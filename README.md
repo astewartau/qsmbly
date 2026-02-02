@@ -4,58 +4,76 @@
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Ready-green.svg)](https://pages.github.com/)
 [![WebAssembly](https://img.shields.io/badge/WebAssembly-Powered-blue.svg)](https://webassembly.org/)
 
-A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs entirely in your web browser using WebAssembly and Pyodide. No installation, no backend servers, no data uploads - just pure client-side MRI processing.
+A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs entirely in your web browser using WebAssembly. No installation, no backend servers, no data uploads - just pure client-side MRI processing.
 
-## 🌟 Features
+## Features
 
-- **🔒 Completely Private**: All processing happens locally in your browser - your data never leaves your computer
-- **🚀 Zero Installation**: No Python, MATLAB, or specialized software required
-- **📱 Cross-Platform**: Works on Windows, macOS, Linux, and even mobile devices
-- **⚡ Interactive**: Real-time visualization with NiiVue, adjustable contrast, and masking thresholds
-- **💾 Portable**: Static files can be hosted anywhere (GitHub Pages, local server, etc.)
-- **🔬 Complete Pipeline**: Phase unwrapping → Background removal → Dipole inversion
+- **Completely Private**: All processing happens locally in your browser - your data never leaves your computer
+- **Zero Installation**: No Python, MATLAB, or specialized software required
+- **Cross-Platform**: Works on Windows, macOS, Linux, and even mobile devices
+- **Interactive**: Real-time visualization with NiiVue, adjustable contrast, and masking thresholds
+- **Portable**: Static files can be hosted anywhere (GitHub Pages, local server, etc.)
+- **Comprehensive**: 16+ algorithms covering the complete QSM pipeline
 
-## 🏗️ QSM Pipeline Steps
+## Implemented Algorithms
 
-### 1. **Phase Scaling** 
-- **Purpose**: Normalizes phase values to standard [-π, +π] range
-- **Input**: Raw phase data (any range, e.g., -4096 to +4095)
-- **Output**: Phase data scaled to [-π, +π] in float32 format
-- **Robustness**: Handles integer or float input data with any min/max range
+### Phase Unwrapping (2 methods)
 
-### 2. **Phase Unwrapping**
-- **Algorithm**: Laplacian-based unwrapping
-- **Input**: Scaled phase image in [-π, +π] range
-- **Output**: Unwrapped fieldmap in Hz
+| Algorithm | Description |
+|-----------|-------------|
+| **ROMEO** | Region-growing with quality-guided ordering. Uses magnitude and gradient coherence weighting for robust unwrapping. |
+| **Laplacian** | FFT-based Poisson solver approach. Fast and effective for well-conditioned data. |
 
-### 3. **Background Field Removal**
-- **Algorithm**: SHARP (Sophisticated Harmonic Artifact Reduction for Phase data)
-- **Purpose**: Removes background field contributions from sources outside the brain
-- **Output**: Local tissue fieldmap
+### Background Field Removal (6 methods)
 
-### 4. **Dipole Inversion**
-- **Algorithm**: RTS (Rapid Two-Step) method
-- **Purpose**: Converts local fieldmap to magnetic susceptibility values
-- **Output**: Quantitative susceptibility map (χ-map)
+| Algorithm | Description |
+|-----------|-------------|
+| **SMV** | Spherical Mean Value - simple baseline subtraction method |
+| **SHARP** | Sophisticated Harmonic Artifact Reduction for Phase data |
+| **V-SHARP** | Variable-radius SHARP with multi-scale kernel approach |
+| **PDF** | Projection onto Dipole Fields |
+| **iSMV** | Iterative Spherical Mean Value deconvolution |
+| **LBV** | Laplacian Boundary Value method |
 
-### 5. **Brain Masking**
-- **Method**: Intensity-based thresholding with morphological operations
-- **Interactive**: Adjustable threshold with real-time preview
-- **Purpose**: Define brain tissue regions for processing
+### Dipole Inversion (8 methods)
 
-## 🚀 Quick Start
+| Algorithm | Description |
+|-----------|-------------|
+| **TKD** | Truncated K-space Division - fast closed-form solution |
+| **TSVD** | Truncated Singular Value Decomposition |
+| **Tikhonov** | L2 regularization with configurable kernels (identity, gradient, Laplacian) |
+| **TV-ADMM** | Total Variation via ADMM - edge-preserving regularization |
+| **NLTV** | Nonlinear Total Variation with iterative reweighting |
+| **RTS** | Rapid Two-Step method (LSMR + TV refinement) |
+| **MEDI** | Morphology-Enabled Dipole Inversion with gradient and SNR weighting |
+| **TGV** | Total Generalized Variation - direct QSM from wrapped phase without separate unwrapping |
 
-### Option 1: GitHub Pages (Recommended)
-1. Visit the live demo: `https://yourusername.github.io/qsmbly/`
+### Multi-Echo Processing
+
+| Algorithm | Description |
+|-----------|-------------|
+| **MCPC-3DS** | Multi-Channel Phase Combination with 3D smoothing. Removes phase offsets across echoes. |
+| **Weighted B0** | Field map calculation with multiple weighting strategies (SNR, variance, magnitude, TEs) |
+
+### Additional Tools
+
+- **Phase Scaling**: Automatic normalization to [-π, π] range
+- **Brain Extraction (BET)**: Region-growing based brain masking with mesh evolution
+- **Gaussian Smoothing**: 3D phase-aware smoothing with wrap handling
+
+## Quick Start
+
+### Option 1: GitHub Pages
+1. Visit the live demo (if deployed)
 2. Upload your magnitude and phase NIfTI files
 3. Set acquisition parameters (Echo Time, Field Strength)
-4. Run the pipeline!
+4. Run the pipeline
 
 ### Option 2: Local Development
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/qsmbly.git
-cd qsmbly
+git clone https://github.com/astewartau/qsm-wasm.git
+cd qsm-wasm
 
 # Serve locally (Python)
 python -m http.server 8080
@@ -66,35 +84,7 @@ npx serve .
 # Open http://localhost:8080
 ```
 
-## 📁 Repository Structure
-
-```
-qsmbly/
-├── index.html              # Main application interface
-├── build.sh                # WASM build script
-├── js/
-│   ├── qsm-app.js          # Main application logic
-│   └── qsm-worker.js       # Web worker for processing
-├── css/
-│   └── modern-styles.css   # Modern UI styling
-├── wasm/                   # Compiled WebAssembly (served)
-│   ├── qsm_wasm.js         # JS bindings
-│   └── qsm_wasm_bg.wasm    # WASM binary
-├── rust-wasm/              # Rust source code
-│   ├── Cargo.toml          # Rust dependencies
-│   ├── src/                # Rust source files
-│   └── pkg/                # wasm-pack output (generated)
-├── python/                 # QSM processing algorithms
-│   ├── masking3.py         # Brain masking
-│   ├── unwrap.py           # Phase unwrapping
-│   ├── bg_removal_sharp.py # Background field removal
-│   └── rts_wasm_standard.py# Dipole inversion
-├── demo/                   # Demo datasets
-├── Benchmark/              # Validation results
-└── settings.json           # Default acquisition parameters
-```
-
-## 📊 Input Requirements
+## Input Requirements
 
 ### Required Files
 - **Magnitude Image**: `.nii` or `.nii.gz` format
@@ -108,56 +98,84 @@ qsmbly/
 - **Sequence**: 3D Gradient Echo (GRE) or FLASH
 - **Resolution**: ≤ 1mm³ isotropic
 - **Field Strength**: 3T or 7T
-- **Echo Time**: First echo of multi-echo sequence
+- **Echo Time**: First echo or multi-echo sequence
 
-## 🎮 Usage Guide
+## Repository Structure
 
-### Step 1: Upload Data
-1. Click "Choose magnitude file" and select your magnitude NIfTI
-2. Click "Choose phase file" and select your phase NIfTI
-3. (Optional) Load settings from JSON file
+```
+qsm-wasm/
+├── index.html              # Main application interface
+├── build.sh                # WASM build script
+├── js/
+│   ├── qsm-app.js          # Main application logic
+│   ├── qsm-app-romeo.js    # Extended ROMEO support
+│   ├── qsm-worker.js       # Web worker for processing
+│   └── qsm-worker-pure.js  # Pure JavaScript worker
+├── css/
+│   └── modern-styles.css   # Modern UI styling
+├── wasm/                   # Compiled WebAssembly (served)
+│   ├── qsm_wasm.js         # JS bindings
+│   ├── qsm_wasm_bg.wasm    # WASM binary (~843 KB)
+│   ├── romeo_wasm.js       # ROMEO-specific bindings
+│   └── romeo_wasm_bg.wasm  # ROMEO binary (~22 KB)
+├── rust-wasm/              # Rust source code
+│   ├── Cargo.toml          # Rust dependencies
+│   └── src/
+│       ├── lib.rs          # WASM entry points (37 exports)
+│       ├── fft.rs          # FFT with cached plans
+│       ├── nifti_io.rs     # NIfTI file handling
+│       ├── inversion/      # Dipole inversion algorithms
+│       │   ├── tkd.rs      # TKD/TSVD
+│       │   ├── tikhonov.rs # L2 regularization
+│       │   ├── tv.rs       # TV-ADMM
+│       │   ├── nltv.rs     # Nonlinear TV
+│       │   ├── rts.rs      # RTS two-step
+│       │   ├── medi.rs     # MEDI L1 optimization
+│       │   └── tgv.rs      # TGV from wrapped phase
+│       ├── bgremove/       # Background removal
+│       │   ├── smv.rs, sharp.rs, vsharp.rs
+│       │   ├── pdf.rs, ismv.rs, lbv.rs
+│       ├── unwrap/         # Phase unwrapping
+│       │   ├── romeo.rs    # ROMEO algorithm
+│       │   └── laplacian.rs
+│       ├── kernels/        # Dipole, SMV, Laplacian kernels
+│       ├── solvers/        # CG, LSMR solvers
+│       ├── utils/          # Gradient ops, multi-echo, padding
+│       └── bet/            # Brain extraction
+├── python/                 # Reference implementations
+└── other/                  # Julia reference code
+```
 
-### Step 2: Set Parameters
-1. Enter Echo Time in seconds
-2. Enter Magnetic Field Strength in Tesla
-3. Click "Visualize" buttons to preview your data
+## Building from Source
 
-### Step 3: Create Brain Mask
-1. Click "Run QSM Pipeline"
-2. Adjust masking threshold using the slider
-3. Preview the mask in real-time
-4. Click "Use This Mask" when satisfied
+### Prerequisites
+1. **Install Rust**: https://rustup.rs/
+2. **Install wasm-pack**:
+   ```bash
+   cargo install wasm-pack
+   ```
 
-### Step 4: Process QSM
-The pipeline will automatically run:
-- **Phase Scaling** (~5 seconds) - Normalizes phase to [-π, +π] range
-- **Phase Unwrapping** (~10 seconds)
-- **Background Removal** (~30 seconds)  
-- **Dipole Inversion** (~45 seconds)
+### Build Process
+```bash
+# Use the build script
+./build.sh
 
-### Step 5: Explore Results
-- Navigate between processing stages using buttons
-- Adjust contrast for optimal visualization
-- Download results or save screenshots
+# Or manually:
+cd rust-wasm
+wasm-pack build --target web --release
+cp pkg/qsm_wasm.js ../wasm/
+cp pkg/qsm_wasm_bg.wasm ../wasm/
+```
 
-## 🔧 Technical Details
+### Running Locally
+```bash
+python -m http.server 8080
+# Open http://localhost:8080
+```
 
-### WebAssembly Stack
-- **Pyodide**: Python scientific computing in the browser
-- **NumPy/SciPy**: Numerical processing
-- **NiBabel**: NIfTI file handling
+Note: You may need to hard-refresh (Ctrl+Shift+R) to clear cached WASM files after rebuilding.
 
-### Visualization
-- **NiiVue**: High-performance WebGL neuroimaging viewer
-- **Multi-planar views**: Axial, coronal, sagittal
-- **Interactive contrast**: Real-time adjustment
-
-### Browser Requirements
-- **Modern Browser**: Chrome 88+, Firefox 79+, Safari 14+, Edge 88+
-- **Memory**: 4GB RAM recommended for typical datasets
-- **Storage**: ~100MB for Pyodide + dependencies
-
-## 📈 Performance & Limitations
+## Performance
 
 ### Typical Processing Times
 | Dataset Size | Phase Unwrapping | Background Removal | Dipole Inversion | Total |
@@ -165,139 +183,53 @@ The pipeline will automatically run:
 | 256³        | ~10s            | ~30s             | ~45s            | ~1.5min |
 | 512³        | ~30s            | ~2min            | ~3min           | ~5.5min |
 
-### Current Limitations
+### Limitations
 - **Memory**: Limited by browser (typically 2-4GB)
 - **Dataset Size**: Optimal for ≤ 512³ voxels
 - **Processing Speed**: ~5-10x slower than native code
-- **Mobile**: Limited by device memory and processing power
+- **Mobile**: Limited by device memory
 
-## 🔬 Validation & Benchmarks
+### Browser Requirements
+- Chrome 88+, Firefox 79+, Safari 14+, Edge 88+
+- 4GB RAM recommended
 
-The algorithms have been validated against reference implementations:
+## Technical Stack
 
-- **Phase Unwrapping**: Compared with MRITOOLS
-- **Background Removal**: Validated against SHARP reference
-- **Dipole Inversion**: Benchmarked against RTS Julia implementation
+### Rust/WebAssembly
+- **wasm-bindgen**: JavaScript/WASM interop
+- **rustfft**: FFT computations
+- **nifti**: NIfTI file handling
+- **ndarray**: N-dimensional arrays
 
-See `Benchmark/` directory for detailed validation results and error analysis.
+### Frontend
+- **NiiVue**: WebGL neuroimaging viewer
+- **Pyodide**: Python in browser (optional)
 
-## 🤝 Contributing
+## References
 
-We welcome contributions! Areas for improvement:
+1. **ROMEO**: Dymerska et al. "Phase unwrapping with a rapid opensource minimum spanning tree algorithm (ROMEO)." *Magnetic Resonance in Medicine* (2021)
+2. **Laplacian Unwrapping**: Schofield & Zhu. "Fast phase unwrapping algorithm for interferometric applications." *Optics Letters* (2003)
+3. **SHARP**: Schweser et al. "Quantitative imaging of intrinsic magnetic tissue properties using MRI signal phase." *MRM* (2011)
+4. **V-SHARP**: Li et al. "A method for estimating and removing streaking artifacts in quantitative susceptibility mapping." *NeuroImage* (2015)
+5. **PDF**: Liu et al. "A novel background field removal method for MRI using projection onto dipole fields." *NMR in Biomedicine* (2011)
+6. **LBV**: Zhou et al. "Background field removal by solving the Laplacian boundary value problem." *NMR in Biomedicine* (2014)
+7. **TKD**: Shmueli et al. "Magnetic susceptibility mapping of brain tissue in vivo using MRI phase data." *MRM* (2009)
+8. **MEDI**: Liu et al. "Morphology enabled dipole inversion (MEDI) from a single-angle acquisition." *MRM* (2011)
+9. **TGV-QSM**: Langkammer et al. "Fast quantitative susceptibility mapping using 3D EPI and total generalized variation." *NeuroImage* (2015)
+10. **RTS**: Kames et al. "Rapid two-step dipole inversion for susceptibility mapping with sparsity priors." *NeuroImage* (2018)
+11. **MCPC-3DS**: Eckstein et al. "Computationally efficient combination of multi-channel phase data from multi-echo acquisitions (ASPIRE)." *MRM* (2018)
 
-- **Performance**: Optimize algorithms for WebAssembly
-- **Features**: Additional QSM methods (MEDI, iLSQR, etc.)
-- **UI/UX**: Enhanced visualization and user experience
-- **Validation**: More extensive benchmarking
-
-### Development Setup
-
-```bash
-# Clone and setup
-git clone https://github.com/yourusername/qsmbly.git
-cd qsmbly
-
-# For Python algorithm development
-pip install nibabel numpy scipy
-
-# For frontend development
-npm install -g live-server
-live-server --port=8080
-```
-
-### Building the Rust/WASM Components
-
-The core QSM algorithms are written in Rust and compiled to WebAssembly. To modify and rebuild:
-
-#### Prerequisites
-
-1. **Install Rust**: https://rustup.rs/
-2. **Install wasm-pack**:
-   ```bash
-   cargo install wasm-pack
-   ```
-
-#### Build Process
-
-Use the provided build script:
-
-```bash
-./build.sh
-```
-
-This will:
-1. Compile the Rust code in `rust-wasm/` to WebAssembly
-2. Copy the output files to `wasm/` for serving
-
-#### Manual Build
-
-If you prefer to build manually:
-
-```bash
-# Navigate to the Rust project
-cd rust-wasm
-
-# Build with wasm-pack
-wasm-pack build --target web --release
-
-# Copy output to serve directory
-cp pkg/qsm_wasm.js ../wasm/
-cp pkg/qsm_wasm_bg.wasm ../wasm/
-```
-
-#### Running Locally
-
-After building, start a local server:
-
-```bash
-python -m http.server 8080
-# Open http://localhost:8080
-```
-
-**Note**: You may need to hard-refresh (Ctrl+Shift+R) to clear cached WASM files.
-
-#### Project Structure (Rust)
-
-```
-rust-wasm/
-├── Cargo.toml          # Rust dependencies
-├── src/
-│   ├── lib.rs          # WASM entry points
-│   ├── fft.rs          # FFT with cached plans
-│   ├── inversion/
-│   │   ├── medi.rs     # MEDI L1 algorithm (optimized)
-│   │   ├── rts.rs      # RTS dipole inversion
-│   │   └── ...
-│   ├── bgremove/       # Background removal algorithms
-│   ├── unwrap/         # Phase unwrapping
-│   └── ...
-├── pkg/                # wasm-pack output (generated)
-└── target/             # Rust build artifacts (generated)
-```
-
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **NiiVue Team**: For the excellent neuroimaging viewer
-- **Pyodide Project**: For bringing Python to the browser
 - **QSM Community**: For developing and sharing algorithms
-- **Original Developer**: For the foundational undergraduate work
+- **ROMEO/MriResearchTools.jl**: Reference implementations
 
-## 📚 References
+## Issues & Support
 
-1. **Phase Unwrapping**: Schofield & Zhu. "Fast phase unwrapping algorithm for interferometric applications." *Optics Letters* (2003)
-2. **SHARP**: Schweser et al. "Quantitative imaging of intrinsic magnetic tissue properties using MRI signal phase." *Magnetic Resonance in Medicine* (2011)
-3. **RTS**: Kames et al. "Rapid two-step dipole inversion for susceptibility mapping with sparsity priors." *NeuroImage* (2018)
-
-## 🐛 Issues & Support
-
-- **Bug Reports**: [GitHub Issues](https://github.com/yourusername/qsmbly/issues)
-- **Feature Requests**: [GitHub Discussions](https://github.com/yourusername/qsmbly/discussions)
-- **Documentation**: [Wiki](https://github.com/yourusername/qsmbly/wiki)
-
----
-
-**Made with ❤️ for the neuroimaging community**
+- **Bug Reports**: [GitHub Issues](https://github.com/astewartau/qsm-wasm/issues)
+- **Feature Requests**: [GitHub Discussions](https://github.com/astewartau/qsm-wasm/discussions)
