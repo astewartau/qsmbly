@@ -1386,7 +1386,8 @@ class QSMApp {
       // Show phase image at the start
       await this.visualizePhase();
 
-      // Disable all stage buttons - they'll be enabled as data becomes available
+      // Clear previous results cache and disable all stage buttons
+      this.clearResults();
       this.disableAllStageButtons();
 
       // Send to worker with pipeline settings
@@ -1482,38 +1483,33 @@ class QSMApp {
     });
   }
 
+  // Clear all cached results (called at pipeline start)
+  clearResults() {
+    this.results = {
+      magnitude: { path: null, file: null },
+      phase: { path: null, file: null },
+      mask: { path: null, file: null },
+      B0: { path: null, file: null },
+      bgRemoved: { path: null, file: null },
+      final: { path: null, file: null }
+    };
+  }
+
   updateDownloadButtons() {
     // Legacy method - now handled by enableStageButtons
   }
 
   async showStage(stage) {
-    if (!this.worker || !this.workerReady) {
-      this.updateOutput("Pipeline not yet run");
-      return;
-    }
-
     try {
-      this.updateOutput(`Loading ${stage}...`);
+      // Check if we have cached results first
+      if (this.results[stage]?.file) {
+        this.updateOutput(`Displaying ${stage}...`);
+        await this.loadAndVisualizeFile(this.results[stage].file, stage);
+        return;
+      }
 
-      // Request stage data from worker
-      this.worker.postMessage({
-        type: 'getStage',
-        data: { stage }
-      });
-
-      // Wait for response
-      const result = await new Promise((resolve) => {
-        this.pendingStageResolve = resolve;
-      });
-
-      // Create file from bytes
-      const blob = new Blob([result.data], { type: 'application/octet-stream' });
-      const file = new File([blob], `${stage}.nii`, { type: 'application/octet-stream' });
-
-      // Load in viewer
-      await this.loadAndVisualizeFile(file, result.description);
-
-      this.results[stage] = { file: file, path: `${stage}.nii` };
+      // No cached result available
+      this.updateOutput(`${stage} not available - run the pipeline first`);
 
     } catch (error) {
       this.updateOutput(`Error showing ${stage}: ${error.message}`);
@@ -1549,18 +1545,17 @@ class QSMApp {
 
   async downloadStage(stage) {
     if (!this.results[stage]?.file) {
-      await this.showStage(stage); // Generate if not already available
+      this.updateOutput(`${stage} not available - run the pipeline first`);
+      return;
     }
-    
-    if (this.results[stage]?.file) {
-      const file = this.results[stage].file;
-      const url = URL.createObjectURL(file);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${stage}_${new Date().toISOString().slice(0,10)}.nii`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
+
+    const file = this.results[stage].file;
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${stage}_${new Date().toISOString().slice(0,10)}.nii`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   updateOutput(message) {

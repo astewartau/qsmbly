@@ -64,6 +64,63 @@ pub fn smv_kernel(
     s
 }
 
+// ============================================================================
+// F32 (Single Precision) SMV Kernel Functions
+// ============================================================================
+
+/// Generate SMV kernel in image space (f32 version for WASM performance)
+///
+/// Creates a binary sphere of given radius, normalized so sum = 1.
+/// Kernel is centered at index (0, 0, 0) for FFT compatibility.
+pub fn smv_kernel_f32(
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+    radius: f32,
+) -> Vec<f32> {
+    let n_total = nx * ny * nz;
+    let mut s = vec![0.0f32; n_total];
+    let r_squared = radius * radius;
+
+    // Create binary sphere centered at (0,0,0) with wraparound
+    let mut count = 0.0f32;
+
+    // Fortran order: index = i + j*nx + k*nx*ny
+    for k in 0..nz {
+        let zk = if k <= nz / 2 { k as f32 } else { (k as i64 - nz as i64) as f32 };
+        let dz = zk * vsz;
+
+        for j in 0..ny {
+            let yj = if j <= ny / 2 { j as f32 } else { (j as i64 - ny as i64) as f32 };
+            let dy = yj * vsy;
+
+            for i in 0..nx {
+                // Distance from center in x (with wraparound)
+                let xi = if i <= nx / 2 { i as f32 } else { (i as i64 - nx as i64) as f32 };
+                let dx = xi * vsx;
+
+                let dist_sq = dx * dx + dy * dy + dz * dz;
+
+                let idx = i + j * nx + k * nx * ny;
+
+                if dist_sq <= r_squared {
+                    s[idx] = 1.0;
+                    count += 1.0;
+                }
+            }
+        }
+    }
+
+    // Normalize so sum = 1
+    if count > 0.0 {
+        let norm = 1.0 / count;
+        for val in s.iter_mut() {
+            *val *= norm;
+        }
+    }
+
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -369,7 +369,7 @@ mod tests {
 
         // Local field should be close to zero for interior voxels
         // since the input is purely harmonic
-        let mut max_local = 0.0;
+        let mut max_local: f64 = 0.0;
         for i in 0..n*n*n {
             if eroded_mask[i] != 0 {
                 max_local = max_local.max(local[i].abs());

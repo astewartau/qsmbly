@@ -205,6 +205,101 @@ pub fn grad_magnitude_squared(
         .collect()
 }
 
+// ============================================================================
+// F32 (Single Precision) Gradient Functions
+// ============================================================================
+
+/// Forward difference gradient operator (in-place, f32)
+#[inline]
+pub fn fgrad_inplace_f32(
+    gx: &mut [f32], gy: &mut [f32], gz: &mut [f32],
+    x: &[f32],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) {
+    let hx = 1.0 / vsx;
+    let hy = 1.0 / vsy;
+    let hz = 1.0 / vsz;
+
+    for k in 0..nz {
+        let kp1 = if k + 1 < nz { k + 1 } else { 0 };
+        let k_offset = k * nx * ny;
+        let kp1_offset = kp1 * nx * ny;
+
+        for j in 0..ny {
+            let jp1 = if j + 1 < ny { j + 1 } else { 0 };
+            let j_offset = j * nx;
+            let jp1_offset = jp1 * nx;
+
+            for i in 0..nx {
+                let ip1 = if i + 1 < nx { i + 1 } else { 0 };
+
+                let idx = i + j_offset + k_offset;
+                let idx_xp = ip1 + j_offset + k_offset;
+                let idx_yp = i + jp1_offset + k_offset;
+                let idx_zp = i + j_offset + kp1_offset;
+
+                let x_val = x[idx];
+                gx[idx] = (x[idx_xp] - x_val) * hx;
+                gy[idx] = (x[idx_yp] - x_val) * hy;
+                gz[idx] = (x[idx_zp] - x_val) * hz;
+            }
+        }
+    }
+}
+
+/// Backward divergence operator (in-place, f32)
+#[inline]
+pub fn bdiv_inplace_f32(
+    div: &mut [f32],
+    gx: &[f32], gy: &[f32], gz: &[f32],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) {
+    let hx = 1.0 / vsx;
+    let hy = 1.0 / vsy;
+    let hz = 1.0 / vsz;
+
+    for k in 0..nz {
+        let km1 = if k == 0 { nz - 1 } else { k - 1 };
+        let k_offset = k * nx * ny;
+        let km1_offset = km1 * nx * ny;
+
+        for j in 0..ny {
+            let jm1 = if j == 0 { ny - 1 } else { j - 1 };
+            let j_offset = j * nx;
+            let jm1_offset = jm1 * nx;
+
+            for i in 0..nx {
+                let im1 = if i == 0 { nx - 1 } else { i - 1 };
+
+                let idx = i + j_offset + k_offset;
+                let idx_xm = im1 + j_offset + k_offset;
+                let idx_ym = i + jm1_offset + k_offset;
+                let idx_zm = i + j_offset + km1_offset;
+
+                div[idx] = (gx[idx] - gx[idx_xm]) * hx
+                         + (gy[idx] - gy[idx_ym]) * hy
+                         + (gz[idx] - gz[idx_zm]) * hz;
+            }
+        }
+    }
+}
+
+/// Forward difference gradient operator (allocating, f32)
+pub fn fgrad_f32(
+    x: &[f32],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+    let n_total = nx * ny * nz;
+    let mut gx = vec![0.0f32; n_total];
+    let mut gy = vec![0.0f32; n_total];
+    let mut gz = vec![0.0f32; n_total];
+    fgrad_inplace_f32(&mut gx, &mut gy, &mut gz, x, nx, ny, nz, vsx, vsy, vsz);
+    (gx, gy, gz)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

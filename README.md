@@ -71,22 +71,27 @@ npx serve .
 ```
 qsmbly/
 ├── index.html              # Main application interface
+├── build.sh                # WASM build script
 ├── js/
-│   └── qsm-app.js          # Main application logic
+│   ├── qsm-app.js          # Main application logic
+│   └── qsm-worker.js       # Web worker for processing
 ├── css/
 │   └── modern-styles.css   # Modern UI styling
+├── wasm/                   # Compiled WebAssembly (served)
+│   ├── qsm_wasm.js         # JS bindings
+│   └── qsm_wasm_bg.wasm    # WASM binary
+├── rust-wasm/              # Rust source code
+│   ├── Cargo.toml          # Rust dependencies
+│   ├── src/                # Rust source files
+│   └── pkg/                # wasm-pack output (generated)
 ├── python/                 # QSM processing algorithms
 │   ├── masking3.py         # Brain masking
 │   ├── unwrap.py           # Phase unwrapping
 │   ├── bg_removal_sharp.py # Background field removal
 │   └── rts_wasm_standard.py# Dipole inversion
-├── assets/                 # Sample data and masks
-│   ├── magnitude.nii       # Example magnitude image
-│   ├── phase.nii          # Example phase image
-│   └── MNI_mask.nii       # Standard brain mask
 ├── demo/                   # Demo datasets
 ├── Benchmark/              # Validation results
-└── settings.json          # Default acquisition parameters
+└── settings.json           # Default acquisition parameters
 ```
 
 ## 📊 Input Requirements
@@ -186,6 +191,7 @@ We welcome contributions! Areas for improvement:
 - **Validation**: More extensive benchmarking
 
 ### Development Setup
+
 ```bash
 # Clone and setup
 git clone https://github.com/yourusername/qsmbly.git
@@ -197,6 +203,76 @@ pip install nibabel numpy scipy
 # For frontend development
 npm install -g live-server
 live-server --port=8080
+```
+
+### Building the Rust/WASM Components
+
+The core QSM algorithms are written in Rust and compiled to WebAssembly. To modify and rebuild:
+
+#### Prerequisites
+
+1. **Install Rust**: https://rustup.rs/
+2. **Install wasm-pack**:
+   ```bash
+   cargo install wasm-pack
+   ```
+
+#### Build Process
+
+Use the provided build script:
+
+```bash
+./build.sh
+```
+
+This will:
+1. Compile the Rust code in `rust-wasm/` to WebAssembly
+2. Copy the output files to `wasm/` for serving
+
+#### Manual Build
+
+If you prefer to build manually:
+
+```bash
+# Navigate to the Rust project
+cd rust-wasm
+
+# Build with wasm-pack
+wasm-pack build --target web --release
+
+# Copy output to serve directory
+cp pkg/qsm_wasm.js ../wasm/
+cp pkg/qsm_wasm_bg.wasm ../wasm/
+```
+
+#### Running Locally
+
+After building, start a local server:
+
+```bash
+python -m http.server 8080
+# Open http://localhost:8080
+```
+
+**Note**: You may need to hard-refresh (Ctrl+Shift+R) to clear cached WASM files.
+
+#### Project Structure (Rust)
+
+```
+rust-wasm/
+├── Cargo.toml          # Rust dependencies
+├── src/
+│   ├── lib.rs          # WASM entry points
+│   ├── fft.rs          # FFT with cached plans
+│   ├── inversion/
+│   │   ├── medi.rs     # MEDI L1 algorithm (optimized)
+│   │   ├── rts.rs      # RTS dipole inversion
+│   │   └── ...
+│   ├── bgremove/       # Background removal algorithms
+│   ├── unwrap/         # Phase unwrapping
+│   └── ...
+├── pkg/                # wasm-pack output (generated)
+└── target/             # Rust build artifacts (generated)
 ```
 
 ## 📄 License

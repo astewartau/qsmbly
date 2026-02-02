@@ -78,6 +78,73 @@ pub fn dipole_kernel_default(
     dipole_kernel(nx, ny, nz, vsx, vsy, vsz, (0.0, 0.0, 1.0))
 }
 
+// ============================================================================
+// F32 (Single Precision) Dipole Kernel Functions
+// ============================================================================
+
+use crate::fft::fftfreq_f32;
+
+/// Generate dipole kernel in k-space (f32 version for WASM performance)
+///
+/// Creates the dipole kernel D(k) = 1/3 - (kz)²/|k|² (for B = [0,0,1])
+/// centered at index (0, 0, 0) (not shifted).
+pub fn dipole_kernel_f32(
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+    bdir: (f32, f32, f32),
+) -> Vec<f32> {
+    let n_total = nx * ny * nz;
+    let mut d = vec![0.0f32; n_total];
+
+    // Generate frequency grids
+    let kx = fftfreq_f32(nx, vsx);
+    let ky = fftfreq_f32(ny, vsy);
+    let kz = fftfreq_f32(nz, vsz);
+
+    // Normalize B direction
+    let (bx, by, bz) = bdir;
+    let bnorm = (bx * bx + by * by + bz * bz).sqrt();
+    let bx = bx / bnorm;
+    let by = by / bnorm;
+    let bz = bz / bnorm;
+
+    let one_third = 1.0f32 / 3.0;
+
+    // Compute dipole kernel: D(k) = 1/3 - (k·B)² / |k|²
+    // Fortran order: index = i + j*nx + k*nx*ny
+    for k in 0..nz {
+        let kz_val = kz[k];
+        for j in 0..ny {
+            let ky_val = ky[j];
+            for i in 0..nx {
+                let kx_val = kx[i];
+
+                let k_dot_b = kx_val * bx + ky_val * by + kz_val * bz;
+                let k_squared = kx_val * kx_val + ky_val * ky_val + kz_val * kz_val;
+
+                let idx = i + j * nx + k * nx * ny;
+
+                if k_squared > 1e-10 {
+                    d[idx] = one_third - (k_dot_b * k_dot_b) / k_squared;
+                } else {
+                    // DC term (k = 0)
+                    d[idx] = 0.0;
+                }
+            }
+        }
+    }
+
+    d
+}
+
+/// Generate f32 dipole kernel with default B direction (0, 0, 1)
+pub fn dipole_kernel_default_f32(
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) -> Vec<f32> {
+    dipole_kernel_f32(nx, ny, nz, vsx, vsy, vsz, (0.0, 0.0, 1.0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
