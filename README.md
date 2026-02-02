@@ -175,24 +175,6 @@ python -m http.server 8080
 
 Note: You may need to hard-refresh (Ctrl+Shift+R) to clear cached WASM files after rebuilding.
 
-## Performance
-
-### Typical Processing Times
-| Dataset Size | Phase Unwrapping | Background Removal | Dipole Inversion | Total |
-|-------------|------------------|-------------------|------------------|-------|
-| 256³        | ~10s            | ~30s             | ~45s            | ~1.5min |
-| 512³        | ~30s            | ~2min            | ~3min           | ~5.5min |
-
-### Limitations
-- **Memory**: Limited by browser (typically 2-4GB)
-- **Dataset Size**: Optimal for ≤ 512³ voxels
-- **Processing Speed**: ~5-10x slower than native code
-- **Mobile**: Limited by device memory
-
-### Browser Requirements
-- Chrome 88+, Firefox 79+, Safari 14+, Edge 88+
-- 4GB RAM recommended
-
 ## Technical Stack
 
 ### Rust/WebAssembly
