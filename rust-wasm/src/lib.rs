@@ -711,6 +711,136 @@ pub fn medi_l1_wasm_with_progress(
     chi
 }
 
+// ============================================================================
+// WASM Exports: TGV (Single-Step QSM from Wrapped Phase)
+// ============================================================================
+
+/// TGV-QSM (Total Generalized Variation) single-step reconstruction
+///
+/// Reconstructs susceptibility directly from wrapped phase data using TGV
+/// regularization. This bypasses phase unwrapping and background field removal.
+///
+/// # Arguments
+/// * `phase` - Wrapped phase data in radians (nx * ny * nz)
+/// * `mask` - Binary mask (nx * ny * nz)
+/// * `nx`, `ny`, `nz` - Array dimensions
+/// * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
+/// * `bx`, `by`, `bz` - B0 field direction
+/// * `alpha0` - TGV second-order weight (symmetric gradient term)
+/// * `alpha1` - TGV first-order weight (gradient term)
+/// * `iterations` - Number of primal-dual iterations
+/// * `erosions` - Number of mask erosions (default 3)
+/// * `te` - Echo time in seconds
+/// * `fieldstrength` - Magnetic field strength in Tesla
+///
+/// # Returns
+/// Susceptibility map as Float64Array (ppm)
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn tgv_qsm_wasm(
+    phase: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    bx: f64, by: f64, bz: f64,
+    alpha0: f64,
+    alpha1: f64,
+    iterations: usize,
+    erosions: usize,
+    te: f64,
+    fieldstrength: f64,
+) -> Vec<f64> {
+    console_log!("WASM TGV-QSM: {}x{}x{}, alpha=({:.4},{:.4}), iter={}, TE={}ms, B0={}T",
+                 nx, ny, nz, alpha0, alpha1, iterations, te * 1000.0, fieldstrength);
+
+    // Convert f64 to f32 for TGV algorithm
+    let phase_f32: Vec<f32> = phase.iter().map(|&x| x as f32).collect();
+
+    let params = inversion::tgv::TgvParams {
+        alpha0: alpha0 as f32,
+        alpha1: alpha1 as f32,
+        iterations,
+        erosions,
+        step_size: 3.0,
+        fieldstrength: fieldstrength as f32,
+        te: te as f32,
+        tol: 1e-5,
+    };
+
+    let chi = inversion::tgv::tgv_qsm(
+        &phase_f32, mask, nx, ny, nz,
+        vsx as f32, vsy as f32, vsz as f32,
+        &params, (bx as f32, by as f32, bz as f32)
+    );
+
+    console_log!("WASM TGV-QSM complete");
+
+    // Convert back to f64
+    chi.iter().map(|&x| x as f64).collect()
+}
+
+/// TGV-QSM with progress callback
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn tgv_qsm_wasm_with_progress(
+    phase: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    bx: f64, by: f64, bz: f64,
+    alpha0: f64,
+    alpha1: f64,
+    iterations: usize,
+    erosions: usize,
+    te: f64,
+    fieldstrength: f64,
+    progress_callback: &js_sys::Function,
+) -> Vec<f64> {
+    console_log!("WASM TGV-QSM with progress: {}x{}x{}, iter={}",
+                 nx, ny, nz, iterations);
+
+    let phase_f32: Vec<f32> = phase.iter().map(|&x| x as f32).collect();
+
+    let params = inversion::tgv::TgvParams {
+        alpha0: alpha0 as f32,
+        alpha1: alpha1 as f32,
+        iterations,
+        erosions,
+        step_size: 3.0,
+        fieldstrength: fieldstrength as f32,
+        te: te as f32,
+        tol: 1e-5,
+    };
+
+    let callback = progress_callback.clone();
+    let chi = inversion::tgv::tgv_qsm_with_progress(
+        &phase_f32, mask, nx, ny, nz,
+        vsx as f32, vsy as f32, vsz as f32,
+        &params, (bx as f32, by as f32, bz as f32),
+        |current, total| {
+            let this = JsValue::null();
+            let _ = callback.call2(&this,
+                &JsValue::from(current as u32),
+                &JsValue::from(total as u32));
+        }
+    );
+
+    console_log!("WASM TGV-QSM complete");
+    chi.iter().map(|&x| x as f64).collect()
+}
+
+/// Get default TGV alpha values for a given regularization level (1-4)
+/// Returns [alpha0, alpha1]
+#[wasm_bindgen]
+pub fn tgv_get_default_alpha(regularization: u8) -> Vec<f64> {
+    let (alpha0, alpha1) = inversion::tgv::get_default_alpha(regularization);
+    vec![alpha0 as f64, alpha1 as f64]
+}
+
+// ============================================================================
+// WASM Exports: Background Field Removal (continued)
+// ============================================================================
+
 /// PDF background field removal
 ///
 /// Projection onto dipole fields for background removal.
@@ -1186,6 +1316,245 @@ pub fn create_sphere_mask(
     console_log!("Sphere mask: {} voxels ({:.1}%)", count, 100.0 * count as f64 / mask.len() as f64);
 
     mask
+}
+
+// ============================================================================
+// WASM Exports: Multi-Echo Processing (MCPC-3D-S)
+// ============================================================================
+
+/// 3D Gaussian smoothing for phase data (handles wrapping)
+///
+/// Smooths phase by converting to complex representation, smoothing real/imag
+/// separately, then converting back to phase. This correctly handles phase wrapping.
+///
+/// # Arguments
+/// * `phase` - Phase data in radians (nx * ny * nz)
+/// * `mask` - Binary mask (nx * ny * nz)
+/// * `nx`, `ny`, `nz` - Dimensions
+/// * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma in voxels
+///
+/// # Returns
+/// Smoothed phase data
+#[wasm_bindgen]
+pub fn gaussian_smooth_3d_phase_wasm(
+    phase: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    sigma_x: f64, sigma_y: f64, sigma_z: f64,
+) -> Vec<f64> {
+    console_log!("WASM gaussian_smooth_3d_phase: {}x{}x{}, sigma=({:.1},{:.1},{:.1})",
+                 nx, ny, nz, sigma_x, sigma_y, sigma_z);
+
+    let result = utils::multi_echo::gaussian_smooth_3d_phase(
+        phase, [sigma_x, sigma_y, sigma_z], mask, nx, ny, nz
+    );
+
+    console_log!("WASM gaussian_smooth_3d_phase complete");
+    result
+}
+
+/// Hermitian Inner Product (HIP) between two echoes
+///
+/// Computes HIP = conj(echo1) * echo2 = mag1 * mag2 * exp(i * (phase2 - phase1))
+///
+/// # Arguments
+/// * `phase1`, `mag1` - First echo phase and magnitude
+/// * `phase2`, `mag2` - Second echo phase and magnitude
+/// * `mask` - Binary mask (nx * ny * nz)
+/// * `n` - Total number of voxels
+///
+/// # Returns
+/// Flattened [hip_phase, hip_mag] - first n elements are phase diff, next n are combined mag
+#[wasm_bindgen]
+pub fn hermitian_inner_product_wasm(
+    phase1: &[f64], mag1: &[f64],
+    phase2: &[f64], mag2: &[f64],
+    mask: &[u8],
+    n: usize,
+) -> Vec<f64> {
+    console_log!("WASM hermitian_inner_product: n={}", n);
+
+    let (hip_phase, hip_mag) = utils::multi_echo::hermitian_inner_product(
+        phase1, mag1, phase2, mag2, mask, n
+    );
+
+    // Combine into single output
+    let mut result = hip_phase;
+    result.extend(hip_mag);
+
+    console_log!("WASM hermitian_inner_product complete");
+    result
+}
+
+/// MCPC-3D-S phase offset estimation for single-coil multi-echo data
+///
+/// Estimates and removes the phase offset (φ₀) from each echo using the
+/// MCPC-3D-S algorithm from MriResearchTools.jl
+///
+/// # Arguments
+/// * `phases_flat` - Flattened phase data [echo0, echo1, ...], each echo is nx*ny*nz
+/// * `mags_flat` - Flattened magnitude data [echo0, echo1, ...], each echo is nx*ny*nz
+/// * `tes` - Echo times in ms
+/// * `mask` - Binary mask (nx * ny * nz)
+/// * `nx`, `ny`, `nz` - Dimensions
+/// * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma for phase offset
+/// * `echo1`, `echo2` - Which echoes to use for HIP (0-indexed)
+///
+/// # Returns
+/// Flattened [corrected_phases..., phase_offset]
+/// - First n_echoes * n_total elements are corrected phases
+/// - Last n_total elements are the estimated phase offset
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn mcpc3ds_single_coil_wasm(
+    phases_flat: &[f64],
+    mags_flat: &[f64],
+    tes: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    sigma_x: f64, sigma_y: f64, sigma_z: f64,
+    echo1: usize, echo2: usize,
+) -> Vec<f64> {
+    let n_echoes = tes.len();
+    let n_total = nx * ny * nz;
+
+    console_log!("WASM mcpc3ds_single_coil: {}x{}x{}, {} echoes, sigma=({:.1},{:.1},{:.1})",
+                 nx, ny, nz, n_echoes, sigma_x, sigma_y, sigma_z);
+
+    // Split flat arrays into per-echo vectors
+    let phases: Vec<Vec<f64>> = (0..n_echoes)
+        .map(|e| phases_flat[e * n_total..(e + 1) * n_total].to_vec())
+        .collect();
+    let mags: Vec<Vec<f64>> = (0..n_echoes)
+        .map(|e| mags_flat[e * n_total..(e + 1) * n_total].to_vec())
+        .collect();
+
+    let (corrected_phases, phase_offset) = utils::multi_echo::mcpc3ds_single_coil(
+        &phases, &mags, tes, mask,
+        [sigma_x, sigma_y, sigma_z], [echo1, echo2],
+        nx, ny, nz
+    );
+
+    // Flatten output: all corrected phases followed by phase_offset
+    let mut result = Vec::with_capacity((n_echoes + 1) * n_total);
+    for phase in &corrected_phases {
+        result.extend(phase);
+    }
+    result.extend(phase_offset);
+
+    console_log!("WASM mcpc3ds_single_coil complete");
+    result
+}
+
+/// Calculate B0 field from unwrapped phase using weighted averaging
+///
+/// Implements calculateB0_unwrapped from MriResearchTools.jl
+/// Formula: B0 = (1000 / 2π) * Σ(phase / TE * weight) / Σ(weight)
+///
+/// # Arguments
+/// * `unwrapped_phases_flat` - Flattened unwrapped phases [echo0, echo1, ...]
+/// * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
+/// * `tes` - Echo times in ms
+/// * `mask` - Binary mask
+/// * `weight_type` - Weighting type: "phase_snr", "phase_var", "average", "tes", "mag"
+/// * `n_total` - Number of voxels per echo
+///
+/// # Returns
+/// B0 field in Hz
+#[wasm_bindgen]
+pub fn calculate_b0_weighted_wasm(
+    unwrapped_phases_flat: &[f64],
+    mags_flat: &[f64],
+    tes: &[f64],
+    mask: &[u8],
+    weight_type: &str,
+    n_total: usize,
+) -> Vec<f64> {
+    let n_echoes = tes.len();
+
+    console_log!("WASM calculate_b0_weighted: {} echoes, {} voxels, type={}",
+                 n_echoes, n_total, weight_type);
+
+    // Split flat arrays into per-echo vectors
+    let unwrapped_phases: Vec<Vec<f64>> = (0..n_echoes)
+        .map(|e| unwrapped_phases_flat[e * n_total..(e + 1) * n_total].to_vec())
+        .collect();
+    let mags: Vec<Vec<f64>> = (0..n_echoes)
+        .map(|e| mags_flat[e * n_total..(e + 1) * n_total].to_vec())
+        .collect();
+
+    let wt = utils::multi_echo::B0WeightType::from_str(weight_type);
+
+    let b0 = utils::multi_echo::calculate_b0_weighted(
+        &unwrapped_phases, &mags, tes, mask, wt, n_total
+    );
+
+    console_log!("WASM calculate_b0_weighted complete");
+    b0
+}
+
+/// Full MCPC-3D-S + B0 calculation pipeline
+///
+/// Combines phase offset removal with weighted B0 calculation.
+/// This is the main entry point for multi-echo B0 mapping.
+///
+/// # Arguments
+/// * `phases_flat` - Flattened wrapped phases [echo0, echo1, ...]
+/// * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
+/// * `tes` - Echo times in ms
+/// * `mask` - Binary mask
+/// * `nx`, `ny`, `nz` - Dimensions
+/// * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma for phase offset
+/// * `weight_type` - B0 weighting type
+///
+/// # Returns
+/// Flattened [b0, phase_offset, corrected_phases...]
+/// - First n_total elements: B0 in Hz
+/// - Next n_total elements: phase offset
+/// - Remaining n_echoes * n_total elements: corrected phases
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn mcpc3ds_b0_pipeline_wasm(
+    phases_flat: &[f64],
+    mags_flat: &[f64],
+    tes: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    sigma_x: f64, sigma_y: f64, sigma_z: f64,
+    weight_type: &str,
+) -> Vec<f64> {
+    let n_echoes = tes.len();
+    let n_total = nx * ny * nz;
+
+    console_log!("WASM mcpc3ds_b0_pipeline: {}x{}x{}, {} echoes, weight_type={}",
+                 nx, ny, nz, n_echoes, weight_type);
+
+    // Split flat arrays into per-echo vectors
+    let phases: Vec<Vec<f64>> = (0..n_echoes)
+        .map(|e| phases_flat[e * n_total..(e + 1) * n_total].to_vec())
+        .collect();
+    let mags: Vec<Vec<f64>> = (0..n_echoes)
+        .map(|e| mags_flat[e * n_total..(e + 1) * n_total].to_vec())
+        .collect();
+
+    let wt = utils::multi_echo::B0WeightType::from_str(weight_type);
+
+    let (b0, phase_offset, corrected_phases) = utils::multi_echo::mcpc3ds_b0_pipeline(
+        &phases, &mags, tes, mask,
+        [sigma_x, sigma_y, sigma_z], wt,
+        nx, ny, nz
+    );
+
+    // Flatten output: b0, phase_offset, then all corrected phases
+    let mut result = Vec::with_capacity((2 + n_echoes) * n_total);
+    result.extend(b0);
+    result.extend(phase_offset);
+    for phase in &corrected_phases {
+        result.extend(phase);
+    }
+
+    console_log!("WASM mcpc3ds_b0_pipeline complete");
+    result
 }
 
 // ============================================================================

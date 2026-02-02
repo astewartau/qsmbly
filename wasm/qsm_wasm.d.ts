@@ -25,6 +25,25 @@ export function bet_wasm(data: Float64Array, nx: number, ny: number, nz: number,
 export function bet_wasm_with_progress(data: Float64Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, fractional_intensity: number, iterations: number, subdivisions: number, progress_callback: Function): Uint8Array;
 
 /**
+ * Calculate B0 field from unwrapped phase using weighted averaging
+ *
+ * Implements calculateB0_unwrapped from MriResearchTools.jl
+ * Formula: B0 = (1000 / 2π) * Σ(phase / TE * weight) / Σ(weight)
+ *
+ * # Arguments
+ * * `unwrapped_phases_flat` - Flattened unwrapped phases [echo0, echo1, ...]
+ * * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
+ * * `tes` - Echo times in ms
+ * * `mask` - Binary mask
+ * * `weight_type` - Weighting type: "phase_snr", "phase_var", "average", "tes", "mag"
+ * * `n_total` - Number of voxels per echo
+ *
+ * # Returns
+ * B0 field in Hz
+ */
+export function calculate_b0_weighted_wasm(unwrapped_phases_flat: Float64Array, mags_flat: Float64Array, tes: Float64Array, mask: Uint8Array, weight_type: string, n_total: number): Float64Array;
+
+/**
  * Calculate ROMEO edge weights for phase unwrapping
  *
  * # Arguments
@@ -44,6 +63,23 @@ export function calculate_weights_romeo_wasm(phase: Float64Array, mag: Float64Ar
  * Create a simple spherical mask for testing (bypasses BET algorithm)
  */
 export function create_sphere_mask(nx: number, ny: number, nz: number, center_x: number, center_y: number, center_z: number, radius: number): Uint8Array;
+
+/**
+ * 3D Gaussian smoothing for phase data (handles wrapping)
+ *
+ * Smooths phase by converting to complex representation, smoothing real/imag
+ * separately, then converting back to phase. This correctly handles phase wrapping.
+ *
+ * # Arguments
+ * * `phase` - Phase data in radians (nx * ny * nz)
+ * * `mask` - Binary mask (nx * ny * nz)
+ * * `nx`, `ny`, `nz` - Dimensions
+ * * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma in voxels
+ *
+ * # Returns
+ * Smoothed phase data
+ */
+export function gaussian_smooth_3d_phase_wasm(phase: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, sigma_x: number, sigma_y: number, sigma_z: number): Float64Array;
 
 /**
  * Get dipole kernel for visualization/debugging
@@ -69,6 +105,22 @@ export function get_version(): string;
  * Number of voxels processed
  */
 export function grow_region_unwrap_wasm(phase: Float64Array, weights: Uint8Array, mask: Uint8Array, nx: number, ny: number, nz: number, seed_i: number, seed_j: number, seed_k: number): number;
+
+/**
+ * Hermitian Inner Product (HIP) between two echoes
+ *
+ * Computes HIP = conj(echo1) * echo2 = mag1 * mag2 * exp(i * (phase2 - phase1))
+ *
+ * # Arguments
+ * * `phase1`, `mag1` - First echo phase and magnitude
+ * * `phase2`, `mag2` - Second echo phase and magnitude
+ * * `mask` - Binary mask (nx * ny * nz)
+ * * `n` - Total number of voxels
+ *
+ * # Returns
+ * Flattened [hip_phase, hip_mag] - first n elements are phase diff, next n are combined mag
+ */
+export function hermitian_inner_product_wasm(phase1: Float64Array, mag1: Float64Array, phase2: Float64Array, mag2: Float64Array, mask: Uint8Array, n: number): Float64Array;
 
 /**
  * Initialize panic hook for better error messages in browser console
@@ -153,6 +205,51 @@ export function load_nifti_4d_wasm(bytes: Uint8Array): object;
  * Returns a JS object with: data (Float64Array), dims (array), voxelSize (array), affine (array)
  */
 export function load_nifti_wasm(bytes: Uint8Array): object;
+
+/**
+ * Full MCPC-3D-S + B0 calculation pipeline
+ *
+ * Combines phase offset removal with weighted B0 calculation.
+ * This is the main entry point for multi-echo B0 mapping.
+ *
+ * # Arguments
+ * * `phases_flat` - Flattened wrapped phases [echo0, echo1, ...]
+ * * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
+ * * `tes` - Echo times in ms
+ * * `mask` - Binary mask
+ * * `nx`, `ny`, `nz` - Dimensions
+ * * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma for phase offset
+ * * `weight_type` - B0 weighting type
+ *
+ * # Returns
+ * Flattened [b0, phase_offset, corrected_phases...]
+ * - First n_total elements: B0 in Hz
+ * - Next n_total elements: phase offset
+ * - Remaining n_echoes * n_total elements: corrected phases
+ */
+export function mcpc3ds_b0_pipeline_wasm(phases_flat: Float64Array, mags_flat: Float64Array, tes: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, sigma_x: number, sigma_y: number, sigma_z: number, weight_type: string): Float64Array;
+
+/**
+ * MCPC-3D-S phase offset estimation for single-coil multi-echo data
+ *
+ * Estimates and removes the phase offset (φ₀) from each echo using the
+ * MCPC-3D-S algorithm from MriResearchTools.jl
+ *
+ * # Arguments
+ * * `phases_flat` - Flattened phase data [echo0, echo1, ...], each echo is nx*ny*nz
+ * * `mags_flat` - Flattened magnitude data [echo0, echo1, ...], each echo is nx*ny*nz
+ * * `tes` - Echo times in ms
+ * * `mask` - Binary mask (nx * ny * nz)
+ * * `nx`, `ny`, `nz` - Dimensions
+ * * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma for phase offset
+ * * `echo1`, `echo2` - Which echoes to use for HIP (0-indexed)
+ *
+ * # Returns
+ * Flattened [corrected_phases..., phase_offset]
+ * - First n_echoes * n_total elements are corrected phases
+ * - Last n_total elements are the estimated phase offset
+ */
+export function mcpc3ds_single_coil_wasm(phases_flat: Float64Array, mags_flat: Float64Array, tes: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, sigma_x: number, sigma_y: number, sigma_z: number, echo1: number, echo2: number): Float64Array;
 
 /**
  * MEDI L1 dipole inversion
@@ -310,6 +407,41 @@ export function sharp_wasm(field: Float64Array, mask: Uint8Array, nx: number, ny
 export function smv_wasm(field: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, radius: number): Float64Array;
 
 /**
+ * Get default TGV alpha values for a given regularization level (1-4)
+ * Returns [alpha0, alpha1]
+ */
+export function tgv_get_default_alpha(regularization: number): Float64Array;
+
+/**
+ * TGV-QSM (Total Generalized Variation) single-step reconstruction
+ *
+ * Reconstructs susceptibility directly from wrapped phase data using TGV
+ * regularization. This bypasses phase unwrapping and background field removal.
+ *
+ * # Arguments
+ * * `phase` - Wrapped phase data in radians (nx * ny * nz)
+ * * `mask` - Binary mask (nx * ny * nz)
+ * * `nx`, `ny`, `nz` - Array dimensions
+ * * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
+ * * `bx`, `by`, `bz` - B0 field direction
+ * * `alpha0` - TGV second-order weight (symmetric gradient term)
+ * * `alpha1` - TGV first-order weight (gradient term)
+ * * `iterations` - Number of primal-dual iterations
+ * * `erosions` - Number of mask erosions (default 3)
+ * * `te` - Echo time in seconds
+ * * `fieldstrength` - Magnetic field strength in Tesla
+ *
+ * # Returns
+ * Susceptibility map as Float64Array (ppm)
+ */
+export function tgv_qsm_wasm(phase: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, bx: number, by: number, bz: number, alpha0: number, alpha1: number, iterations: number, erosions: number, te: number, fieldstrength: number): Float64Array;
+
+/**
+ * TGV-QSM with progress callback
+ */
+export function tgv_qsm_wasm_with_progress(phase: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, bx: number, by: number, bz: number, alpha0: number, alpha1: number, iterations: number, erosions: number, te: number, fieldstrength: number, progress_callback: Function): Float64Array;
+
+/**
  * Tikhonov regularized dipole inversion
  *
  * # Arguments
@@ -402,11 +534,14 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly bet_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly bet_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: any) => [number, number];
+    readonly calculate_b0_weighted_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly calculate_weights_romeo_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number];
     readonly create_sphere_mask: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly gaussian_smooth_3d_phase_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
     readonly get_dipole_kernel: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly get_version: () => [number, number];
     readonly grow_region_unwrap_wasm: (a: number, b: number, c: any, d: number, e: number, f: number, g: number, h: any, i: number, j: number, k: number, l: number, m: number, n: number) => number;
+    readonly hermitian_inner_product_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly ismv_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number];
     readonly ismv_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: any) => [number, number];
     readonly laplacian_unwrap_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
@@ -414,6 +549,8 @@ export interface InitOutput {
     readonly lbv_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: any) => [number, number];
     readonly load_nifti_4d_wasm: (a: number, b: number) => [number, number, number];
     readonly load_nifti_wasm: (a: number, b: number) => [number, number, number];
+    readonly mcpc3ds_b0_pipeline_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number];
+    readonly mcpc3ds_single_coil_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number];
     readonly medi_l1_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number, t: number, u: number, v: number, w: number, x: number, y: number, z: number, a1: number) => [number, number];
     readonly medi_l1_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number, t: number, u: number, v: number, w: number, x: number, y: number, z: number, a1: number, b1: any) => [number, number];
     readonly nltv_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number];
@@ -426,6 +563,9 @@ export interface InitOutput {
     readonly save_nifti_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly sharp_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number];
     readonly smv_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
+    readonly tgv_get_default_alpha: (a: number) => [number, number];
+    readonly tgv_qsm_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number) => [number, number];
+    readonly tgv_qsm_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number, t: any) => [number, number];
     readonly tikhonov_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number];
     readonly tkd_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number];
     readonly tsvd_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number];

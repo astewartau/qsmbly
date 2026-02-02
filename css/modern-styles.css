@@ -693,6 +693,37 @@ select {
   cursor: not-allowed;
 }
 
+/* Echo Navigation */
+.echo-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0 var(--space-sm);
+  border-left: 1px solid var(--color-border);
+  margin-left: var(--space-sm);
+}
+
+.echo-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  min-width: 70px;
+  text-align: center;
+}
+
+.btn-icon {
+  padding: var(--space-xs);
+  min-width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 .viewer-actions {
   display: flex;
   gap: var(--space-sm);

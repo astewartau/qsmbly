@@ -173,8 +173,10 @@ fn apply_medi_operator_core(
 /// Conjugate gradient solver with buffer reuse and early termination
 /// Solves Ax = b where A is the MEDI operator
 /// Early termination when convergence stalls (residual reduction < 1% over 5 iterations)
+///
+/// The optional progress callback receives (cg_iter, max_iter) for each CG iteration.
 #[inline]
-fn cg_solve_medi(
+fn cg_solve_medi<F>(
     ws: &mut MediWorkspace,
     w: &[Complex32],
     d_kernel: &[f32],
@@ -185,7 +187,10 @@ fn cg_solve_medi(
     x: &mut [f32],
     tol: f32,
     max_iter: usize,
-) {
+    mut progress_callback: F,
+) where
+    F: FnMut(usize, usize),
+{
     let n = ws.n_total;
     let (nx, ny, nz) = (ws.nx, ws.ny, ws.nz);
     let (vsx, vsy, vsz) = (ws.vsx, ws.vsy, ws.vsz);
@@ -219,7 +224,10 @@ fn cg_solve_medi(
     // Buffer for p (to avoid borrow conflict)
     let mut p_copy = vec![0.0f32; n];
 
-    for _iter in 0..max_iter {
+    for cg_iter in 0..max_iter {
+        // Report CG progress
+        progress_callback(cg_iter + 1, max_iter);
+
         // Copy p to avoid borrow conflict
         p_copy.copy_from_slice(&ws.cg_p);
 
@@ -474,8 +482,8 @@ pub fn medi_l1(
             *val = -*val;
         }
 
-        // Solve A*dx = rhs using optimized CG with buffer reuse
-        cg_solve_medi(&mut ws, &w, &d_kernel, &w_g, &vr, lambda_f32, &rhs, &mut dx, cg_tol_f32, cg_max_iter);
+        // Solve A*dx = rhs using optimized CG with buffer reuse (no progress reporting)
+        cg_solve_medi(&mut ws, &w, &d_kernel, &w_g, &vr, lambda_f32, &rhs, &mut dx, cg_tol_f32, cg_max_iter, |_, _| {});
 
         // Update: chi = chi + dx
         for i in 0..n_total {
@@ -938,11 +946,11 @@ where
     let mut badpoint = vec![0.0f32; n_total];
     let mut n_std_work: Vec<f32> = n_std_f32.clone();
 
+    // Total progress = GN iterations * CG iterations per GN
+    let total_steps = max_iter * cg_max_iter;
+
     // Gauss-Newton iterations
     for iter in 0..max_iter {
-        // Report progress
-        progress_callback(iter + 1, max_iter);
-
         chi_prev.copy_from_slice(&chi);
 
         // Compute Vr = 1 / sqrt(|wG * grad(chi)|^2 + eps)
@@ -974,8 +982,16 @@ where
             *val = -*val;
         }
 
-        // Solve A*dx = rhs using optimized CG
-        cg_solve_medi(&mut ws, &w, &d_kernel, &w_g, &vr, lambda_f32, &rhs, &mut dx, cg_tol_f32, cg_max_iter);
+        // Solve A*dx = rhs using optimized CG with combined progress reporting
+        // Progress = (gn_iter * cg_max_iter + cg_iter) / (max_iter * cg_max_iter)
+        let gn_iter = iter;
+        cg_solve_medi(
+            &mut ws, &w, &d_kernel, &w_g, &vr, lambda_f32, &rhs, &mut dx, cg_tol_f32, cg_max_iter,
+            |cg_iter, cg_total| {
+                let current = gn_iter * cg_total + cg_iter;
+                progress_callback(current, total_steps);
+            }
+        );
 
         // Update: chi = chi + dx
         for i in 0..n_total {
@@ -1081,7 +1097,8 @@ where
         }
 
         if rel_change < tol_f32 {
-            progress_callback(iter + 1, iter + 1);
+            // Report completion on early convergence
+            progress_callback(total_steps, total_steps);
             break;
         }
     }

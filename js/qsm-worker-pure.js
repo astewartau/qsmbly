@@ -136,7 +136,8 @@ function findSeedPoint(mask, nx, ny, nz) {
 }
 
 // Compute B0 fieldmap from unwrapped phase
-function computeB0FromUnwrapped(unwrappedPhase, echoTimes, nx, ny, nz) {
+// method: 'ols' (simple least squares through origin) or 'ols_offset' (estimates phase offset)
+function computeB0FromUnwrapped(unwrappedPhase, echoTimes, nx, ny, nz, method = 'ols') {
   const nEchoes = echoTimes.length;
   const voxelCount = nx * ny * nz;
 
@@ -153,37 +154,67 @@ function computeB0FromUnwrapped(unwrappedPhase, echoTimes, nx, ny, nz) {
     return b0;
   }
 
-  // Multi-echo: weighted linear fit
-  const weights = new Float64Array(nEchoes);
-  let weightSum = 0;
-  for (let i = 0; i < nEchoes; i++) {
-    weights[i] = i + 1;
-    weightSum += weights[i];
-  }
-  for (let i = 0; i < nEchoes; i++) {
-    weights[i] /= weightSum;
-  }
-
-  let teMean = 0;
-  for (let i = 0; i < nEchoes; i++) {
-    teMean += weights[i] * teSec[i];
-  }
-
   const b0 = new Float64Array(voxelCount);
 
-  for (let v = 0; v < voxelCount; v++) {
-    let numerator = 0;
-    let denominator = 0;
+  if (method === 'ols_offset') {
+    // OLS with phase offset estimation (matching QSM.jl _multi_echo_linear_fit! with α)
+    // Model: phase = α + β * TE
+    // Solve using centered data to avoid numerical issues
 
+    // Compute mean TE
+    let teMean = 0;
     for (let e = 0; e < nEchoes; e++) {
-      const teDiff = teSec[e] - teMean;
-      const phaseIdx = e * voxelCount + v;
-      numerator += weights[e] * teDiff * unwrappedPhase[phaseIdx];
-      denominator += weights[e] * teDiff * teDiff;
+      teMean += teSec[e];
+    }
+    teMean /= nEchoes;
+
+    // Compute centered TE and sum of squared centered TEs
+    const teCentered = teSec.map(t => t - teMean);
+    let sumTeCenteredSq = 0;
+    for (let e = 0; e < nEchoes; e++) {
+      sumTeCenteredSq += teCentered[e] * teCentered[e];
     }
 
-    const b0RadPerSec = numerator / (denominator + 1e-10);
-    b0[v] = b0RadPerSec / (2 * Math.PI);
+    for (let v = 0; v < voxelCount; v++) {
+      // Compute mean phase for this voxel
+      let phaseMean = 0;
+      for (let e = 0; e < nEchoes; e++) {
+        phaseMean += unwrappedPhase[e * voxelCount + v];
+      }
+      phaseMean /= nEchoes;
+
+      // Compute slope β = Σ((TE - TE_mean) * (phase - phase_mean)) / Σ((TE - TE_mean)²)
+      let sumTeCenteredPhase = 0;
+      for (let e = 0; e < nEchoes; e++) {
+        const phaseIdx = e * voxelCount + v;
+        sumTeCenteredPhase += teCentered[e] * (unwrappedPhase[phaseIdx] - phaseMean);
+      }
+
+      const b0RadPerSec = sumTeCenteredPhase / (sumTeCenteredSq + 1e-10);
+      b0[v] = b0RadPerSec / (2 * Math.PI);
+    }
+  } else {
+    // Simple OLS through origin (default, matching QSM.jl _multi_echo_linear_fit! without α)
+    // Model: phase = β * TE (assumes zero phase at TE=0)
+    // Slope: β = Σ(TE * phase) / Σ(TE²)
+
+    // Precompute sum of TE² (same for all voxels)
+    let sumTeSq = 0;
+    for (let e = 0; e < nEchoes; e++) {
+      sumTeSq += teSec[e] * teSec[e];
+    }
+
+    for (let v = 0; v < voxelCount; v++) {
+      let sumTePhase = 0;
+
+      for (let e = 0; e < nEchoes; e++) {
+        const phaseIdx = e * voxelCount + v;
+        sumTePhase += teSec[e] * unwrappedPhase[phaseIdx];
+      }
+
+      const b0RadPerSec = sumTePhase / (sumTeSq + 1e-10);
+      b0[v] = b0RadPerSec / (2 * Math.PI);
+    }
   }
 
   return b0;
@@ -198,8 +229,21 @@ async function runPipeline(data) {
   const thresholdFraction = (maskThreshold || 15) / 100;
   const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
 
-  // Extract pipeline settings
+  // Check for combined method (TGV)
+  const combinedMethod = pipelineSettings?.combinedMethod || 'none';
+
+  if (combinedMethod === 'tgv') {
+    // Use TGV single-step reconstruction
+    return await runTgvPipeline(data);
+  }
+
+  // Extract pipeline settings for standard pipeline
   const unwrapMethod = pipelineSettings?.unwrapMethod || 'romeo';
+  const multiEchoMethod = pipelineSettings?.multiEchoMethod || 'ols_offset'; // 'ols', 'ols_offset', 'mcpc3ds'
+  const mcpc3dsSettings = pipelineSettings?.mcpc3ds || {
+    sigma: [10, 10, 5],  // Smoothing sigma in voxels [x, y, z]
+    weightType: 'phase_snr'  // 'phase_snr', 'phase_var', 'average', 'tes', 'mag'
+  };
   const backgroundMethod = pipelineSettings?.backgroundRemoval || 'smv';
   const dipoleMethod = pipelineSettings?.dipoleInversion || 'rts';
 
@@ -296,6 +340,9 @@ async function runPipeline(data) {
     const maskCount = mask.reduce((a, b) => a + b, 0);
     postLog(`Mask coverage: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
 
+    // Note: magnitude, phase, and mask are available from the app's uploaded files
+    // and mask editing UI. We don't need to send them back - only send computed results.
+
     // =========================================================================
     // Step 3: Phase unwrapping (15% - 40%)
     // =========================================================================
@@ -344,36 +391,124 @@ async function runPipeline(data) {
 
     postProgress(0.40, 'Computing B0 field...');
 
-    // For multi-echo, do temporal unwrapping
-    let allUnwrapped;
-    if (nEchoes > 1) {
-      postLog("  Temporal unwrapping remaining echoes...");
-      allUnwrapped = new Float64Array(voxelCount * nEchoes);
-      allUnwrapped.set(unwrappedPhase, 0);
+    // Handle multi-echo phase combination
+    let b0Fieldmap;
 
-      for (let e = 1; e < nEchoes; e++) {
-        const currentPhase = new Float64Array(phase4d[e]);
+    if (nEchoes > 1 && multiEchoMethod === 'mcpc3ds') {
+      // MCPC-3D-S workflow from MriResearchTools.jl
+      postLog(`Using MCPC-3D-S multi-echo combination (sigma=[${mcpc3dsSettings.sigma.join(',')}], weight=${mcpc3dsSettings.weightType})...`);
+      postProgress(0.41, 'MCPC-3D-S: Preparing data...');
 
-        // Temporal unwrap: adjust to minimize difference from scaled template
-        const teRatio = echoTimes[e] / echoTimes[0];
-        for (let i = 0; i < voxelCount; i++) {
-          if (mask[i]) {
-            const expected = unwrappedPhase[i] * teRatio;
-            let diff = currentPhase[i] - (expected % (2 * Math.PI));
-            // Wrap diff to [-π, π]
-            while (diff > Math.PI) diff -= 2 * Math.PI;
-            while (diff < -Math.PI) diff += 2 * Math.PI;
-            allUnwrapped[e * voxelCount + i] = expected + diff;
+      // Flatten phase and magnitude data for WASM
+      const phasesFlat = new Float64Array(nEchoes * voxelCount);
+      const magsFlat = new Float64Array(nEchoes * voxelCount);
+      for (let e = 0; e < nEchoes; e++) {
+        phasesFlat.set(phase4d[e], e * voxelCount);
+        magsFlat.set(magnitude4d[e], e * voxelCount);
+      }
+
+      postProgress(0.42, 'MCPC-3D-S: Running pipeline...');
+
+      // Call the full MCPC-3D-S + B0 pipeline
+      const result = wasmModule.mcpc3ds_b0_pipeline_wasm(
+        phasesFlat, magsFlat,
+        new Float64Array(echoTimes),
+        mask,
+        nx, ny, nz,
+        mcpc3dsSettings.sigma[0], mcpc3dsSettings.sigma[1], mcpc3dsSettings.sigma[2],
+        mcpc3dsSettings.weightType
+      );
+
+      postProgress(0.44, 'MCPC-3D-S: Extracting B0...');
+
+      // Extract B0 from result (first n_total elements)
+      b0Fieldmap = new Float64Array(result.slice(0, voxelCount));
+
+      // Could also extract phase_offset (next n_total) and corrected_phases (remaining)
+      // for debugging/visualization if needed
+
+      postLog(`  MCPC-3D-S B0 calculation complete`);
+
+    } else {
+      // Standard workflow: unwrap each echo independently, then fit B0
+      let allUnwrapped;
+      if (nEchoes > 1) {
+        allUnwrapped = new Float64Array(voxelCount * nEchoes);
+        allUnwrapped.set(unwrappedPhase, 0);
+
+        postLog(`  Unwrapping ${nEchoes} echoes...`);
+        const [seedI, seedJ, seedK] = findSeedPoint(mask, nx, ny, nz);
+
+        for (let e = 1; e < nEchoes; e++) {
+          postProgress(0.40 + (e / nEchoes) * 0.05, `Unwrapping echo ${e + 1}/${nEchoes}...`);
+
+          if (unwrapMethod === 'laplacian') {
+            const phaseE = new Float64Array(phase4d[e]);
+            const unwrappedE = new Float64Array(wasmModule.laplacian_unwrap_wasm(
+              phaseE, mask, nx, ny, nz, vsx, vsy, vsz
+            ));
+            allUnwrapped.set(unwrappedE, e * voxelCount);
+          } else {
+            // ROMEO for each echo
+            const magE = new Float64Array(magnitude4d[e]);
+            const phaseE = new Float64Array(phase4d[e]);
+            const phaseNext = (e + 1 < nEchoes) ? new Float64Array(phase4d[e + 1]) : new Float64Array(0);
+            const teE = echoTimes[e];
+            const teNext = (e + 1 < nEchoes) ? echoTimes[e + 1] : 0;
+
+            const weightsE = wasmModule.calculate_weights_romeo_wasm(
+              phaseE, magE, phaseNext, teE, teNext, mask, nx, ny, nz
+            );
+
+            const unwrappedE = new Float64Array(phaseE);
+            const workMaskE = new Uint8Array(mask);
+            wasmModule.grow_region_unwrap_wasm(
+              unwrappedE, weightsE, workMaskE,
+              nx, ny, nz, seedI, seedJ, seedK
+            );
+            allUnwrapped.set(unwrappedE, e * voxelCount);
           }
         }
-      }
-    } else {
-      allUnwrapped = unwrappedPhase;
-    }
 
-    // Compute B0 fieldmap
-    postLog("Computing B0 field map...");
-    const b0Fieldmap = computeB0FromUnwrapped(allUnwrapped, echoTimes, nx, ny, nz);
+        // Align echoes globally to remove 2π ambiguities between independent unwrappings
+        postLog("  Aligning echoes to remove 2π ambiguities...");
+        for (let e = 1; e < nEchoes; e++) {
+          const teRatio = echoTimes[e] / echoTimes[0];
+
+          // Calculate mean difference from expected (based on first echo)
+          let sumDiff = 0;
+          let count = 0;
+          for (let i = 0; i < voxelCount; i++) {
+            if (mask[i]) {
+              const expected = unwrappedPhase[i] * teRatio;
+              const actual = allUnwrapped[e * voxelCount + i];
+              sumDiff += (actual - expected);
+              count++;
+            }
+          }
+          const meanDiff = sumDiff / count;
+
+          // Round to nearest multiple of 2π and correct
+          const correction = Math.round(meanDiff / (2 * Math.PI)) * (2 * Math.PI);
+          if (Math.abs(correction) > 0.1) {
+            postLog(`    Echo ${e + 1}: correcting by ${(correction / Math.PI).toFixed(2)}π`);
+            for (let i = 0; i < voxelCount; i++) {
+              if (mask[i]) {
+                allUnwrapped[e * voxelCount + i] -= correction;
+              }
+            }
+          }
+        }
+      } else {
+        allUnwrapped = unwrappedPhase;
+      }
+
+      // Compute B0 fieldmap using OLS
+      const useOffset = multiEchoMethod === 'ols_offset';
+      const b0FitMethod = useOffset ? 'ols_offset' : 'ols';
+      postLog(`Computing B0 field map (${useOffset ? 'estimating phase offset' : 'assuming zero offset'})...`);
+      b0Fieldmap = computeB0FromUnwrapped(allUnwrapped, echoTimes, nx, ny, nz, b0FitMethod);
+    }
 
     // Apply mask
     for (let i = 0; i < voxelCount; i++) {
@@ -663,6 +798,139 @@ async function runPipeline(data) {
 
     postProgress(1.0, 'Pipeline complete!');
     postLog("Pipeline completed successfully!");
+    postComplete({ success: true });
+
+  } catch (error) {
+    postError(error.message);
+    throw error;
+  }
+}
+
+// TGV single-step pipeline
+async function runTgvPipeline(data) {
+  const {
+    magnitudeBuffers, phaseBuffers, echoTimes, magField,
+    maskThreshold, customMaskBuffer, pipelineSettings
+  } = data;
+
+  const thresholdFraction = (maskThreshold || 15) / 100;
+  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
+
+  // TGV settings
+  const tgvSettings = pipelineSettings?.tgv || { regularization: 2, iterations: 1000, erosions: 3 };
+  const alphas = wasmModule.tgv_get_default_alpha(tgvSettings.regularization);
+  const alpha0 = alphas[0];
+  const alpha1 = alphas[1];
+
+  try {
+    // =========================================================================
+    // Step 1: Load NIfTI data (0% - 15%)
+    // =========================================================================
+    postProgress(0.02, 'Loading NIfTI data...');
+    postLog("TGV: Loading data via WASM...");
+
+    const nEchoes = echoTimes.length;
+    let magnitude4d = [];
+    let phase4d = [];
+    let dims, voxelSize, affine;
+
+    for (let e = 0; e < nEchoes; e++) {
+      postProgress(0.02 + (e / nEchoes) * 0.08, `Loading echo ${e + 1}/${nEchoes}...`);
+
+      // Load magnitude
+      const magResult = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffers[e]));
+      const magData = Array.from(magResult.data);
+      dims = Array.from(magResult.dims);
+      voxelSize = Array.from(magResult.voxelSize);
+      affine = Array.from(magResult.affine);
+      magnitude4d.push(magData);
+
+      // Load phase
+      const phaseResult = wasmModule.load_nifti_wasm(new Uint8Array(phaseBuffers[e]));
+      let phaseData = Array.from(phaseResult.data);
+
+      // Scale phase to [-π, +π]
+      phaseData = scalePhase(new Float64Array(phaseData));
+      phase4d.push(Array.from(phaseData));
+
+      postLog(`  Echo ${e + 1}: shape ${dims[0]}x${dims[1]}x${dims[2]}`);
+    }
+
+    const [nx, ny, nz] = dims;
+    const [vsx, vsy, vsz] = voxelSize;
+    const voxelCount = nx * ny * nz;
+
+    postLog(`Data shape: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm`);
+
+    // =========================================================================
+    // Step 2: Create or load mask (15% - 20%)
+    // =========================================================================
+    postProgress(0.15, 'Creating mask...');
+    let mask;
+
+    if (hasCustomMask) {
+      postLog("Loading custom mask...");
+      const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+      const maskData = Array.from(maskResult.data);
+      mask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        mask[i] = maskData[i] > 0.5 ? 1 : 0;
+      }
+    } else {
+      postLog(`Creating threshold mask (${thresholdFraction * 100}%)...`);
+      mask = createThresholdMask(new Float64Array(magnitude4d[0]), thresholdFraction);
+    }
+
+    const maskCount = mask.reduce((a, b) => a + b, 0);
+    postLog(`Mask coverage: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
+
+    // Note: magnitude, phase, and mask are available from the app's uploaded files
+    // and mask editing UI. We don't need to send them back - only send computed results.
+
+    // =========================================================================
+    // Step 3: TGV reconstruction (20% - 95%)
+    // =========================================================================
+    postProgress(0.20, 'Starting TGV reconstruction...');
+    postLog(`TGV parameters: alpha0=${alpha0.toFixed(4)}, alpha1=${alpha1.toFixed(4)}, iterations=${tgvSettings.iterations}, erosions=${tgvSettings.erosions}`);
+
+    // Use first echo phase for TGV
+    const phase1 = new Float64Array(phase4d[0]);
+    const te = echoTimes[0] / 1000;  // Convert ms to seconds
+    const fieldstrength = magField || 3.0;
+
+    postLog(`Using TE=${(te * 1000).toFixed(2)}ms, B0=${fieldstrength}T`);
+
+    // Progress callback
+    const tgvProgress = (current, total) => {
+      const progress = 0.20 + (current / total) * 0.70;
+      postProgress(progress, `TGV: Iteration ${current}/${total}`);
+    };
+
+    const qsmResult = new Float64Array(wasmModule.tgv_qsm_wasm_with_progress(
+      phase1, mask, nx, ny, nz, vsx, vsy, vsz,
+      0, 0, 1,  // B0 direction
+      alpha0, alpha1,
+      tgvSettings.iterations, tgvSettings.erosions,
+      te, fieldstrength,
+      tgvProgress
+    ));
+
+    // Calculate QSM range
+    let qsmMin = Infinity, qsmMax = -Infinity;
+    for (let i = 0; i < voxelCount; i++) {
+      if (mask[i] && qsmResult[i] !== 0) {
+        if (qsmResult[i] < qsmMin) qsmMin = qsmResult[i];
+        if (qsmResult[i] > qsmMax) qsmMax = qsmResult[i];
+      }
+    }
+    postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
+
+    // Send QSM result for display
+    postProgress(0.95, 'Sending QSM result...');
+    sendStageData('final', qsmResult, dims, voxelSize, affine, 'QSM Result (ppm) - TGV');
+
+    postProgress(1.0, 'TGV pipeline complete!');
+    postLog("TGV pipeline completed successfully!");
     postComplete({ success: true });
 
   } catch (error) {

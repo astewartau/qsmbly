@@ -61,6 +61,47 @@ export function bet_wasm_with_progress(data, nx, ny, nz, vsx, vsy, vsz, fraction
 }
 
 /**
+ * Calculate B0 field from unwrapped phase using weighted averaging
+ *
+ * Implements calculateB0_unwrapped from MriResearchTools.jl
+ * Formula: B0 = (1000 / 2π) * Σ(phase / TE * weight) / Σ(weight)
+ *
+ * # Arguments
+ * * `unwrapped_phases_flat` - Flattened unwrapped phases [echo0, echo1, ...]
+ * * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
+ * * `tes` - Echo times in ms
+ * * `mask` - Binary mask
+ * * `weight_type` - Weighting type: "phase_snr", "phase_var", "average", "tes", "mag"
+ * * `n_total` - Number of voxels per echo
+ *
+ * # Returns
+ * B0 field in Hz
+ * @param {Float64Array} unwrapped_phases_flat
+ * @param {Float64Array} mags_flat
+ * @param {Float64Array} tes
+ * @param {Uint8Array} mask
+ * @param {string} weight_type
+ * @param {number} n_total
+ * @returns {Float64Array}
+ */
+export function calculate_b0_weighted_wasm(unwrapped_phases_flat, mags_flat, tes, mask, weight_type, n_total) {
+    const ptr0 = passArrayF64ToWasm0(unwrapped_phases_flat, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayF64ToWasm0(mags_flat, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArrayF64ToWasm0(tes, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passArray8ToWasm0(mask, wasm.__wbindgen_malloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ptr4 = passStringToWasm0(weight_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len4 = WASM_VECTOR_LEN;
+    const ret = wasm.calculate_b0_weighted_wasm(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, n_total);
+    var v6 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v6;
+}
+
+/**
  * Calculate ROMEO edge weights for phase unwrapping
  *
  * # Arguments
@@ -115,6 +156,41 @@ export function create_sphere_mask(nx, ny, nz, center_x, center_y, center_z, rad
     var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v1;
+}
+
+/**
+ * 3D Gaussian smoothing for phase data (handles wrapping)
+ *
+ * Smooths phase by converting to complex representation, smoothing real/imag
+ * separately, then converting back to phase. This correctly handles phase wrapping.
+ *
+ * # Arguments
+ * * `phase` - Phase data in radians (nx * ny * nz)
+ * * `mask` - Binary mask (nx * ny * nz)
+ * * `nx`, `ny`, `nz` - Dimensions
+ * * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma in voxels
+ *
+ * # Returns
+ * Smoothed phase data
+ * @param {Float64Array} phase
+ * @param {Uint8Array} mask
+ * @param {number} nx
+ * @param {number} ny
+ * @param {number} nz
+ * @param {number} sigma_x
+ * @param {number} sigma_y
+ * @param {number} sigma_z
+ * @returns {Float64Array}
+ */
+export function gaussian_smooth_3d_phase_wasm(phase, mask, nx, ny, nz, sigma_x, sigma_y, sigma_z) {
+    const ptr0 = passArrayF64ToWasm0(phase, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(mask, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.gaussian_smooth_3d_phase_wasm(ptr0, len0, ptr1, len1, nx, ny, nz, sigma_x, sigma_y, sigma_z);
+    var v3 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v3;
 }
 
 /**
@@ -186,6 +262,44 @@ export function grow_region_unwrap_wasm(phase, weights, mask, nx, ny, nz, seed_i
     var len2 = WASM_VECTOR_LEN;
     const ret = wasm.grow_region_unwrap_wasm(ptr0, len0, phase, ptr1, len1, ptr2, len2, mask, nx, ny, nz, seed_i, seed_j, seed_k);
     return ret >>> 0;
+}
+
+/**
+ * Hermitian Inner Product (HIP) between two echoes
+ *
+ * Computes HIP = conj(echo1) * echo2 = mag1 * mag2 * exp(i * (phase2 - phase1))
+ *
+ * # Arguments
+ * * `phase1`, `mag1` - First echo phase and magnitude
+ * * `phase2`, `mag2` - Second echo phase and magnitude
+ * * `mask` - Binary mask (nx * ny * nz)
+ * * `n` - Total number of voxels
+ *
+ * # Returns
+ * Flattened [hip_phase, hip_mag] - first n elements are phase diff, next n are combined mag
+ * @param {Float64Array} phase1
+ * @param {Float64Array} mag1
+ * @param {Float64Array} phase2
+ * @param {Float64Array} mag2
+ * @param {Uint8Array} mask
+ * @param {number} n
+ * @returns {Float64Array}
+ */
+export function hermitian_inner_product_wasm(phase1, mag1, phase2, mag2, mask, n) {
+    const ptr0 = passArrayF64ToWasm0(phase1, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayF64ToWasm0(mag1, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArrayF64ToWasm0(phase2, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passArrayF64ToWasm0(mag2, wasm.__wbindgen_malloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ptr4 = passArray8ToWasm0(mask, wasm.__wbindgen_malloc);
+    const len4 = WASM_VECTOR_LEN;
+    const ret = wasm.hermitian_inner_product_wasm(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, n);
+    var v6 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v6;
 }
 
 /**
@@ -394,6 +508,104 @@ export function load_nifti_wasm(bytes) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Full MCPC-3D-S + B0 calculation pipeline
+ *
+ * Combines phase offset removal with weighted B0 calculation.
+ * This is the main entry point for multi-echo B0 mapping.
+ *
+ * # Arguments
+ * * `phases_flat` - Flattened wrapped phases [echo0, echo1, ...]
+ * * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
+ * * `tes` - Echo times in ms
+ * * `mask` - Binary mask
+ * * `nx`, `ny`, `nz` - Dimensions
+ * * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma for phase offset
+ * * `weight_type` - B0 weighting type
+ *
+ * # Returns
+ * Flattened [b0, phase_offset, corrected_phases...]
+ * - First n_total elements: B0 in Hz
+ * - Next n_total elements: phase offset
+ * - Remaining n_echoes * n_total elements: corrected phases
+ * @param {Float64Array} phases_flat
+ * @param {Float64Array} mags_flat
+ * @param {Float64Array} tes
+ * @param {Uint8Array} mask
+ * @param {number} nx
+ * @param {number} ny
+ * @param {number} nz
+ * @param {number} sigma_x
+ * @param {number} sigma_y
+ * @param {number} sigma_z
+ * @param {string} weight_type
+ * @returns {Float64Array}
+ */
+export function mcpc3ds_b0_pipeline_wasm(phases_flat, mags_flat, tes, mask, nx, ny, nz, sigma_x, sigma_y, sigma_z, weight_type) {
+    const ptr0 = passArrayF64ToWasm0(phases_flat, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayF64ToWasm0(mags_flat, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArrayF64ToWasm0(tes, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passArray8ToWasm0(mask, wasm.__wbindgen_malloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ptr4 = passStringToWasm0(weight_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len4 = WASM_VECTOR_LEN;
+    const ret = wasm.mcpc3ds_b0_pipeline_wasm(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, nx, ny, nz, sigma_x, sigma_y, sigma_z, ptr4, len4);
+    var v6 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v6;
+}
+
+/**
+ * MCPC-3D-S phase offset estimation for single-coil multi-echo data
+ *
+ * Estimates and removes the phase offset (φ₀) from each echo using the
+ * MCPC-3D-S algorithm from MriResearchTools.jl
+ *
+ * # Arguments
+ * * `phases_flat` - Flattened phase data [echo0, echo1, ...], each echo is nx*ny*nz
+ * * `mags_flat` - Flattened magnitude data [echo0, echo1, ...], each echo is nx*ny*nz
+ * * `tes` - Echo times in ms
+ * * `mask` - Binary mask (nx * ny * nz)
+ * * `nx`, `ny`, `nz` - Dimensions
+ * * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma for phase offset
+ * * `echo1`, `echo2` - Which echoes to use for HIP (0-indexed)
+ *
+ * # Returns
+ * Flattened [corrected_phases..., phase_offset]
+ * - First n_echoes * n_total elements are corrected phases
+ * - Last n_total elements are the estimated phase offset
+ * @param {Float64Array} phases_flat
+ * @param {Float64Array} mags_flat
+ * @param {Float64Array} tes
+ * @param {Uint8Array} mask
+ * @param {number} nx
+ * @param {number} ny
+ * @param {number} nz
+ * @param {number} sigma_x
+ * @param {number} sigma_y
+ * @param {number} sigma_z
+ * @param {number} echo1
+ * @param {number} echo2
+ * @returns {Float64Array}
+ */
+export function mcpc3ds_single_coil_wasm(phases_flat, mags_flat, tes, mask, nx, ny, nz, sigma_x, sigma_y, sigma_z, echo1, echo2) {
+    const ptr0 = passArrayF64ToWasm0(phases_flat, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayF64ToWasm0(mags_flat, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArrayF64ToWasm0(tes, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passArray8ToWasm0(mask, wasm.__wbindgen_malloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.mcpc3ds_single_coil_wasm(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, nx, ny, nz, sigma_x, sigma_y, sigma_z, echo1, echo2);
+    var v5 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v5;
 }
 
 /**
@@ -857,6 +1069,103 @@ export function smv_wasm(field, mask, nx, ny, nz, vsx, vsy, vsz, radius) {
     const ptr1 = passArray8ToWasm0(mask, wasm.__wbindgen_malloc);
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.smv_wasm(ptr0, len0, ptr1, len1, nx, ny, nz, vsx, vsy, vsz, radius);
+    var v3 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v3;
+}
+
+/**
+ * Get default TGV alpha values for a given regularization level (1-4)
+ * Returns [alpha0, alpha1]
+ * @param {number} regularization
+ * @returns {Float64Array}
+ */
+export function tgv_get_default_alpha(regularization) {
+    const ret = wasm.tgv_get_default_alpha(regularization);
+    var v1 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v1;
+}
+
+/**
+ * TGV-QSM (Total Generalized Variation) single-step reconstruction
+ *
+ * Reconstructs susceptibility directly from wrapped phase data using TGV
+ * regularization. This bypasses phase unwrapping and background field removal.
+ *
+ * # Arguments
+ * * `phase` - Wrapped phase data in radians (nx * ny * nz)
+ * * `mask` - Binary mask (nx * ny * nz)
+ * * `nx`, `ny`, `nz` - Array dimensions
+ * * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
+ * * `bx`, `by`, `bz` - B0 field direction
+ * * `alpha0` - TGV second-order weight (symmetric gradient term)
+ * * `alpha1` - TGV first-order weight (gradient term)
+ * * `iterations` - Number of primal-dual iterations
+ * * `erosions` - Number of mask erosions (default 3)
+ * * `te` - Echo time in seconds
+ * * `fieldstrength` - Magnetic field strength in Tesla
+ *
+ * # Returns
+ * Susceptibility map as Float64Array (ppm)
+ * @param {Float64Array} phase
+ * @param {Uint8Array} mask
+ * @param {number} nx
+ * @param {number} ny
+ * @param {number} nz
+ * @param {number} vsx
+ * @param {number} vsy
+ * @param {number} vsz
+ * @param {number} bx
+ * @param {number} by
+ * @param {number} bz
+ * @param {number} alpha0
+ * @param {number} alpha1
+ * @param {number} iterations
+ * @param {number} erosions
+ * @param {number} te
+ * @param {number} fieldstrength
+ * @returns {Float64Array}
+ */
+export function tgv_qsm_wasm(phase, mask, nx, ny, nz, vsx, vsy, vsz, bx, by, bz, alpha0, alpha1, iterations, erosions, te, fieldstrength) {
+    const ptr0 = passArrayF64ToWasm0(phase, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(mask, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.tgv_qsm_wasm(ptr0, len0, ptr1, len1, nx, ny, nz, vsx, vsy, vsz, bx, by, bz, alpha0, alpha1, iterations, erosions, te, fieldstrength);
+    var v3 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v3;
+}
+
+/**
+ * TGV-QSM with progress callback
+ * @param {Float64Array} phase
+ * @param {Uint8Array} mask
+ * @param {number} nx
+ * @param {number} ny
+ * @param {number} nz
+ * @param {number} vsx
+ * @param {number} vsy
+ * @param {number} vsz
+ * @param {number} bx
+ * @param {number} by
+ * @param {number} bz
+ * @param {number} alpha0
+ * @param {number} alpha1
+ * @param {number} iterations
+ * @param {number} erosions
+ * @param {number} te
+ * @param {number} fieldstrength
+ * @param {Function} progress_callback
+ * @returns {Float64Array}
+ */
+export function tgv_qsm_wasm_with_progress(phase, mask, nx, ny, nz, vsx, vsy, vsz, bx, by, bz, alpha0, alpha1, iterations, erosions, te, fieldstrength, progress_callback) {
+    const ptr0 = passArrayF64ToWasm0(phase, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(mask, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.tgv_qsm_wasm_with_progress(ptr0, len0, ptr1, len1, nx, ny, nz, vsx, vsy, vsz, bx, by, bz, alpha0, alpha1, iterations, erosions, te, fieldstrength, progress_callback);
     var v3 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
     return v3;

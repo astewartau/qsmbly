@@ -30,6 +30,32 @@ fn is_gzip(bytes: &[u8]) -> bool {
     bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b
 }
 
+/// Get header info for diagnostics
+fn get_header_info(bytes: &[u8]) -> String {
+    if bytes.len() < 348 {
+        return format!("File too small ({} bytes, need at least 348)", bytes.len());
+    }
+
+    // NIfTI-1 header size should be at offset 0, stored as i32
+    let sizeof_hdr = i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+
+    // Magic bytes at offset 344 for NIfTI-1
+    let magic = if bytes.len() >= 348 {
+        String::from_utf8_lossy(&bytes[344..348]).to_string()
+    } else {
+        "N/A".to_string()
+    };
+
+    // Data type at offset 70 (dim[0..8] at 40, then datatype at 70)
+    let datatype = if bytes.len() >= 72 {
+        i16::from_le_bytes([bytes[70], bytes[71]])
+    } else {
+        -1
+    };
+
+    format!("sizeof_hdr={}, magic='{}', datatype={}", sizeof_hdr, magic, datatype)
+}
+
 /// Load a NIfTI file from bytes
 ///
 /// Supports both .nii and .nii.gz files (gzip is auto-detected)
@@ -38,11 +64,22 @@ pub fn load_nifti(bytes: &[u8]) -> Result<NiftiData, String> {
         let cursor = Cursor::new(bytes);
         let decoder = GzDecoder::new(cursor);
         InMemNiftiObject::from_reader(decoder)
-            .map_err(|e| format!("Failed to read gzipped NIfTI: {}", e))?
+            .map_err(|e| {
+                // Try to get header info from decompressed data
+                let mut decoder2 = GzDecoder::new(Cursor::new(bytes));
+                let mut decompressed = Vec::new();
+                let info = if std::io::Read::read_to_end(&mut decoder2, &mut decompressed).is_ok() {
+                    get_header_info(&decompressed)
+                } else {
+                    "Could not decompress".to_string()
+                };
+                format!("Failed to read gzipped NIfTI: {} ({})", e, info)
+            })?
     } else {
+        let info = get_header_info(bytes);
         let cursor = Cursor::new(bytes);
         InMemNiftiObject::from_reader(cursor)
-            .map_err(|e| format!("Failed to read NIfTI: {}", e))?
+            .map_err(|e| format!("Failed to read NIfTI: {} ({})", e, info))?
     };
 
     let header = obj.header();

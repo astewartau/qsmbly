@@ -11,6 +11,7 @@
 //! - NLTV: Nonlinear TV with iterative reweighting
 //! - RTS: Rapid two-step method
 //! - MEDI: Morphology-enabled dipole inversion
+//! - TGV: Total Generalized Variation (single-step from wrapped phase)
 
 pub mod tkd;
 pub mod tikhonov;
@@ -18,6 +19,7 @@ pub mod tv;
 pub mod nltv;
 pub mod rts;
 pub mod medi;
+pub mod tgv;
 
 pub use tkd::*;
 pub use tikhonov::*;
@@ -25,3 +27,4 @@ pub use tv::*;
 pub use nltv::*;
 pub use rts::*;
 pub use medi::*;
+pub use tgv::*;

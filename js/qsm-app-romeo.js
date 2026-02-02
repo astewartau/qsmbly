@@ -69,10 +69,13 @@ class QSMApp {
 
     // Pipeline settings (null values = calculate from voxel size)
     this.pipelineSettings = {
+      combinedMethod: 'none',  // 'none' or 'tgv'
+      tgv: { regularization: 2, iterations: 1000, erosions: 3 },
       unwrapMethod: 'romeo',  // 'romeo' or 'laplacian'
-      unwrapMode: 'individual',  // 'individual' or 'temporal'
+      multiEchoMethod: 'mcpc3ds',  // 'ols', 'ols_offset', 'mcpc3ds'
+      mcpc3ds: { sigma: [10, 10, 5], weightType: 'phase_snr' },
       romeo: { weighting: 'phase_snr' },
-      backgroundRemoval: 'smv',  // 'vsharp', 'sharp', 'smv', 'ismv', 'pdf', 'lbv'
+      backgroundRemoval: 'vsharp',  // 'vsharp', 'sharp', 'smv', 'ismv', 'pdf', 'lbv'
       vsharp: { maxRadius: null, minRadius: null, threshold: 0.05 },
       sharp: { radius: 6, threshold: 0.05 },
       smv: { radius: null },
@@ -99,6 +102,10 @@ class QSMApp {
     // Track last run settings for intelligent caching
     this.lastRunSettings = null;
     this.pipelineHasRun = false;
+
+    // Echo navigation state
+    this.currentEchoIndex = 0;   // 0-indexed current echo
+    this.currentViewType = null; // 'magnitude' or 'phase' when navigating echoes
 
     // Pipeline running state
     this.pipelineRunning = false;
@@ -343,6 +350,10 @@ class QSMApp {
     document.getElementById('vis_magnitude').addEventListener('click', () => this.visualizeMagnitude());
     document.getElementById('vis_phase').addEventListener('click', () => this.visualizePhase());
 
+    // Echo navigation
+    document.getElementById('echoPrev')?.addEventListener('click', () => this.navigateEcho(-1));
+    document.getElementById('echoNext')?.addEventListener('click', () => this.navigateEcho(1));
+
     // Stage navigation
     document.getElementById('showMagnitude').addEventListener('click', () => this.showStage('magnitude'));
     document.getElementById('showPhase').addEventListener('click', () => this.showStage('phase'));
@@ -410,11 +421,22 @@ class QSMApp {
       if (e.target.id === 'betSettingsModal') this.closeBetSettingsModal();
     });
 
+    // Combined method dropdown - show/hide TGV settings and toggle other sections
+    document.getElementById('combinedMethod')?.addEventListener('change', (e) => {
+      this.updatePipelineModalVisibility();
+    });
+
     // Method selection dropdowns - show/hide appropriate settings
     document.getElementById('unwrapMethod')?.addEventListener('change', (e) => {
       const isRomeo = e.target.value === 'romeo';
       document.getElementById('romeoSettings').style.display = isRomeo ? 'block' : 'none';
       document.getElementById('laplacianSettings').style.display = isRomeo ? 'none' : 'block';
+    });
+
+    // Single-echo unwrap method dropdown
+    document.getElementById('singleEchoUnwrapMethod')?.addEventListener('change', (e) => {
+      const isRomeo = e.target.value === 'romeo';
+      document.getElementById('singleEchoRomeoSettings').style.display = isRomeo ? 'block' : 'none';
     });
 
     document.getElementById('bgRemovalMethod')?.addEventListener('change', (e) => {
@@ -441,6 +463,11 @@ class QSMApp {
     // MEDI SMV checkbox toggle
     document.getElementById('mediSmv')?.addEventListener('change', (e) => {
       document.getElementById('mediSmvRadiusGroup').style.display = e.target.checked ? 'block' : 'none';
+    });
+
+    // Multi-echo method dropdown - show/hide appropriate settings
+    document.getElementById('multiEchoMethod')?.addEventListener('change', (e) => {
+      this.updatePipelineModalVisibility();
     });
 
     // Morphological operation buttons
@@ -740,8 +767,10 @@ class QSMApp {
       return;
     }
 
-    const file = this.multiEchoFiles.magnitude[0].file;
-    await this.loadAndVisualizeFile(file, "Magnitude (Echo 1)");
+    this.currentViewType = 'magnitude';
+    this.currentEchoIndex = 0;
+    this.updateEchoNavigation();
+    await this.visualizeCurrentEcho();
   }
 
   async visualizePhase() {
@@ -750,8 +779,70 @@ class QSMApp {
       return;
     }
 
-    const file = this.multiEchoFiles.phase[0].file;
-    await this.loadAndVisualizeFile(file, "Phase (Echo 1)");
+    this.currentViewType = 'phase';
+    this.currentEchoIndex = 0;
+    this.updateEchoNavigation();
+    await this.visualizeCurrentEcho();
+  }
+
+  // Navigate to previous/next echo
+  navigateEcho(direction) {
+    if (!this.currentViewType) return;
+
+    const files = this.multiEchoFiles[this.currentViewType];
+    if (!files || files.length === 0) return;
+
+    const newIndex = this.currentEchoIndex + direction;
+    if (newIndex >= 0 && newIndex < files.length) {
+      this.currentEchoIndex = newIndex;
+      this.updateEchoNavigation();
+      this.visualizeCurrentEcho();
+    }
+  }
+
+  // Visualize the current echo based on currentViewType and currentEchoIndex
+  async visualizeCurrentEcho() {
+    if (!this.currentViewType) return;
+
+    const files = this.multiEchoFiles[this.currentViewType];
+    if (!files || files.length === 0) return;
+
+    const file = files[this.currentEchoIndex].file;
+    const typeName = this.currentViewType.charAt(0).toUpperCase() + this.currentViewType.slice(1);
+    await this.loadAndVisualizeFile(file, `${typeName} (Echo ${this.currentEchoIndex + 1})`);
+  }
+
+  // Update echo navigation UI visibility and labels
+  updateEchoNavigation() {
+    const echoNav = document.getElementById('echoNav');
+    const echoLabel = document.getElementById('echoLabel');
+    const echoPrev = document.getElementById('echoPrev');
+    const echoNext = document.getElementById('echoNext');
+
+    if (!echoNav || !this.currentViewType) {
+      if (echoNav) echoNav.style.display = 'none';
+      return;
+    }
+
+    const files = this.multiEchoFiles[this.currentViewType];
+    const numEchoes = files?.length || 0;
+
+    if (numEchoes <= 1) {
+      echoNav.style.display = 'none';
+      return;
+    }
+
+    echoNav.style.display = 'flex';
+    echoLabel.textContent = `Echo ${this.currentEchoIndex + 1}/${numEchoes}`;
+    echoPrev.disabled = this.currentEchoIndex === 0;
+    echoNext.disabled = this.currentEchoIndex >= numEchoes - 1;
+  }
+
+  // Hide echo navigation when viewing non-echo data (pipeline results)
+  hideEchoNavigation() {
+    this.currentViewType = null;
+    const echoNav = document.getElementById('echoNav');
+    if (echoNav) echoNav.style.display = 'none';
   }
 
   async loadAndVisualizeFile(file, description) {
@@ -1339,7 +1430,6 @@ class QSMApp {
 
     // Get parameters
     const magField = parseFloat(document.getElementById('magField').value);
-    const unwrapMode = document.getElementById('unwrapMode').value;
 
     if (!magField || magField <= 0) {
       this.updateOutput("Please enter a valid magnetic field strength");
@@ -1398,7 +1488,6 @@ class QSMApp {
           phaseBuffers,
           echoTimes,
           magField,
-          unwrapMode,
           maskThreshold: this.maskThreshold,
           customMaskBuffer,
           pipelineSettings: this.pipelineSettings,
@@ -1501,6 +1590,18 @@ class QSMApp {
 
   async showStage(stage) {
     try {
+      // For magnitude and phase, use the multi-echo viewer with echo navigation
+      if (stage === 'magnitude' || stage === 'phase') {
+        this.currentViewType = stage;
+        this.currentEchoIndex = 0;
+        await this.visualizeCurrentEcho();
+        this.updateEchoNavigation();
+        return;
+      }
+
+      // For single 3D volume stages (mask, B0, bgRemoved, final), hide echo navigation
+      this.hideEchoNavigation();
+
       // Check if we have cached results first
       if (this.results[stage]?.file) {
         this.updateOutput(`Displaying ${stage}...`);
@@ -1526,6 +1627,9 @@ class QSMApp {
 
       // Enable the buttons for this specific stage
       this.enableStageButtons(stage);
+
+      // Hide echo navigation - pipeline results are single 3D volumes, not multi-echo
+      this.hideEchoNavigation();
 
       // Create file from bytes
       const blob = new Blob([stageBytes], { type: 'application/octet-stream' });
@@ -1735,13 +1839,39 @@ class QSMApp {
 
     // Populate form with current settings (or calculated defaults if null)
 
-    // Unwrap method and mode
+    // Combined method
+    const combinedMethod = this.pipelineSettings.combinedMethod || 'none';
+    document.getElementById('combinedMethod').value = combinedMethod;
+
+    // TGV settings
+    document.getElementById('tgvRegularization').value = this.pipelineSettings.tgv.regularization;
+    document.getElementById('tgvIterations').value = this.pipelineSettings.tgv.iterations;
+    document.getElementById('tgvErosions').value = this.pipelineSettings.tgv.erosions;
+
+    // Multi-echo method
+    const multiEchoMethod = this.pipelineSettings.multiEchoMethod || 'mcpc3ds';
+    document.getElementById('multiEchoMethod').value = multiEchoMethod;
+
+    // Phase unwrap method (for multi-echo OLS methods)
     const unwrapMethod = this.pipelineSettings.unwrapMethod || 'romeo';
     document.getElementById('unwrapMethod').value = unwrapMethod;
-    document.getElementById('unwrapMode').value = this.pipelineSettings.unwrapMode || 'individual';
     document.getElementById('romeoSettings').style.display = unwrapMethod === 'romeo' ? 'block' : 'none';
     document.getElementById('laplacianSettings').style.display = unwrapMethod === 'laplacian' ? 'block' : 'none';
     document.getElementById('romeoWeighting').value = this.pipelineSettings.romeo.weighting;
+
+    // Single-echo unwrap method (sync with multi-echo settings)
+    document.getElementById('singleEchoUnwrapMethod').value = unwrapMethod;
+    document.getElementById('singleEchoRomeoSettings').style.display = unwrapMethod === 'romeo' ? 'block' : 'none';
+    document.getElementById('singleEchoRomeoWeighting').value = this.pipelineSettings.romeo.weighting;
+
+    // MCPC-3D-S settings
+    document.getElementById('mcpc3dsSigmaX').value = this.pipelineSettings.mcpc3ds?.sigma?.[0] ?? 10;
+    document.getElementById('mcpc3dsSigmaY').value = this.pipelineSettings.mcpc3ds?.sigma?.[1] ?? 10;
+    document.getElementById('mcpc3dsSigmaZ').value = this.pipelineSettings.mcpc3ds?.sigma?.[2] ?? 5;
+    document.getElementById('mcpc3dsWeightType').value = this.pipelineSettings.mcpc3ds?.weightType ?? 'phase_snr';
+
+    // Update section visibility based on current selections
+    this.updatePipelineModalVisibility();
 
     // Background removal method
     const bgMethod = this.pipelineSettings.backgroundRemoval;
@@ -1830,22 +1960,88 @@ class QSMApp {
     document.getElementById('pipelineSettingsModal').classList.remove('active');
   }
 
+  /**
+   * Update visibility of pipeline modal sections based on:
+   * - Number of echoes (single vs multi)
+   * - QSM method (Standard vs TGV)
+   * - Multi-echo method (OLS/OLS+offset vs MCPC-3D-S)
+   */
+  updatePipelineModalVisibility() {
+    const combinedMethod = document.getElementById('combinedMethod').value;
+    const multiEchoMethod = document.getElementById('multiEchoMethod').value;
+    const isTgv = combinedMethod === 'tgv';
+    const isMcpc3ds = multiEchoMethod === 'mcpc3ds';
+
+    // Count echoes from loaded files
+    const nEchoes = this.multiEchoFiles?.phase?.filter(f => f.file)?.length || 0;
+    const isMultiEcho = nEchoes > 1;
+
+    // TGV settings - show only when TGV selected
+    document.getElementById('tgvSettings').style.display = isTgv ? 'block' : 'none';
+
+    // Multi-echo section - show only when multi-echo data loaded
+    document.getElementById('multiEchoSection').style.display = isMultiEcho ? 'block' : 'none';
+
+    // Within multi-echo section:
+    // - Unwrap settings: show for OLS methods, hide for MCPC-3D-S
+    // - MCPC-3D-S settings: show for MCPC-3D-S, hide for OLS methods
+    const multiEchoUnwrapSettings = document.getElementById('multiEchoUnwrapSettings');
+    const mcpc3dsSettings = document.getElementById('mcpc3dsSettings');
+
+    if (multiEchoUnwrapSettings) multiEchoUnwrapSettings.style.display = !isMcpc3ds ? 'block' : 'none';
+    if (mcpc3dsSettings) mcpc3dsSettings.style.display = isMcpc3ds ? 'block' : 'none';
+
+    // Single-echo unwrap section - show only for single-echo + standard pipeline
+    const singleEchoUnwrapSection = document.getElementById('singleEchoUnwrapSection');
+    if (singleEchoUnwrapSection) {
+      singleEchoUnwrapSection.style.display = (!isMultiEcho && !isTgv) ? 'block' : 'none';
+    }
+
+    // Background removal and dipole inversion - show only for standard pipeline
+    document.getElementById('bgRemovalSection').style.display = isTgv ? 'none' : 'block';
+    document.getElementById('dipoleInversionSection').style.display = isTgv ? 'none' : 'block';
+  }
+
   resetPipelineSettings() {
     // Reset to defaults (using dynamic voxel-based values where applicable)
     const defaults = this.getVoxelBasedDefaults();
 
-    // Unwrap method and mode
+    // Combined method - reset to standard pipeline
+    document.getElementById('combinedMethod').value = 'none';
+
+    // TGV defaults
+    document.getElementById('tgvRegularization').value = 2;
+    document.getElementById('tgvIterations').value = 1000;
+    document.getElementById('tgvErosions').value = 3;
+
+    // Multi-echo method - default to OLS with offset
+    document.getElementById('multiEchoMethod').value = 'mcpc3ds';
+
+    // Unwrap method (for both multi-echo and single-echo)
     document.getElementById('unwrapMethod').value = 'romeo';
-    document.getElementById('unwrapMode').value = 'individual';
     document.getElementById('romeoSettings').style.display = 'block';
     document.getElementById('laplacianSettings').style.display = 'none';
     document.getElementById('romeoWeighting').value = 'phase_snr';
 
-    // Background removal - default to SMV
-    document.getElementById('bgRemovalMethod').value = 'smv';
-    document.getElementById('vsharpSettings').style.display = 'none';
+    // Single-echo unwrap (sync with multi-echo)
+    document.getElementById('singleEchoUnwrapMethod').value = 'romeo';
+    document.getElementById('singleEchoRomeoSettings').style.display = 'block';
+    document.getElementById('singleEchoRomeoWeighting').value = 'phase_snr';
+
+    // MCPC-3D-S settings
+    document.getElementById('mcpc3dsSigmaX').value = 10;
+    document.getElementById('mcpc3dsSigmaY').value = 10;
+    document.getElementById('mcpc3dsSigmaZ').value = 5;
+    document.getElementById('mcpc3dsWeightType').value = 'phase_snr';
+
+    // Update section visibility
+    this.updatePipelineModalVisibility();
+
+    // Background removal - default to V-SHARP
+    document.getElementById('bgRemovalMethod').value = 'vsharp';
+    document.getElementById('vsharpSettings').style.display = 'block';
     document.getElementById('sharpSettings').style.display = 'none';
-    document.getElementById('smvSettings').style.display = 'block';
+    document.getElementById('smvSettings').style.display = 'none';
     document.getElementById('ismvSettings').style.display = 'none';
     document.getElementById('pdfSettings').style.display = 'none';
     document.getElementById('vsharpMaxRadius').value = defaults.vsharpMaxRadius;
@@ -1919,12 +2115,40 @@ class QSMApp {
   }
 
   runPipelineWithSettings() {
+    // Determine if multi-echo based on loaded files
+    const nEchoes = this.multiEchoFiles?.phase?.filter(f => f.file)?.length || 0;
+    const isMultiEcho = nEchoes > 1;
+
+    // Get unwrap method from appropriate dropdown based on echo count
+    const unwrapMethod = isMultiEcho
+      ? document.getElementById('unwrapMethod').value
+      : document.getElementById('singleEchoUnwrapMethod').value;
+
+    // Get ROMEO weighting from appropriate dropdown
+    const romeoWeighting = isMultiEcho
+      ? document.getElementById('romeoWeighting').value
+      : document.getElementById('singleEchoRomeoWeighting').value;
+
     // Save settings from form
     this.pipelineSettings = {
-      unwrapMethod: document.getElementById('unwrapMethod').value,
-      unwrapMode: document.getElementById('unwrapMode').value,
+      combinedMethod: document.getElementById('combinedMethod').value,
+      tgv: {
+        regularization: parseInt(document.getElementById('tgvRegularization').value),
+        iterations: parseInt(document.getElementById('tgvIterations').value),
+        erosions: parseInt(document.getElementById('tgvErosions').value)
+      },
+      unwrapMethod: unwrapMethod,
+      multiEchoMethod: document.getElementById('multiEchoMethod').value,
+      mcpc3ds: {
+        sigma: [
+          parseInt(document.getElementById('mcpc3dsSigmaX').value),
+          parseInt(document.getElementById('mcpc3dsSigmaY').value),
+          parseInt(document.getElementById('mcpc3dsSigmaZ').value)
+        ],
+        weightType: document.getElementById('mcpc3dsWeightType').value
+      },
       romeo: {
-        weighting: document.getElementById('romeoWeighting').value
+        weighting: romeoWeighting
       },
       backgroundRemoval: document.getElementById('bgRemovalMethod').value,
       vsharp: {

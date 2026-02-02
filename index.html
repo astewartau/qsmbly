@@ -366,6 +366,21 @@
           <button class="view-tab" data-view="render">3D</button>
         </div>
 
+        <!-- Echo Navigation (hidden when not multi-echo) -->
+        <div class="echo-nav" id="echoNav" style="display: none;">
+          <button class="btn btn-sm btn-icon" id="echoPrev" title="Previous echo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <span class="echo-label" id="echoLabel">Echo 1/1</span>
+          <button class="btn btn-sm btn-icon" id="echoNext" title="Next echo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+        </div>
+
         <div class="viewer-actions">
           <div class="window-controls">
             <input type="number" id="windowMin" class="window-input" placeholder="min" step="any" title="Window minimum">
@@ -429,57 +444,154 @@
         <button class="modal-close" id="closePipelineSettings">&times;</button>
       </div>
       <div class="modal-body">
-        <!-- Phase Unwrapping Settings -->
+        <!-- QSM Reconstruction Method Section -->
         <div class="settings-section">
-          <h4>Phase Unwrapping</h4>
+          <h4>QSM Reconstruction</h4>
           <div class="param-group">
-            <label class="param-label" for="unwrapMethod">Method</label>
-            <select id="unwrapMethod">
+            <label class="param-label" for="combinedMethod">Method</label>
+            <select id="combinedMethod">
+              <option value="none" selected>Standard Pipeline (BG Removal + Inversion)</option>
+              <option value="tgv">TGV Single-Step</option>
+            </select>
+          </div>
+
+          <!-- TGV Settings -->
+          <div id="tgvSettings" class="method-settings" style="display: none;">
+            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
+              TGV performs background removal and dipole inversion in one step.
+              For multi-echo data, B0 estimation is still performed first.
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="tgvRegularization">Regularization Level</label>
+              <select id="tgvRegularization">
+                <option value="1">1 - Low (sharper, more noise)</option>
+                <option value="2" selected>2 - Default</option>
+                <option value="3">3 - High (smoother)</option>
+                <option value="4">4 - Very High (very smooth)</option>
+              </select>
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="tgvIterations">Iterations</label>
+              <input type="number" id="tgvIterations" value="1000" min="100" max="5000" step="100">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="tgvErosions">Mask Erosions</label>
+              <input type="number" id="tgvErosions" value="3" min="0" max="10" step="1">
+            </div>
+          </div>
+        </div>
+
+        <!-- Multi-echo B0 Estimation Section -->
+        <div class="settings-section" id="multiEchoSection">
+          <h4>Multi-echo B0 Estimation</h4>
+          <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
+            Combines multiple echoes to estimate B0. All methods require phase unwrapping
+            (OLS methods use settings below; MCPC-3D-S uses ROMEO internally).
+          </div>
+
+          <div class="param-group">
+            <label class="param-label" for="multiEchoMethod">Method</label>
+            <select id="multiEchoMethod">
+              <option value="ols">OLS (assumes zero phase offset)</option>
+              <option value="ols_offset">OLS with Offset</option>
+              <option value="mcpc3ds" selected>MCPC-3D-S (Recommended)</option>
+            </select>
+          </div>
+
+          <!-- Nested Phase Unwrapping for OLS methods -->
+          <div id="multiEchoUnwrapSettings" class="method-settings" style="margin-left: var(--space-md); padding-left: var(--space-md); border-left: 2px solid var(--color-border);">
+            <div class="param-group">
+              <label class="param-label" for="unwrapMethod">Phase Unwrapping</label>
+              <select id="unwrapMethod">
+                <option value="romeo" selected>ROMEO (Quality-guided)</option>
+                <option value="laplacian">Laplacian (Fast)</option>
+              </select>
+            </div>
+
+            <!-- ROMEO Settings -->
+            <div id="romeoSettings" class="method-settings">
+              <div class="param-group">
+                <label class="param-label" for="romeoWeighting">ROMEO Weighting</label>
+                <select id="romeoWeighting">
+                  <option value="phase_snr" selected>Phase SNR (Recommended)</option>
+                  <option value="magnitude">Magnitude</option>
+                  <option value="uniform">Uniform</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Laplacian Settings -->
+            <div id="laplacianSettings" class="method-settings" style="display: none;">
+              <div class="param-hint" style="color: var(--color-text-muted);">
+                Laplacian is faster but may have residual wraps in noisy regions
+              </div>
+            </div>
+          </div>
+
+          <!-- MCPC-3D-S Settings -->
+          <div id="mcpc3dsSettings" class="method-settings" style="display: none;">
+            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
+              Estimates phase offset using Hermitian Inner Product with Gaussian smoothing.
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="mcpc3dsSigmaX">Smoothing Sigma X (voxels)</label>
+              <input type="number" id="mcpc3dsSigmaX" value="10" min="1" max="30" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="mcpc3dsSigmaY">Smoothing Sigma Y (voxels)</label>
+              <input type="number" id="mcpc3dsSigmaY" value="10" min="1" max="30" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="mcpc3dsSigmaZ">Smoothing Sigma Z (voxels)</label>
+              <input type="number" id="mcpc3dsSigmaZ" value="5" min="1" max="30" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="mcpc3dsWeightType">B0 Weighting</label>
+              <select id="mcpc3dsWeightType">
+                <option value="phase_snr" selected>Phase SNR (mag × TE)</option>
+                <option value="phase_var">Phase Variance (mag² × TE²)</option>
+                <option value="average">Uniform</option>
+                <option value="tes">TE only</option>
+                <option value="mag">Magnitude only</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phase Unwrapping for Single-echo (Standard pipeline only) -->
+        <div class="settings-section" id="singleEchoUnwrapSection" style="display: none;">
+          <h4>Phase Unwrapping</h4>
+          <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
+            Single-echo phase unwrapping settings
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="singleEchoUnwrapMethod">Method</label>
+            <select id="singleEchoUnwrapMethod">
               <option value="romeo" selected>ROMEO (Quality-guided)</option>
               <option value="laplacian">Laplacian (Fast)</option>
             </select>
           </div>
-
-          <div class="param-group">
-            <label class="param-label" for="unwrapMode">Multi-echo Mode</label>
-            <select id="unwrapMode">
-              <option value="individual">Individual (each echo separately)</option>
-              <option value="temporal">Temporal (use echo correlation)</option>
-            </select>
-          </div>
-
-          <!-- ROMEO Settings -->
-          <div id="romeoSettings" class="method-settings">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              ROMEO uses quality-guided region growing for robust unwrapping
-            </div>
+          <div id="singleEchoRomeoSettings" class="method-settings">
             <div class="param-group">
-              <label class="param-label" for="romeoWeighting">Weighting</label>
-              <select id="romeoWeighting">
+              <label class="param-label" for="singleEchoRomeoWeighting">ROMEO Weighting</label>
+              <select id="singleEchoRomeoWeighting">
                 <option value="phase_snr" selected>Phase SNR (Recommended)</option>
                 <option value="magnitude">Magnitude</option>
                 <option value="uniform">Uniform</option>
               </select>
             </div>
           </div>
-
-          <!-- Laplacian Settings -->
-          <div id="laplacianSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="color: var(--color-text-muted);">
-              Laplacian unwrapping solves a Poisson equation - fast but may have residual wraps in noisy regions
-            </div>
-          </div>
         </div>
 
         <!-- Background Removal -->
-        <div class="settings-section">
+        <div class="settings-section" id="bgRemovalSection">
           <h4>Background Removal</h4>
           <div class="param-group">
             <label class="param-label" for="bgRemovalMethod">Method</label>
             <select id="bgRemovalMethod">
-              <option value="vsharp">V-SHARP (Variable radii)</option>
+              <option value="vsharp" selected>V-SHARP (Variable radii)</option>
               <option value="sharp">SHARP (Single radius + deconvolution)</option>
-              <option value="smv" selected>SMV (Single radius)</option>
+              <option value="smv">SMV (Single radius)</option>
               <option value="ismv">iSMV (Iterative)</option>
               <option value="pdf">PDF (Projection onto Dipole Fields)</option>
               <option value="lbv">LBV (Laplacian Boundary Value)</option>
@@ -576,7 +688,7 @@
         </div>
 
         <!-- Dipole Inversion -->
-        <div class="settings-section">
+        <div class="settings-section" id="dipoleInversionSection">
           <h4>Dipole Inversion</h4>
           <div class="param-group">
             <label class="param-label" for="dipoleMethod">Method</label>

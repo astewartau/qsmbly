@@ -222,33 +222,40 @@ pub fn fgrad_inplace_f32(
     let hz = 1.0 / vsz;
 
     for k in 0..nz {
-        let kp1 = if k + 1 < nz { k + 1 } else { 0 };
         let k_offset = k * nx * ny;
-        let kp1_offset = kp1 * nx * ny;
 
         for j in 0..ny {
-            let jp1 = if j + 1 < ny { j + 1 } else { 0 };
             let j_offset = j * nx;
-            let jp1_offset = jp1 * nx;
 
             for i in 0..nx {
-                let ip1 = if i + 1 < nx { i + 1 } else { 0 };
-
                 let idx = i + j_offset + k_offset;
-                let idx_xp = ip1 + j_offset + k_offset;
-                let idx_yp = i + jp1_offset + k_offset;
-                let idx_zp = i + j_offset + kp1_offset;
-
                 let x_val = x[idx];
-                gx[idx] = (x[idx_xp] - x_val) * hx;
-                gy[idx] = (x[idx_yp] - x_val) * hy;
-                gz[idx] = (x[idx_zp] - x_val) * hz;
+
+                // Forward difference with zero boundary (matching Julia)
+                gx[idx] = if i + 1 < nx {
+                    (x[idx + 1] - x_val) * hx
+                } else {
+                    0.0
+                };
+
+                gy[idx] = if j + 1 < ny {
+                    (x[i + (j + 1) * nx + k_offset] - x_val) * hy
+                } else {
+                    0.0
+                };
+
+                gz[idx] = if k + 1 < nz {
+                    (x[i + j_offset + (k + 1) * nx * ny] - x_val) * hz
+                } else {
+                    0.0
+                };
             }
         }
     }
 }
 
 /// Backward divergence operator (in-place, f32)
+/// Uses zero boundary conditions (matching Julia)
 #[inline]
 pub fn bdiv_inplace_f32(
     div: &mut [f32],
@@ -261,26 +268,22 @@ pub fn bdiv_inplace_f32(
     let hz = 1.0 / vsz;
 
     for k in 0..nz {
-        let km1 = if k == 0 { nz - 1 } else { k - 1 };
         let k_offset = k * nx * ny;
-        let km1_offset = km1 * nx * ny;
 
         for j in 0..ny {
-            let jm1 = if j == 0 { ny - 1 } else { j - 1 };
             let j_offset = j * nx;
-            let jm1_offset = jm1 * nx;
 
             for i in 0..nx {
-                let im1 = if i == 0 { nx - 1 } else { i - 1 };
-
                 let idx = i + j_offset + k_offset;
-                let idx_xm = im1 + j_offset + k_offset;
-                let idx_ym = i + jm1_offset + k_offset;
-                let idx_zm = i + j_offset + km1_offset;
 
-                div[idx] = (gx[idx] - gx[idx_xm]) * hx
-                         + (gy[idx] - gy[idx_ym]) * hy
-                         + (gz[idx] - gz[idx_zm]) * hz;
+                // Zero at boundary (matching Julia)
+                let gx_xm = if i > 0 { gx[(i - 1) + j_offset + k_offset] } else { 0.0 };
+                let gy_ym = if j > 0 { gy[i + (j - 1) * nx + k_offset] } else { 0.0 };
+                let gz_zm = if k > 0 { gz[i + j_offset + (k - 1) * nx * ny] } else { 0.0 };
+
+                div[idx] = (gx[idx] - gx_xm) * hx
+                         + (gy[idx] - gy_ym) * hy
+                         + (gz[idx] - gz_zm) * hz;
             }
         }
     }
@@ -298,6 +301,257 @@ pub fn fgrad_f32(
     let mut gz = vec![0.0f32; n_total];
     fgrad_inplace_f32(&mut gx, &mut gy, &mut gz, x, nx, ny, nz, vsx, vsy, vsz);
     (gx, gy, gz)
+}
+
+// ============================================================================
+// Symmetric Gradient (for TGV)
+// ============================================================================
+
+/// Symmetric gradient operator for TGV regularization (in-place, f32)
+///
+/// Computes the symmetric gradient tensor from a vector field w = (wx, wy, wz).
+/// The output is a 6-component symmetric tensor:
+///   q[0] = ∂wx/∂x (Sxx)
+///   q[1] = (∂wx/∂y + ∂wy/∂x) / 2 (Sxy)
+///   q[2] = (∂wx/∂z + ∂wz/∂x) / 2 (Sxz)
+///   q[3] = ∂wy/∂y (Syy)
+///   q[4] = (∂wy/∂z + ∂wz/∂y) / 2 (Syz)
+///   q[5] = ∂wz/∂z (Szz)
+#[inline]
+pub fn symgrad_inplace_f32(
+    sxx: &mut [f32], sxy: &mut [f32], sxz: &mut [f32],
+    syy: &mut [f32], syz: &mut [f32], szz: &mut [f32],
+    wx: &[f32], wy: &[f32], wz: &[f32],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) {
+    let hx = 1.0 / vsx;
+    let hy = 1.0 / vsy;
+    let hz = 1.0 / vsz;
+
+    for k in 0..nz {
+        let k_offset = k * nx * ny;
+
+        for j in 0..ny {
+            let j_offset = j * nx;
+
+            for i in 0..nx {
+                let idx = i + j_offset + k_offset;
+
+                let wx0 = wx[idx];
+                let wy0 = wy[idx];
+                let wz0 = wz[idx];
+
+                // X derivatives (zero at boundary, matching Julia)
+                if i + 1 < nx {
+                    let idx_xp = (i + 1) + j_offset + k_offset;
+                    sxx[idx] = (wx[idx_xp] - wx0) * hx;
+                    // Contributions to off-diagonal terms
+                    let dwy_dx = (wy[idx_xp] - wy0) * hx;
+                    let dwz_dx = (wz[idx_xp] - wz0) * hx;
+                    sxy[idx] = dwy_dx * 0.5;
+                    sxz[idx] = dwz_dx * 0.5;
+                } else {
+                    sxx[idx] = 0.0;
+                    sxy[idx] = 0.0;
+                    sxz[idx] = 0.0;
+                }
+
+                // Y derivatives (zero at boundary)
+                if j + 1 < ny {
+                    let idx_yp = i + (j + 1) * nx + k_offset;
+                    syy[idx] = (wy[idx_yp] - wy0) * hy;
+                    let dwx_dy = (wx[idx_yp] - wx0) * hy;
+                    let dwz_dy = (wz[idx_yp] - wz0) * hy;
+                    sxy[idx] += dwx_dy * 0.5;
+                    syz[idx] = dwz_dy * 0.5;
+                } else {
+                    syy[idx] = 0.0;
+                    syz[idx] = 0.0;
+                }
+
+                // Z derivatives (zero at boundary)
+                if k + 1 < nz {
+                    let idx_zp = i + j_offset + (k + 1) * nx * ny;
+                    szz[idx] = (wz[idx_zp] - wz0) * hz;
+                    let dwx_dz = (wx[idx_zp] - wx0) * hz;
+                    let dwy_dz = (wy[idx_zp] - wy0) * hz;
+                    sxz[idx] += dwx_dz * 0.5;
+                    syz[idx] += dwy_dz * 0.5;
+                } else {
+                    szz[idx] = 0.0;
+                }
+            }
+        }
+    }
+}
+
+/// Divergence of symmetric tensor field (adjoint of symgrad)
+///
+/// Computes the divergence of a 6-component symmetric tensor field,
+/// producing a 3-component vector field.
+/// This is the adjoint of symgrad_inplace_f32.
+/// Uses zero boundary conditions (matching Julia).
+#[inline]
+pub fn symdiv_inplace_f32(
+    divx: &mut [f32], divy: &mut [f32], divz: &mut [f32],
+    sxx: &[f32], sxy: &[f32], sxz: &[f32],
+    syy: &[f32], syz: &[f32], szz: &[f32],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) {
+    let hx = 1.0 / vsx;
+    let hy = 1.0 / vsy;
+    let hz = 1.0 / vsz;
+
+    for k in 0..nz {
+        let k_offset = k * nx * ny;
+
+        for j in 0..ny {
+            let j_offset = j * nx;
+
+            for i in 0..nx {
+                let idx = i + j_offset + k_offset;
+
+                // Divergence of first row of tensor: div([Sxx, Sxy, Sxz])
+                // Using backward difference with zero at boundary
+                let sxx_xm = if i > 0 { sxx[(i - 1) + j_offset + k_offset] } else { 0.0 };
+                let sxy_ym = if j > 0 { sxy[i + (j - 1) * nx + k_offset] } else { 0.0 };
+                let sxz_zm = if k > 0 { sxz[i + j_offset + (k - 1) * nx * ny] } else { 0.0 };
+
+                divx[idx] = (sxx[idx] - sxx_xm) * hx
+                          + (sxy[idx] - sxy_ym) * hy
+                          + (sxz[idx] - sxz_zm) * hz;
+
+                // Divergence of second row: div([Sxy, Syy, Syz])
+                let sxy_xm = if i > 0 { sxy[(i - 1) + j_offset + k_offset] } else { 0.0 };
+                let syy_ym = if j > 0 { syy[i + (j - 1) * nx + k_offset] } else { 0.0 };
+                let syz_zm = if k > 0 { syz[i + j_offset + (k - 1) * nx * ny] } else { 0.0 };
+
+                divy[idx] = (sxy[idx] - sxy_xm) * hx
+                          + (syy[idx] - syy_ym) * hy
+                          + (syz[idx] - syz_zm) * hz;
+
+                // Divergence of third row: div([Sxz, Syz, Szz])
+                let sxz_xm = if i > 0 { sxz[(i - 1) + j_offset + k_offset] } else { 0.0 };
+                let syz_ym = if j > 0 { syz[i + (j - 1) * nx + k_offset] } else { 0.0 };
+                let szz_zm = if k > 0 { szz[i + j_offset + (k - 1) * nx * ny] } else { 0.0 };
+
+                divz[idx] = (sxz[idx] - sxz_xm) * hx
+                          + (syz[idx] - syz_ym) * hy
+                          + (szz[idx] - szz_zm) * hz;
+            }
+        }
+    }
+}
+
+/// Forward difference gradient operator (in-place, f32) - masked version
+/// Only computes gradient where mask is non-zero
+#[inline]
+pub fn fgrad_masked_inplace_f32(
+    gx: &mut [f32], gy: &mut [f32], gz: &mut [f32],
+    x: &[f32],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) {
+    let hx = 1.0 / vsx;
+    let hy = 1.0 / vsy;
+    let hz = 1.0 / vsz;
+
+    for k in 0..nz {
+        let kp1 = if k + 1 < nz { k + 1 } else { 0 };
+        let k_offset = k * nx * ny;
+        let kp1_offset = kp1 * nx * ny;
+
+        for j in 0..ny {
+            let jp1 = if j + 1 < ny { j + 1 } else { 0 };
+            let j_offset = j * nx;
+            let jp1_offset = jp1 * nx;
+
+            for i in 0..nx {
+                let ip1 = if i + 1 < nx { i + 1 } else { 0 };
+
+                let idx = i + j_offset + k_offset;
+
+                if mask[idx] == 0 {
+                    gx[idx] = 0.0;
+                    gy[idx] = 0.0;
+                    gz[idx] = 0.0;
+                    continue;
+                }
+
+                let idx_xp = ip1 + j_offset + k_offset;
+                let idx_yp = i + jp1_offset + k_offset;
+                let idx_zp = i + j_offset + kp1_offset;
+
+                let x_val = x[idx];
+                gx[idx] = (x[idx_xp] - x_val) * hx;
+                gy[idx] = (x[idx_yp] - x_val) * hy;
+                gz[idx] = (x[idx_zp] - x_val) * hz;
+            }
+        }
+    }
+}
+
+/// Backward divergence operator (in-place, f32) - masked version
+#[inline]
+pub fn bdiv_masked_inplace_f32(
+    div: &mut [f32],
+    gx: &[f32], gy: &[f32], gz: &[f32],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) {
+    let hx = 1.0 / vsx;
+    let hy = 1.0 / vsy;
+    let hz = 1.0 / vsz;
+
+    for k in 0..nz {
+        let k_offset = k * nx * ny;
+
+        for j in 0..ny {
+            let j_offset = j * nx;
+
+            for i in 0..nx {
+                let idx = i + j_offset + k_offset;
+
+                if mask[idx] == 0 {
+                    div[idx] = 0.0;
+                    continue;
+                }
+
+                // Julia: div = mask[i]*g[i] - mask[i-1]*g[i-1] (0 if i<=1)
+                let m = if mask[idx] != 0 { 1.0 } else { 0.0 };
+
+                let gx_term = m * gx[idx] * hx - if i > 0 {
+                    let idx_xm = (i - 1) + j_offset + k_offset;
+                    let m_xm = if mask[idx_xm] != 0 { 1.0 } else { 0.0 };
+                    m_xm * gx[idx_xm] * hx
+                } else {
+                    0.0
+                };
+
+                let gy_term = m * gy[idx] * hy - if j > 0 {
+                    let idx_ym = i + (j - 1) * nx + k_offset;
+                    let m_ym = if mask[idx_ym] != 0 { 1.0 } else { 0.0 };
+                    m_ym * gy[idx_ym] * hy
+                } else {
+                    0.0
+                };
+
+                let gz_term = m * gz[idx] * hz - if k > 0 {
+                    let idx_zm = i + j_offset + (k - 1) * nx * ny;
+                    let m_zm = if mask[idx_zm] != 0 { 1.0 } else { 0.0 };
+                    m_zm * gz[idx_zm] * hz
+                } else {
+                    0.0
+                };
+
+                div[idx] = gx_term + gy_term + gz_term;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
