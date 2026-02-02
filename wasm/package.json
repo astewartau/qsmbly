@@ -1,0 +1,19 @@
+{
+  "name": "qsm_wasm",
+  "type": "module",
+  "collaborators": [
+    "QSM-WASM"
+  ],
+  "description": "WASM-accelerated QSM processing pipeline",
+  "version": "0.2.0",
+  "files": [
+    "qsm_wasm_bg.wasm",
+    "qsm_wasm.js",
+    "qsm_wasm.d.ts"
+  ],
+  "main": "qsm_wasm.js",
+  "types": "qsm_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

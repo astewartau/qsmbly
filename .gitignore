@@ -143,3 +143,10 @@ dmypy.json
 QSM.jl/
 ROMEO.jl/
 MriResearchTools.jl/
+
+# Rust build artifacts
+rust-wasm/target/
+rust-wasm/pkg/
+
+# WASM binaries (built by CI)
+wasm/*.wasm

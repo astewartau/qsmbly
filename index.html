@@ -477,10 +477,12 @@
           <div class="param-group">
             <label class="param-label" for="bgRemovalMethod">Method</label>
             <select id="bgRemovalMethod">
-              <option value="vsharp" selected>V-SHARP (Variable radii)</option>
-              <option value="smv">SMV (Single radius)</option>
+              <option value="vsharp">V-SHARP (Variable radii)</option>
+              <option value="sharp">SHARP (Single radius + deconvolution)</option>
+              <option value="smv" selected>SMV (Single radius)</option>
               <option value="ismv">iSMV (Iterative)</option>
               <option value="pdf">PDF (Projection onto Dipole Fields)</option>
+              <option value="lbv">LBV (Laplacian Boundary Value)</option>
             </select>
           </div>
 
@@ -500,8 +502,23 @@
             </div>
           </div>
 
+          <!-- SHARP Settings -->
+          <div id="sharpSettings" class="method-settings" style="display: none;">
+            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
+              High-pass filter with deconvolution - more aggressive than simple SMV
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="sharpRadius">Radius (mm)</label>
+              <input type="number" id="sharpRadius" value="6" min="1" max="20" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="sharpThreshold">Threshold</label>
+              <input type="number" id="sharpThreshold" value="0.05" min="0.01" max="0.2" step="0.01">
+            </div>
+          </div>
+
           <!-- SMV Settings -->
-          <div id="smvSettings" class="method-settings" style="display: none;">
+          <div id="smvSettings" class="method-settings">
             <div class="param-group">
               <label class="param-label" for="smvRadius">Radius (mm)</label>
               <input type="number" id="smvRadius" value="5" min="1" max="20" step="1">
@@ -541,6 +558,21 @@
               <input type="number" id="pdfMaxit" value="100" min="10" max="500" step="10">
             </div>
           </div>
+
+          <!-- LBV Settings -->
+          <div id="lbvSettings" class="method-settings" style="display: none;">
+            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
+              Laplacian Boundary Value - solves Poisson equation with Dirichlet BCs
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="lbvTol">Tolerance</label>
+              <input type="number" id="lbvTol" value="0.001" min="0.0001" max="0.01" step="0.0001">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="lbvMaxit">Max Iterations</label>
+              <input type="number" id="lbvMaxit" value="500" min="50" max="2000" step="50">
+            </div>
+          </div>
         </div>
 
         <!-- Dipole Inversion -->
@@ -550,9 +582,12 @@
             <label class="param-label" for="dipoleMethod">Method</label>
             <select id="dipoleMethod">
               <option value="tkd">TKD (Instant - basic)</option>
+              <option value="tsvd">TSVD (Instant - smoother)</option>
               <option value="tikhonov">Tikhonov (Instant - smooth)</option>
               <option value="tv" selected>TV-ADMM (Fast - edge-preserving)</option>
               <option value="rts">RTS (Fast - iterative)</option>
+              <option value="nltv">NLTV (Slow - non-local TV)</option>
+              <option value="medi">MEDI (Morphology-weighted)</option>
             </select>
           </div>
 
@@ -564,6 +599,17 @@
             <div class="param-group">
               <label class="param-label" for="tkdThreshold">Threshold</label>
               <input type="number" id="tkdThreshold" value="0.15" min="0.05" max="0.3" step="0.01">
+            </div>
+          </div>
+
+          <!-- TSVD Settings -->
+          <div id="tsvdSettings" class="method-settings" style="display: none;">
+            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
+              Truncated SVD - zeros small values (smoother than TKD)
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="tsvdThreshold">Threshold</label>
+              <input type="number" id="tsvdThreshold" value="0.15" min="0.05" max="0.3" step="0.01">
             </div>
           </div>
 
@@ -622,6 +668,70 @@
             <div class="param-group">
               <label class="param-label" for="rtsMaxIter">Max Iterations</label>
               <input type="number" id="rtsMaxIter" value="20" min="5" max="100" step="5">
+            </div>
+          </div>
+
+          <!-- NLTV Settings -->
+          <div id="nltvSettings" class="method-settings" style="display: none;">
+            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
+              Non-linear TV with ADMM - best quality but slow
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="nltvLambda">Lambda (TV regularization)</label>
+              <input type="number" id="nltvLambda" value="0.001" min="0.0001" max="0.1" step="0.0001">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="nltvMu">Mu (data fidelity)</label>
+              <input type="number" id="nltvMu" value="1" min="0.1" max="10" step="0.1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="nltvMaxIter">Max Iterations</label>
+              <input type="number" id="nltvMaxIter" value="250" min="50" max="1000" step="50">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="nltvTol">Tolerance</label>
+              <input type="number" id="nltvTol" value="0.001" min="0.0001" max="0.01" step="0.0001">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="nltvNewtonMaxIter">Newton Max Iterations</label>
+              <input type="number" id="nltvNewtonMaxIter" value="10" min="1" max="50" step="1">
+            </div>
+          </div>
+
+          <!-- MEDI Settings -->
+          <div id="mediSettings" class="method-settings" style="display: none;">
+            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
+              Morphology Enabled Dipole Inversion - uses magnitude edges for regularization
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="mediLambda">Lambda (regularization)</label>
+              <input type="number" id="mediLambda" value="1000" min="100" max="10000" step="100">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="mediPercentage">Edge Percentage</label>
+              <input type="number" id="mediPercentage" value="0.9" min="0.5" max="0.99" step="0.01">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="mediMaxIter">Max Iterations</label>
+              <input type="number" id="mediMaxIter" value="10" min="1" max="50" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="mediCgMaxIter">CG Max Iterations</label>
+              <input type="number" id="mediCgMaxIter" value="100" min="10" max="500" step="10">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="mediSmv">
+                <input type="checkbox" id="mediSmv"> Enable SMV preprocessing
+              </label>
+            </div>
+            <div class="param-group" id="mediSmvRadiusGroup" style="display: none;">
+              <label class="param-label" for="mediSmvRadius">SMV Radius (mm)</label>
+              <input type="number" id="mediSmvRadius" value="5" min="1" max="20" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="mediMerit">
+                <input type="checkbox" id="mediMerit"> Enable Merit adjustment
+              </label>
             </div>
           </div>
         </div>
@@ -788,14 +898,17 @@
     document.getElementById('resetWindow').addEventListener('click', () => {
       if (!window.app || !window.app.nv || !window.app.nv.volumes.length) return;
       const vol = window.app.nv.volumes[0];
-      windowState.currentMin = vol.global_min;
-      windowState.currentMax = vol.global_max;
-      document.getElementById('windowMin').value = vol.global_min.toFixed(2);
-      document.getElementById('windowMax').value = vol.global_max.toFixed(2);
-      document.getElementById('rangeMin').value = 0;
-      document.getElementById('rangeMax').value = 100;
+      // Use NiiVue's built-in robust (percentile-based) min/max
+      const min = vol.robust_min ?? vol.global_min;
+      const max = vol.robust_max ?? vol.global_max;
+      windowState.currentMin = min;
+      windowState.currentMax = max;
+      document.getElementById('windowMin').value = min.toFixed(2);
+      document.getElementById('windowMax').value = max.toFixed(2);
+      document.getElementById('rangeMin').value = valueToSlider(min);
+      document.getElementById('rangeMax').value = valueToSlider(max);
       updateRangeHighlight();
-      applyWindow(vol.global_min, vol.global_max);
+      applyWindow(min, max);
     });
 
     // Update window controls when a new volume is loaded

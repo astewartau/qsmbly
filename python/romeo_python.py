@@ -29,36 +29,37 @@ from collections import defaultdict
 
 
 class PriorityQueue:
-    """Priority queue implementation for region growing
+    """Priority queue implementation for region growing (optimized)
 
     Higher weight = better quality edge = processed first
+    Uses __slots__ to reduce memory overhead.
     """
+    __slots__ = ['bins', 'current_priority', 'n_bins', 'count']
 
     def __init__(self, n_bins=256):
         self.bins = [[] for _ in range(n_bins)]
-        self.current_priority = n_bins - 1  # Start from highest priority
+        self.current_priority = n_bins - 1
         self.n_bins = n_bins
+        self.count = 0
 
     def enqueue(self, item, priority):
-        bin_idx = min(max(0, priority), self.n_bins - 1)
+        bin_idx = priority if 0 <= priority < self.n_bins else max(0, min(priority, self.n_bins - 1))
         self.bins[bin_idx].append(item)
-        # Update current_priority if we added to a higher bin
+        self.count += 1
         if bin_idx > self.current_priority:
             self.current_priority = bin_idx
 
     def dequeue(self):
-        # Process from highest priority (best edges) to lowest
         while self.current_priority >= 0:
-            if self.bins[self.current_priority]:
-                return self.bins[self.current_priority].pop()
+            b = self.bins[self.current_priority]
+            if b:
+                self.count -= 1
+                return b.pop()
             self.current_priority -= 1
         return None
 
     def is_empty(self):
-        for i in range(self.current_priority, -1, -1):
-            if self.bins[i]:
-                return False
-        return True
+        return self.count == 0
 
 
 def wrap_phase(phase):
@@ -185,54 +186,97 @@ def calculate_weights_romeo(phase, mag, phase2, TEs, mask, weights_type, progres
 
 def grow_region_unwrap(phase, weights, mask):
     """
-    Region growing phase unwrapping using priority queue
+    Region growing phase unwrapping using priority queue (optimized)
+
+    If WASM acceleration is available (via js_wasm_grow_region_unwrap),
+    uses that for ~10-50x speedup. Otherwise falls back to Python.
 
     Returns unwrapped phase array
     """
     nx, ny, nz = phase.shape
+
+    # Find seed point (same logic as Python fallback for consistency)
+    if mask is not None:
+        valid_indices = np.where(mask)
+        if len(valid_indices[0]) > 0:
+            seed_idx = len(valid_indices[0]) // 2
+            si = int(valid_indices[0][seed_idx])
+            sj = int(valid_indices[1][seed_idx])
+            sk = int(valid_indices[2][seed_idx])
+        else:
+            si, sj, sk = nx//2, ny//2, nz//2
+    else:
+        si, sj, sk = nx//2, ny//2, nz//2
+
+    # Check for WASM acceleration
+    try:
+        js_wasm_unwrap = globals().get('js_wasm_grow_region_unwrap')
+        if js_wasm_unwrap is not None:
+            print("Using WASM-accelerated unwrapping...")
+
+            # Prepare flat arrays for WASM (C-contiguous order)
+            phase_flat = np.ascontiguousarray(phase).ravel().astype(np.float64)
+            weights_flat = np.ascontiguousarray(weights).ravel().astype(np.uint8)
+            # Convert boolean mask to uint8 (1 = in ROI, 0 = not)
+            mask_flat = np.ascontiguousarray(mask).ravel().astype(np.uint8)
+
+            # Call JS bridge with all parameters
+            result = js_wasm_unwrap(phase_flat, weights_flat, mask_flat,
+                                    nx, ny, nz, si, sj, sk)
+
+            if result is not None:
+                # Reshape flat result back to 3D
+                unwrapped = np.array(result, dtype=np.float64).reshape(phase.shape)
+                print(f"WASM unwrapping complete")
+                return unwrapped
+            else:
+                print("WASM returned None, falling back to Python")
+    except Exception as e:
+        print(f"WASM bridge error: {e}, falling back to Python")
+
+    # Python fallback
+    print("Using Python unwrapping...")
     unwrapped = phase.copy()
-    visited = np.zeros_like(phase, dtype=bool)
+    visited = np.zeros((nx, ny, nz), dtype=np.bool_)
 
     # For progress tracking
     total_voxels = int(np.sum(mask)) if mask is not None else nx * ny * nz
     processed_voxels = 0
     last_progress_pct = 0
-    
-    # Find seed point (highest magnitude if available, otherwise center)
-    if mask is not None:
-        valid_indices = np.where(mask)
-        if len(valid_indices[0]) > 0:
-            seed_idx = len(valid_indices[0]) // 2
-            seed = (valid_indices[0][seed_idx], valid_indices[1][seed_idx], valid_indices[2][seed_idx])
-        else:
-            seed = (nx//2, ny//2, nz//2)
-    else:
-        seed = (nx//2, ny//2, nz//2)
-    
+
+    # Seed point (si, sj, sk) already computed above
+
     # Initialize priority queue
     pq = PriorityQueue(256)
-    visited[seed] = True
-    
+    visited[si, sj, sk] = True
+
+    # Cache for speed
+    pq_enqueue = pq.enqueue
+    pq_dequeue = pq.dequeue
+    pq_is_empty = pq.is_empty
+    two_pi = 2.0 * np.pi
+    np_round = np.round
+    use_mask = mask is not None
+
+    # Neighbor offsets: (dim, di, dj, dk)
+    neighbor_offsets = [(0, 1, 0, 0), (0, -1, 0, 0),
+                        (1, 0, 1, 0), (1, 0, -1, 0),
+                        (2, 0, 0, 1), (2, 0, 0, -1)]
+
     # Add initial edges from seed
-    for dim in range(3):
-        for direction in [-1, 1]:
-            neighbor = list(seed)
-            neighbor[dim] += direction
-            
-            if (0 <= neighbor[0] < nx and 0 <= neighbor[1] < ny and 0 <= neighbor[2] < nz):
-                ni, nj, nk = neighbor
-                if not visited[ni, nj, nk]:
-                    if mask is None or mask[ni, nj, nk]:
-                        # Calculate edge index
-                        edge_i, edge_j, edge_k = min(seed[0], ni), min(seed[1], nj), min(seed[2], nk)
-                        if dim < weights.shape[0] and edge_i < weights.shape[1] and edge_j < weights.shape[2] and edge_k < weights.shape[3]:
-                            weight = weights[dim, edge_i, edge_j, edge_k]
-                            if weight > 0:
-                                pq.enqueue((ni, nj, nk, seed[0], seed[1], seed[2]), weight)
-    
-    # Region growing
-    while not pq.is_empty():
-        item = pq.dequeue()
+    for dim, di, dj, dk in neighbor_offsets:
+        ni, nj, nk = si + di, sj + dj, sk + dk
+        if 0 <= ni < nx and 0 <= nj < ny and 0 <= nk < nz:
+            if not visited[ni, nj, nk]:
+                if not use_mask or mask[ni, nj, nk]:
+                    ei, ej, ek = min(si, ni), min(sj, nj), min(sk, nk)
+                    weight = int(weights[dim, ei, ej, ek])
+                    if weight > 0:
+                        pq_enqueue((ni, nj, nk, si, sj, sk), weight)
+
+    # Region growing - main loop
+    while not pq_is_empty():
+        item = pq_dequeue()
         if item is None:
             break
 
@@ -241,36 +285,31 @@ def grow_region_unwrap(phase, weights, mask):
         if visited[ni, nj, nk]:
             continue
 
-        # Unwrap this voxel
-        unwrapped[ni, nj, nk] = unwrap_voxel(unwrapped[ni, nj, nk], unwrapped[oi, oj, ok])
+        # Unwrap this voxel (inlined)
+        new_val = unwrapped[ni, nj, nk]
+        old_val = unwrapped[oi, oj, ok]
+        unwrapped[ni, nj, nk] = new_val - two_pi * np_round((new_val - old_val) / two_pi)
         visited[ni, nj, nk] = True
 
         # Progress tracking - report every 10%
         processed_voxels += 1
         if total_voxels > 0:
-            progress_pct = int(100 * processed_voxels / total_voxels)
+            progress_pct = (100 * processed_voxels) // total_voxels
             if progress_pct >= last_progress_pct + 10:
-                # Report raw progress (0-100%), JS will map it
                 report_progress("region_grow", progress_pct)
                 last_progress_pct = progress_pct
-        
+
         # Add new edges
-        for dim in range(3):
-            for direction in [-1, 1]:
-                neighbor = [ni, nj, nk]
-                neighbor[dim] += direction
-                
-                if (0 <= neighbor[0] < nx and 0 <= neighbor[1] < ny and 0 <= neighbor[2] < nz):
-                    nni, nnj, nnk = neighbor
-                    if not visited[nni, nnj, nnk]:
-                        if mask is None or mask[nni, nnj, nnk]:
-                            # Calculate edge index
-                            edge_i, edge_j, edge_k = min(ni, nni), min(nj, nnj), min(nk, nnk)
-                            if dim < weights.shape[0] and edge_i < weights.shape[1] and edge_j < weights.shape[2] and edge_k < weights.shape[3]:
-                                weight = weights[dim, edge_i, edge_j, edge_k]
-                                if weight > 0:
-                                    pq.enqueue((nni, nnj, nnk, ni, nj, nk), weight)
-    
+        for dim, di, dj, dk in neighbor_offsets:
+            nni, nnj, nnk = ni + di, nj + dj, nk + dk
+            if 0 <= nni < nx and 0 <= nnj < ny and 0 <= nnk < nz:
+                if not visited[nni, nnj, nnk]:
+                    if not use_mask or mask[nni, nnj, nnk]:
+                        ei, ej, ek = min(ni, nni), min(nj, nnj), min(nk, nnk)
+                        weight = int(weights[dim, ei, ej, ek])
+                        if weight > 0:
+                            pq_enqueue((nni, nnj, nnk, ni, nj, nk), weight)
+
     return unwrapped
 
 

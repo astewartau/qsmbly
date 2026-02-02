@@ -1,0 +1,78 @@
+name: Build and Deploy
+
+on:
+  # Build and deploy on release
+  release:
+    types: [published]
+  # Also allow manual trigger
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build WASM
+        working-directory: rust-wasm
+        run: wasm-pack build --target web --release
+
+      - name: Prepare deployment directory
+        run: |
+          mkdir -p deploy/wasm
+
+          # Copy static files
+          cp index.html deploy/
+          cp -r js deploy/
+          cp -r css deploy/
+          cp -r niivue deploy/
+          cp -r nifti-js deploy/
+
+          # Copy built WASM
+          cp rust-wasm/pkg/qsm_wasm.js deploy/wasm/
+          cp rust-wasm/pkg/qsm_wasm_bg.wasm deploy/wasm/
+          cp rust-wasm/pkg/qsm_wasm.d.ts deploy/wasm/
+          cp rust-wasm/pkg/qsm_wasm_bg.wasm.d.ts deploy/wasm/
+
+          # Copy any existing WASM files that aren't rebuilt (e.g., romeo_wasm if separate)
+          cp wasm/romeo_wasm* deploy/wasm/ 2>/dev/null || true
+          cp wasm/package.json deploy/wasm/ 2>/dev/null || true
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: deploy
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

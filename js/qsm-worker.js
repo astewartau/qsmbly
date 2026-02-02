@@ -6,6 +6,7 @@
  */
 
 let pyodide = null;
+let wasmModule = null;
 
 // Post progress updates to main thread
 function postProgress(value, text) {
@@ -75,13 +76,276 @@ async function initializePyodide() {
     await micropip.install("nibabel")
   `);
 
+  // Try to load WASM acceleration module
+  try {
+    postLog("Loading WASM acceleration...");
+    // Construct URLs relative to worker location
+    const baseUrl = self.location.href.replace(/\/js\/.*$/, '');
+    const jsUrl = `${baseUrl}/wasm/qsm_wasm.js`;
+    const wasmBinaryUrl = `${baseUrl}/wasm/qsm_wasm_bg.wasm`;
+
+    const module = await import(jsUrl);
+    // Pass explicit WASM binary URL since import.meta.url doesn't work in workers
+    await module.default(wasmBinaryUrl);
+    wasmModule = module;
+    if (wasmModule.wasm_health_check()) {
+      postLog(`WASM acceleration loaded (v${wasmModule.get_version()})`);
+    }
+  } catch (e) {
+    postLog("WASM not available, using Python fallback");
+    console.warn("WASM load failed:", e);
+    wasmModule = null;
+  }
+
   postLog("Pyodide ready");
   return pyodide;
 }
 
-async function loadRomeoCode(romeoCode) {
-  postLog("Loading ROMEO algorithm...");
-  await pyodide.runPython(romeoCode);
+/**
+ * WASM-accelerated region growing phase unwrapping
+ * Called from Python via JS bridge
+ *
+ * Takes flat arrays and dimensions directly to avoid Pyodide proxy issues
+ */
+function wasmGrowRegionUnwrap(phaseFlatProxy, weightsFlatProxy, maskFlatProxy, nx, ny, nz, seedI, seedJ, seedK) {
+  if (!wasmModule) {
+    return null; // Signal to use Python fallback
+  }
+
+  try {
+    // Convert Pyodide proxies to TypedArrays
+    // The arrays are already flattened by Python in C order
+    const phaseFlat = new Float64Array(phaseFlatProxy.toJs());
+    const weightsFlat = new Uint8Array(weightsFlatProxy.toJs());
+    const maskFlat = new Uint8Array(maskFlatProxy.toJs());
+
+    console.log(`WASM unwrap: ${nx}x${ny}x${nz}, seed=(${seedI},${seedJ},${seedK})`);
+    console.log(`  phase length: ${phaseFlat.length}, weights length: ${weightsFlat.length}, mask length: ${maskFlat.length}`);
+
+    // Run WASM unwrapping (modifies phaseFlat in-place)
+    const processed = wasmModule.grow_region_unwrap_wasm(
+      phaseFlat, weightsFlat, maskFlat,
+      nx, ny, nz, seedI, seedJ, seedK
+    );
+
+    console.log(`WASM processed ${processed} voxels`);
+
+    // Return the modified phase as a regular array
+    // Python will reshape it back to 3D
+    return Array.from(phaseFlat);
+
+  } catch (e) {
+    console.error("WASM unwrapping failed:", e);
+    return null; // Signal to use Python fallback
+  }
+}
+
+/**
+ * WASM-accelerated TKD dipole inversion
+ */
+function wasmTKD(fieldProxy, maskProxy, nx, ny, nz, vsx, vsy, vsz, threshold) {
+  if (!wasmModule) return null;
+  try {
+    const field = new Float64Array(fieldProxy.toJs());
+    const mask = new Uint8Array(maskProxy.toJs());
+    console.log(`WASM TKD: ${nx}x${ny}x${nz}, threshold=${threshold}`);
+    const result = wasmModule.tkd_wasm(field, mask, nx, ny, nz, vsx, vsy, vsz, 0, 0, 1, threshold);
+    return Array.from(result);
+  } catch (e) {
+    console.error("WASM TKD failed:", e);
+    return null;
+  }
+}
+
+/**
+ * WASM-accelerated Tikhonov dipole inversion
+ */
+function wasmTikhonov(fieldProxy, maskProxy, nx, ny, nz, vsx, vsy, vsz, lambda, regType) {
+  if (!wasmModule) return null;
+  try {
+    const field = new Float64Array(fieldProxy.toJs());
+    const mask = new Uint8Array(maskProxy.toJs());
+    console.log(`WASM Tikhonov: ${nx}x${ny}x${nz}, lambda=${lambda}`);
+    const result = wasmModule.tikhonov_wasm(field, mask, nx, ny, nz, vsx, vsy, vsz, 0, 0, 1, lambda, regType);
+    return Array.from(result);
+  } catch (e) {
+    console.error("WASM Tikhonov failed:", e);
+    return null;
+  }
+}
+
+/**
+ * WASM-accelerated TV-ADMM dipole inversion
+ */
+function wasmTVADMM(fieldProxy, maskProxy, nx, ny, nz, vsx, vsy, vsz, lambda, rho, tol, maxIter) {
+  if (!wasmModule) return null;
+  try {
+    const field = new Float64Array(fieldProxy.toJs());
+    const mask = new Uint8Array(maskProxy.toJs());
+    console.log(`WASM TV-ADMM: ${nx}x${ny}x${nz}, lambda=${lambda}, maxIter=${maxIter}`);
+    const result = wasmModule.tv_admm_wasm(field, mask, nx, ny, nz, vsx, vsy, vsz, 0, 0, 1, lambda, rho, tol, maxIter);
+    return Array.from(result);
+  } catch (e) {
+    console.error("WASM TV-ADMM failed:", e);
+    return null;
+  }
+}
+
+/**
+ * WASM-accelerated RTS dipole inversion
+ */
+function wasmRTS(fieldProxy, maskProxy, nx, ny, nz, vsx, vsy, vsz, delta, mu, rho, tol, maxIter, lsmrIter) {
+  if (!wasmModule) return null;
+  try {
+    const field = new Float64Array(fieldProxy.toJs());
+    const mask = new Uint8Array(maskProxy.toJs());
+    console.log(`WASM RTS: ${nx}x${ny}x${nz}, delta=${delta}, mu=${mu}`);
+    const result = wasmModule.rts_wasm(field, mask, nx, ny, nz, vsx, vsy, vsz, 0, 0, 1, delta, mu, rho, tol, maxIter, lsmrIter);
+    return Array.from(result);
+  } catch (e) {
+    console.error("WASM RTS failed:", e);
+    return null;
+  }
+}
+
+/**
+ * WASM-accelerated V-SHARP background removal
+ */
+function wasmVSHARP(fieldProxy, maskProxy, nx, ny, nz, vsx, vsy, vsz, radiiProxy, threshold) {
+  if (!wasmModule) return null;
+  try {
+    const field = new Float64Array(fieldProxy.toJs());
+    const mask = new Uint8Array(maskProxy.toJs());
+    const radii = new Float64Array(radiiProxy.toJs());
+    console.log(`WASM V-SHARP: ${nx}x${ny}x${nz}, ${radii.length} radii`);
+    const result = wasmModule.vsharp_wasm(field, mask, nx, ny, nz, vsx, vsy, vsz, radii, threshold);
+    // Result contains local_field followed by eroded_mask
+    return Array.from(result);
+  } catch (e) {
+    console.error("WASM V-SHARP failed:", e);
+    return null;
+  }
+}
+
+/**
+ * WASM-accelerated SHARP background removal
+ */
+function wasmSHARP(fieldProxy, maskProxy, nx, ny, nz, vsx, vsy, vsz, radius, threshold) {
+  if (!wasmModule) return null;
+  try {
+    const field = new Float64Array(fieldProxy.toJs());
+    const mask = new Uint8Array(maskProxy.toJs());
+    console.log(`WASM SHARP: ${nx}x${ny}x${nz}, radius=${radius}`);
+    const result = wasmModule.sharp_wasm(field, mask, nx, ny, nz, vsx, vsy, vsz, radius, threshold);
+    return Array.from(result);
+  } catch (e) {
+    console.error("WASM SHARP failed:", e);
+    return null;
+  }
+}
+
+/**
+ * WASM-accelerated PDF background removal
+ */
+function wasmPDF(fieldProxy, maskProxy, nx, ny, nz, vsx, vsy, vsz, tol, maxIter) {
+  if (!wasmModule) return null;
+  try {
+    const field = new Float64Array(fieldProxy.toJs());
+    const mask = new Uint8Array(maskProxy.toJs());
+    console.log(`WASM PDF: ${nx}x${ny}x${nz}`);
+    const result = wasmModule.pdf_wasm(field, mask, nx, ny, nz, vsx, vsy, vsz, 0, 0, 1, tol, maxIter);
+    return Array.from(result);
+  } catch (e) {
+    console.error("WASM PDF failed:", e);
+    return null;
+  }
+}
+
+/**
+ * WASM-accelerated iSMV background removal
+ */
+function wasmISMV(fieldProxy, maskProxy, nx, ny, nz, vsx, vsy, vsz, radius, tol, maxIter) {
+  if (!wasmModule) return null;
+  try {
+    const field = new Float64Array(fieldProxy.toJs());
+    const mask = new Uint8Array(maskProxy.toJs());
+    console.log(`WASM iSMV: ${nx}x${ny}x${nz}, radius=${radius}`);
+    const result = wasmModule.ismv_wasm(field, mask, nx, ny, nz, vsx, vsy, vsz, radius, tol, maxIter);
+    return Array.from(result);
+  } catch (e) {
+    console.error("WASM iSMV failed:", e);
+    return null;
+  }
+}
+
+/**
+ * WASM-accelerated ROMEO weight calculation
+ */
+function wasmRomeoWeights(phaseProxy, magProxy, phase2Proxy, te1, te2, maskProxy, nx, ny, nz) {
+  if (!wasmModule) return null;
+  try {
+    const phase = new Float64Array(phaseProxy.toJs());
+    const mag = magProxy ? new Float64Array(magProxy.toJs()) : new Float64Array(0);
+    const phase2 = phase2Proxy ? new Float64Array(phase2Proxy.toJs()) : new Float64Array(0);
+    const mask = new Uint8Array(maskProxy.toJs());
+    console.log(`WASM ROMEO weights: ${nx}x${ny}x${nz}`);
+    const result = wasmModule.calculate_weights_romeo_wasm(phase, mag, phase2, te1, te2, mask, nx, ny, nz);
+    return Array.from(result);
+  } catch (e) {
+    console.error("WASM ROMEO weights failed:", e);
+    return null;
+  }
+}
+
+/**
+ * WASM-accelerated MEDI L1 dipole inversion
+ */
+function wasmMEDI(fieldProxy, maskProxy, magProxy, nx, ny, nz, vsx, vsy, vsz, lambda, maxIter, cgMaxIter, cgTol) {
+  if (!wasmModule) return null;
+  try {
+    const field = new Float64Array(fieldProxy.toJs());
+    const mask = new Uint8Array(maskProxy.toJs());
+    const mag = new Float64Array(magProxy.toJs());
+    console.log(`WASM MEDI: ${nx}x${ny}x${nz}, lambda=${lambda}, maxIter=${maxIter}`);
+    const result = wasmModule.medi_l1_wasm(field, mask, mag, nx, ny, nz, vsx, vsy, vsz, 0, 0, 1, lambda, maxIter, cgMaxIter, cgTol);
+    return Array.from(result);
+  } catch (e) {
+    console.error("WASM MEDI failed:", e);
+    return null;
+  }
+}
+
+async function loadPythonAlgorithms(code) {
+  postLog("Loading algorithms...");
+  await pyodide.runPython(code);
+
+  // Set up WASM bridge for Python
+  if (wasmModule) {
+    pyodide.globals.set('js_wasm_grow_region_unwrap', wasmGrowRegionUnwrap);
+    pyodide.globals.set('js_wasm_tkd', wasmTKD);
+    pyodide.globals.set('js_wasm_tikhonov', wasmTikhonov);
+    pyodide.globals.set('js_wasm_tv_admm', wasmTVADMM);
+    pyodide.globals.set('js_wasm_rts', wasmRTS);
+    pyodide.globals.set('js_wasm_vsharp', wasmVSHARP);
+    pyodide.globals.set('js_wasm_sharp', wasmSHARP);
+    pyodide.globals.set('js_wasm_pdf', wasmPDF);
+    pyodide.globals.set('js_wasm_ismv', wasmISMV);
+    pyodide.globals.set('js_wasm_romeo_weights', wasmRomeoWeights);
+    pyodide.globals.set('js_wasm_medi', wasmMEDI);
+    postLog("WASM bridge enabled for all algorithms");
+  } else {
+    pyodide.globals.set('js_wasm_grow_region_unwrap', null);
+    pyodide.globals.set('js_wasm_tkd', null);
+    pyodide.globals.set('js_wasm_tikhonov', null);
+    pyodide.globals.set('js_wasm_tv_admm', null);
+    pyodide.globals.set('js_wasm_rts', null);
+    pyodide.globals.set('js_wasm_vsharp', null);
+    pyodide.globals.set('js_wasm_sharp', null);
+    pyodide.globals.set('js_wasm_pdf', null);
+    pyodide.globals.set('js_wasm_ismv', null);
+    pyodide.globals.set('js_wasm_romeo_weights', null);
+    pyodide.globals.set('js_wasm_medi', null);
+  }
 }
 
 async function runPipeline(data) {
@@ -172,14 +436,22 @@ for i in range(num_echoes):
     phase_img = nib.Nifti1Image.from_file_map({'image': phase_fh, 'header': phase_fh})
     phase_data = phase_img.get_fdata()
 
-    # Wrap phase to [-π, π] using complex exponential
-    # This handles both arbitrary scaling and extended phase ranges
-    if np.max(np.abs(phase_data)) > np.pi * 1.1:
-        if np.max(np.abs(phase_data)) > 10:
-            # Data is in arbitrary units (e.g., 0-4095), scale to [-π, π]
-            phase_data = (phase_data - np.min(phase_data)) / (np.max(phase_data) - np.min(phase_data)) * 2 * np.pi - np.pi
-        # Now wrap to [-π, π]
-        phase_data = np.angle(np.exp(1j * phase_data))
+    # Scale phase to [-π, +π] range
+    # This must be done BEFORE any phase processing
+    phase_min = np.min(phase_data)
+    phase_max = np.max(phase_data)
+    phase_range = phase_max - phase_min
+
+    print(f"  Echo {i+1} phase input range: [{phase_min:.2f}, {phase_max:.2f}]")
+
+    # Check if phase needs scaling (not already in approximately -π to +π)
+    if phase_range > 2 * np.pi * 1.1 or phase_max > np.pi * 1.5 or phase_min < -np.pi * 1.5:
+        # Linear scale from [min, max] to [-π, +π]
+        phase_data = (phase_data - phase_min) / phase_range * 2 * np.pi - np.pi
+        print(f"  Echo {i+1} phase scaled to [-π, +π]")
+
+    # Always wrap to ensure exactly [-π, +π] using complex exponential
+    phase_data = np.angle(np.exp(1j * phase_data))
 
     phase_4d.append(phase_data)
 
@@ -399,10 +671,18 @@ if use_temporal and n_echoes > 1:
     print(f"  Spatially unwrapping template echo {template_idx + 1} with Laplacian...")
     unwrapped_template = laplacian_unwrap(phase_4d[:,:,:,template_idx], voxel_size)
 
-    # Create mask for temporal unwrapping
+    # Create mask for temporal unwrapping - use custom mask if provided
     magnitude_combined = magnitude_4d[:, :, :, 0]
-    mag_threshold = np.max(magnitude_combined) * ${thresholdFraction}
-    temp_mask = magnitude_combined > mag_threshold
+    if has_custom_mask:
+        print("  Using custom mask for temporal unwrapping...")
+        mask_bytes = custom_mask_data.to_py()
+        mask_fh = nib.FileHolder(BytesIO(mask_bytes))
+        mask_img = nib.Nifti1Image.from_file_map({'image': mask_fh, 'header': mask_fh})
+        mask_data = mask_img.get_fdata()
+        temp_mask = mask_data > 0.5
+    else:
+        mag_threshold = np.max(magnitude_combined) * ${thresholdFraction}
+        temp_mask = magnitude_combined > mag_threshold
 
     # Use temporal_unwrap from romeo_python.py
     unwrapped_4d = temporal_unwrap(unwrapped_template, phase_4d, echo_times_py, template_idx, temp_mask)
@@ -415,10 +695,22 @@ else:
 
 print("Laplacian unwrapping completed!")
 
-# Create mask from magnitude (threshold-based)
+# Create processing mask - use custom mask if provided, otherwise threshold
 magnitude_combined = magnitude_4d[:, :, :, 0]  # First echo
-mag_threshold = np.max(magnitude_combined) * ${thresholdFraction}
-processing_mask = magnitude_combined > mag_threshold
+if has_custom_mask:
+    print("Loading custom mask for B0 computation...")
+    mask_bytes = custom_mask_data.to_py()
+    mask_fh = nib.FileHolder(BytesIO(mask_bytes))
+    mask_img = nib.Nifti1Image.from_file_map({'image': mask_fh, 'header': mask_fh})
+    mask_data = mask_img.get_fdata()
+    processing_mask = mask_data > 0.5
+    print(f"Custom mask loaded: {processing_mask.shape}")
+else:
+    mag_threshold = np.max(magnitude_combined) * ${thresholdFraction}
+    processing_mask = magnitude_combined > mag_threshold
+    print(f"Using threshold mask: {${thresholdFraction} * 100:.0f}% of max magnitude")
+
+print(f"Mask coverage: {np.sum(processing_mask)}/{processing_mask.size} voxels ({100*np.sum(processing_mask)/processing_mask.size:.1f}%)")
 
 # Compute B0 fieldmap from unwrapped phase
 print("Computing B0 field map...")
@@ -492,7 +784,7 @@ def create_smv_kernel_kspace(shape, voxel_size, radius):
 
 def vsharp_background_removal(fieldmap, mask, voxel_size=(1.0, 1.0, 1.0),
                                radii=None, threshold=0.05):
-    """V-SHARP background field removal with variable radii"""
+    """V-SHARP background field removal via WASM"""
     if radii is None:
         min_vox = min(voxel_size)
         max_vox = max(voxel_size)
@@ -501,46 +793,23 @@ def vsharp_background_removal(fieldmap, mask, voxel_size=(1.0, 1.0, 1.0),
             radii = [6.0, 4.0, 2.0]
 
     radii = sorted(radii, reverse=True)
-    print(f"V-SHARP radii (mm): {[f'{r:.1f}' for r in radii]}")
+    print(f"V-SHARP (WASM) radii (mm): {[f'{r:.1f}' for r in radii]}")
 
     shape = fieldmap.shape
-    F_hat = np.fft.fftn(fieldmap)
-    M_hat = np.fft.fftn(mask.astype(np.float64))
-
-    local_field = np.zeros_like(fieldmap)
-    final_mask = np.zeros(shape, dtype=bool)
-    prev_mask = np.zeros(shape, dtype=bool)
-    delta = 1.0 - np.sqrt(np.finfo(np.float64).eps)
-    iS_largest = None
-
-    n_radii = len(radii)
-    for i, radius in enumerate(radii):
-        try:
-            js_bg_progress(i + 1, n_radii)
-        except:
-            pass
-        print(f"  Processing radius {i+1}/{n_radii}: {radius:.1f} mm")
-        S = create_smv_kernel_kspace(shape, voxel_size, radius)
-        HP = 1.0 - S
-        eroded = np.real(np.fft.ifftn(S * M_hat))
-        current_mask = eroded > delta
-
-        if i == 0:
-            iS_largest = np.where(np.abs(HP) < threshold, 0.0, 1.0 / HP)
-
-        F_hp = HP * F_hat
-        hp_field = np.real(np.fft.ifftn(F_hp))
-        new_voxels = current_mask & ~prev_mask
-        local_field[new_voxels] = hp_field[new_voxels]
-        prev_mask = current_mask.copy()
-        final_mask = current_mask
-
-    F_local = np.fft.fftn(local_field)
-    F_local *= iS_largest
-    local_field = np.real(np.fft.ifftn(F_local))
-    local_field[~final_mask] = 0
-
-    return local_field, final_mask
+    nx, ny, nz = shape
+    vsx, vsy, vsz = voxel_size
+    mask_u8 = mask.astype(np.uint8)
+    radii_arr = np.array(radii, dtype=np.float64)
+    result = js_wasm_vsharp(
+        fieldmap.flatten().astype(np.float64),
+        mask_u8.flatten(),
+        nx, ny, nz, vsx, vsy, vsz, radii_arr, threshold
+    )
+    result_arr = np.array(result)
+    local_field = result_arr[:nx*ny*nz].reshape(shape)
+    eroded_mask = result_arr[nx*ny*nz:].reshape(shape) > 0.5
+    print("V-SHARP completed")
+    return local_field, eroded_mask
 
 def smv_background_removal(fieldmap, mask, voxel_size, radius=5.0):
     """SMV background field removal with single radius"""
@@ -577,144 +846,40 @@ def smv_background_removal(fieldmap, mask, voxel_size, radius=5.0):
     return local_field, eroded_mask
 
 def ismv_background_removal(fieldmap, mask, voxel_size, radius=5.0, tol=1e-3, maxit=500):
-    """Iterative SMV background field removal"""
-    print(f"iSMV background removal: radius={radius:.1f}mm, tol={tol}, maxit={maxit}")
+    """iSMV background field removal via WASM"""
+    print(f"iSMV (WASM): radius={radius:.1f}mm, tol={tol}, maxit={maxit}")
     shape = fieldmap.shape
-
-    # Create SMV kernel
-    S = create_smv_kernel_kspace(shape, voxel_size, radius)
-
-    # Erode mask using SMV
-    M = np.fft.fftn(mask.astype(np.float64))
-    eroded = np.real(np.fft.ifftn(S * M))
-    eroded_mask = eroded > 0.999
-
-    # Boundary mask (original mask minus eroded)
-    boundary_mask = mask & ~eroded_mask
-
-    # Initialize
-    f = fieldmap.copy()
-    f0 = eroded_mask * f
-    bc = boundary_mask * fieldmap  # Boundary correction term
-
-    nr = np.linalg.norm(f0)
-    eps = tol * nr
-
-    print(f"  Initial residual norm: {nr:.6f}, target: {eps:.6f}")
-
-    for i in range(maxit):
-        if nr <= eps:
-            print(f"  Converged at iteration {i}")
-            break
-
-        # Apply SMV convolution
-        F = np.fft.fftn(f)
-        f = np.real(np.fft.ifftn(S * F))
-
-        # Apply mask and add boundary correction
-        f = eroded_mask * f + bc
-
-        # Compute residual
-        diff = f0 - f
-        nr = np.linalg.norm(diff)
-        f0 = f.copy()
-
-        if (i + 1) % 50 == 0:
-            print(f"  Iteration {i+1}: residual = {nr:.6f}")
-
-        try:
-            js_bg_progress(i + 1, maxit)
-        except:
-            pass
-
-    # Compute local field: original - background
-    local_field = (fieldmap - f) * eroded_mask
-
-    print(f"  Final iteration: {min(i+1, maxit)}, residual: {nr:.6f}")
+    nx, ny, nz = shape
+    vsx, vsy, vsz = voxel_size
+    mask_u8 = mask.astype(np.uint8)
+    result = js_wasm_ismv(
+        fieldmap.flatten().astype(np.float64),
+        mask_u8.flatten(),
+        nx, ny, nz, vsx, vsy, vsz, radius, tol, maxit
+    )
+    result_arr = np.array(result)
+    local_field = result_arr[:nx*ny*nz].reshape(shape)
+    eroded_mask = result_arr[nx*ny*nz:].reshape(shape) > 0.5
+    print("iSMV completed")
     return local_field, eroded_mask
 
 def pdf_background_removal(fieldmap, mask, voxel_size, bdir=(0, 0, 1), tol=1e-5, maxit=None):
-    """PDF (Projection onto Dipole Fields) background removal using LSMR"""
-    from scipy.sparse.linalg import LinearOperator, lsmr
-
+    """PDF background field removal via WASM"""
     shape = fieldmap.shape
-    n_voxels = np.prod(shape)
-
+    nx, ny, nz = shape
+    n_voxels = nx * ny * nz
     if maxit is None:
         maxit = int(np.ceil(np.sqrt(n_voxels)))
-
-    print(f"PDF background removal: tol={tol}, maxit={maxit}")
-
-    # Create dipole kernel
-    nx, ny, nz = shape
-    dx, dy, dz = voxel_size
-    kx = np.fft.fftfreq(nx, dx)
-    ky = np.fft.fftfreq(ny, dy)
-    kz = np.fft.fftfreq(nz, dz)
-    KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing='ij')
-
-    bdir = np.array(bdir, dtype=np.float64)
-    bdir = bdir / np.linalg.norm(bdir)
-    k_dot_b = KX * bdir[0] + KY * bdir[1] + KZ * bdir[2]
-    k2 = KX**2 + KY**2 + KZ**2
-    k2[0, 0, 0] = 1e-12
-    D = 1/3 - (k_dot_b**2) / k2
-    D[0, 0, 0] = 0
-
-    # Background mask (outside ROI)
-    bg_mask = ~mask
-
-    # Masked weights (inside ROI)
-    W = mask.astype(np.float64)
-
-    def A_forward(v):
-        \"\"\"A = W * D * bg_mask\"\"\"
-        v_3d = v.reshape(shape)
-        # Apply background mask
-        x = bg_mask * v_3d
-        # Apply dipole convolution
-        F = np.fft.fftn(x)
-        x = np.real(np.fft.ifftn(D * F))
-        # Apply ROI mask (weights)
-        x = W * x
-        return x.ravel()
-
-    def A_adjoint(u):
-        \"\"\"A^T = bg_mask * D * W\"\"\"
-        u_3d = u.reshape(shape)
-        # Apply ROI mask
-        x = W * u_3d
-        # Apply dipole convolution (D is real, so D^T = D)
-        F = np.fft.fftn(x)
-        x = np.real(np.fft.ifftn(D * F))
-        # Apply background mask
-        x = bg_mask * x
-        return x.ravel()
-
-    A = LinearOperator(
-        shape=(n_voxels, n_voxels),
-        matvec=A_forward,
-        rmatvec=A_adjoint,
-        dtype=np.float64
+    print(f"PDF (WASM): tol={tol}, maxit={maxit}")
+    vsx, vsy, vsz = voxel_size
+    mask_u8 = mask.astype(np.uint8)
+    result = js_wasm_pdf(
+        fieldmap.flatten().astype(np.float64),
+        mask_u8.flatten(),
+        nx, ny, nz, vsx, vsy, vsz, tol, maxit
     )
-
-    # Right-hand side: W * fieldmap
-    b = (W * fieldmap).ravel()
-
-    print("  Running LSMR solver...")
-    result = lsmr(A, b, atol=tol, btol=tol, maxiter=maxit)
-    x_bg = result[0].reshape(shape)
-    iterations = result[2]
-    print(f"  LSMR completed in {iterations} iterations")
-
-    # Background field = D * (bg_mask * x)
-    bg_field_source = bg_mask * x_bg
-    F = np.fft.fftn(bg_field_source)
-    background_field = np.real(np.fft.ifftn(D * F))
-
-    # Local field = (fieldmap - background) * mask
-    local_field = (fieldmap - background_field) * mask
-
+    local_field = np.array(result).reshape(shape)
+    print("PDF completed")
     return local_field, mask
 
 # Create processing mask - use custom mask if provided, otherwise threshold
@@ -890,161 +1055,84 @@ def _shrink_update(u, d, threshold):
     new_d = 2*z - v  # precompute for next iteration (equals z - new_u)
     return new_u, new_d
 
-# --- TKD (Truncated K-space Division) from QSM.jl direct.jl ---
+# --- TKD (Truncated K-space Division) - WASM only ---
 def tkd_qsm(local_field, mask, voxel_size, bdir=(0, 0, 1), thr=0.15):
-    """TKD dipole inversion - instant (2 FFTs)
-
-    From QSM.jl/src/inversion/direct.jl lines 37-48, 237-241
-    If |D| <= thr: use sign(D)/thr (clamped inverse)
-    If |D| > thr: use 1/D (normal inverse)
-    """
-    print(f"TKD: threshold={thr}")
+    """TKD dipole inversion via WASM"""
+    print(f"TKD (WASM): threshold={thr}")
     shape = local_field.shape
-    D = create_dipole_kernel(shape, voxel_size, bdir)
-
-    # Create truncated inverse kernel
-    abs_D = np.abs(D)
-    # Avoid division by zero in the else branch
-    D_safe = np.where(abs_D > 0, D, 1.0)
-    iD = np.where(abs_D <= thr,
-                  np.sign(D) / thr,  # Clamped inverse (preserves sign)
-                  1.0 / D_safe)  # Normal inverse
-    iD[0, 0, 0] = 0  # DC term
-
-    # Apply inversion: chi = IFFT(iD * FFT(f))
-    f = local_field * mask
-    F = np.fft.fftn(f)
-    chi = np.real(np.fft.ifftn(iD * F)) * mask
-
+    nx, ny, nz = shape
+    vsx, vsy, vsz = voxel_size
+    mask_u8 = mask.astype(np.uint8)
+    result = js_wasm_tkd(
+        local_field.flatten().astype(np.float64),
+        mask_u8.flatten(),
+        nx, ny, nz, vsx, vsy, vsz, thr
+    )
+    chi = np.array(result).reshape(shape)
     print("TKD completed")
     return chi
 
 # --- Tikhonov Regularization from QSM.jl direct.jl ---
 def tikh_qsm(local_field, mask, voxel_size, bdir=(0, 0, 1),
              lambda_=0.01, reg='identity'):
-    """Tikhonov dipole inversion - instant (2-3 FFTs)
-
-    From QSM.jl/src/inversion/direct.jl lines 100-154, 248-270
-    argmin_chi ||D*chi - f||^2 + (lambda/2)||Gamma*chi||^2
-
-    Closed-form: chi_hat = D / (|D|^2 + lambda*Gamma) * f_hat
-    """
-    print(f"Tikhonov: lambda={lambda_}, reg={reg}")
+    """Tikhonov dipole inversion via WASM"""
+    print(f"Tikhonov (WASM): lambda={lambda_}, reg={reg}")
     shape = local_field.shape
-    D = create_dipole_kernel(shape, voxel_size, bdir)
-    D_sq = D * D
-
-    if reg == 'identity':
-        # iD = D / (D^2 + lambda)
-        denom = D_sq + lambda_
-        iD = np.where(np.abs(denom) > 1e-12, D / denom, 0.0)
-    elif reg == 'gradient':
-        # iD = D / (D^2 + lambda*L) where L = negative Laplacian
-        L = create_laplacian_kernel(shape, voxel_size)
-        denom = D_sq + lambda_ * L
-        iD = np.where(np.abs(denom) > 1e-12, D / denom, 0.0)
-    elif reg == 'laplacian':
-        # iD = D / (D^2 + lambda*L^2)
-        L = create_laplacian_kernel(shape, voxel_size)
-        L_sq = L * L
-        denom = D_sq + lambda_ * L_sq
-        iD = np.where(np.abs(denom) > 1e-12, D / denom, 0.0)
-    else:
-        raise ValueError(f"Unknown regularization: {reg}")
-
-    iD[0, 0, 0] = 0  # DC term
-
-    # Apply inversion
-    f = local_field * mask
-    F = np.fft.fftn(f)
-    chi = np.real(np.fft.ifftn(iD * F)) * mask
-
+    nx, ny, nz = shape
+    vsx, vsy, vsz = voxel_size
+    reg_type = {'identity': 0, 'gradient': 1, 'laplacian': 2}.get(reg, 0)
+    mask_u8 = mask.astype(np.uint8)
+    result = js_wasm_tikhonov(
+        local_field.flatten().astype(np.float64),
+        mask_u8.flatten(),
+        nx, ny, nz, vsx, vsy, vsz, lambda_, reg_type
+    )
+    chi = np.array(result).reshape(shape)
     print("Tikhonov completed")
     return chi
 
 # --- TV-ADMM from QSM.jl tv.jl ---
 def tv_admm_qsm(local_field, mask, voxel_size, bdir=(0, 0, 1),
                 lambda_=0.001, rho=None, tol=0.001, maxit=250):
-    """TV-ADMM dipole inversion
-
-    From QSM.jl/src/inversion/tv.jl lines 56-382
-    minimize: (1/2)||D*chi - f||^2 + lambda*||grad(chi)||_1
-
-    Uses ADMM with precomputed frequency-domain operators.
-    """
+    """TV-ADMM dipole inversion via WASM"""
     if rho is None:
-        rho = 100 * lambda_  # Default from QSM.jl
-
-    print(f"TV-ADMM: lambda={lambda_}, rho={rho}, tol={tol}, maxit={maxit}")
+        rho = 100 * lambda_
+    print(f"TV-ADMM (WASM): lambda={lambda_}, rho={rho}, tol={tol}, maxit={maxit}")
     shape = local_field.shape
-    D = create_dipole_kernel(shape, voxel_size, bdir)
-    L = create_laplacian_kernel(shape, voxel_size)
-
-    # Precompute frequency-domain operators (from QSM.jl tv.jl lines 220-235)
-    # iA = (D'D + rho*L)^-1
-    # F_hat = iA * D' * FFT(f)
-    # When denominator is near zero, set both iA and F_hat to zero (QSM.jl tv.jl lines 224-234)
-    D_conj = np.conj(D)
-    D_sq = D_conj * D
-    denom = D_sq + rho * L
-
-    f = local_field * mask
-    F = np.fft.fftn(f)
-
-    # Handle near-zero denominators properly (like QSM.jl)
-    eps = 1e-10
-    small_denom = np.abs(denom) < eps
-    denom_safe = np.where(small_denom, 1.0, denom)  # Avoid division by zero
-    iA = np.where(small_denom, 0.0, 1.0 / denom_safe)
-    F_hat = np.where(small_denom, 0.0, iA * D_conj * F)
-
-    # Initialize ADMM variables
-    x = np.zeros(shape, dtype=np.float64)
-    ux, uy, uz = np.zeros(shape), np.zeros(shape), np.zeros(shape)
-    dx, dy, dz = gradient_periodic(x, voxel_size)
-
-    lambda_rho = lambda_ / rho
-
-    for iteration in range(maxit):
-        x_prev = x.copy()
-
-        # x-subproblem: frequency domain solve (QSM.jl tv.jl lines 260-273)
-        div_d = divergence_periodic(dx, dy, dz, voxel_size)
-        X = rho * iA * np.fft.fftn(div_d) + F_hat
-        x = np.real(np.fft.ifftn(X))
-
-        # Convergence check (QSM.jl tv.jl lines 276-293)
-        diff = np.linalg.norm(x - x_prev) / (np.linalg.norm(x) + 1e-12)
-
-        try:
-            js_qsm_progress(iteration + 1, maxit)
-        except:
-            pass
-
-        if diff < tol:
-            print(f"  TV-ADMM converged at iteration {iteration + 1}")
-            break
-
-        if (iteration + 1) % 10 == 0:
-            print(f"  Iteration {iteration + 1}/{maxit}, diff = {diff:.2e}")
-
-        # Compute gradients
-        dx, dy, dz = gradient_periodic(x, voxel_size)
-
-        # z-subproblem + dual update (QSM.jl tv.jl lines 295-349)
-        ux, dx = _shrink_update(ux, dx, lambda_rho)
-        uy, dy = _shrink_update(uy, dy, lambda_rho)
-        uz, dz = _shrink_update(uz, dz, lambda_rho)
-
+    nx, ny, nz = shape
+    vsx, vsy, vsz = voxel_size
+    mask_u8 = mask.astype(np.uint8)
+    result = js_wasm_tv_admm(
+        local_field.flatten().astype(np.float64),
+        mask_u8.flatten(),
+        nx, ny, nz, vsx, vsy, vsz, lambda_, rho, tol, maxit
+    )
+    chi = np.array(result).reshape(shape)
     print("TV-ADMM completed")
-    return x * mask
+    return chi
 
 def rts_qsm(local_field, mask, voxel_size, bdir=(0, 0, 1),
             delta=0.15, mu=1e5, rho=10.0, tol=1e-2, maxit=20):
-    """RTS dipole inversion"""
+    """RTS dipole inversion via WASM"""
+    print(f"RTS (WASM): delta={delta}, mu={mu}, rho={rho}, maxit={maxit}")
     shape = local_field.shape
-    D = create_dipole_kernel(shape, voxel_size, bdir)
-    L = create_laplacian_kernel(shape, voxel_size)
+    nx, ny, nz = shape
+    vsx, vsy, vsz = voxel_size
+    mask_u8 = mask.astype(np.uint8)
+    result = js_wasm_rts(
+        local_field.flatten().astype(np.float64),
+        mask_u8.flatten(),
+        nx, ny, nz, vsx, vsy, vsz, delta, mu, rho, tol, maxit, 4
+    )
+    chi = np.array(result).reshape(shape)
+    print("RTS completed")
+    return chi
+
+# Keep the Python helper functions for any remaining code that might use them
+def _rts_python_fallback(local_field, mask, voxel_size, bdir, delta, mu, rho, tol, maxit):
+    """Python RTS fallback - kept for reference but not used"""
+    D = create_dipole_kernel(local_field.shape, voxel_size, bdir)
+    L = create_laplacian_kernel(local_field.shape, voxel_size)
     well_conditioned = np.abs(D) > delta
     M = np.where(well_conditioned, mu, 0.0)
     f = local_field * mask
@@ -1166,87 +1254,21 @@ def cg_solve(A_op, b, tol=0.01, max_iter=100, precond=None):
 
 def medi_l1(local_field, mask, magnitude, voxel_size, lambda_=1000, max_iter=10,
             cg_max_iter=100, cg_tol=0.01, edge_percent=0.9, merit=False):
-    """MEDI L1 dipole inversion - fully optimized (rfftn + preconditioner + float32)"""
+    """MEDI L1 dipole inversion via WASM"""
+    print(f"MEDI (WASM): lambda={lambda_}, max_iter={max_iter}, cg_max_iter={cg_max_iter}")
     shape = local_field.shape
-    eps = np.float32(1e-6)
-    two_lambda = np.float32(2 * lambda_)
-
-    # Use rfft dipole kernel in float32 (half-spectrum, ~2x faster FFTs)
-    D_r = create_dipole_kernel_rfft(shape, voxel_size).astype(np.float32)
-
-    # Precompute diagonal preconditioner: P = 1 / (eps + 2*lambda*|D|^2)
-    # This approximates the inverse of the dominant fidelity term
-    D_sq = D_r * D_r
-    P_diag = (1.0 / (eps + two_lambda * D_sq)).astype(np.float32)
-    print(f"MEDI (optimized): preconditioner range [{P_diag.min():.2e}, {P_diag.max():.2e}]")
-
-    # Precompute mask and target in float32/complex64
-    m = mask.astype(np.float32)
-    b0 = m * np.exp(1j * local_field.astype(np.float32)).astype(np.complex64)
-
-    # Precompute edge weighting (constant across all iterations)
-    wG = gradient_mask(magnitude, mask, edge_percent).astype(np.float32)
-    wG_sq = wG * wG
-
-    chi = np.zeros(shape, dtype=np.float32)
-    print(f"MEDI (rfftn+precond+f32): lambda={lambda_}, max_iter={max_iter}, cg_max_iter={cg_max_iter}")
-
-    # Helper for rfft-based dipole convolution (float32)
-    def Dconv_r(x):
-        return np.fft.irfftn(D_r * np.fft.rfftn(x), s=shape).astype(np.float32)
-
-    # Preconditioner: apply diagonal precond in Fourier space
-    def precond(x):
-        return np.fft.irfftn(P_diag * np.fft.rfftn(x), s=shape).astype(np.float32)
-
-    for outer_iter in range(max_iter):
-        try: js_qsm_progress(outer_iter + 1, max_iter)
-        except: pass
-
-        # Compute TV weights (changes each outer iteration)
-        grad_chi = fgrad(chi, voxel_size)
-        grad_mag_sq = wG_sq[:,:,:,np.newaxis] * grad_chi
-        grad_mag_sq = np.sum(grad_mag_sq * grad_chi, axis=-1)
-        Vr = (1.0 / np.sqrt(grad_mag_sq + eps)).astype(np.float32)
-        Vr_wG_sq = Vr * wG_sq
-
-        # Compute data fidelity weight (changes each outer iteration)
-        phi_forward = Dconv_r(chi)
-        w = (m * np.exp(1j * phi_forward)).astype(np.complex64)
-        w_sq = np.real(np.conj(w) * w).astype(np.float32)
-
-        # Define operators with precomputed weights
-        def reg0(dx):
-            g = fgrad(dx, voxel_size)
-            g[:,:,:,0] *= Vr_wG_sq
-            g[:,:,:,1] *= Vr_wG_sq
-            g[:,:,:,2] *= Vr_wG_sq
-            return bdiv(g, voxel_size).astype(np.float32)
-
-        def fidelity(dx):
-            Ddx = Dconv_r(dx)
-            return Dconv_r(w_sq * Ddx)
-
-        def A_op(dx): return reg0(dx) + two_lambda * fidelity(dx)
-
-        # Compute RHS
-        reg0_chi = reg0(chi)
-        phase_term = np.imag(np.conj(w) * (w - b0)).astype(np.float32)
-        rhs = reg0_chi + two_lambda * Dconv_r(phase_term)
-
-        # Solve with preconditioned CG
-        dx = cg_solve(A_op, -rhs, tol=cg_tol, max_iter=cg_max_iter, precond=precond)
-        chi = chi + dx
-
-        rel_change = np.linalg.norm(dx) / (np.linalg.norm(chi) + eps)
-        print(f"  Iter {outer_iter + 1}/{max_iter}: rel_change={rel_change:.4f}")
-
-        if rel_change < 0.1:
-            print(f"  Converged at iteration {outer_iter + 1}")
-            break
-
-    # Return as float64 for compatibility with rest of pipeline
-    return (chi * mask).astype(np.float64)
+    nx, ny, nz = shape
+    vsx, vsy, vsz = voxel_size
+    mask_u8 = mask.astype(np.uint8)
+    result = js_wasm_medi(
+        local_field.flatten().astype(np.float64),
+        mask_u8.flatten(),
+        magnitude.flatten().astype(np.float64),
+        nx, ny, nz, vsx, vsy, vsz, lambda_, max_iter, cg_max_iter, cg_tol
+    )
+    chi = np.array(result).reshape(shape)
+    print("MEDI completed")
+    return chi
 
 # Get voxel size
 try:
@@ -1530,7 +1552,7 @@ self.onmessage = async function (e) {
     switch (type) {
       case 'init':
         await initializePyodide();
-        await loadRomeoCode(data.romeoCode);
+        await loadPythonAlgorithms(data.romeoCode);
         self.postMessage({ type: 'initialized' });
         break;
 

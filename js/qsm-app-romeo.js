@@ -2,9 +2,15 @@ class QSMApp {
   constructor() {
     this.worker = null;
     this.workerReady = false;
+    this.workerInitializing = false;
     this.nv = new window.Niivue({
       loadingText: "",
+      dragToMeasure: false,
+      isColorbar: false,
       textHeight: 0.03,
+      show3Dcrosshair: false,
+      crosshairColor: [0.23, 0.51, 0.96, 1.0],  // #3b82f6 - matches site primary color
+      crosshairWidth: 0.75,  // Thinner crosshair
       onLocationChange: (data) => {
         document.getElementById("intensity").innerHTML = data.string;
       }
@@ -19,7 +25,7 @@ class QSMApp {
     this.progressAnimationId = null;
     this.lastAnimationTime = 0;
     // Animation speed: move at ~0.67% per second (completes 100% in ~150s typical runtime)
-    this.progressAnimationSpeed = 0.0067;
+    this.progressAnimationSpeed = 0.5; // 50% per second - catches up quickly
 
     // Multi-echo file storage
     this.multiEchoFiles = {
@@ -59,23 +65,28 @@ class QSMApp {
     this.drawingEnabled = false;
     this.brushMode = 'add';           // 'add' or 'remove'
     this.brushSize = 2;
-    this.savedCrosshairWidth = 1;     // Store crosshair width when hiding
+    this.savedCrosshairWidth = 0.75;  // Store crosshair width when hiding
 
     // Pipeline settings (null values = calculate from voxel size)
     this.pipelineSettings = {
       unwrapMethod: 'romeo',  // 'romeo' or 'laplacian'
       unwrapMode: 'individual',  // 'individual' or 'temporal'
       romeo: { weighting: 'phase_snr' },
-      backgroundRemoval: 'vsharp',  // 'vsharp', 'smv', 'ismv', 'pdf'
+      backgroundRemoval: 'smv',  // 'vsharp', 'sharp', 'smv', 'ismv', 'pdf', 'lbv'
       vsharp: { maxRadius: null, minRadius: null, threshold: 0.05 },
+      sharp: { radius: 6, threshold: 0.05 },
       smv: { radius: null },
       ismv: { radius: null, tol: 0.001, maxit: 500 },
       pdf: { tol: 0.00001, maxit: null },
-      dipoleInversion: 'tv',  // 'tkd', 'tikhonov', 'tv', 'rts'
+      lbv: { tol: 0.001, maxit: 500 },
+      dipoleInversion: 'rts',  // 'tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi'
       tkd: { threshold: 0.15 },
+      tsvd: { threshold: 0.15 },
       tikhonov: { lambda: 0.01, reg: 'identity' },
       tv: { lambda: 0.001, maxIter: 250, tol: 0.001 },
-      rts: { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 }
+      rts: { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 },
+      nltv: { lambda: 0.001, mu: 1, maxIter: 250, tol: 0.001, newtonMaxIter: 10 },
+      medi: { lambda: 1000, percentage: 0.9, maxIter: 10, cgMaxIter: 100, cgTol: 0.01, tol: 0.1, smv: false, smvRadius: 5, merit: false, dataWeighting: 1 }
     };
 
     // BET settings
@@ -108,14 +119,14 @@ class QSMApp {
 
     this.updateOutput("Ready. Upload magnitude, phase, and JSON files for each echo.");
 
-    // Start loading Pyodide in the background immediately
+    // Start loading WASM in the background immediately
     this.initializeWorker();
   }
 
   setupWorker() {
     if (this.worker) return;
 
-    this.worker = new Worker('js/qsm-worker.js');
+    this.worker = new Worker('js/qsm-worker-pure.js');
 
     this.worker.onmessage = (e) => {
       const { type, ...data } = e.data;
@@ -139,7 +150,7 @@ class QSMApp {
 
         case 'initialized':
           this.workerReady = true;
-          this.updateOutput("Pyodide ready");
+          this.updateOutput("WASM ready");
           break;
 
         case 'complete':
@@ -182,17 +193,29 @@ class QSMApp {
   async initializeWorker() {
     this.setupWorker();
 
+    // Already initialized
     if (this.workerReady) return;
 
-    this.updateOutput("Initializing Pyodide in background...");
+    // Already initializing - just wait for it
+    if (this.workerInitializing) {
+      return new Promise((resolve) => {
+        const checkReady = setInterval(() => {
+          if (this.workerReady) {
+            clearInterval(checkReady);
+            resolve();
+          }
+        }, 100);
+      });
+    }
 
-    // Fetch ROMEO code
-    const romeoCode = await fetch('./python/romeo_python.py').then(r => r.text());
+    // Start initialization
+    this.workerInitializing = true;
+    this.updateOutput("Initializing WASM...");
 
-    // Send init message to worker
+    // Send init message to worker (no Python code needed)
     this.worker.postMessage({
       type: 'init',
-      data: { romeoCode }
+      data: {}
     });
 
     // Wait for initialization
@@ -200,6 +223,7 @@ class QSMApp {
       const checkReady = setInterval(() => {
         if (this.workerReady) {
           clearInterval(checkReady);
+          this.workerInitializing = false;
           resolve();
         }
       }, 100);
@@ -210,6 +234,8 @@ class QSMApp {
     await this.nv.attachTo("gl1");
     this.nv.setMultiplanarPadPixels(5);
     this.nv.setSliceType(this.nv.sliceTypeMultiplanar);
+    // Clear any default loading text by drawing empty scene
+    this.nv.drawScene();
   }
 
   setupUIControls() {
@@ -249,25 +275,12 @@ class QSMApp {
     const textEl = document.getElementById('progressText');
     if (textEl) textEl.textContent = text || `${Math.round(value * 100)}%`;
 
-    // Start animation if not already running
-    if (!this.progressAnimationId && value > 0 && value < 1) {
-      this.lastAnimationTime = performance.now();
-      this.animateProgress();
-    }
+    // Update progress bar immediately for accurate feedback
+    this.animatedProgress = value;
+    this.updateProgressBar();
 
-    // If complete, jump to 100% and stop animation
-    if (value >= 1) {
-      this.animatedProgress = 1;
-      this.updateProgressBar();
-      this.stopProgressAnimation();
-    }
-
-    // If reset to 0, reset animation
-    if (value === 0) {
-      this.animatedProgress = 0;
-      this.updateProgressBar();
-      this.stopProgressAnimation();
-    }
+    // Stop any running animation since we update immediately
+    this.stopProgressAnimation();
   }
 
   animateProgress() {
@@ -407,17 +420,27 @@ class QSMApp {
     document.getElementById('bgRemovalMethod')?.addEventListener('change', (e) => {
       const method = e.target.value;
       document.getElementById('vsharpSettings').style.display = method === 'vsharp' ? 'block' : 'none';
+      document.getElementById('sharpSettings').style.display = method === 'sharp' ? 'block' : 'none';
       document.getElementById('smvSettings').style.display = method === 'smv' ? 'block' : 'none';
       document.getElementById('ismvSettings').style.display = method === 'ismv' ? 'block' : 'none';
       document.getElementById('pdfSettings').style.display = method === 'pdf' ? 'block' : 'none';
+      document.getElementById('lbvSettings').style.display = method === 'lbv' ? 'block' : 'none';
     });
 
     document.getElementById('dipoleMethod')?.addEventListener('change', (e) => {
       const method = e.target.value;
       document.getElementById('tkdSettings').style.display = method === 'tkd' ? 'block' : 'none';
+      document.getElementById('tsvdSettings').style.display = method === 'tsvd' ? 'block' : 'none';
       document.getElementById('tikhonovSettings').style.display = method === 'tikhonov' ? 'block' : 'none';
       document.getElementById('tvSettings').style.display = method === 'tv' ? 'block' : 'none';
       document.getElementById('rtsSettings').style.display = method === 'rts' ? 'block' : 'none';
+      document.getElementById('nltvSettings').style.display = method === 'nltv' ? 'block' : 'none';
+      document.getElementById('mediSettings').style.display = method === 'medi' ? 'block' : 'none';
+    });
+
+    // MEDI SMV checkbox toggle
+    document.getElementById('mediSmv')?.addEventListener('change', (e) => {
+      document.getElementById('mediSmvRadiusGroup').style.display = e.target.checked ? 'block' : 'none';
     });
 
     // Morphological operation buttons
@@ -1407,6 +1430,7 @@ class QSMApp {
       this.worker.terminate();
       this.worker = null;
       this.workerReady = false;
+      this.workerInitializing = false;
     }
 
     // Reset state
@@ -1611,9 +1635,6 @@ class QSMApp {
 
       this.updateOutput(`Image dimensions: ${nx}x${ny}x${nz}, voxel size: ${dx.toFixed(2)}x${dy.toFixed(2)}x${dz.toFixed(2)}mm`);
 
-      // Fetch BET code
-      const betCode = await fetch('./python/bet_python.py').then(r => r.text());
-
       // Set up handler for BET messages
       const betHandler = (e) => {
         const { type, ...data } = e.data;
@@ -1639,13 +1660,12 @@ class QSMApp {
       };
       this.worker.addEventListener('message', betHandler);
 
-      // Send BET request to worker with settings
+      // Send BET request to worker (pure WASM, no Python code needed)
       this.worker.postMessage({
         type: 'runBET',
         data: {
           magnitudeBuffer: this.magnitudeFileBytes,
           voxelSize: voxelSize,
-          betCode: betCode,
           fractionalIntensity: this.betSettings.fractionalIntensity,
           iterations: this.betSettings.iterations,
           subdivisions: this.betSettings.subdivisions
@@ -1699,13 +1719,15 @@ class QSMApp {
     const maskSize = this.maskDims ? this.maskDims[0] * this.maskDims[1] * this.maskDims[2] : 100000;
 
     return {
-      // V-SHARP: maxRadius = 18 * min(vsz), but we use mm directly
+      // V-SHARP: maxRadius = 18 * min(vsz), minRadius = 2 * max(vsz)
       vsharpMaxRadius: Math.round(18 * minVsz),
       vsharpMinRadius: Math.round(Math.max(1, 2 * minVsz)),
-      // SMV: radius = 18 * min(vsz) in QSM.jl for SHARP
-      smvRadius: Math.round(18 * minVsz),
-      // iSMV: radius = 2 * max(vsz)
-      ismvRadius: Math.round(2 * maxVsz),
+      // SHARP: radius = 18 * min(vsz) - matches QSM.jl sharp.jl line 22
+      sharpRadius: Math.round(18 * minVsz),
+      // Simple SMV: radius = 5 * max(vsz) - smaller than SHARP since no deconvolution
+      smvRadius: Math.round(Math.max(4, 5 * maxVsz)),
+      // iSMV: radius = 2 * max(vsz) - matches QSM.jl ismv.jl line 20
+      ismvRadius: Math.round(Math.max(2, 2 * maxVsz)),
       // PDF: maxit = ceil(sqrt(numel(mask)))
       pdfMaxit: Math.ceil(Math.sqrt(maskSize))
     };
@@ -1730,9 +1752,11 @@ class QSMApp {
     const bgMethod = this.pipelineSettings.backgroundRemoval;
     document.getElementById('bgRemovalMethod').value = bgMethod;
     document.getElementById('vsharpSettings').style.display = bgMethod === 'vsharp' ? 'block' : 'none';
+    document.getElementById('sharpSettings').style.display = bgMethod === 'sharp' ? 'block' : 'none';
     document.getElementById('smvSettings').style.display = bgMethod === 'smv' ? 'block' : 'none';
     document.getElementById('ismvSettings').style.display = bgMethod === 'ismv' ? 'block' : 'none';
     document.getElementById('pdfSettings').style.display = bgMethod === 'pdf' ? 'block' : 'none';
+    document.getElementById('lbvSettings').style.display = bgMethod === 'lbv' ? 'block' : 'none';
 
     // V-SHARP settings (use calculated defaults if null)
     document.getElementById('vsharpMaxRadius').value = this.pipelineSettings.vsharp.maxRadius ?? defaults.vsharpMaxRadius;
@@ -1751,16 +1775,26 @@ class QSMApp {
     document.getElementById('pdfTol').value = this.pipelineSettings.pdf.tol;
     document.getElementById('pdfMaxit').value = this.pipelineSettings.pdf.maxit ?? defaults.pdfMaxit;
 
+    // LBV settings
+    document.getElementById('lbvTol').value = this.pipelineSettings.lbv.tol;
+    document.getElementById('lbvMaxit').value = this.pipelineSettings.lbv.maxit;
+
     // Dipole inversion method
     const dipoleMethod = this.pipelineSettings.dipoleInversion;
     document.getElementById('dipoleMethod').value = dipoleMethod;
     document.getElementById('tkdSettings').style.display = dipoleMethod === 'tkd' ? 'block' : 'none';
+    document.getElementById('tsvdSettings').style.display = dipoleMethod === 'tsvd' ? 'block' : 'none';
     document.getElementById('tikhonovSettings').style.display = dipoleMethod === 'tikhonov' ? 'block' : 'none';
     document.getElementById('tvSettings').style.display = dipoleMethod === 'tv' ? 'block' : 'none';
     document.getElementById('rtsSettings').style.display = dipoleMethod === 'rts' ? 'block' : 'none';
+    document.getElementById('nltvSettings').style.display = dipoleMethod === 'nltv' ? 'block' : 'none';
+    document.getElementById('mediSettings').style.display = dipoleMethod === 'medi' ? 'block' : 'none';
 
     // TKD settings
     document.getElementById('tkdThreshold').value = this.pipelineSettings.tkd.threshold;
+
+    // TSVD settings
+    document.getElementById('tsvdThreshold').value = this.pipelineSettings.tsvd.threshold;
 
     // Tikhonov settings
     document.getElementById('tikhLambda').value = this.pipelineSettings.tikhonov.lambda;
@@ -1776,6 +1810,23 @@ class QSMApp {
     document.getElementById('rtsMu').value = this.pipelineSettings.rts.mu;
     document.getElementById('rtsRho').value = this.pipelineSettings.rts.rho;
     document.getElementById('rtsMaxIter').value = this.pipelineSettings.rts.maxIter;
+
+    // NLTV settings
+    document.getElementById('nltvLambda').value = this.pipelineSettings.nltv.lambda;
+    document.getElementById('nltvMu').value = this.pipelineSettings.nltv.mu;
+    document.getElementById('nltvMaxIter').value = this.pipelineSettings.nltv.maxIter;
+    document.getElementById('nltvTol').value = this.pipelineSettings.nltv.tol;
+    document.getElementById('nltvNewtonMaxIter').value = this.pipelineSettings.nltv.newtonMaxIter;
+
+    // MEDI settings
+    document.getElementById('mediLambda').value = this.pipelineSettings.medi.lambda;
+    document.getElementById('mediPercentage').value = this.pipelineSettings.medi.percentage;
+    document.getElementById('mediMaxIter').value = this.pipelineSettings.medi.maxIter;
+    document.getElementById('mediCgMaxIter').value = this.pipelineSettings.medi.cgMaxIter;
+    document.getElementById('mediSmv').checked = this.pipelineSettings.medi.smv;
+    document.getElementById('mediSmvRadius').value = this.pipelineSettings.medi.smvRadius;
+    document.getElementById('mediSmvRadiusGroup').style.display = this.pipelineSettings.medi.smv ? 'block' : 'none';
+    document.getElementById('mediMerit').checked = this.pipelineSettings.medi.merit;
 
     document.getElementById('pipelineSettingsModal').classList.add('active');
   }
@@ -1795,15 +1846,18 @@ class QSMApp {
     document.getElementById('laplacianSettings').style.display = 'none';
     document.getElementById('romeoWeighting').value = 'phase_snr';
 
-    // Background removal
-    document.getElementById('bgRemovalMethod').value = 'vsharp';
-    document.getElementById('vsharpSettings').style.display = 'block';
-    document.getElementById('smvSettings').style.display = 'none';
+    // Background removal - default to SMV
+    document.getElementById('bgRemovalMethod').value = 'smv';
+    document.getElementById('vsharpSettings').style.display = 'none';
+    document.getElementById('sharpSettings').style.display = 'none';
+    document.getElementById('smvSettings').style.display = 'block';
     document.getElementById('ismvSettings').style.display = 'none';
     document.getElementById('pdfSettings').style.display = 'none';
     document.getElementById('vsharpMaxRadius').value = defaults.vsharpMaxRadius;
     document.getElementById('vsharpMinRadius').value = defaults.vsharpMinRadius;
     document.getElementById('vsharpThreshold').value = 0.05;
+    document.getElementById('sharpRadius').value = 6;
+    document.getElementById('sharpThreshold').value = 0.05;
     document.getElementById('smvRadius').value = defaults.smvRadius;
 
     // iSMV defaults
@@ -1815,15 +1869,26 @@ class QSMApp {
     document.getElementById('pdfTol').value = 0.00001;
     document.getElementById('pdfMaxit').value = defaults.pdfMaxit;
 
-    // Dipole inversion - default to TV-ADMM
-    document.getElementById('dipoleMethod').value = 'tv';
+    // LBV defaults
+    document.getElementById('lbvSettings').style.display = 'none';
+    document.getElementById('lbvTol').value = 0.001;
+    document.getElementById('lbvMaxit').value = 500;
+
+    // Dipole inversion - default to RTS
+    document.getElementById('dipoleMethod').value = 'rts';
     document.getElementById('tkdSettings').style.display = 'none';
+    document.getElementById('tsvdSettings').style.display = 'none';
     document.getElementById('tikhonovSettings').style.display = 'none';
-    document.getElementById('tvSettings').style.display = 'block';
-    document.getElementById('rtsSettings').style.display = 'none';
+    document.getElementById('tvSettings').style.display = 'none';
+    document.getElementById('rtsSettings').style.display = 'block';
+    document.getElementById('nltvSettings').style.display = 'none';
+    document.getElementById('mediSettings').style.display = 'none';
 
     // TKD
     document.getElementById('tkdThreshold').value = 0.15;
+
+    // TSVD
+    document.getElementById('tsvdThreshold').value = 0.15;
 
     // Tikhonov
     document.getElementById('tikhLambda').value = 0.01;
@@ -1839,6 +1904,23 @@ class QSMApp {
     document.getElementById('rtsMu').value = 100000;
     document.getElementById('rtsRho').value = 10;
     document.getElementById('rtsMaxIter').value = 20;
+
+    // NLTV
+    document.getElementById('nltvLambda').value = 0.001;
+    document.getElementById('nltvMu').value = 1;
+    document.getElementById('nltvMaxIter').value = 250;
+    document.getElementById('nltvTol').value = 0.001;
+    document.getElementById('nltvNewtonMaxIter').value = 10;
+
+    // MEDI
+    document.getElementById('mediLambda').value = 1000;
+    document.getElementById('mediPercentage').value = 0.9;
+    document.getElementById('mediMaxIter').value = 10;
+    document.getElementById('mediCgMaxIter').value = 100;
+    document.getElementById('mediSmv').checked = false;
+    document.getElementById('mediSmvRadius').value = 5;
+    document.getElementById('mediSmvRadiusGroup').style.display = 'none';
+    document.getElementById('mediMerit').checked = false;
   }
 
   runPipelineWithSettings() {
@@ -1855,6 +1937,10 @@ class QSMApp {
         minRadius: parseFloat(document.getElementById('vsharpMinRadius').value),
         threshold: parseFloat(document.getElementById('vsharpThreshold').value)
       },
+      sharp: {
+        radius: parseFloat(document.getElementById('sharpRadius').value),
+        threshold: parseFloat(document.getElementById('sharpThreshold').value)
+      },
       smv: {
         radius: parseFloat(document.getElementById('smvRadius').value)
       },
@@ -1867,9 +1953,16 @@ class QSMApp {
         tol: parseFloat(document.getElementById('pdfTol').value),
         maxit: parseInt(document.getElementById('pdfMaxit').value)
       },
+      lbv: {
+        tol: parseFloat(document.getElementById('lbvTol').value),
+        maxit: parseInt(document.getElementById('lbvMaxit').value)
+      },
       dipoleInversion: document.getElementById('dipoleMethod').value,
       tkd: {
         threshold: parseFloat(document.getElementById('tkdThreshold').value)
+      },
+      tsvd: {
+        threshold: parseFloat(document.getElementById('tsvdThreshold').value)
       },
       tikhonov: {
         lambda: parseFloat(document.getElementById('tikhLambda').value),
@@ -1885,6 +1978,25 @@ class QSMApp {
         mu: parseFloat(document.getElementById('rtsMu').value),
         rho: parseFloat(document.getElementById('rtsRho').value),
         maxIter: parseInt(document.getElementById('rtsMaxIter').value)
+      },
+      nltv: {
+        lambda: parseFloat(document.getElementById('nltvLambda').value),
+        mu: parseFloat(document.getElementById('nltvMu').value),
+        maxIter: parseInt(document.getElementById('nltvMaxIter').value),
+        tol: parseFloat(document.getElementById('nltvTol').value),
+        newtonMaxIter: parseInt(document.getElementById('nltvNewtonMaxIter').value)
+      },
+      medi: {
+        lambda: parseFloat(document.getElementById('mediLambda').value),
+        percentage: parseFloat(document.getElementById('mediPercentage').value),
+        maxIter: parseInt(document.getElementById('mediMaxIter').value),
+        cgMaxIter: parseInt(document.getElementById('mediCgMaxIter').value),
+        cgTol: 0.01,
+        tol: 0.1,
+        smv: document.getElementById('mediSmv').checked,
+        smvRadius: parseFloat(document.getElementById('mediSmvRadius').value),
+        merit: document.getElementById('mediMerit').checked,
+        dataWeighting: 1
       }
     };
 
