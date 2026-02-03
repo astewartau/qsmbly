@@ -28,7 +28,8 @@ function postComplete(results) {
 }
 
 // Send intermediate stage data for live display
-function sendStageData(stage, data, dims, voxelSize, affine, description) {
+// Set displayNow=false to cache without displaying (e.g., for auxiliary outputs)
+function sendStageData(stage, data, dims, voxelSize, affine, description, displayNow = true) {
   // Save as NIfTI and send to main thread
   const niftiBytes = wasmModule.save_nifti_wasm(
     data,
@@ -36,7 +37,7 @@ function sendStageData(stage, data, dims, voxelSize, affine, description) {
     voxelSize[0], voxelSize[1], voxelSize[2],
     affine
   );
-  self.postMessage({ type: 'stageData', stage, data: niftiBytes, description });
+  self.postMessage({ type: 'stageData', stage, data: niftiBytes, description, displayNow });
 }
 
 async function initializeWasm() {
@@ -135,6 +136,47 @@ function findSeedPoint(mask, nx, ny, nz) {
   ];
 }
 
+// 3D box filter (mean filter) for smoothing
+// Used for R_0 reliability map computation
+function boxFilter3D(data, nx, ny, nz, radius) {
+  const voxelCount = nx * ny * nz;
+  const result = new Float64Array(voxelCount);
+
+  const idx = (i, j, k) => i + j * nx + k * nx * ny;
+
+  for (let k = 0; k < nz; k++) {
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        let sum = 0;
+        let count = 0;
+
+        // Box neighborhood
+        for (let dk = -radius; dk <= radius; dk++) {
+          const kk = k + dk;
+          if (kk < 0 || kk >= nz) continue;
+
+          for (let dj = -radius; dj <= radius; dj++) {
+            const jj = j + dj;
+            if (jj < 0 || jj >= ny) continue;
+
+            for (let di = -radius; di <= radius; di++) {
+              const ii = i + di;
+              if (ii < 0 || ii >= nx) continue;
+
+              sum += data[idx(ii, jj, kk)];
+              count++;
+            }
+          }
+        }
+
+        result[idx(i, j, k)] = count > 0 ? sum / count : 0;
+      }
+    }
+  }
+
+  return result;
+}
+
 // Compute B0 fieldmap from unwrapped phase
 // method: 'ols' (simple least squares through origin) or 'ols_offset' (estimates phase offset)
 function computeB0FromUnwrapped(unwrappedPhase, echoTimes, nx, ny, nz, method = 'ols') {
@@ -223,11 +265,12 @@ function computeB0FromUnwrapped(unwrappedPhase, echoTimes, nx, ny, nz, method = 
 async function runPipeline(data) {
   const {
     magnitudeBuffers, phaseBuffers, echoTimes, magField,
-    maskThreshold, customMaskBuffer, pipelineSettings
+    maskThreshold, customMaskBuffer, preparedMagnitude, pipelineSettings
   } = data;
 
   const thresholdFraction = (maskThreshold || 15) / 100;
   const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
+  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
 
   // Check for combined method (TGV)
   const combinedMethod = pipelineSettings?.combinedMethod || 'none';
@@ -235,6 +278,9 @@ async function runPipeline(data) {
   if (combinedMethod === 'tgv') {
     // Use TGV single-step reconstruction
     return await runTgvPipeline(data);
+  } else if (combinedMethod === 'qsmart') {
+    // Use QSMART two-stage reconstruction
+    return await runQsmartPipeline(data);
   }
 
   // Extract pipeline settings for standard pipeline
@@ -250,7 +296,7 @@ async function runPipeline(data) {
   // Validate methods upfront - never silently fall back to a different algorithm
   const validUnwrapMethods = ['romeo', 'laplacian'];
   const validBgMethods = ['vsharp', 'sharp', 'smv', 'ismv', 'pdf', 'lbv'];
-  const validInversionMethods = ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi'];
+  const validInversionMethods = ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr'];
 
   if (!validUnwrapMethods.includes(unwrapMethod)) {
     throw new Error(`Unknown unwrapping method: '${unwrapMethod}'. Valid options are: ${validUnwrapMethods.join(', ')}`);
@@ -277,6 +323,7 @@ async function runPipeline(data) {
     lambda: 1000, percentage: 0.9, maxIter: 10, cgMaxIter: 100, cgTol: 0.01, tol: 0.1,
     smv: false, smvRadius: 5, merit: false, dataWeighting: 1
   };
+  const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, maxIter: 50 };
 
   try {
     // =========================================================================
@@ -333,15 +380,24 @@ async function runPipeline(data) {
         mask[i] = maskData[i] > 0.5 ? 1 : 0;
       }
     } else {
-      postLog(`Creating threshold mask (${thresholdFraction * 100}%)...`);
-      mask = createThresholdMask(new Float64Array(magnitude4d[0]), thresholdFraction);
+      // Use prepared magnitude if available (combined/bias-corrected), otherwise first echo
+      const maskMagnitude = hasPreparedMagnitude
+        ? new Float64Array(preparedMagnitude)
+        : new Float64Array(magnitude4d[0]);
+      const magSource = hasPreparedMagnitude ? 'prepared' : 'first echo';
+      postLog(`Creating threshold mask (${thresholdFraction * 100}%) from ${magSource} magnitude...`);
+      mask = createThresholdMask(maskMagnitude, thresholdFraction);
     }
 
     const maskCount = mask.reduce((a, b) => a + b, 0);
     postLog(`Mask coverage: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
 
-    // Note: magnitude, phase, and mask are available from the app's uploaded files
-    // and mask editing UI. We don't need to send them back - only send computed results.
+    // Send mask as intermediate stage
+    const maskFloat = new Float64Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      maskFloat[i] = mask[i] ? 1.0 : 0.0;
+    }
+    sendStageData('mask', maskFloat, dims, voxelSize, affine, 'Brain Mask');
 
     // =========================================================================
     // Step 3: Phase unwrapping (15% - 40%)
@@ -741,8 +797,12 @@ async function runPipeline(data) {
       };
 
       // MEDI requires magnitude image for gradient weighting
-      // Use the first echo magnitude data
-      const magnitudeData = new Float64Array(magnitude4d[0]);
+      // Use prepared magnitude if available (combined/bias-corrected), otherwise first echo
+      const magnitudeData = hasPreparedMagnitude
+        ? new Float64Array(preparedMagnitude)
+        : new Float64Array(magnitude4d[0]);
+      const magSource = hasPreparedMagnitude ? 'prepared' : 'first echo';
+      postLog(`MEDI using ${magSource} magnitude for gradient weighting`);
 
       // Create noise std map (uniform for now - could be computed from data)
       const nStd = new Float64Array(voxelCount).fill(1.0);
@@ -767,8 +827,24 @@ async function runPipeline(data) {
         mediSettings.tol,
         mediProgress
       ));
+    } else if (dipoleMethod === 'ilsqr') {
+      // iLSQR (iterative LSQR with streaking artifact removal)
+      const ilsqrProgress = (current, total) => {
+        const progress = 0.67 + (current / total) * 0.25;
+        postProgress(progress, `iLSQR: Step ${current}/${total}`);
+      };
+
+      postProgress(0.70, 'iLSQR: Running 4-step artifact removal...');
+      postLog(`iLSQR parameters: tol=${ilsqrSettings.tol}, maxIter=${ilsqrSettings.maxIter}`);
+
+      qsmResult = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
+        localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+        0, 0, 1,  // B0 direction
+        ilsqrSettings.tol, ilsqrSettings.maxIter,
+        ilsqrProgress
+      ));
     } else {
-      throw new Error(`Unknown dipole inversion method: '${dipoleMethod}'. Valid options are: tkd, tsvd, tikhonov, tv, rts, nltv, medi`);
+      throw new Error(`Unknown dipole inversion method: '${dipoleMethod}'. Valid options are: tkd, tsvd, tikhonov, tv, rts, nltv, medi, ilsqr`);
     }
 
     // Scale to ppm: χ (ppm) = χ_raw / (γ × B0) × 1e6
@@ -810,11 +886,12 @@ async function runPipeline(data) {
 async function runTgvPipeline(data) {
   const {
     magnitudeBuffers, phaseBuffers, echoTimes, magField,
-    maskThreshold, customMaskBuffer, pipelineSettings
+    maskThreshold, customMaskBuffer, preparedMagnitude, pipelineSettings
   } = data;
 
   const thresholdFraction = (maskThreshold || 15) / 100;
   const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
+  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
 
   // TGV settings
   const tgvSettings = pipelineSettings?.tgv || { regularization: 2, iterations: 1000, erosions: 3 };
@@ -877,8 +954,13 @@ async function runTgvPipeline(data) {
         mask[i] = maskData[i] > 0.5 ? 1 : 0;
       }
     } else {
-      postLog(`Creating threshold mask (${thresholdFraction * 100}%)...`);
-      mask = createThresholdMask(new Float64Array(magnitude4d[0]), thresholdFraction);
+      // Use prepared magnitude if available (combined/bias-corrected), otherwise first echo
+      const maskMagnitude = hasPreparedMagnitude
+        ? new Float64Array(preparedMagnitude)
+        : new Float64Array(magnitude4d[0]);
+      const magSource = hasPreparedMagnitude ? 'prepared' : 'first echo';
+      postLog(`Creating threshold mask (${thresholdFraction * 100}%) from ${magSource} magnitude...`);
+      mask = createThresholdMask(maskMagnitude, thresholdFraction);
     }
 
     const maskCount = mask.reduce((a, b) => a + b, 0);
@@ -931,6 +1013,434 @@ async function runTgvPipeline(data) {
 
     postProgress(1.0, 'TGV pipeline complete!');
     postLog("TGV pipeline completed successfully!");
+    postComplete({ success: true });
+
+  } catch (error) {
+    postError(error.message);
+    throw error;
+  }
+}
+
+// QSMART two-stage pipeline
+async function runQsmartPipeline(data) {
+  const {
+    magnitudeBuffers, phaseBuffers, echoTimes, magField,
+    maskThreshold, customMaskBuffer, preparedMagnitude, pipelineSettings
+  } = data;
+
+  const thresholdFraction = (maskThreshold || 15) / 100;
+  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
+  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
+
+  // QSMART settings with defaults from Demo_QSMART.m
+  const qsmartSettings = pipelineSettings?.qsmart || {};
+  const sdfSigma1Stage1 = qsmartSettings.sdfSigma1Stage1 ?? 10;
+  const sdfSigma2Stage1 = qsmartSettings.sdfSigma2Stage1 ?? 0;
+  const sdfSigma1Stage2 = qsmartSettings.sdfSigma1Stage2 ?? 8;
+  const sdfSigma2Stage2 = qsmartSettings.sdfSigma2Stage2 ?? 2;
+  const sdfSpatialRadius = qsmartSettings.sdfSpatialRadius ?? 8;
+  const sdfLowerLim = qsmartSettings.sdfLowerLim ?? 0.6;
+  const sdfCurvConstant = qsmartSettings.sdfCurvConstant ?? 500;
+  // Curvature disabled by default for now - our implementation differs from reference
+  // which uses Delaunay triangulation + mesh-based curvature
+  const useCurvature = qsmartSettings.useCurvature === true;
+  // Vasculature sphere radius - can be specified in mm or voxels
+  // Default 8mm - the reference uses 8 voxels tuned for ~1mm isotropic data
+  const vasculatureSphereRadiusMm = qsmartSettings.vascSphereRadiusMm ?? 8.0;  // mm
+  // Legacy support: direct voxel-based radius (will be overridden by mm-based if not set)
+  const vasculatureSphereRadiusOverride = qsmartSettings.vascSphereRadius ?? qsmartSettings.vasculatureSphereRadius;
+  // Frangi scale parameters - can be specified in mm (physical) or voxels
+  // Default reference values are in mm, tuned for typical brain vessel sizes
+  const frangiScaleMinMm = qsmartSettings.frangiScaleMinMm ?? 1.0;  // mm - minimum vessel radius (QSMART default: 1)
+  const frangiScaleMaxMm = qsmartSettings.frangiScaleMaxMm ?? 10.0;  // mm - maximum vessel radius (QSMART default: 10)
+  const frangiScaleRatioMm = qsmartSettings.frangiScaleRatioMm ?? 2.0;  // mm - step between scales (QSMART default: 2)
+  // Legacy support: direct voxel-based scales (will be overridden by mm-based if not set)
+  const frangiScaleMinVoxelOverride = qsmartSettings.frangiScaleRange?.[0] ?? qsmartSettings.frangiScaleMin;
+  const frangiScaleMaxVoxelOverride = qsmartSettings.frangiScaleRange?.[1] ?? qsmartSettings.frangiScaleMax;
+  const frangiScaleRatioOverride = qsmartSettings.frangiScaleRatio;
+  const frangiC = qsmartSettings.frangiC ?? 500;
+  const ilsqrTol = qsmartSettings.ilsqrTol ?? 0.01;
+  const ilsqrMaxIter = qsmartSettings.ilsqrMaxIter ?? 50;
+  const enableVasculature = qsmartSettings.enableVasculature !== false;
+
+  // Compute ppm conversion factor (gyro * B0 / 1e6)
+  const gyro = 2.675e8;  // Proton gyromagnetic ratio rad/s/T
+  const b0Tesla = magField || 7.0;  // QSMART optimized for 7T
+  const ppmFactor = gyro * b0Tesla / 1e6;
+
+  try {
+    // =========================================================================
+    // Step 1: Load NIfTI data (0% - 10%)
+    // =========================================================================
+    postProgress(0.02, 'Loading NIfTI data...');
+    postLog("QSMART: Loading multi-echo data via WASM...");
+
+    const nEchoes = echoTimes.length;
+    let magnitude4d = [];
+    let phase4d = [];
+    let dims, voxelSize, affine;
+
+    for (let e = 0; e < nEchoes; e++) {
+      postProgress(0.02 + (e / nEchoes) * 0.06, `Loading echo ${e + 1}/${nEchoes}...`);
+
+      const magResult = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffers[e]));
+      magnitude4d.push(Array.from(magResult.data));
+      dims = Array.from(magResult.dims);
+      voxelSize = Array.from(magResult.voxelSize);
+      affine = Array.from(magResult.affine);
+
+      const phaseResult = wasmModule.load_nifti_wasm(new Uint8Array(phaseBuffers[e]));
+      let phaseData = scalePhase(new Float64Array(phaseResult.data));
+      phase4d.push(Array.from(phaseData));
+
+      postLog(`  Echo ${e + 1}: shape ${dims[0]}x${dims[1]}x${dims[2]}`);
+    }
+
+    const [nx, ny, nz] = dims;
+    const [vsx, vsy, vsz] = voxelSize;
+    const voxelCount = nx * ny * nz;
+
+    postLog(`Data: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm, B0=${b0Tesla}T`);
+
+    // =========================================================================
+    // Step 2: Create or load mask (10% - 12%)
+    // =========================================================================
+    postProgress(0.10, 'Creating mask...');
+    let mask;
+
+    if (hasCustomMask) {
+      postLog("Loading custom mask...");
+      const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+      mask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
+      }
+    } else {
+      const maskMagnitude = hasPreparedMagnitude
+        ? new Float64Array(preparedMagnitude)
+        : new Float64Array(magnitude4d[0]);
+      mask = createThresholdMask(maskMagnitude, thresholdFraction);
+    }
+
+    const maskCount = mask.reduce((a, b) => a + b, 0);
+    postLog(`Mask: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
+
+    // Send mask as intermediate stage
+    const maskFloat = new Float64Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      maskFloat[i] = mask[i] ? 1.0 : 0.0;
+    }
+    sendStageData('mask', maskFloat, dims, voxelSize, affine, 'Brain Mask');
+
+    // =========================================================================
+    // Step 3: Phase unwrapping and B0 estimation (12% - 20%)
+    // =========================================================================
+    postProgress(0.12, 'Phase unwrapping (Laplacian)...');
+    postLog("Running Laplacian phase unwrapping...");
+
+    // Unwrap first echo
+    const phase1 = new Float64Array(phase4d[0]);
+    let unwrappedPhase = new Float64Array(wasmModule.laplacian_unwrap_wasm(
+      phase1, mask, nx, ny, nz, vsx, vsy, vsz
+    ));
+
+    // Multi-echo B0 estimation
+    postProgress(0.16, 'Computing total field shift...');
+    let tfs;
+    if (nEchoes > 1) {
+      // Unwrap all echoes and fit
+      const allUnwrapped = new Float64Array(voxelCount * nEchoes);
+      allUnwrapped.set(unwrappedPhase, 0);
+
+      for (let e = 1; e < nEchoes; e++) {
+        const phaseE = new Float64Array(phase4d[e]);
+        const unwrappedE = new Float64Array(wasmModule.laplacian_unwrap_wasm(
+          phaseE, mask, nx, ny, nz, vsx, vsy, vsz
+        ));
+        allUnwrapped.set(unwrappedE, e * voxelCount);
+      }
+
+      tfs = computeB0FromUnwrapped(allUnwrapped, echoTimes, nx, ny, nz, 'ols');
+    } else {
+      // Single echo
+      const te = echoTimes[0] / 1000;
+      tfs = new Float64Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        tfs[i] = unwrappedPhase[i] / (2 * Math.PI * te);
+      }
+    }
+
+    // Apply mask
+    for (let i = 0; i < voxelCount; i++) {
+      if (!mask[i]) tfs[i] = 0;
+    }
+
+    // Compute TFS range without spread operator (avoid stack overflow for large arrays)
+    let tfsMin = Infinity, tfsMax = -Infinity;
+    for (let i = 0; i < voxelCount; i++) {
+      if (mask[i]) {
+        if (tfs[i] < tfsMin) tfsMin = tfs[i];
+        if (tfs[i] > tfsMax) tfsMax = tfs[i];
+      }
+    }
+    postLog(`TFS range: [${tfsMin.toFixed(1)}, ${tfsMax.toFixed(1)}] Hz`);
+
+    // Send TFS as intermediate stage
+    sendStageData('tfs', tfs, dims, voxelSize, affine, 'Total Field Shift (Hz)');
+
+    // =========================================================================
+    // Step 4: Generate vasculature mask (20% - 30%)
+    // =========================================================================
+    let vascOnly;
+    if (enableVasculature) {
+      postProgress(0.20, 'Detecting vasculature (Frangi filter)...');
+
+      // Compute parameters in voxels from mm-based parameters
+      // Use average voxel size for isotropic-equivalent scaling
+      const avgVoxelSize = (vsx + vsy + vsz) / 3.0;
+
+      // Morphological sphere radius: use override if set, otherwise compute from mm
+      const sphereRadiusVoxels = vasculatureSphereRadiusOverride ?? Math.round(vasculatureSphereRadiusMm / avgVoxelSize);
+      // Ensure minimum radius of 2 voxels for meaningful morphological filtering
+      const effectiveSphereRadius = Math.max(sphereRadiusVoxels, 2);
+
+      // Frangi scales: use override values if explicitly set, otherwise compute from mm
+      const frangiScaleMin = frangiScaleMinVoxelOverride ?? (frangiScaleMinMm / avgVoxelSize);
+      const frangiScaleMax = frangiScaleMaxVoxelOverride ?? (frangiScaleMaxMm / avgVoxelSize);
+      const frangiScaleRatio = frangiScaleRatioOverride ?? (frangiScaleRatioMm / avgVoxelSize);
+
+      // Ensure minimum scale ratio to avoid too many iterations
+      const effectiveScaleRatio = Math.max(frangiScaleRatio, 0.1);
+
+      postLog(`Generating vasculature mask:`);
+      postLog(`  Voxel size: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm (avg=${avgVoxelSize.toFixed(2)}mm)`);
+      postLog(`  Sphere radius: ${effectiveSphereRadius} voxels (${vasculatureSphereRadiusMm.toFixed(1)}mm)`);
+      postLog(`  Frangi scales: [${frangiScaleMin.toFixed(2)}, ${frangiScaleMax.toFixed(2)}] voxels (step=${effectiveScaleRatio.toFixed(2)})`);
+      postLog(`  (Physical: [${frangiScaleMinMm.toFixed(1)}, ${frangiScaleMaxMm.toFixed(1)}]mm, Frangi C: ${frangiC})`);
+
+      const avgMag = hasPreparedMagnitude
+        ? new Float64Array(preparedMagnitude)
+        : new Float64Array(magnitude4d[0]);
+
+      const vascProgress = (current, total) => {
+        postProgress(0.20 + (current / total) * 0.10, `Vasculature: Step ${current}/${total}`);
+      };
+
+      vascOnly = new Float64Array(wasmModule.vasculature_mask_wasm_with_progress(
+        avgMag, mask, nx, ny, nz,
+        effectiveSphereRadius,
+        frangiScaleMin, frangiScaleMax, effectiveScaleRatio,
+        frangiC,
+        vascProgress
+      ));
+
+      const vascCount = vascOnly.filter(v => v === 0).length;
+      postLog(`Vessel voxels: ${vascCount} (${(100 * vascCount / maskCount).toFixed(1)}% of brain)`);
+
+      // Send vasculature detection result (inverted: 1 = vessel, 0 = tissue)
+      const vascDisplay = new Float64Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        vascDisplay[i] = mask[i] ? (1 - vascOnly[i]) : 0;
+      }
+      sendStageData('vascDetect', vascDisplay, dims, voxelSize, affine, 'Vessel Detection (Frangi)');
+    } else {
+      postLog("Vasculature detection disabled - using full mask for both stages");
+      vascOnly = new Float64Array(voxelCount).fill(1.0);
+    }
+
+    // =========================================================================
+    // Step 5: Create weighted mask (simplified - use mask directly)
+    // =========================================================================
+    // Note: Full R_0 reliability computation from echo fitting residuals
+    // requires storing all unwrapped phases. For now, use mask directly.
+    // The reference QSMART uses R_0 to exclude voxels with poor echo fits,
+    // but for most data this doesn't significantly affect results.
+
+    const weightedMask = new Float64Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      weightedMask[i] = mask[i] ? 1.0 : 0.0;
+    }
+
+    postLog(`Using full mask (${maskCount} voxels) for SDF`);
+
+    // =========================================================================
+    // Step 6: Stage 1 - SDF + iLSQR on whole ROI (30% - 50%)
+    // =========================================================================
+    postProgress(0.30, 'Stage 1: SDF background removal...');
+    postLog(`Stage 1 SDF: sigma1=${sdfSigma1Stage1}, sigma2=${sdfSigma2Stage1}, curvature=${useCurvature}`);
+
+    // All-ones for vasc_only in stage 1
+    const onesArray = new Float64Array(voxelCount).fill(1.0);
+
+    const sdfProgress1 = (current, total) => {
+      postProgress(0.30 + (current / total) * 0.10, `Stage 1 SDF: ${current}/${total} alphas`);
+    };
+
+    const lfsStage1 = new Float64Array(wasmModule.sdf_wasm_with_progress(
+      tfs, weightedMask, onesArray,
+      nx, ny, nz,
+      sdfSigma1Stage1, sdfSigma2Stage1,
+      sdfSpatialRadius,
+      sdfLowerLim, sdfCurvConstant,
+      useCurvature,
+      sdfProgress1
+    ));
+
+    // Compute LFS range for diagnostics
+    let lfs1Min = Infinity, lfs1Max = -Infinity;
+    for (let i = 0; i < voxelCount; i++) {
+      if (weightedMask[i] > 0) {
+        if (lfsStage1[i] < lfs1Min) lfs1Min = lfsStage1[i];
+        if (lfsStage1[i] > lfs1Max) lfs1Max = lfsStage1[i];
+      }
+    }
+    postLog(`Stage 1 LFS range: [${lfs1Min.toFixed(2)}, ${lfs1Max.toFixed(2)}] Hz`);
+
+    // Scale to ppm for storage (will scale back for offset adjustment)
+    const lfsStage1Ppm = new Float64Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      lfsStage1Ppm[i] = lfsStage1[i] * ppmFactor;
+    }
+
+    // Send stage 1 local field for display
+    sendStageData('lfsStage1', lfsStage1, dims, voxelSize, affine, 'Stage 1 Local Field (Hz)');
+
+    postProgress(0.42, 'Stage 1: iLSQR inversion...');
+    postLog(`Stage 1 iLSQR: tol=${ilsqrTol}, maxIter=${ilsqrMaxIter}`);
+
+    // Create binary mask for iLSQR
+    const maskStage1 = new Uint8Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      maskStage1[i] = weightedMask[i] > 0.1 ? 1 : 0;
+    }
+
+    const ilsqrProgress1 = (current, total) => {
+      postProgress(0.42 + (current / total) * 0.08, `Stage 1 iLSQR: Step ${current}/${total}`);
+    };
+
+    const chiStage1 = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
+      lfsStage1, maskStage1, nx, ny, nz, vsx, vsy, vsz,
+      0, 0, 1,  // B0 direction
+      ilsqrTol, ilsqrMaxIter,
+      ilsqrProgress1
+    ));
+
+    // Compute chi1 range for diagnostics
+    let chi1Min = Infinity, chi1Max = -Infinity;
+    for (let i = 0; i < voxelCount; i++) {
+      if (maskStage1[i]) {
+        if (chiStage1[i] < chi1Min) chi1Min = chiStage1[i];
+        if (chiStage1[i] > chi1Max) chi1Max = chiStage1[i];
+      }
+    }
+    postLog(`Stage 1 Chi range: [${chi1Min.toFixed(4)}, ${chi1Max.toFixed(4)}]`);
+
+    sendStageData('chiStage1', chiStage1, dims, voxelSize, affine, 'Stage 1 QSM (arb)');
+
+    // =========================================================================
+    // Step 7: Stage 2 - SDF + iLSQR on tissue only (50% - 75%)
+    // =========================================================================
+    postProgress(0.50, 'Stage 2: SDF on tissue region...');
+    postLog(`Stage 2 SDF: sigma1=${sdfSigma1Stage2}, sigma2=${sdfSigma2Stage2}`);
+
+    // Weighted TFS for stage 2: tfs * mask * R_0
+    const tfsWeighted = new Float64Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      tfsWeighted[i] = tfs[i] * weightedMask[i];
+    }
+
+    const sdfProgress2 = (current, total) => {
+      postProgress(0.50 + (current / total) * 0.12, `Stage 2 SDF: ${current}/${total} alphas`);
+    };
+
+    const lfsStage2 = new Float64Array(wasmModule.sdf_wasm_with_progress(
+      tfsWeighted, weightedMask, vascOnly,
+      nx, ny, nz,
+      sdfSigma1Stage2, sdfSigma2Stage2,
+      sdfSpatialRadius,
+      sdfLowerLim, sdfCurvConstant,
+      useCurvature,
+      sdfProgress2
+    ));
+
+    const lfsStage2Ppm = new Float64Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      lfsStage2Ppm[i] = lfsStage2[i] * ppmFactor;
+    }
+
+    sendStageData('lfsStage2', lfsStage2, dims, voxelSize, affine, 'Stage 2 Local Field (Hz)');
+
+    postProgress(0.64, 'Stage 2: iLSQR inversion...');
+
+    // Mask for stage 2: mask * vasc_only * R_0
+    const maskStage2 = new Uint8Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      maskStage2[i] = (weightedMask[i] > 0.1 && vascOnly[i] > 0.5) ? 1 : 0;
+    }
+
+    const ilsqrProgress2 = (current, total) => {
+      postProgress(0.64 + (current / total) * 0.10, `Stage 2 iLSQR: Step ${current}/${total}`);
+    };
+
+    const chiStage2 = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
+      lfsStage2, maskStage2, nx, ny, nz, vsx, vsy, vsz,
+      0, 0, 1,
+      ilsqrTol, ilsqrMaxIter,
+      ilsqrProgress2
+    ));
+
+    sendStageData('chiStage2', chiStage2, dims, voxelSize, affine, 'Stage 2 QSM (arb)');
+
+    // =========================================================================
+    // Step 8: Combine stages with offset adjustment (75% - 90%)
+    // =========================================================================
+    postProgress(0.75, 'Combining stages with offset adjustment...');
+    postLog("Computing offset adjustment in Fourier space...");
+
+    // Removed voxels = mask * R_0 - vasc_only
+    const removedVoxels = new Float64Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      removedVoxels[i] = weightedMask[i] - vascOnly[i];
+    }
+
+    const chiQsmart = new Float64Array(wasmModule.qsmart_adjust_offset_wasm(
+      removedVoxels, lfsStage1Ppm, chiStage1, chiStage2,
+      nx, ny, nz, vsx, vsy, vsz,
+      0, 0, 1,  // B0 direction
+      ppmFactor
+    ));
+
+    // =========================================================================
+    // Step 9: Scale to ppm and finalize (90% - 100%)
+    // =========================================================================
+    postProgress(0.90, 'Scaling to ppm...');
+
+    // Scale to ppm: χ (ppm) = χ_raw / (γ × B0) × 1e6
+    const gamma = 42.576e6; // Hz/T
+    const scaleFactor = 1e6 / (gamma * b0Tesla);
+
+    const qsmResult = new Float64Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      qsmResult[i] = chiQsmart[i] * scaleFactor;
+      if (!mask[i]) qsmResult[i] = 0;
+    }
+
+    // Calculate QSM range
+    let qsmMin = Infinity, qsmMax = -Infinity;
+    for (let i = 0; i < voxelCount; i++) {
+      if (mask[i] && qsmResult[i] !== 0) {
+        if (qsmResult[i] < qsmMin) qsmMin = qsmResult[i];
+        if (qsmResult[i] > qsmMax) qsmMax = qsmResult[i];
+      }
+    }
+    postLog(`QSMART QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
+
+    // Send final result
+    postProgress(0.95, 'Sending QSMART result...');
+    sendStageData('final', qsmResult, dims, voxelSize, affine, 'QSMART QSM (ppm)');
+
+    postProgress(1.0, 'QSMART pipeline complete!');
+    postLog("QSMART two-stage pipeline completed successfully!");
     postComplete({ success: true });
 
   } catch (error) {
@@ -1031,6 +1541,52 @@ async function runBET(data) {
   }
 }
 
+/**
+ * Run bias field correction on magnitude data
+ * @param {Object} data - Contains magnitude, dimensions, voxel sizes, and parameters
+ */
+async function runBiasCorrection(data) {
+  const { magnitude, nx, ny, nz, vx, vy, vz, sigma_mm, nbox } = data;
+
+  try {
+    // Ensure WASM is initialized
+    if (!wasmModule) {
+      await initializeWasm();
+    }
+
+    console.log(`[Worker] Bias correction: ${nx}x${ny}x${nz}, voxel size=${vx.toFixed(2)}x${vy.toFixed(2)}x${vz.toFixed(2)}mm, sigma=${sigma_mm}mm, nbox=${nbox}`);
+
+    const inputArray = new Float64Array(magnitude);
+    const inputSum = inputArray.reduce((a, b) => a + b, 0);
+    console.log(`[Worker] Input data length: ${inputArray.length}, sum: ${inputSum.toExponential(3)}`);
+
+    // Call WASM bias correction
+    const result = wasmModule.makehomogeneous_wasm(
+      inputArray,
+      nx, ny, nz,
+      vx, vy, vz,
+      sigma_mm,
+      nbox
+    );
+
+    const resultSum = result.reduce((a, b) => a + b, 0);
+    console.log(`[Worker] Bias correction complete, result sum: ${resultSum.toExponential(3)}`);
+
+    // Send result back
+    self.postMessage({
+      type: 'biasCorrection',
+      result: Array.from(result)
+    });
+
+  } catch (error) {
+    console.error('[Worker] Bias correction error:', error);
+    self.postMessage({
+      type: 'biasCorrection',
+      error: error.message
+    });
+  }
+}
+
 // Handle messages from main thread
 self.onmessage = async function (e) {
   const { type, data } = e.data;
@@ -1049,6 +1605,11 @@ self.onmessage = async function (e) {
       case 'runBET':
         await runBET(data);
         break;
+
+      case 'biasCorrection':
+        await runBiasCorrection(data);
+        break;
+
 
       default:
         postError(`Unknown message type: ${type}`);

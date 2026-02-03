@@ -711,6 +711,120 @@ pub fn medi_l1_wasm_with_progress(
     chi
 }
 
+/// iLSQR dipole inversion with streaking artifact removal
+///
+/// A method for estimating and removing streaking artifacts in QSM.
+/// Based on Li et al., NeuroImage 2015.
+///
+/// The algorithm consists of 4 steps:
+/// 1. Initial LSQR solution with Laplacian-based weights
+/// 2. FastQSM estimate using sign(D) approximation
+/// 3. Streaking artifact estimation using LSMR
+/// 4. Artifact subtraction
+///
+/// # Arguments
+/// * `local_field` - Local field values (nx * ny * nz)
+/// * `mask` - Binary mask (nx * ny * nz)
+/// * `nx`, `ny`, `nz` - Array dimensions
+/// * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
+/// * `bx`, `by`, `bz` - B0 field direction
+/// * `tol` - Stopping tolerance for LSMR solver (default 1e-2)
+/// * `max_iter` - Maximum iterations for LSMR (default 50)
+///
+/// # Returns
+/// Susceptibility map as Float64Array
+#[wasm_bindgen]
+pub fn ilsqr_wasm(
+    local_field: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    bx: f64, by: f64, bz: f64,
+    tol: f64,
+    max_iter: usize,
+) -> Vec<f64> {
+    console_log!("WASM iLSQR: {}x{}x{}, tol={:.4}, max_iter={}",
+                 nx, ny, nz, tol, max_iter);
+
+    let chi = inversion::ilsqr::ilsqr_simple(
+        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        (bx, by, bz), tol, max_iter
+    );
+
+    console_log!("WASM iLSQR complete");
+    chi
+}
+
+/// iLSQR with progress callback
+#[wasm_bindgen]
+pub fn ilsqr_wasm_with_progress(
+    local_field: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    bx: f64, by: f64, bz: f64,
+    tol: f64,
+    max_iter: usize,
+    progress_callback: &js_sys::Function,
+) -> Vec<f64> {
+    console_log!("WASM iLSQR with progress: {}x{}x{}, tol={:.4}, max_iter={}",
+                 nx, ny, nz, tol, max_iter);
+
+    let callback = progress_callback.clone();
+    let chi = inversion::ilsqr::ilsqr_with_progress(
+        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        (bx, by, bz), tol, max_iter,
+        |current, total| {
+            let this = JsValue::null();
+            let _ = callback.call2(&this,
+                &JsValue::from(current as u32),
+                &JsValue::from(total as u32));
+        }
+    );
+
+    console_log!("WASM iLSQR complete");
+    chi
+}
+
+/// iLSQR with full output (susceptibility, artifacts, fastqsm, initial lsqr)
+///
+/// Returns all intermediate results for analysis/debugging.
+///
+/// # Returns
+/// Flattened array: [chi, xsa, xfs, xlsqr] - 4 * (nx * ny * nz) elements
+/// - chi: Final susceptibility map
+/// - xsa: Estimated streaking artifacts
+/// - xfs: FastQSM estimate
+/// - xlsqr: Initial LSQR result
+#[wasm_bindgen]
+pub fn ilsqr_full_wasm(
+    local_field: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    bx: f64, by: f64, bz: f64,
+    tol: f64,
+    max_iter: usize,
+) -> Vec<f64> {
+    console_log!("WASM iLSQR full: {}x{}x{}", nx, ny, nz);
+
+    let (chi, xsa, xfs, xlsqr) = inversion::ilsqr::ilsqr(
+        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        (bx, by, bz), tol, max_iter
+    );
+
+    // Concatenate all outputs
+    let n_total = nx * ny * nz;
+    let mut result = Vec::with_capacity(4 * n_total);
+    result.extend(chi);
+    result.extend(xsa);
+    result.extend(xfs);
+    result.extend(xlsqr);
+
+    console_log!("WASM iLSQR full complete");
+    result
+}
+
 // ============================================================================
 // WASM Exports: TGV (Single-Step QSM from Wrapped Phase)
 // ============================================================================
@@ -1318,6 +1432,100 @@ pub fn create_sphere_mask(
     mask
 }
 
+/// Otsu's method for automatic thresholding
+///
+/// Computes the optimal threshold that minimizes intra-class variance
+/// (equivalently maximizes inter-class variance) for bimodal histograms.
+///
+/// # Arguments
+/// * `data` - 3D magnitude image (flattened)
+/// * `num_bins` - Number of histogram bins (typically 256)
+///
+/// # Returns
+/// Tuple of (threshold_value, binary_mask)
+#[wasm_bindgen]
+pub fn otsu_threshold_wasm(data: &[f64], num_bins: usize) -> Vec<u8> {
+    console_log!("WASM Otsu: {} voxels, {} bins", data.len(), num_bins);
+
+    // Find min/max for histogram range
+    let mut min_val = f64::MAX;
+    let mut max_val = f64::MIN;
+    for &v in data.iter() {
+        if v < min_val { min_val = v; }
+        if v > max_val { max_val = v; }
+    }
+
+    if (max_val - min_val).abs() < 1e-10 {
+        console_log!("Otsu: constant image, returning all zeros");
+        return vec![0u8; data.len()];
+    }
+
+    // Build histogram
+    let mut histogram = vec![0usize; num_bins];
+    let bin_width = (max_val - min_val) / num_bins as f64;
+
+    for &v in data.iter() {
+        let bin = ((v - min_val) / bin_width).floor() as usize;
+        let bin = bin.min(num_bins - 1); // Clamp to valid range
+        histogram[bin] += 1;
+    }
+
+    // Compute Otsu threshold
+    let total_pixels = data.len() as f64;
+
+    // Compute cumulative sums and means
+    let mut sum_total = 0.0;
+    for (i, &count) in histogram.iter().enumerate() {
+        sum_total += i as f64 * count as f64;
+    }
+
+    let mut sum_background = 0.0;
+    let mut weight_background = 0.0;
+    let mut max_variance = 0.0;
+    let mut optimal_threshold_bin = 0usize;
+
+    for (t, &count) in histogram.iter().enumerate() {
+        weight_background += count as f64;
+        if weight_background == 0.0 { continue; }
+
+        let weight_foreground = total_pixels - weight_background;
+        if weight_foreground == 0.0 { break; }
+
+        sum_background += t as f64 * count as f64;
+
+        let mean_background = sum_background / weight_background;
+        let mean_foreground = (sum_total - sum_background) / weight_foreground;
+
+        // Inter-class variance
+        let variance = weight_background * weight_foreground
+            * (mean_background - mean_foreground).powi(2);
+
+        if variance > max_variance {
+            max_variance = variance;
+            optimal_threshold_bin = t;
+        }
+    }
+
+    // Convert bin index to actual threshold value
+    let threshold = min_val + (optimal_threshold_bin as f64 + 0.5) * bin_width;
+    console_log!("Otsu threshold: {:.4} (bin {} of {})", threshold, optimal_threshold_bin, num_bins);
+
+    // Create binary mask
+    let mut mask = vec![0u8; data.len()];
+    let mut count = 0usize;
+    for (i, &v) in data.iter().enumerate() {
+        if v > threshold {
+            mask[i] = 1;
+            count += 1;
+        }
+    }
+
+    let coverage = 100.0 * count as f64 / data.len() as f64;
+    console_log!("Otsu mask: {} voxels ({:.1}%)", count, coverage);
+
+    mask
+}
+
 // ============================================================================
 // WASM Exports: Multi-Echo Processing (MCPC-3D-S)
 // ============================================================================
@@ -1555,6 +1763,392 @@ pub fn mcpc3ds_b0_pipeline_wasm(
 
     console_log!("WASM mcpc3ds_b0_pipeline complete");
     result
+}
+
+// ============================================================================
+// Bias Correction Functions
+// ============================================================================
+
+/// Bias field correction (makehomogeneous)
+///
+/// Corrects RF receive field inhomogeneities in magnitude images using
+/// the boxsegment approach from MriResearchTools.jl.
+///
+/// # Arguments
+/// * `mag` - Magnitude data (nx * ny * nz)
+/// * `nx`, `ny`, `nz` - Dimensions
+/// * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
+/// * `sigma_mm` - Smoothing sigma in mm (will be clamped to 10% of FOV)
+/// * `nbox` - Number of boxes per dimension for segmentation
+///
+/// # Returns
+/// Bias-corrected magnitude
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn makehomogeneous_wasm(
+    mag: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    sigma_mm: f64,
+    nbox: usize,
+) -> Vec<f64> {
+    console_log!("WASM makehomogeneous: {}x{}x{}, voxel=[{:.2},{:.2},{:.2}]mm, sigma={:.1}mm, nbox={}",
+                 nx, ny, nz, vsx, vsy, vsz, sigma_mm, nbox);
+
+    // Clamp sigma to 10% of minimum FOV dimension
+    let fov_min = (nx as f64 * vsx).min(ny as f64 * vsy).min(nz as f64 * vsz);
+    let sigma_clamped = sigma_mm.min(fov_min * 0.1);
+
+    if (sigma_clamped - sigma_mm).abs() > 0.1 {
+        console_log!("WASM makehomogeneous: sigma clamped from {:.1} to {:.1}mm", sigma_mm, sigma_clamped);
+    }
+
+    let result = utils::bias_correction::makehomogeneous(
+        mag, nx, ny, nz, vsx, vsy, vsz, sigma_clamped, nbox
+    );
+
+    console_log!("WASM makehomogeneous complete");
+    result
+}
+
+/// RSS (Root Sum of Squares) magnitude combination
+///
+/// Combines multi-echo magnitude images using RSS for improved SNR.
+///
+/// # Arguments
+/// * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
+/// * `n_echoes` - Number of echoes
+/// * `n_total` - Voxels per echo (nx * ny * nz)
+///
+/// # Returns
+/// RSS-combined magnitude
+#[wasm_bindgen]
+pub fn rss_combine_wasm(
+    mags_flat: &[f64],
+    n_echoes: usize,
+    n_total: usize,
+) -> Vec<f64> {
+    console_log!("WASM RSS combine: {} echoes, {} voxels each", n_echoes, n_total);
+
+    let result = utils::bias_correction::rss_combine(mags_flat, n_echoes, n_total);
+
+    console_log!("WASM RSS combine complete");
+    result
+}
+
+// ============================================================================
+// WASM Exports: QSMART Pipeline Functions
+// ============================================================================
+
+/// Frangi vesselness filter for vessel detection
+///
+/// Detects tubular structures (vessels) using multi-scale Hessian eigenvalue analysis.
+///
+/// # Arguments
+/// * `data` - Input 3D volume (nx * ny * nz)
+/// * `nx`, `ny`, `nz` - Dimensions
+/// * `scale_min` - Minimum sigma for multi-scale analysis (default 0.5)
+/// * `scale_max` - Maximum sigma (default 6.0)
+/// * `scale_ratio` - Step between scales (default 0.5)
+/// * `alpha` - Plate vs line sensitivity (default 0.5)
+/// * `beta` - Blob vs line sensitivity (default 0.5)
+/// * `c` - Noise threshold (default 500)
+/// * `black_white` - Detect dark vessels (true) or bright (false)
+///
+/// # Returns
+/// Vesselness response (0-1)
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn frangi_filter_3d_wasm(
+    data: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    scale_min: f64, scale_max: f64, scale_ratio: f64,
+    alpha: f64, beta: f64, c: f64,
+    black_white: bool,
+) -> Vec<f64> {
+    console_log!("WASM Frangi: {}x{}x{}, scales=[{:.1},{:.1}], c={}",
+                 nx, ny, nz, scale_min, scale_max, c);
+
+    let params = utils::frangi::FrangiParams {
+        scale_range: [scale_min, scale_max],
+        scale_ratio,
+        alpha,
+        beta,
+        c,
+        black_white,
+    };
+
+    let result = utils::frangi::frangi_filter_3d(data, nx, ny, nz, &params);
+
+    console_log!("WASM Frangi complete");
+    result.vesselness
+}
+
+/// Frangi filter with progress callback
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn frangi_filter_3d_wasm_with_progress(
+    data: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    scale_min: f64, scale_max: f64, scale_ratio: f64,
+    alpha: f64, beta: f64, c: f64,
+    black_white: bool,
+    progress_callback: &js_sys::Function,
+) -> Vec<f64> {
+    console_log!("WASM Frangi with progress: {}x{}x{}", nx, ny, nz);
+
+    let params = utils::frangi::FrangiParams {
+        scale_range: [scale_min, scale_max],
+        scale_ratio,
+        alpha,
+        beta,
+        c,
+        black_white,
+    };
+
+    let callback = progress_callback.clone();
+    let result = utils::frangi::frangi_filter_3d_with_progress(
+        data, nx, ny, nz, &params,
+        |current, total| {
+            let this = JsValue::null();
+            let _ = callback.call2(&this,
+                &JsValue::from(current as u32),
+                &JsValue::from(total as u32));
+        }
+    );
+
+    console_log!("WASM Frangi complete");
+    result.vesselness
+}
+
+/// Generate vasculature mask for QSMART
+///
+/// Uses bottom-hat filtering and Frangi vesselness to detect blood vessels.
+///
+/// # Arguments
+/// * `magnitude` - Average magnitude image (ideally bias-corrected)
+/// * `mask` - Binary brain mask
+/// * `nx`, `ny`, `nz` - Dimensions
+/// * `sphere_radius` - Radius for bottom-hat filter (default 8)
+/// * `frangi_scale_min`, `frangi_scale_max` - Frangi scale range (default [0.5, 6])
+/// * `frangi_scale_ratio` - Frangi scale step (default 0.5)
+/// * `frangi_c` - Frangi C parameter (default 500)
+///
+/// # Returns
+/// Complementary mask (1 = tissue, 0 = vessel)
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn vasculature_mask_wasm(
+    magnitude: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    sphere_radius: i32,
+    frangi_scale_min: f64, frangi_scale_max: f64, frangi_scale_ratio: f64,
+    frangi_c: f64,
+) -> Vec<f64> {
+    console_log!("WASM vasculature_mask: {}x{}x{}, sphere_r={}, frangi_c={}",
+                 nx, ny, nz, sphere_radius, frangi_c);
+
+    let params = utils::vasculature::VasculatureParams {
+        sphere_radius,
+        frangi_scale_range: [frangi_scale_min, frangi_scale_max],
+        frangi_scale_ratio,
+        frangi_c,
+    };
+
+    let result = utils::vasculature::generate_vasculature_mask(magnitude, mask, nx, ny, nz, &params);
+
+    console_log!("WASM vasculature_mask complete");
+    result
+}
+
+/// Vasculature mask with progress callback
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn vasculature_mask_wasm_with_progress(
+    magnitude: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    sphere_radius: i32,
+    frangi_scale_min: f64, frangi_scale_max: f64, frangi_scale_ratio: f64,
+    frangi_c: f64,
+    progress_callback: &js_sys::Function,
+) -> Vec<f64> {
+    console_log!("WASM vasculature_mask with progress: {}x{}x{}", nx, ny, nz);
+
+    let params = utils::vasculature::VasculatureParams {
+        sphere_radius,
+        frangi_scale_range: [frangi_scale_min, frangi_scale_max],
+        frangi_scale_ratio,
+        frangi_c,
+    };
+
+    let callback = progress_callback.clone();
+    let result = utils::vasculature::generate_vasculature_mask_with_progress(
+        magnitude, mask, nx, ny, nz, &params,
+        |current, total| {
+            let this = JsValue::null();
+            let _ = callback.call2(&this,
+                &JsValue::from(current as u32),
+                &JsValue::from(total as u32));
+        }
+    );
+
+    console_log!("WASM vasculature_mask complete");
+    result
+}
+
+/// SDF (Spatially Dependent Filtering) background field removal for QSMART
+///
+/// Variable-radius Gaussian filtering where kernel size depends on proximity to boundary.
+///
+/// # Arguments
+/// * `tfs` - Total field shift (weighted by mask if using R_0)
+/// * `mask` - Weighted mask (mask * R_0 for reliability weighting)
+/// * `vasc_only` - Vasculature mask (1 = tissue, 0 = vessel). Use all-ones for stage 1.
+/// * `nx`, `ny`, `nz` - Dimensions
+/// * `sigma1` - Primary smoothing sigma (10 for stage1, 8 for stage2)
+/// * `sigma2` - Vasculature proximity sigma (0 for stage1, 2 for stage2)
+/// * `lower_lim` - Proximity clamping value (default 0.6)
+/// * `curv_constant` - Curvature scaling (default 500)
+/// * `use_curvature` - Enable curvature-based weighting
+///
+/// # Returns
+/// Local field shift (background removed)
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn sdf_wasm(
+    tfs: &[f64],
+    mask: &[f64],
+    vasc_only: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    sigma1: f64, sigma2: f64,
+    lower_lim: f64, curv_constant: f64,
+    use_curvature: bool,
+) -> Vec<f64> {
+    console_log!("WASM SDF: {}x{}x{}, sigma1={}, sigma2={}, curv={}",
+                 nx, ny, nz, sigma1, sigma2, use_curvature);
+
+    let params = bgremove::sdf::SdfParams {
+        sigma1,
+        sigma2,
+        spatial_radius: 8,
+        lower_lim,
+        curv_constant,
+        use_curvature,
+    };
+
+    let result = bgremove::sdf::sdf(tfs, mask, vasc_only, nx, ny, nz, &params);
+
+    console_log!("WASM SDF complete");
+    result
+}
+
+/// SDF with progress callback
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn sdf_wasm_with_progress(
+    tfs: &[f64],
+    mask: &[f64],
+    vasc_only: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    sigma1: f64, sigma2: f64,
+    spatial_radius: i32,
+    lower_lim: f64, curv_constant: f64,
+    use_curvature: bool,
+    progress_callback: &js_sys::Function,
+) -> Vec<f64> {
+    console_log!("WASM SDF with progress: {}x{}x{}", nx, ny, nz);
+
+    let params = bgremove::sdf::SdfParams {
+        sigma1,
+        sigma2,
+        spatial_radius,
+        lower_lim,
+        curv_constant,
+        use_curvature,
+    };
+
+    let callback = progress_callback.clone();
+    let result = bgremove::sdf::sdf_with_progress(
+        tfs, mask, vasc_only, nx, ny, nz, &params,
+        |current, total| {
+            let this = JsValue::null();
+            let _ = callback.call2(&this,
+                &JsValue::from(current as u32),
+                &JsValue::from(total as u32));
+        }
+    );
+
+    console_log!("WASM SDF complete");
+    result
+}
+
+/// QSMART offset adjustment
+///
+/// Combines two-stage QSM results with offset adjustment for consistency.
+///
+/// # Arguments
+/// * `removed_voxels` - Voxels in stage 1 but not stage 2 (mask*R_0 - vasc_only)
+/// * `lfs_sdf` - Local field from stage 1 (in ppm)
+/// * `chi_1` - Susceptibility from stage 1 (whole ROI)
+/// * `chi_2` - Susceptibility from stage 2 (tissue only)
+/// * `nx`, `ny`, `nz` - Dimensions
+/// * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
+/// * `bx`, `by`, `bz` - B0 field direction
+/// * `ppm` - PPM conversion factor
+///
+/// # Returns
+/// Combined and offset-adjusted susceptibility map
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn qsmart_adjust_offset_wasm(
+    removed_voxels: &[f64],
+    lfs_sdf: &[f64],
+    chi_1: &[f64],
+    chi_2: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    bx: f64, by: f64, bz: f64,
+    ppm: f64,
+) -> Vec<f64> {
+    console_log!("WASM QSMART offset adjustment: {}x{}x{}", nx, ny, nz);
+
+    let result = utils::qsmart::adjust_offset(
+        removed_voxels, lfs_sdf, chi_1, chi_2,
+        nx, ny, nz, vsx, vsy, vsz,
+        (bx, by, bz), ppm
+    );
+
+    console_log!("WASM QSMART offset adjustment complete");
+    result
+}
+
+/// Calculate Gaussian curvature at mask boundary
+///
+/// Used for curvature-based edge weighting in QSMART SDF.
+///
+/// # Arguments
+/// * `mask` - Binary brain mask
+/// * `nx`, `ny`, `nz` - Dimensions
+///
+/// # Returns
+/// Flattened [gaussian_curvature, mean_curvature] - each n_total elements
+#[wasm_bindgen]
+pub fn curvature_wasm(
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+) -> Vec<f64> {
+    console_log!("WASM curvature: {}x{}x{}", nx, ny, nz);
+
+    let result = utils::curvature::calculate_gaussian_curvature(mask, nx, ny, nz);
+
+    // Combine outputs
+    let mut output = result.gaussian_curvature;
+    output.extend(result.mean_curvature);
+
+    console_log!("WASM curvature complete: {} surface voxels", result.surface_indices.len());
+    output
 }
 
 // ============================================================================

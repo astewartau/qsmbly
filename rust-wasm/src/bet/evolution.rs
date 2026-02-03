@@ -4,18 +4,28 @@ use super::icosphere::create_icosphere;
 use super::mesh::{build_neighbor_matrix, compute_vertex_normals, compute_mean_edge_length};
 use std::collections::VecDeque;
 
-/// Estimate brain parameters from the image
+/// Brain parameters struct (like FSL's bet_parameters)
+struct BetParameters {
+    t2: f64,      // 2nd percentile (robust min)
+    t98: f64,     // 98th percentile (robust max)
+    t: f64,       // threshold = t2 + 0.1*(t98-t2)
+    tm: f64,      // median within-brain intensity (critical for proper surface evolution)
+    cog: [f64; 3], // center of gravity in voxel coordinates
+    radius: f64,  // estimated brain radius in mm
+}
+
+/// Estimate brain parameters from the image (matches FSL-BET2's adjust_initial_mesh)
 fn estimate_brain_parameters(
     data: &[f64],
     nx: usize, ny: usize, nz: usize,
     voxel_size: &[f64; 3],
-) -> (f64, f64, f64, [f64; 3], f64) {
+) -> BetParameters {
     // Collect non-zero values
     let nonzero: Vec<f64> = data.iter().copied().filter(|&v| v > 0.0).collect();
 
     if nonzero.is_empty() {
         let cog = [(nx as f64) / 2.0, (ny as f64) / 2.0, (nz as f64) / 2.0];
-        return (0.0, 1.0, 0.1, cog, 50.0);
+        return BetParameters { t2: 0.0, t98: 1.0, t: 0.1, tm: 0.5, cog, radius: 50.0 };
     }
 
     // Sort for percentiles
@@ -26,7 +36,7 @@ fn estimate_brain_parameters(
     let t98 = percentile(&sorted, 98.0);
     let t = t2 + 0.1 * (t98 - t2);
 
-    // Find center of gravity
+    // Find center of gravity (weighted by intensity, like FSL)
     let mut sum_x = 0.0;
     let mut sum_y = 0.0;
     let mut sum_z = 0.0;
@@ -40,10 +50,12 @@ fn estimate_brain_parameters(
                 let idx = i + j * nx + k * nx * ny;
                 let val = data[idx];
                 if val > t {
-                    sum_x += (i as f64) * val;
-                    sum_y += (j as f64) * val;
-                    sum_z += (k as f64) * val;
-                    sum_weight += val;
+                    // FSL: weight = min(c, t98 - t2) where c = val - t2
+                    let c = (val - t2).min(t98 - t2);
+                    sum_x += (i as f64) * c;
+                    sum_y += (j as f64) * c;
+                    sum_z += (k as f64) * c;
+                    sum_weight += c;
                     n_voxels += 1;
                 }
             }
@@ -61,7 +73,45 @@ fn estimate_brain_parameters(
     let brain_volume = (n_voxels as f64) * voxel_volume;
     let radius = (3.0 * brain_volume / (4.0 * std::f64::consts::PI)).powf(1.0 / 3.0);
 
-    (t2, t98, t, cog, radius)
+    // Compute tm: median intensity within a sphere centered at COG with radius = brain radius
+    // This is critical for proper intensity-based surface evolution (FSL bet2.cpp lines 385-403)
+    let cog_mm = [cog[0] * voxel_size[0], cog[1] * voxel_size[1], cog[2] * voxel_size[2]];
+    let radius_sq = radius * radius;
+
+    let mut within_brain_values: Vec<f64> = Vec::new();
+    for k in 0..nz {
+        for j in 0..ny {
+            for i in 0..nx {
+                let idx = i + j * nx + k * nx * ny;
+                let val = data[idx];
+                // Only consider voxels with intensity between t2 and t98
+                if val > t2 && val < t98 {
+                    // Check if within sphere of radius centered at COG
+                    let px = (i as f64) * voxel_size[0];
+                    let py = (j as f64) * voxel_size[1];
+                    let pz = (k as f64) * voxel_size[2];
+                    let dx = px - cog_mm[0];
+                    let dy = py - cog_mm[1];
+                    let dz = pz - cog_mm[2];
+                    let dist_sq = dx * dx + dy * dy + dz * dz;
+                    if dist_sq < radius_sq {
+                        within_brain_values.push(val);
+                    }
+                }
+            }
+        }
+    }
+
+    // Compute median (tm)
+    let tm = if within_brain_values.is_empty() {
+        (t2 + t98) / 2.0 // fallback
+    } else {
+        within_brain_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mid = within_brain_values.len() / 2;
+        within_brain_values[mid]
+    };
+
+    BetParameters { t2, t98, t, tm, cog, radius }
 }
 
 /// Compute percentile of sorted array
@@ -113,32 +163,84 @@ fn sample_intensity(data: &[f64], nx: usize, ny: usize, nz: usize, x: f64, y: f6
     c0 * (1.0 - zd) + c1 * zd
 }
 
-/// Sample min/max intensities along inward normal
-fn sample_intensities(
+/// Sample min/max intensities along inward normal (matches FSL-BET2's step_of_computation)
+///
+/// FSL samples from 1mm to d1 (7mm) for Imin, and up to d2 (3mm) for Imax.
+/// Initial values: Imin = tm, Imax = t
+/// Final clamps: Imin >= t2, Imax <= tm
+fn sample_intensities_fsl(
     data: &[f64],
     nx: usize, ny: usize, nz: usize,
     point: &[f64; 3],
     normal: &[f64; 3],
     voxel_size: &[f64; 3],
-    max_dist: f64,
-    n_samples: usize,
+    t2: f64,
+    t: f64,
+    tm: f64,
 ) -> (f64, f64) {
-    let mut i_min = f64::INFINITY;
-    let mut i_max = f64::NEG_INFINITY;
+    let d1 = 7.0; // max search distance for Imin (mm)
+    let d2 = 3.0; // max search distance for Imax (mm)
+    let dscale = voxel_size[0].min(voxel_size[1]).min(voxel_size[2]).min(1.0);
 
-    for i in 0..n_samples {
-        let d = (i as f64) * max_dist / (n_samples as f64 - 1.0);
+    // Initialize like FSL does
+    let mut i_min = tm;
+    let mut i_max = t;
 
-        // Sample point along inward normal (convert from mm to voxels)
-        let x = point[0] - d * normal[0] / voxel_size[0];
-        let y = point[1] - d * normal[1] / voxel_size[1];
-        let z = point[2] - d * normal[2] / voxel_size[2];
+    // Normal direction in voxel units
+    let nxv = normal[0] / voxel_size[0];
+    let nyv = normal[1] / voxel_size[1];
+    let nzv = normal[2] / voxel_size[2];
 
-        let intensity = sample_intensity(data, nx, ny, nz, x, y, z);
+    // Starting position (1mm inward along normal)
+    let mut iv = point[0] - nxv;
+    let mut jv = point[1] - nyv;
+    let mut kv = point[2] - nzv;
 
-        i_min = i_min.min(intensity);
-        i_max = i_max.max(intensity);
+    // Check if starting point is in bounds
+    if iv >= 0.0 && iv < (nx - 1) as f64 && jv >= 0.0 && jv < (ny - 1) as f64 && kv >= 0.0 && kv < (nz - 1) as f64 {
+        let im = sample_intensity(data, nx, ny, nz, iv, jv, kv);
+        i_min = i_min.min(im);
+        i_max = i_max.max(im);
+
+        // Check far point at d1-1
+        let iv_far = point[0] - (d1 - 1.0) * nxv;
+        let jv_far = point[1] - (d1 - 1.0) * nyv;
+        let kv_far = point[2] - (d1 - 1.0) * nzv;
+
+        if iv_far >= 0.0 && iv_far < (nx - 1) as f64 && jv_far >= 0.0 && jv_far < (ny - 1) as f64 && kv_far >= 0.0 && kv_far < (nz - 1) as f64 {
+            let im = sample_intensity(data, nx, ny, nz, iv_far, jv_far, kv_far);
+            i_min = i_min.min(im);
+
+            // Scale normal for stepping
+            let nxv_scaled = nxv * dscale;
+            let nyv_scaled = nyv * dscale;
+            let nzv_scaled = nzv * dscale;
+
+            // Sample from 2mm to d1
+            let mut gi = 2.0;
+            while gi < d1 {
+                iv -= nxv_scaled;
+                jv -= nyv_scaled;
+                kv -= nzv_scaled;
+
+                if iv >= 0.0 && iv < (nx - 1) as f64 && jv >= 0.0 && jv < (ny - 1) as f64 && kv >= 0.0 && kv < (nz - 1) as f64 {
+                    let im = sample_intensity(data, nx, ny, nz, iv, jv, kv);
+                    i_min = i_min.min(im);
+
+                    // Only update Imax for samples within d2
+                    if gi < d2 {
+                        i_max = i_max.max(im);
+                    }
+                }
+
+                gi += dscale;
+            }
+        }
     }
+
+    // Clamp like FSL does (this is critical for sinus exclusion)
+    i_min = i_min.max(t2);    // Imin can't go below noise floor
+    i_max = i_max.min(tm);    // Imax can't go above median brain intensity
 
     (i_min, i_max)
 }
@@ -369,8 +471,8 @@ pub fn run_bet(
 ) -> Vec<u8> {
     let voxel_size = [vsx, vsy, vsz];
 
-    // Step 1: Estimate brain parameters
-    let (t2, t98, _t, cog, radius) = estimate_brain_parameters(data, nx, ny, nz, &voxel_size);
+    // Step 1: Estimate brain parameters (now includes tm)
+    let bp = estimate_brain_parameters(data, nx, ny, nz, &voxel_size);
 
     // Step 2: Create icosphere
     let (unit_vertices, faces) = create_icosphere(subdivisions);
@@ -378,17 +480,17 @@ pub fn run_bet(
 
     // Scale and position sphere (start at 50% of estimated radius)
     let initial_radius_vox = [
-        (radius * 0.5) / voxel_size[0],
-        (radius * 0.5) / voxel_size[1],
-        (radius * 0.5) / voxel_size[2],
+        (bp.radius * 0.5) / voxel_size[0],
+        (bp.radius * 0.5) / voxel_size[1],
+        (bp.radius * 0.5) / voxel_size[2],
     ];
 
     let mut vertices: Vec<[f64; 3]> = unit_vertices
         .iter()
         .map(|v| [
-            v[0] * initial_radius_vox[0] + cog[0],
-            v[1] * initial_radius_vox[1] + cog[1],
-            v[2] * initial_radius_vox[2] + cog[2],
+            v[0] * initial_radius_vox[0] + bp.cog[0],
+            v[1] * initial_radius_vox[1] + bp.cog[1],
+            v[2] * initial_radius_vox[2] + bp.cog[2],
         ])
         .collect();
 
@@ -455,17 +557,18 @@ pub fn run_bet(
             let f2 = (1.0 + (f * (rinv - e)).tanh()) * 0.5;
             let u2 = [f2 * sn[0], f2 * sn[1], f2 * sn[2]];
 
-            // Force 3: Intensity-based
-            let (i_min, i_max) = sample_intensities(
-                data, nx, ny, nz, &v, &n, &voxel_size, 7.0, 15
+            // Force 3: Intensity-based (using FSL-style sampling with tm)
+            let (i_min, i_max) = sample_intensities_fsl(
+                data, nx, ny, nz, &v, &n, &voxel_size, bp.t2, bp.t, bp.tm
             );
 
-            let i_min = i_min.max(t2);
-            let i_max = i_max.min(t98);
-
-            let t_l = (i_max - t2) * bt + t2;
-            let denom = if i_max - t2 > 0.0 { i_max - t2 } else { 1.0 };
-            let f3 = 2.0 * (i_min - t_l) / denom;
+            // Compute local threshold and force (matches FSL exactly)
+            let t_l = (i_max - bp.t2) * bt + bp.t2;
+            let f3 = if i_max - bp.t2 > 0.0 {
+                2.0 * (i_min - t_l) / (i_max - bp.t2)
+            } else {
+                2.0 * (i_min - t_l)
+            };
             let f3 = f3 * normal_max_update_fraction * lambda_fit * l;
 
             let u3 = [f3 * n[0], f3 * n[1], f3 * n[2]];
@@ -508,26 +611,26 @@ where
 {
     let voxel_size = [vsx, vsy, vsz];
 
-    // Step 1: Estimate brain parameters
+    // Step 1: Estimate brain parameters (now includes tm)
     progress_callback(0, iterations);
-    let (t2, t98, _t, cog, radius) = estimate_brain_parameters(data, nx, ny, nz, &voxel_size);
+    let bp = estimate_brain_parameters(data, nx, ny, nz, &voxel_size);
 
     // Step 2: Create icosphere
     let (unit_vertices, faces) = create_icosphere(subdivisions);
     let n_vertices = unit_vertices.len();
 
     let initial_radius_vox = [
-        (radius * 0.5) / voxel_size[0],
-        (radius * 0.5) / voxel_size[1],
-        (radius * 0.5) / voxel_size[2],
+        (bp.radius * 0.5) / voxel_size[0],
+        (bp.radius * 0.5) / voxel_size[1],
+        (bp.radius * 0.5) / voxel_size[2],
     ];
 
     let mut vertices: Vec<[f64; 3]> = unit_vertices
         .iter()
         .map(|v| [
-            v[0] * initial_radius_vox[0] + cog[0],
-            v[1] * initial_radius_vox[1] + cog[1],
-            v[2] * initial_radius_vox[2] + cog[2],
+            v[0] * initial_radius_vox[0] + bp.cog[0],
+            v[1] * initial_radius_vox[1] + bp.cog[1],
+            v[2] * initial_radius_vox[2] + bp.cog[2],
         ])
         .collect();
 
@@ -585,16 +688,18 @@ where
             let f2 = (1.0 + (f * (rinv - e)).tanh()) * 0.5;
             let u2 = [f2 * sn[0], f2 * sn[1], f2 * sn[2]];
 
-            let (i_min, i_max) = sample_intensities(
-                data, nx, ny, nz, &v, &n, &voxel_size, 7.0, 15
+            // Force 3: Intensity-based (using FSL-style sampling with tm)
+            let (i_min, i_max) = sample_intensities_fsl(
+                data, nx, ny, nz, &v, &n, &voxel_size, bp.t2, bp.t, bp.tm
             );
 
-            let i_min = i_min.max(t2);
-            let i_max = i_max.min(t98);
-
-            let t_l = (i_max - t2) * bt + t2;
-            let denom = if i_max - t2 > 0.0 { i_max - t2 } else { 1.0 };
-            let f3 = 2.0 * (i_min - t_l) / denom;
+            // Compute local threshold and force (matches FSL exactly)
+            let t_l = (i_max - bp.t2) * bt + bp.t2;
+            let f3 = if i_max - bp.t2 > 0.0 {
+                2.0 * (i_min - t_l) / (i_max - bp.t2)
+            } else {
+                2.0 * (i_min - t_l)
+            };
             let f3 = f3 * normal_max_update_fraction * lambda_fit * l;
 
             let u3 = [f3 * n[0], f3 * n[1], f3 * n[2]];
@@ -648,14 +753,15 @@ mod tests {
             }
         }
 
-        let (t2, t98, _t, cog, radius) = estimate_brain_parameters(&data, nx, ny, nz, &[1.0, 1.0, 1.0]);
+        let bp = estimate_brain_parameters(&data, nx, ny, nz, &[1.0, 1.0, 1.0]);
 
-        assert!(t2 >= 0.0);
-        assert!(t98 >= t2); // Allow equal for edge cases
-        assert!((cog[0] - 5.0).abs() < 1.0);
-        assert!((cog[1] - 5.0).abs() < 1.0);
-        assert!((cog[2] - 5.0).abs() < 1.0);
-        assert!(radius > 0.0);
+        assert!(bp.t2 >= 0.0);
+        assert!(bp.t98 >= bp.t2); // Allow equal for edge cases
+        assert!((bp.cog[0] - 5.0).abs() < 1.0);
+        assert!((bp.cog[1] - 5.0).abs() < 1.0);
+        assert!((bp.cog[2] - 5.0).abs() < 1.0);
+        assert!(bp.radius > 0.0);
+        assert!(bp.tm > bp.t2 && bp.tm < bp.t98); // tm should be between t2 and t98
     }
 
     #[test]

@@ -15,7 +15,7 @@ A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs enti
 - **Cross-Platform**: Works on Windows, macOS, Linux, and even mobile devices
 - **Interactive**: Real-time visualization with NiiVue, adjustable contrast, and masking thresholds
 - **Portable**: Static files can be hosted anywhere (GitHub Pages, local server, etc.)
-- **Comprehensive**: 16+ algorithms covering the complete QSM pipeline
+- **Comprehensive**: 20+ algorithms covering the complete QSM pipeline
 
 ## Implemented Algorithms
 
@@ -37,7 +37,7 @@ A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs enti
 | **iSMV** | Iterative Spherical Mean Value deconvolution |
 | **LBV** | Laplacian Boundary Value method |
 
-### Dipole Inversion (8 methods)
+### Dipole Inversion (9 methods)
 
 | Algorithm | Description |
 |-----------|-------------|
@@ -48,6 +48,7 @@ A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs enti
 | **NLTV** | Nonlinear Total Variation with iterative reweighting |
 | **RTS** | Rapid Two-Step method (LSMR + TV refinement) |
 | **MEDI** | Morphology-Enabled Dipole Inversion with gradient and SNR weighting |
+| **iLSQR** | Iterative LSQR with streaking artifact removal (Li et al., 2015) |
 | **TGV** | Total Generalized Variation - direct QSM from wrapped phase without separate unwrapping |
 
 ### Multi-Echo Processing
@@ -56,6 +57,13 @@ A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs enti
 |-----------|-------------|
 | **MCPC-3DS** | Multi-Channel Phase Combination with 3D smoothing. Removes phase offsets across echoes. |
 | **Weighted B0** | Field map calculation with multiple weighting strategies (SNR, variance, magnitude, TEs) |
+
+### Advanced Reconstruction Methods
+
+| Algorithm | Description |
+|-----------|-------------|
+| **QSMART** | Two-stage QSM with Artifact Reduction using Tissue maps. Uses Spatially Dependent Filtering (SDF) and Frangi vesselness to separate tissue and vasculature, reducing streaking artifacts from veins. |
+| **TGV Single-Step** | Combines background removal and dipole inversion in one optimization. Useful for challenging data. |
 
 ### Additional Tools
 
@@ -133,16 +141,22 @@ qsm-wasm/
 │       │   ├── nltv.rs     # Nonlinear TV
 │       │   ├── rts.rs      # RTS two-step
 │       │   ├── medi.rs     # MEDI L1 optimization
-│       │   └── tgv.rs      # TGV from wrapped phase
+│       │   ├── tgv.rs      # TGV from wrapped phase
+│       │   └── ilsqr.rs    # iLSQR streaking removal
 │       ├── bgremove/       # Background removal
 │       │   ├── smv.rs, sharp.rs, vsharp.rs
 │       │   ├── pdf.rs, ismv.rs, lbv.rs
+│       │   └── sdf.rs      # Spatially Dependent Filtering
 │       ├── unwrap/         # Phase unwrapping
 │       │   ├── romeo.rs    # ROMEO algorithm
 │       │   └── laplacian.rs
 │       ├── kernels/        # Dipole, SMV, Laplacian kernels
 │       ├── solvers/        # CG, LSMR solvers
 │       ├── utils/          # Gradient ops, multi-echo, padding
+│       │   ├── qsmart.rs   # QSMART two-stage reconstruction
+│       │   ├── frangi.rs   # Frangi vesselness filter
+│       │   ├── vasculature.rs # Vessel detection
+│       │   └── simd_ops.rs # SIMD-accelerated operations (optional)
 │       └── bet/            # Brain extraction
 ├── python/                 # Reference implementations
 └── other/                  # Julia reference code
@@ -159,15 +173,33 @@ qsm-wasm/
 
 ### Build Process
 ```bash
-# Use the build script
+# Standard build (maximum browser compatibility)
 ./build.sh
+
+# SIMD-accelerated build (faster, but requires modern browsers)
+./build.sh --simd
 
 # Or manually:
 cd rust-wasm
-wasm-pack build --target web --release
+wasm-pack build --target web --release              # Standard
+wasm-pack build --target web --release --features simd  # With SIMD
 cp pkg/qsm_wasm.js ../wasm/
 cp pkg/qsm_wasm_bg.wasm ../wasm/
 ```
+
+### SIMD Acceleration
+
+The `--simd` flag enables 128-bit SIMD vectorization for faster processing of iterative algorithms (MEDI, TV, TGV, etc.). This provides approximately **2-4x speedup** for element-wise operations.
+
+**Browser Requirements for SIMD:**
+| Browser | Minimum Version |
+|---------|-----------------|
+| Chrome  | 91+ (May 2021)  |
+| Firefox | 89+ (June 2021) |
+| Safari  | 16.4+ (March 2023) |
+| Edge    | 91+ (May 2021)  |
+
+If targeting older browsers, use the standard build without `--simd`.
 
 ### Running Locally
 ```bash
@@ -184,6 +216,7 @@ Note: You may need to hard-refresh (Ctrl+Shift+R) to clear cached WASM files aft
 - **rustfft**: FFT computations
 - **nifti**: NIfTI file handling
 - **ndarray**: N-dimensional arrays
+- **wide**: Optional SIMD acceleration (128-bit vectorization)
 
 ### Frontend
 - **NiiVue**: WebGL neuroimaging viewer
@@ -202,6 +235,8 @@ Note: You may need to hard-refresh (Ctrl+Shift+R) to clear cached WASM files aft
 9. **TGV-QSM**: Langkammer et al. "Fast quantitative susceptibility mapping using 3D EPI and total generalized variation." *NeuroImage* (2015)
 10. **RTS**: Kames et al. "Rapid two-step dipole inversion for susceptibility mapping with sparsity priors." *NeuroImage* (2018)
 11. **MCPC-3DS**: Eckstein et al. "Computationally efficient combination of multi-channel phase data from multi-echo acquisitions (ASPIRE)." *MRM* (2018)
+12. **QSMART**: Özbay et al. "A comprehensive numerical analysis of background phase correction with V-SHARP." *NMR in Biomedicine* (2017)
+13. **iLSQR**: Li et al. "A method for estimating and removing streaking artifacts in quantitative susceptibility mapping." *NeuroImage* (2015)
 
 ## License
 

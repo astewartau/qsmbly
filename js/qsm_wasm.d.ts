@@ -65,46 +65,6 @@ export function calculate_weights_romeo_wasm(phase: Float64Array, mag: Float64Ar
 export function create_sphere_mask(nx: number, ny: number, nz: number, center_x: number, center_y: number, center_z: number, radius: number): Uint8Array;
 
 /**
- * Calculate Gaussian curvature at mask boundary
- *
- * Used for curvature-based edge weighting in QSMART SDF.
- *
- * # Arguments
- * * `mask` - Binary brain mask
- * * `nx`, `ny`, `nz` - Dimensions
- *
- * # Returns
- * Flattened [gaussian_curvature, mean_curvature] - each n_total elements
- */
-export function curvature_wasm(mask: Uint8Array, nx: number, ny: number, nz: number): Float64Array;
-
-/**
- * Frangi vesselness filter for vessel detection
- *
- * Detects tubular structures (vessels) using multi-scale Hessian eigenvalue analysis.
- *
- * # Arguments
- * * `data` - Input 3D volume (nx * ny * nz)
- * * `nx`, `ny`, `nz` - Dimensions
- * * `scale_min` - Minimum sigma for multi-scale analysis (default 0.5)
- * * `scale_max` - Maximum sigma (default 6.0)
- * * `scale_ratio` - Step between scales (default 0.5)
- * * `alpha` - Plate vs line sensitivity (default 0.5)
- * * `beta` - Blob vs line sensitivity (default 0.5)
- * * `c` - Noise threshold (default 500)
- * * `black_white` - Detect dark vessels (true) or bright (false)
- *
- * # Returns
- * Vesselness response (0-1)
- */
-export function frangi_filter_3d_wasm(data: Float64Array, nx: number, ny: number, nz: number, scale_min: number, scale_max: number, scale_ratio: number, alpha: number, beta: number, c: number, black_white: boolean): Float64Array;
-
-/**
- * Frangi filter with progress callback
- */
-export function frangi_filter_3d_wasm_with_progress(data: Float64Array, nx: number, ny: number, nz: number, scale_min: number, scale_max: number, scale_ratio: number, alpha: number, beta: number, c: number, black_white: boolean, progress_callback: Function): Float64Array;
-
-/**
  * 3D Gaussian smoothing for phase data (handles wrapping)
  *
  * Smooths phase by converting to complex representation, smoothing real/imag
@@ -161,51 +121,6 @@ export function grow_region_unwrap_wasm(phase: Float64Array, weights: Uint8Array
  * Flattened [hip_phase, hip_mag] - first n elements are phase diff, next n are combined mag
  */
 export function hermitian_inner_product_wasm(phase1: Float64Array, mag1: Float64Array, phase2: Float64Array, mag2: Float64Array, mask: Uint8Array, n: number): Float64Array;
-
-/**
- * iLSQR with full output (susceptibility, artifacts, fastqsm, initial lsqr)
- *
- * Returns all intermediate results for analysis/debugging.
- *
- * # Returns
- * Flattened array: [chi, xsa, xfs, xlsqr] - 4 * (nx * ny * nz) elements
- * - chi: Final susceptibility map
- * - xsa: Estimated streaking artifacts
- * - xfs: FastQSM estimate
- * - xlsqr: Initial LSQR result
- */
-export function ilsqr_full_wasm(local_field: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, bx: number, by: number, bz: number, tol: number, max_iter: number): Float64Array;
-
-/**
- * iLSQR dipole inversion with streaking artifact removal
- *
- * A method for estimating and removing streaking artifacts in QSM.
- * Based on Li et al., NeuroImage 2015.
- *
- * The algorithm consists of 4 steps:
- * 1. Initial LSQR solution with Laplacian-based weights
- * 2. FastQSM estimate using sign(D) approximation
- * 3. Streaking artifact estimation using LSMR
- * 4. Artifact subtraction
- *
- * # Arguments
- * * `local_field` - Local field values (nx * ny * nz)
- * * `mask` - Binary mask (nx * ny * nz)
- * * `nx`, `ny`, `nz` - Array dimensions
- * * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
- * * `bx`, `by`, `bz` - B0 field direction
- * * `tol` - Stopping tolerance for LSMR solver (default 1e-2)
- * * `max_iter` - Maximum iterations for LSMR (default 50)
- *
- * # Returns
- * Susceptibility map as Float64Array
- */
-export function ilsqr_wasm(local_field: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, bx: number, by: number, bz: number, tol: number, max_iter: number): Float64Array;
-
-/**
- * iLSQR with progress callback
- */
-export function ilsqr_wasm_with_progress(local_field: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, bx: number, by: number, bz: number, tol: number, max_iter: number, progress_callback: Function): Float64Array;
 
 /**
  * Initialize panic hook for better error messages in browser console
@@ -412,21 +327,6 @@ export function nltv_wasm(local_field: Float64Array, mask: Uint8Array, nx: numbe
 export function nltv_wasm_with_progress(local_field: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, bx: number, by: number, bz: number, lambda: number, mu: number, tol: number, max_iter: number, newton_iter: number, progress_callback: Function): Float64Array;
 
 /**
- * Otsu's method for automatic thresholding
- *
- * Computes the optimal threshold that minimizes intra-class variance
- * (equivalently maximizes inter-class variance) for bimodal histograms.
- *
- * # Arguments
- * * `data` - 3D magnitude image (flattened)
- * * `num_bins` - Number of histogram bins (typically 256)
- *
- * # Returns
- * Tuple of (threshold_value, binary_mask)
- */
-export function otsu_threshold_wasm(data: Float64Array, num_bins: number): Uint8Array;
-
-/**
  * PDF background field removal
  *
  * Projection onto dipole fields for background removal.
@@ -446,26 +346,6 @@ export function pdf_wasm(field: Float64Array, mask: Uint8Array, nx: number, ny: 
  * PDF with progress callback
  */
 export function pdf_wasm_with_progress(field: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, bx: number, by: number, bz: number, tol: number, max_iter: number, progress_callback: Function): Float64Array;
-
-/**
- * QSMART offset adjustment
- *
- * Combines two-stage QSM results with offset adjustment for consistency.
- *
- * # Arguments
- * * `removed_voxels` - Voxels in stage 1 but not stage 2 (mask*R_0 - vasc_only)
- * * `lfs_sdf` - Local field from stage 1 (in ppm)
- * * `chi_1` - Susceptibility from stage 1 (whole ROI)
- * * `chi_2` - Susceptibility from stage 2 (tissue only)
- * * `nx`, `ny`, `nz` - Dimensions
- * * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
- * * `bx`, `by`, `bz` - B0 field direction
- * * `ppm` - PPM conversion factor
- *
- * # Returns
- * Combined and offset-adjusted susceptibility map
- */
-export function qsmart_adjust_offset_wasm(removed_voxels: Float64Array, lfs_sdf: Float64Array, chi_1: Float64Array, chi_2: Float64Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, bx: number, by: number, bz: number, ppm: number): Float64Array;
 
 /**
  * RSS (Root Sum of Squares) magnitude combination
@@ -525,32 +405,6 @@ export function save_nifti_gz_wasm(data: Float64Array, nx: number, ny: number, n
  * NIfTI file as Uint8Array
  */
 export function save_nifti_wasm(data: Float64Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, affine: Float64Array): Uint8Array;
-
-/**
- * SDF (Spatially Dependent Filtering) background field removal for QSMART
- *
- * Variable-radius Gaussian filtering where kernel size depends on proximity to boundary.
- *
- * # Arguments
- * * `tfs` - Total field shift (weighted by mask if using R_0)
- * * `mask` - Weighted mask (mask * R_0 for reliability weighting)
- * * `vasc_only` - Vasculature mask (1 = tissue, 0 = vessel). Use all-ones for stage 1.
- * * `nx`, `ny`, `nz` - Dimensions
- * * `sigma1` - Primary smoothing sigma (10 for stage1, 8 for stage2)
- * * `sigma2` - Vasculature proximity sigma (0 for stage1, 2 for stage2)
- * * `lower_lim` - Proximity clamping value (default 0.6)
- * * `curv_constant` - Curvature scaling (default 500)
- * * `use_curvature` - Enable curvature-based weighting
- *
- * # Returns
- * Local field shift (background removed)
- */
-export function sdf_wasm(tfs: Float64Array, mask: Float64Array, vasc_only: Float64Array, nx: number, ny: number, nz: number, sigma1: number, sigma2: number, lower_lim: number, curv_constant: number, use_curvature: boolean): Float64Array;
-
-/**
- * SDF with progress callback
- */
-export function sdf_wasm_with_progress(tfs: Float64Array, mask: Float64Array, vasc_only: Float64Array, nx: number, ny: number, nz: number, sigma1: number, sigma2: number, spatial_radius: number, lower_lim: number, curv_constant: number, use_curvature: boolean, progress_callback: Function): Float64Array;
 
 /**
  * SHARP background field removal
@@ -681,30 +535,6 @@ export function tv_admm_wasm(local_field: Float64Array, mask: Uint8Array, nx: nu
 export function tv_admm_wasm_with_progress(local_field: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, bx: number, by: number, bz: number, lambda: number, rho: number, tol: number, max_iter: number, progress_callback: Function): Float64Array;
 
 /**
- * Generate vasculature mask for QSMART
- *
- * Uses bottom-hat filtering and Frangi vesselness to detect blood vessels.
- *
- * # Arguments
- * * `magnitude` - Average magnitude image (ideally bias-corrected)
- * * `mask` - Binary brain mask
- * * `nx`, `ny`, `nz` - Dimensions
- * * `sphere_radius` - Radius for bottom-hat filter (default 8)
- * * `frangi_scale_min`, `frangi_scale_max` - Frangi scale range (default [0.5, 6])
- * * `frangi_scale_ratio` - Frangi scale step (default 0.5)
- * * `frangi_c` - Frangi C parameter (default 500)
- *
- * # Returns
- * Complementary mask (1 = tissue, 0 = vessel)
- */
-export function vasculature_mask_wasm(magnitude: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, sphere_radius: number, frangi_scale_min: number, frangi_scale_max: number, frangi_scale_ratio: number, frangi_c: number): Float64Array;
-
-/**
- * Vasculature mask with progress callback
- */
-export function vasculature_mask_wasm_with_progress(magnitude: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, sphere_radius: number, frangi_scale_min: number, frangi_scale_max: number, frangi_scale_ratio: number, frangi_c: number, progress_callback: Function): Float64Array;
-
-/**
  * V-SHARP background field removal
  *
  * # Arguments
@@ -740,17 +570,11 @@ export interface InitOutput {
     readonly calculate_b0_weighted_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly calculate_weights_romeo_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number];
     readonly create_sphere_mask: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
-    readonly curvature_wasm: (a: number, b: number, c: number, d: number, e: number) => [number, number];
-    readonly frangi_filter_3d_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number];
-    readonly frangi_filter_3d_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: any) => [number, number];
     readonly gaussian_smooth_3d_phase_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
     readonly get_dipole_kernel: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly get_version: () => [number, number];
     readonly grow_region_unwrap_wasm: (a: number, b: number, c: any, d: number, e: number, f: number, g: number, h: any, i: number, j: number, k: number, l: number, m: number, n: number) => number;
     readonly hermitian_inner_product_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
-    readonly ilsqr_full_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number];
-    readonly ilsqr_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number];
-    readonly ilsqr_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: any) => [number, number];
     readonly ismv_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number];
     readonly ismv_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: any) => [number, number];
     readonly laplacian_unwrap_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
@@ -765,17 +589,13 @@ export interface InitOutput {
     readonly medi_l1_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number, t: number, u: number, v: number, w: number, x: number, y: number, z: number, a1: number, b1: any) => [number, number];
     readonly nltv_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number];
     readonly nltv_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: any) => [number, number];
-    readonly otsu_threshold_wasm: (a: number, b: number, c: number) => [number, number];
     readonly pdf_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number];
     readonly pdf_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: any) => [number, number];
-    readonly qsmart_adjust_offset_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number];
     readonly rss_combine_wasm: (a: number, b: number, c: number, d: number) => [number, number];
     readonly rts_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number) => [number, number];
     readonly rts_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number, t: any) => [number, number];
     readonly save_nifti_gz_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly save_nifti_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
-    readonly sdf_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number];
-    readonly sdf_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: any) => [number, number];
     readonly sharp_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number];
     readonly smv_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly tgv_get_default_alpha: (a: number) => [number, number];
@@ -786,8 +606,6 @@ export interface InitOutput {
     readonly tsvd_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number];
     readonly tv_admm_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number) => [number, number];
     readonly tv_admm_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: any) => [number, number];
-    readonly vasculature_mask_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number];
-    readonly vasculature_mask_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: any) => [number, number];
     readonly vsharp_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number];
     readonly vsharp_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: any) => [number, number];
     readonly wasm_health_check: () => number;

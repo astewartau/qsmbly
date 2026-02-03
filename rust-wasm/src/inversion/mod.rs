@@ -20,6 +20,7 @@ pub mod nltv;
 pub mod rts;
 pub mod medi;
 pub mod tgv;
+pub mod ilsqr;
 
 pub use tkd::*;
 pub use tikhonov::*;
@@ -28,3 +29,4 @@ pub use nltv::*;
 pub use rts::*;
 pub use medi::*;
 pub use tgv::*;
+pub use ilsqr::*;

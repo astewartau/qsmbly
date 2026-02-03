@@ -1,6 +1,10 @@
 #!/bin/bash
 # Build script for QSMbly WebAssembly components
 # This compiles the Rust code to WASM and copies it to the serve directory
+#
+# Usage:
+#   ./build.sh           # Standard build (maximum browser compatibility)
+#   ./build.sh --simd    # SIMD-accelerated build (faster, requires modern browsers)
 
 set -e  # Exit on error
 
@@ -8,7 +12,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUST_DIR="$SCRIPT_DIR/rust-wasm"
 WASM_DIR="$SCRIPT_DIR/wasm"
 
-echo "=== QSMbly WASM Build ==="
+# Parse arguments
+SIMD_FLAG=""
+BUILD_TYPE="standard"
+if [[ "$1" == "--simd" ]]; then
+    SIMD_FLAG="--features simd"
+    BUILD_TYPE="SIMD-accelerated"
+fi
+
+echo "=== QSMbly WASM Build ($BUILD_TYPE) ==="
 echo ""
 
 # Check for required tools
@@ -27,8 +39,11 @@ fi
 
 # Build WASM
 echo "[1/3] Building WASM with wasm-pack..."
+if [[ -n "$SIMD_FLAG" ]]; then
+    echo "      SIMD acceleration enabled (requires Chrome 91+, Firefox 89+, Safari 16.4+)"
+fi
 cd "$RUST_DIR"
-wasm-pack build --target web --release
+wasm-pack build --target web --release $SIMD_FLAG
 
 echo ""
 echo "[2/3] Copying WASM files to serve directory..."

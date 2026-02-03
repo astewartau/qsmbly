@@ -4,25 +4,38 @@
 //! morphology-based gradient weighting from magnitude images.
 //!
 //! Features:
-//! - Adaptive gradient mask with percentage-based edge detection
+//! - **Per-direction gradient masks** (mx, my, mz) matching the original MEDI formulation
+//! - Adaptive edge detection with configurable percentage threshold (default: 30% edges)
 //! - SNR-based data weighting using noise standard deviation maps
 //! - Optional SMV (Spherical Mean Value) preprocessing
-//! - Optional merit-based outlier adjustment
+//! - Optional merit-based outlier adjustment (MERIT)
 //! - **Optimized with f32 single precision for WASM performance**
 //! - **Buffer reuse to minimize allocations**
 //! - **Early CG termination when convergence stalls**
+//! - **Linear extrapolation boundary conditions** matching MATLAB's gradf
 //!
 //! Reference:
 //! Liu T, Liu J, de Rochefort L, Spincemaille P, Khalidov I, Ledoux JR,
 //! Wang Y. Morphology enabled dipole inversion (MEDI) from a single-angle
 //! acquisition: comparison with COSMOS in human brain imaging.
 //! Magnetic resonance in medicine. 2011 Aug;66(3):777-83.
+//!
+//! Liu J, Liu T, de Rochefort L, Ledoux J, Khalidov I, Chen W, Tsiouris AJ,
+//! Wisnieff C, Spincemaille P, Prince MR, Wang Y. Morphology enabled dipole
+//! inversion for quantitative susceptibility mapping using structural
+//! consistency between the magnitude image and the susceptibility map.
+//! Neuroimage. 2012 Feb 1;59(3):2560-8.
 
 use num_complex::Complex32;
 use crate::fft::Fft3dWorkspaceF32;
 use crate::kernels::dipole::dipole_kernel_f32;
 use crate::kernels::smv::smv_kernel_f32;
-use crate::utils::gradient::{fgrad_f32, fgrad_inplace_f32, bdiv_inplace_f32};
+use crate::utils::simd_ops::{
+    dot_product_f32, norm_squared_f32, axpy_f32, xpby_f32,
+    apply_gradient_weights_f32, compute_p_weights_f32, combine_terms_f32, negate_f32,
+};
+// Note: We use local fgrad_linext_inplace_f32 and bdiv_linext_inplace_f32 with
+// linear extrapolation boundary conditions to match MATLAB's gradf behavior
 
 /// Workspace for MEDI operations - holds all reusable buffers (f32 version)
 /// Uses single precision for ~2x speedup on WASM
@@ -119,6 +132,8 @@ struct MediOpBuffers<'a> {
 
 /// Apply MEDI operator in-place: out = reg(dx) + 2*lambda*fidelity(dx)
 /// This is the hot path - called many times per Gauss-Newton iteration
+/// Uses per-direction gradient masks (mx, my, mz) matching MATLAB MEDI
+/// SIMD-accelerated for element-wise operations
 #[inline]
 fn apply_medi_operator_core(
     fft_ws: &mut Fft3dWorkspaceF32,
@@ -129,24 +144,26 @@ fn apply_medi_operator_core(
     dx: &[f32],
     w: &[Complex32],
     d_kernel: &[f32],
-    grad_weights: &[f32],
+    mx: &[f32],  // Per-direction gradient mask for x
+    my: &[f32],  // Per-direction gradient mask for y
+    mz: &[f32],  // Per-direction gradient mask for z
     vr: &[f32],
     lambda: f32,
     out: &mut [f32],
 ) {
     // 1. Compute gradient of dx (in-place into gx, gy, gz)
-    fgrad_inplace_f32(bufs.gx, bufs.gy, bufs.gz, dx, nx, ny, nz, vsx, vsy, vsz);
+    fgrad_linext_inplace_f32(bufs.gx, bufs.gy, bufs.gz, dx, nx, ny, nz, vsx, vsy, vsz);
 
-    // 2. Apply weights: reg_i = wG * Vr * wG * g_i (in-place)
-    for i in 0..n {
-        let w2v = grad_weights[i] * vr[i] * grad_weights[i];
-        bufs.reg_x[i] = w2v * bufs.gx[i];
-        bufs.reg_y[i] = w2v * bufs.gy[i];
-        bufs.reg_z[i] = w2v * bufs.gz[i];
-    }
+    // 2. Apply per-direction weights: reg_i = m_i * P * m_i * g_i (SIMD accelerated)
+    // MATLAB: ux = mx .* P .* mx .* ux; uy = my .* P .* my .* uy; uz = mz .* P .* mz .* uz;
+    apply_gradient_weights_f32(
+        bufs.reg_x, bufs.reg_y, bufs.reg_z,
+        mx, my, mz, vr,
+        bufs.gx, bufs.gy, bufs.gz,
+    );
 
     // 3. Compute divergence (in-place into div_buf)
-    bdiv_inplace_f32(bufs.div_buf, bufs.reg_x, bufs.reg_y, bufs.reg_z, nx, ny, nz, vsx, vsy, vsz);
+    bdiv_linext_inplace_f32(bufs.div_buf, bufs.reg_x, bufs.reg_y, bufs.reg_z, nx, ny, nz, vsx, vsy, vsz);
 
     // 4. Fidelity term: D^T(|w|^2 * D(dx))
     apply_dipole_conv(fft_ws, dx, d_kernel, bufs.dipole_buf, bufs.complex_buf);
@@ -165,9 +182,11 @@ fn apply_medi_operator_core(
     fft_ws.ifft3d(bufs.complex_buf2);
 
     // 5. Combine: out = div_buf + 2*lambda*real(complex_buf2)
+    // Extract real parts for SIMD operation
     for i in 0..n {
-        out[i] = bufs.div_buf[i] + 2.0 * lambda * bufs.complex_buf2[i].re;
+        bufs.dipole_buf[i] = bufs.complex_buf2[i].re;
     }
+    combine_terms_f32(out, bufs.div_buf, bufs.dipole_buf, lambda);
 }
 
 /// Conjugate gradient solver with buffer reuse and early termination
@@ -175,12 +194,15 @@ fn apply_medi_operator_core(
 /// Early termination when convergence stalls (residual reduction < 1% over 5 iterations)
 ///
 /// The optional progress callback receives (cg_iter, max_iter) for each CG iteration.
+/// Uses per-direction gradient masks (mx, my, mz) matching MATLAB MEDI.
 #[inline]
 fn cg_solve_medi<F>(
     ws: &mut MediWorkspace,
     w: &[Complex32],
     d_kernel: &[f32],
-    grad_weights: &[f32],
+    mx: &[f32],  // Per-direction gradient mask for x
+    my: &[f32],  // Per-direction gradient mask for y
+    mz: &[f32],  // Per-direction gradient mask for z
     vr: &[f32],
     lambda: f32,
     b: &[f32],
@@ -196,9 +218,7 @@ fn cg_solve_medi<F>(
     let (vsx, vsy, vsz) = (ws.vsx, ws.vsy, ws.vsz);
 
     // Initialize x to zero
-    for xi in x.iter_mut() {
-        *xi = 0.0;
-    }
+    x.fill(0.0);
 
     // r = b - A*x = b (since x=0)
     ws.cg_r.copy_from_slice(b);
@@ -206,11 +226,11 @@ fn cg_solve_medi<F>(
     // p = r
     ws.cg_p.copy_from_slice(&ws.cg_r);
 
-    // rsold = r·r
-    let mut rsold: f32 = ws.cg_r.iter().map(|&ri| ri * ri).sum();
+    // rsold = r·r (SIMD accelerated)
+    let mut rsold: f32 = norm_squared_f32(&ws.cg_r);
 
-    // b_norm for relative tolerance
-    let b_norm: f32 = b.iter().map(|&bi| bi * bi).sum::<f32>().sqrt();
+    // b_norm for relative tolerance (SIMD accelerated)
+    let b_norm: f32 = norm_squared_f32(b).sqrt();
     if b_norm < 1e-10 {
         return; // b is zero, x=0 is the solution
     }
@@ -247,15 +267,12 @@ fn cg_solve_medi<F>(
             };
             apply_medi_operator_core(
                 &mut ws.fft_ws, &mut bufs, n, nx, ny, nz, vsx, vsy, vsz,
-                &p_copy, w, d_kernel, grad_weights, vr, lambda, &mut ws.cg_ap
+                &p_copy, w, d_kernel, mx, my, mz, vr, lambda, &mut ws.cg_ap
             );
         }
 
-        // pap = p·ap
-        let pap: f32 = ws.cg_p.iter()
-            .zip(ws.cg_ap.iter())
-            .map(|(&pi, &api)| pi * api)
-            .sum();
+        // pap = p·ap (SIMD accelerated)
+        let pap: f32 = dot_product_f32(&ws.cg_p, &ws.cg_ap);
 
         if pap.abs() < 1e-15 {
             break;
@@ -263,14 +280,14 @@ fn cg_solve_medi<F>(
 
         let alpha = rsold / pap;
 
-        // x = x + alpha*p, r = r - alpha*ap (fused loop)
-        for i in 0..n {
-            x[i] += alpha * ws.cg_p[i];
-            ws.cg_r[i] -= alpha * ws.cg_ap[i];
-        }
+        // x = x + alpha*p (SIMD accelerated)
+        axpy_f32(x, alpha, &ws.cg_p);
 
-        // rsnew = r·r
-        let rsnew: f32 = ws.cg_r.iter().map(|&ri| ri * ri).sum();
+        // r = r - alpha*ap (SIMD accelerated)
+        axpy_f32(&mut ws.cg_r, -alpha, &ws.cg_ap);
+
+        // rsnew = r·r (SIMD accelerated)
+        let rsnew: f32 = norm_squared_f32(&ws.cg_r);
         let residual = rsnew.sqrt();
 
         // Check convergence
@@ -292,10 +309,8 @@ fn cg_solve_medi<F>(
 
         let beta = rsnew / rsold;
 
-        // p = r + beta*p
-        for i in 0..n {
-            ws.cg_p[i] = ws.cg_r[i] + beta * ws.cg_p[i];
-        }
+        // p = r + beta*p (SIMD accelerated)
+        xpby_f32(&mut ws.cg_p, &ws.cg_r, beta);
 
         rsold = rsnew;
     }
@@ -310,16 +325,16 @@ fn cg_solve_medi<F>(
 /// * `mask` - Binary mask (nx * ny * nz), 1 = brain
 /// * `nx`, `ny`, `nz` - Array dimensions
 /// * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
-/// * `lambda` - Regularization parameter (default: 1000)
+/// * `lambda` - Regularization parameter (default: 7.5e-5, matching MATLAB MEDI)
 /// * `bdir` - B0 field direction (default: (0, 0, 1))
 /// * `merit` - Enable iterative merit-based outlier adjustment (default: false)
 /// * `smv` - Enable SMV preprocessing within MEDI (default: false)
 /// * `smv_radius` - SMV radius in mm (default: 5.0)
 /// * `data_weighting` - Data weighting mode: 0=uniform, 1=SNR (default: 1)
-/// * `percentage` - Gradient mask edge percentage (default: 0.9)
+/// * `percentage` - Fraction of voxels considered edges (default: 0.3 = 30%, matching MATLAB gpct=30)
 /// * `cg_tol` - CG solver tolerance (default: 0.01)
-/// * `cg_max_iter` - CG maximum iterations (default: 100)
-/// * `max_iter` - Maximum Gauss-Newton iterations (default: 10)
+/// * `cg_max_iter` - CG maximum iterations (default: 10, matching MATLAB)
+/// * `max_iter` - Maximum Gauss-Newton iterations (default: 30, matching MATLAB)
 /// * `tol` - Convergence tolerance (default: 0.1)
 ///
 /// # Returns
@@ -435,37 +450,42 @@ pub fn medi_l1(
         })
         .collect();
 
-    // Compute gradient weighting from magnitude edges
-    let w_g = gradient_mask_f32(&magnitude_f32, &work_mask, nx, ny, nz, vsx_f32, vsy_f32, vsz_f32, percentage_f32);
+    // Compute per-direction gradient weighting masks from magnitude edges
+    // Returns (mx, my, mz) - separate masks for each gradient direction (matching MATLAB MEDI)
+    let (w_gx, w_gy, w_gz) = gradient_mask_f32(&magnitude_f32, &work_mask, nx, ny, nz, vsx_f32, vsy_f32, vsz_f32, percentage_f32);
+
+    // Fallback: if any mask is all zeros, use magnitude image (matching MATLAB)
+    let w_gx = if w_gx.iter().any(|&v| v != 0.0) { w_gx } else { magnitude_f32.clone() };
+    let w_gy = if w_gy.iter().any(|&v| v != 0.0) { w_gy } else { magnitude_f32.clone() };
+    let w_gz = if w_gz.iter().any(|&v| v != 0.0) { w_gz } else { magnitude_f32.clone() };
 
     // Initialize susceptibility
     let mut chi = vec![0.0f32; n_total];
     let mut dx = vec![0.0f32; n_total];  // Reusable buffer for CG solution
     let mut rhs = vec![0.0f32; n_total]; // Reusable buffer for RHS
-    let mut vr = vec![0.0f32; n_total];  // Reusable buffer for Vr
+    let mut vr = vec![0.0f32; n_total];  // Reusable buffer for Vr (P in MATLAB)
     let mut w: Vec<Complex32> = vec![Complex32::new(0.0, 0.0); n_total]; // Reusable buffer for w
     let mut chi_prev = vec![0.0f32; n_total]; // Reusable buffer for convergence check
     let mut badpoint = vec![0.0f32; n_total];
     let mut n_std_work: Vec<f32> = n_std_f32.clone();
+
+    // Small epsilon for numerical stability (matching MATLAB: beta = sqrt(eps))
+    let beta = f32::EPSILON.sqrt();
 
     // Gauss-Newton iterations
     for _iter in 0..max_iter {
         // Save chi_prev for convergence check
         chi_prev.copy_from_slice(&chi);
 
-        // Compute Vr = 1 / sqrt(|wG * grad(chi)|^2 + eps) using workspace
-        fgrad_inplace_f32(
+        // Compute P = 1 / sqrt(|m * grad(chi)|^2 + beta) using per-direction masks (SIMD accelerated)
+        // MATLAB: P = 1 ./ sqrt(ux.*ux + uy.*uy + uz.*uz + beta);
+        // where ux = mx .* grad_x(chi), uy = my .* grad_y(chi), uz = mz .* grad_z(chi)
+        fgrad_linext_inplace_f32(
             &mut ws.gx, &mut ws.gy, &mut ws.gz,
             &chi, nx, ny, nz, vsx_f32, vsy_f32, vsz_f32,
         );
 
-        for i in 0..n_total {
-            let wgx = w_g[i] * ws.gx[i];
-            let wgy = w_g[i] * ws.gy[i];
-            let wgz = w_g[i] * ws.gz[i];
-            let grad_norm_sq = wgx * wgx + wgy * wgy + wgz * wgz;
-            vr[i] = 1.0 / (grad_norm_sq + 1e-6).sqrt();
-        }
+        compute_p_weights_f32(&mut vr, &w_gx, &w_gy, &w_gz, &ws.gx, &ws.gy, &ws.gz, beta);
 
         // Compute w = m * exp(i * D*chi) using workspace
         apply_dipole_conv(&mut ws.fft_ws, &chi, &d_kernel, &mut ws.dipole_buf, &mut ws.complex_buf);
@@ -475,28 +495,20 @@ pub fn medi_l1(
         }
 
         // Compute right-hand side using workspace
-        compute_rhs_inplace(&chi, &w, &b0, &d_kernel, &w_g, &vr, lambda_f32, &mut rhs, &mut ws);
+        compute_rhs_inplace(&chi, &w, &b0, &d_kernel, &w_gx, &w_gy, &w_gz, &vr, lambda_f32, &mut rhs, &mut ws);
 
-        // Negate for CG (solving A*dx = -b)
-        for val in rhs.iter_mut() {
-            *val = -*val;
-        }
+        // Negate for CG (solving A*dx = -b) (SIMD accelerated)
+        negate_f32(&mut rhs);
 
         // Solve A*dx = rhs using optimized CG with buffer reuse (no progress reporting)
-        cg_solve_medi(&mut ws, &w, &d_kernel, &w_g, &vr, lambda_f32, &rhs, &mut dx, cg_tol_f32, cg_max_iter, |_, _| {});
+        cg_solve_medi(&mut ws, &w, &d_kernel, &w_gx, &w_gy, &w_gz, &vr, lambda_f32, &rhs, &mut dx, cg_tol_f32, cg_max_iter, |_, _| {});
 
-        // Update: chi = chi + dx
-        for i in 0..n_total {
-            chi[i] += dx[i];
-        }
+        // Update: chi = chi + dx (SIMD accelerated)
+        axpy_f32(&mut chi, 1.0, &dx);
 
-        // Check convergence
-        let mut norm_dx_sq = 0.0f32;
-        let mut norm_chi_sq = 0.0f32;
-        for i in 0..n_total {
-            norm_dx_sq += dx[i] * dx[i];
-            norm_chi_sq += chi_prev[i] * chi_prev[i];
-        }
+        // Check convergence (SIMD accelerated)
+        let norm_dx_sq = norm_squared_f32(&dx);
+        let norm_chi_sq = norm_squared_f32(&chi_prev);
         let rel_change = norm_dx_sq.sqrt() / (norm_chi_sq.sqrt() + 1e-6);
 
         // Merit adjustment (optional)
@@ -628,12 +640,16 @@ fn apply_smv_kernel_ws(
 }
 
 /// Compute RHS in-place using workspace buffers (f32)
+/// Uses per-direction gradient masks (mx, my, mz) matching MATLAB MEDI
+/// SIMD-accelerated for element-wise operations
 fn compute_rhs_inplace(
     chi: &[f32],
     w: &[Complex32],
     b0: &[Complex32],
     d_kernel: &[f32],
-    grad_weights: &[f32],
+    mx: &[f32],  // Per-direction gradient mask for x
+    my: &[f32],  // Per-direction gradient mask for y
+    mz: &[f32],  // Per-direction gradient mask for z
     vr: &[f32],
     lambda: f32,
     rhs: &mut [f32],
@@ -641,21 +657,23 @@ fn compute_rhs_inplace(
 ) {
     let n = ws.n_total;
 
-    // Regularization term: div(wG * Vr * wG * grad(chi))
-    fgrad_inplace_f32(
+    // Regularization term: div(m * P * m * grad(chi)) for each direction
+    // MATLAB: b = lam .* gradAdj_(ux, uy, uz, vsz);
+    // where ux = mx .* P .* mx .* grad_x(chi), etc.
+    fgrad_linext_inplace_f32(
         &mut ws.gx, &mut ws.gy, &mut ws.gz,
         chi, ws.nx, ws.ny, ws.nz,
         ws.vsx, ws.vsy, ws.vsz,
     );
 
-    for i in 0..n {
-        let w2v = grad_weights[i] * vr[i] * grad_weights[i];
-        ws.reg_x[i] = w2v * ws.gx[i];
-        ws.reg_y[i] = w2v * ws.gy[i];
-        ws.reg_z[i] = w2v * ws.gz[i];
-    }
+    // Apply per-direction weights: ux = mx * P * mx * gx (SIMD accelerated)
+    apply_gradient_weights_f32(
+        &mut ws.reg_x, &mut ws.reg_y, &mut ws.reg_z,
+        mx, my, mz, vr,
+        &ws.gx, &ws.gy, &ws.gz,
+    );
 
-    bdiv_inplace_f32(
+    bdiv_linext_inplace_f32(
         &mut ws.div_buf,
         &ws.reg_x, &ws.reg_y, &ws.reg_z,
         ws.nx, ws.ny, ws.nz,
@@ -663,6 +681,7 @@ fn compute_rhs_inplace(
     );
 
     // Data term: D^T(conj(w) * (-i) * (w - b0))
+    // MATLAB: b = b + real(ifft3(conj(D) .* fft3(1i .* w2 .* (exp(1i.*(f - Dx)) - 1))));
     for i in 0..n {
         let diff = w[i] - b0[i];
         let conj_w = w[i].conj();
@@ -679,10 +698,13 @@ fn compute_rhs_inplace(
 
     ws.fft_ws.ifft3d(&mut ws.complex_buf2);
 
-    // Combine terms into rhs
+    // Extract real parts for SIMD combine operation
     for i in 0..n {
-        rhs[i] = ws.div_buf[i] + 2.0 * lambda * ws.complex_buf2[i].re;
+        ws.dipole_buf[i] = ws.complex_buf2[i].re;
     }
+
+    // Combine terms: rhs = lambda * reg_term + 2 * data_term (SIMD accelerated)
+    combine_terms_f32(rhs, &ws.div_buf, &ws.dipole_buf, lambda);
 }
 
 /// Generate data weighting mask (f32)
@@ -739,80 +761,213 @@ fn dataterm_mask_f32(mode: i32, n_std: &[f32], mask: &[u8]) -> Vec<f32> {
     }
 }
 
-/// Generate gradient weighting mask (f32)
+/// Generate per-direction gradient weighting masks (f32)
 ///
-/// Computes edge mask from magnitude image using adaptive thresholding.
-/// Returns 1 (regularize) for non-edges, lower values for edges.
+/// Computes separate edge masks for each gradient direction from magnitude image,
+/// matching the MATLAB MEDI implementation (gradientMaskMedi.m).
+/// Returns (mx, my, mz) where each mask is 1 (regularize) for non-edges, 0 for edges.
+///
+/// # Arguments
+/// * `magnitude` - Magnitude image
+/// * `mask` - Binary mask
+/// * `nx`, `ny`, `nz` - Array dimensions
+/// * `vsx`, `vsy`, `vsz` - Voxel sizes
+/// * `percentage` - Percentage of voxels considered to be edges (0.0-1.0, e.g., 0.3 = 30% edges)
+///
+/// # Returns
+/// Tuple of (mx, my, mz) per-direction binary gradient masks
 fn gradient_mask_f32(
     magnitude: &[f32],
     mask: &[u8],
     nx: usize, ny: usize, nz: usize,
     vsx: f32, vsy: f32, vsz: f32,
     percentage: f32,
-) -> Vec<f32> {
+) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
     let n_total = nx * ny * nz;
 
-    // Compute gradient of masked magnitude
-    let mag_masked: Vec<f32> = magnitude.iter()
+    // Normalize magnitude by max value within mask (matching MATLAB)
+    let mag_max = magnitude.iter()
         .zip(mask.iter())
-        .map(|(&m, &msk)| if msk != 0 { m } else { 0.0 })
-        .collect();
+        .filter(|(_, &m)| m != 0)
+        .map(|(&v, _)| v.abs())
+        .fold(0.0_f32, f32::max);
 
-    let (gx, gy, gz) = fgrad_f32(&mag_masked, nx, ny, nz, vsx, vsy, vsz);
-
-    // Compute gradient magnitude (4D: store as single value per voxel)
-    let w_g: Vec<f32> = (0..n_total)
-        .map(|i| (gx[i].powi(2) + gy[i].powi(2) + gz[i].powi(2)).sqrt())
-        .collect();
-
-    // Find threshold using iterative adjustment
-    let mag_max = magnitude.iter().cloned().fold(0.0_f32, f32::max);
-    let mut field_noise_level = (0.01 * mag_max).max(f32::EPSILON);
-
-    let mask_count = mask.iter().filter(|&&m| m != 0).count() as f32;
-    if mask_count == 0.0 {
-        return vec![1.0; n_total];
-    }
-
-    // Count voxels above threshold (edges)
-    let count_above = |thresh: f32| -> f32 {
-        w_g.iter()
-            .zip(mask.iter())
-            .filter(|(&g, &m)| m != 0 && g > thresh)
-            .count() as f32
-    };
-
-    let mut numerator = count_above(field_noise_level);
-    let mut ratio = numerator / mask_count;
-
-    // Iteratively adjust threshold to achieve target percentage
-    let max_adjust_iter = 100;
-    for _ in 0..max_adjust_iter {
-        if (ratio - percentage).abs() < 0.01 {
-            break;
-        }
-
-        if ratio > percentage {
-            field_noise_level *= 1.05;
-        } else {
-            field_noise_level *= 0.95;
-        }
-
-        numerator = count_above(field_noise_level);
-        ratio = numerator / mask_count;
-    }
-
-    // Return binary mask: 1 where gradient <= threshold (non-edges), 0 at edges
-    w_g.iter()
+    let mag_normalized: Vec<f32> = magnitude.iter()
         .zip(mask.iter())
-        .map(|(&g, &m)| {
-            if m != 0 {
-                if g <= field_noise_level { 1.0 } else { 0.0 }
+        .map(|(&m, &msk)| {
+            if msk != 0 && mag_max > 1e-10 {
+                m / mag_max
             } else {
                 0.0
             }
         })
-        .collect()
+        .collect();
+
+    // Compute gradient of normalized magnitude (using linear extrapolation BCs)
+    let (gx, gy, gz) = fgrad_linext_f32(&mag_normalized, nx, ny, nz, vsx, vsy, vsz);
+
+    // Take absolute values of each gradient direction
+    let abs_gx: Vec<f32> = gx.iter().map(|&v| v.abs()).collect();
+    let abs_gy: Vec<f32> = gy.iter().map(|&v| v.abs()).collect();
+    let abs_gz: Vec<f32> = gz.iter().map(|&v| v.abs()).collect();
+
+    // Collect all gradient values within mask for threshold computation
+    let mut all_grads: Vec<f32> = Vec::with_capacity(3 * n_total);
+    for i in 0..n_total {
+        if mask[i] != 0 {
+            all_grads.push(abs_gx[i]);
+            all_grads.push(abs_gy[i]);
+            all_grads.push(abs_gz[i]);
+        }
+    }
+
+    if all_grads.is_empty() {
+        return (vec![1.0; n_total], vec![1.0; n_total], vec![1.0; n_total]);
+    }
+
+    // Sort to find percentile threshold (100 - percentage)
+    // MATLAB: thr = prctile([mx(mask); my(mask); mz(mask)], 100 - p);
+    all_grads.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let percentile_idx = ((1.0 - percentage) * (all_grads.len() - 1) as f32) as usize;
+    let threshold = all_grads[percentile_idx.min(all_grads.len() - 1)];
+
+    // Create per-direction masks: 1 where gradient < threshold (non-edges), 0 at edges
+    // MATLAB: mx = mx < thr; my = my < thr; mz = mz < thr;
+    let mx: Vec<f32> = abs_gx.iter()
+        .zip(mask.iter())
+        .map(|(&g, &m)| if m != 0 && g < threshold { 1.0 } else { 0.0 })
+        .collect();
+
+    let my: Vec<f32> = abs_gy.iter()
+        .zip(mask.iter())
+        .map(|(&g, &m)| if m != 0 && g < threshold { 1.0 } else { 0.0 })
+        .collect();
+
+    let mz: Vec<f32> = abs_gz.iter()
+        .zip(mask.iter())
+        .map(|(&g, &m)| if m != 0 && g < threshold { 1.0 } else { 0.0 })
+        .collect();
+
+    (mx, my, mz)
+}
+
+/// Forward difference gradient with linear extrapolation boundary conditions (f32)
+/// Matches MATLAB's gradf behavior: dx(end) = dx(end-1)
+fn fgrad_linext_f32(
+    x: &[f32],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+    let n_total = nx * ny * nz;
+    let mut gx = vec![0.0f32; n_total];
+    let mut gy = vec![0.0f32; n_total];
+    let mut gz = vec![0.0f32; n_total];
+    fgrad_linext_inplace_f32(&mut gx, &mut gy, &mut gz, x, nx, ny, nz, vsx, vsy, vsz);
+    (gx, gy, gz)
+}
+
+/// Forward difference gradient with linear extrapolation boundary conditions (f32, in-place)
+/// Matches MATLAB's gradf behavior: dx(end) = dx(end-1)
+#[inline]
+fn fgrad_linext_inplace_f32(
+    gx: &mut [f32], gy: &mut [f32], gz: &mut [f32],
+    x: &[f32],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) {
+    let hx = 1.0 / vsx;
+    let hy = 1.0 / vsy;
+    let hz = 1.0 / vsz;
+
+    for k in 0..nz {
+        let k_offset = k * nx * ny;
+
+        for j in 0..ny {
+            let j_offset = j * nx;
+
+            for i in 0..nx {
+                let idx = i + j_offset + k_offset;
+                let x_val = x[idx];
+
+                // Forward difference with linear extrapolation at boundary
+                // MATLAB: dx(end,:,:) = dx(end-1,:,:)
+                if i + 1 < nx {
+                    gx[idx] = (x[idx + 1] - x_val) * hx;
+                } else if i > 0 {
+                    // Copy from previous (linear extrapolation)
+                    gx[idx] = gx[idx - 1];
+                } else {
+                    gx[idx] = 0.0;
+                }
+
+                if j + 1 < ny {
+                    gy[idx] = (x[i + (j + 1) * nx + k_offset] - x_val) * hy;
+                } else if j > 0 {
+                    gy[idx] = gy[i + (j - 1) * nx + k_offset];
+                } else {
+                    gy[idx] = 0.0;
+                }
+
+                if k + 1 < nz {
+                    gz[idx] = (x[i + j_offset + (k + 1) * nx * ny] - x_val) * hz;
+                } else if k > 0 {
+                    gz[idx] = gz[i + j_offset + (k - 1) * nx * ny];
+                } else {
+                    gz[idx] = 0.0;
+                }
+            }
+        }
+    }
+}
+
+/// Backward divergence with linear extrapolation boundary conditions (f32, in-place)
+/// Adjoint of fgrad_linext_inplace_f32
+/// Matches MATLAB's gradAdj_ behavior
+#[inline]
+fn bdiv_linext_inplace_f32(
+    div: &mut [f32],
+    gx: &[f32], gy: &[f32], gz: &[f32],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) {
+    let hx = -1.0 / vsx;  // Negative for adjoint
+    let hy = -1.0 / vsy;
+    let hz = -1.0 / vsz;
+
+    for k in 0..nz {
+        let k_offset = k * nx * ny;
+
+        for j in 0..ny {
+            let j_offset = j * nx;
+
+            for i in 0..nx {
+                let idx = i + j_offset + k_offset;
+
+                // Adjoint of forward difference with linear extrapolation BC
+                // MATLAB: dx = dx - circshift(dx, [1,0,0]); dx = ih(1) .* dx;
+                // With boundary: dx(1) = dx(1), others = dx(i) - dx(i-1)
+                let gx_term = if i > 0 {
+                    (gx[idx] - gx[idx - 1]) * hx
+                } else {
+                    gx[idx] * hx
+                };
+
+                let gy_term = if j > 0 {
+                    (gy[idx] - gy[i + (j - 1) * nx + k_offset]) * hy
+                } else {
+                    gy[idx] * hy
+                };
+
+                let gz_term = if k > 0 {
+                    (gz[idx] - gz[i + j_offset + (k - 1) * nx * ny]) * hz
+                } else {
+                    gz[idx] * hz
+                };
+
+                div[idx] = gx_term + gy_term + gz_term;
+            }
+        }
+    }
 }
 
 /// MEDI L1 with progress callback (OPTIMIZED f32 VERSION)
@@ -933,8 +1088,14 @@ where
         })
         .collect();
 
-    // Compute gradient weighting from magnitude edges
-    let w_g = gradient_mask_f32(&magnitude_f32, &work_mask, nx, ny, nz, vsx_f32, vsy_f32, vsz_f32, percentage_f32);
+    // Compute per-direction gradient weighting masks from magnitude edges
+    // Returns (mx, my, mz) - separate masks for each gradient direction (matching MATLAB MEDI)
+    let (w_gx, w_gy, w_gz) = gradient_mask_f32(&magnitude_f32, &work_mask, nx, ny, nz, vsx_f32, vsy_f32, vsz_f32, percentage_f32);
+
+    // Fallback: if any mask is all zeros, use magnitude image (matching MATLAB)
+    let w_gx = if w_gx.iter().any(|&v| v != 0.0) { w_gx } else { magnitude_f32.clone() };
+    let w_gy = if w_gy.iter().any(|&v| v != 0.0) { w_gy } else { magnitude_f32.clone() };
+    let w_gz = if w_gz.iter().any(|&v| v != 0.0) { w_gz } else { magnitude_f32.clone() };
 
     // Initialize susceptibility and reusable buffers
     let mut chi = vec![0.0f32; n_total];
@@ -946,6 +1107,9 @@ where
     let mut badpoint = vec![0.0f32; n_total];
     let mut n_std_work: Vec<f32> = n_std_f32.clone();
 
+    // Small epsilon for numerical stability (matching MATLAB: beta = sqrt(eps))
+    let beta = f32::EPSILON.sqrt();
+
     // Total progress = GN iterations * CG iterations per GN
     let total_steps = max_iter * cg_max_iter;
 
@@ -953,19 +1117,14 @@ where
     for iter in 0..max_iter {
         chi_prev.copy_from_slice(&chi);
 
-        // Compute Vr = 1 / sqrt(|wG * grad(chi)|^2 + eps)
-        fgrad_inplace_f32(
+        // Compute P = 1 / sqrt(|m * grad(chi)|^2 + beta) using per-direction masks (SIMD accelerated)
+        // MATLAB: P = 1 ./ sqrt(ux.*ux + uy.*uy + uz.*uz + beta);
+        fgrad_linext_inplace_f32(
             &mut ws.gx, &mut ws.gy, &mut ws.gz,
             &chi, nx, ny, nz, vsx_f32, vsy_f32, vsz_f32,
         );
 
-        for i in 0..n_total {
-            let wgx = w_g[i] * ws.gx[i];
-            let wgy = w_g[i] * ws.gy[i];
-            let wgz = w_g[i] * ws.gz[i];
-            let grad_norm_sq = wgx * wgx + wgy * wgy + wgz * wgz;
-            vr[i] = 1.0 / (grad_norm_sq + 1e-6).sqrt();
-        }
+        compute_p_weights_f32(&mut vr, &w_gx, &w_gy, &w_gz, &ws.gx, &ws.gy, &ws.gz, beta);
 
         // Compute w = m * exp(i * D*chi)
         apply_dipole_conv(&mut ws.fft_ws, &chi, &d_kernel, &mut ws.dipole_buf, &mut ws.complex_buf);
@@ -975,36 +1134,28 @@ where
         }
 
         // Compute right-hand side
-        compute_rhs_inplace(&chi, &w, &b0, &d_kernel, &w_g, &vr, lambda_f32, &mut rhs, &mut ws);
+        compute_rhs_inplace(&chi, &w, &b0, &d_kernel, &w_gx, &w_gy, &w_gz, &vr, lambda_f32, &mut rhs, &mut ws);
 
-        // Negate for CG (solving A*dx = -b)
-        for val in rhs.iter_mut() {
-            *val = -*val;
-        }
+        // Negate for CG (solving A*dx = -b) (SIMD accelerated)
+        negate_f32(&mut rhs);
 
         // Solve A*dx = rhs using optimized CG with combined progress reporting
         // Progress = (gn_iter * cg_max_iter + cg_iter) / (max_iter * cg_max_iter)
         let gn_iter = iter;
         cg_solve_medi(
-            &mut ws, &w, &d_kernel, &w_g, &vr, lambda_f32, &rhs, &mut dx, cg_tol_f32, cg_max_iter,
+            &mut ws, &w, &d_kernel, &w_gx, &w_gy, &w_gz, &vr, lambda_f32, &rhs, &mut dx, cg_tol_f32, cg_max_iter,
             |cg_iter, cg_total| {
                 let current = gn_iter * cg_total + cg_iter;
                 progress_callback(current, total_steps);
             }
         );
 
-        // Update: chi = chi + dx
-        for i in 0..n_total {
-            chi[i] += dx[i];
-        }
+        // Update: chi = chi + dx (SIMD accelerated)
+        axpy_f32(&mut chi, 1.0, &dx);
 
-        // Check convergence
-        let mut norm_dx_sq = 0.0f32;
-        let mut norm_chi_sq = 0.0f32;
-        for i in 0..n_total {
-            norm_dx_sq += dx[i] * dx[i];
-            norm_chi_sq += chi_prev[i] * chi_prev[i];
-        }
+        // Check convergence (SIMD accelerated)
+        let norm_dx_sq = norm_squared_f32(&dx);
+        let norm_chi_sq = norm_squared_f32(&chi_prev);
         let rel_change = norm_dx_sq.sqrt() / (norm_chi_sq.sqrt() + 1e-6);
 
         // Merit adjustment (optional)
@@ -1131,16 +1282,16 @@ pub fn medi_l1_default(
         mask,
         nx, ny, nz,
         vsx, vsy, vsz,
-        1000.0,            // lambda
+        7.5e-5,            // lambda (matching MATLAB default)
         (0.0, 0.0, 1.0),   // bdir
         false,             // merit
         false,             // smv
         5.0,               // smv_radius
         1,                 // data_weighting (SNR mode)
-        0.9,               // percentage
+        0.3,               // percentage (30% edges, matching MATLAB gpct=30)
         0.01,              // cg_tol
-        100,               // cg_max_iter
-        10,                // max_iter
+        10,                // cg_max_iter (matching MATLAB default)
+        30,                // max_iter (matching MATLAB default)
         0.1,               // tol
     )
 }
@@ -1175,15 +1326,17 @@ mod tests {
 
     #[test]
     fn test_gradient_mask_constant() {
-        // Constant magnitude should have no edges
+        // Constant magnitude should have no edges (all gradients are zero)
         let mag = vec![1.0f32; 8 * 8 * 8];
         let mask = vec![1u8; 8 * 8 * 8];
 
-        let w = gradient_mask_f32(&mag, &mask, 8, 8, 8, 1.0, 1.0, 1.0, 0.9);
+        let (mx, my, mz) = gradient_mask_f32(&mag, &mask, 8, 8, 8, 1.0, 1.0, 1.0, 0.3);
 
-        // All should be 1 (non-edges)
-        for &wi in w.iter() {
-            assert!(wi >= 0.0 && wi <= 1.0);
+        // All should be binary masks (0 or 1)
+        for i in 0..(8 * 8 * 8) {
+            assert!(mx[i] == 0.0 || mx[i] == 1.0, "mx should be binary, got {}", mx[i]);
+            assert!(my[i] == 0.0 || my[i] == 1.0, "my should be binary, got {}", my[i]);
+            assert!(mz[i] == 0.0 || mz[i] == 1.0, "mz should be binary, got {}", mz[i]);
         }
     }
 

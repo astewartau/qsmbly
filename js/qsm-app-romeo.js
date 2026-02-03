@@ -37,15 +37,11 @@ class QSMApp {
       combinedPhase: null
     };
 
-    // Processing results
-    this.results = {
-      magnitude: { path: null, file: null },
-      phase: { path: null, file: null },
-      mask: { path: null, file: null },
-      B0: { path: null, file: null },
-      bgRemoved: { path: null, file: null },
-      final: { path: null, file: null }
-    };
+    // Processing results - dynamically populated as stages arrive
+    this.results = {};
+
+    // Track stage order for display (in order they arrive)
+    this.stageOrder = [];
 
     // Pending stage requests
     this.pendingStageResolve = null;
@@ -69,8 +65,20 @@ class QSMApp {
 
     // Pipeline settings (null values = calculate from voxel size)
     this.pipelineSettings = {
-      combinedMethod: 'none',  // 'none' or 'tgv'
+      combinedMethod: 'none',  // 'none', 'tgv', or 'qsmart'
       tgv: { regularization: 2, iterations: 1000, erosions: 3 },
+      qsmart: {
+        sdfSigma1Stage1: 10, sdfSigma2Stage1: 0,
+        sdfSigma1Stage2: 8, sdfSigma2Stage2: 2,
+        sdfSpatialRadius: 8, sdfLowerLim: 0.6, sdfCurvConstant: 500,
+        // Vasculature detection parameters (in mm - auto-scaled to voxels)
+        vascSphereRadiusMm: 8.0,  // mm - morphological filter radius
+        frangiScaleMinMm: 1.0,    // mm - minimum vessel radius to detect (QSMART default: 1)
+        frangiScaleMaxMm: 10.0,   // mm - maximum vessel radius to detect (QSMART default: 10)
+        frangiScaleRatioMm: 2.0,  // mm - step between scales (QSMART default: 2)
+        frangiC: 500,             // noise sensitivity threshold
+        ilsqrTol: 0.01, ilsqrMaxIter: 50
+      },
       unwrapMethod: 'romeo',  // 'romeo' or 'laplacian'
       multiEchoMethod: 'mcpc3ds',  // 'ols', 'ols_offset', 'mcpc3ds'
       mcpc3ds: { sigma: [10, 10, 5], weightType: 'phase_snr' },
@@ -99,6 +107,15 @@ class QSMApp {
       subdivisions: 4
     };
 
+    // Mask preparation settings
+    this.maskPrepSettings = {
+      source: 'combined',        // 'first_echo' or 'combined'
+      biasCorrection: true,
+      prepared: false
+    };
+    this.preparedMagnitudeData = null;  // Cached prepared magnitude
+    this.preparedMagnitudeMax = 0;
+
     // Track last run settings for intelligent caching
     this.lastRunSettings = null;
     this.pipelineHasRun = false;
@@ -123,6 +140,15 @@ class QSMApp {
     this.updateFileList('magnitude', []);
     this.updateFileList('phase', []);
     this.updateFileList('json', []);
+
+    // Initialize masking controls state (disabled until Prepare is clicked)
+    this.updateMaskingControlsState();
+
+    // Sync mask prep settings with actual UI state
+    const sourceSelect = document.getElementById('maskInputSource');
+    const biasCheckbox = document.getElementById('applyBiasCorrection');
+    if (sourceSelect) this.maskPrepSettings.source = sourceSelect.value;
+    if (biasCheckbox) this.maskPrepSettings.biasCorrection = biasCheckbox.checked;
 
     this.updateOutput("Ready. Upload magnitude, phase, and JSON files for each echo.");
 
@@ -163,10 +189,13 @@ class QSMApp {
         case 'complete':
           this.updateOutput("Pipeline completed successfully!");
           this.showStageButtons();
-          // Enable magnitude, phase, and mask buttons (available after pipeline completes)
-          this.enableStageButtons('magnitude');
-          this.enableStageButtons('phase');
-          this.enableStageButtons('mask');
+          // Add magnitude and phase buttons if we have multi-echo data
+          if (this.multiEchoFiles.magnitude.length > 0) {
+            this.addStageButton('magnitude', 'Input Magnitude');
+          }
+          if (this.multiEchoFiles.phase.length > 0) {
+            this.addStageButton('phase', 'Input Phase');
+          }
           // Save settings for intelligent caching on next run
           this.lastRunSettings = JSON.parse(JSON.stringify(this.pipelineSettings));
           this.pipelineHasRun = true;
@@ -181,8 +210,15 @@ class QSMApp {
             this.pendingStageResolve(data);
             this.pendingStageResolve = null;
           } else if (this.pipelineRunning) {
-            // Live update during pipeline - display immediately
-            this.displayLiveStageData(data);
+            // Live update during pipeline
+            // displayNow defaults to true for backward compatibility
+            const displayNow = data.displayNow !== false;
+            if (displayNow) {
+              this.displayLiveStageData(data);
+            } else {
+              // Just cache without displaying
+              this.cacheStageData(data);
+            }
           }
           break;
       }
@@ -354,28 +390,14 @@ class QSMApp {
     document.getElementById('echoPrev')?.addEventListener('click', () => this.navigateEcho(-1));
     document.getElementById('echoNext')?.addEventListener('click', () => this.navigateEcho(1));
 
-    // Stage navigation
-    document.getElementById('showMagnitude').addEventListener('click', () => this.showStage('magnitude'));
-    document.getElementById('showPhase').addEventListener('click', () => this.showStage('phase'));
-    document.getElementById('showMask').addEventListener('click', () => this.showStage('mask'));
-    document.getElementById('showB0').addEventListener('click', () => this.showStage('B0'));
-    document.getElementById('showBgRemoved').addEventListener('click', () => this.showStage('bgRemoved'));
-    document.getElementById('showDipoleInversed').addEventListener('click', () => this.showStage('final'));
-
-    // Download buttons
-    document.getElementById('downloadMagnitude').addEventListener('click', () => this.downloadStage('magnitude'));
-    document.getElementById('downloadPhase').addEventListener('click', () => this.downloadStage('phase'));
-    document.getElementById('downloadMask').addEventListener('click', () => this.downloadStage('mask'));
-    document.getElementById('downloadB0').addEventListener('click', () => this.downloadStage('B0'));
-    document.getElementById('downloadBgRemoved').addEventListener('click', () => this.downloadStage('bgRemoved'));
-    document.getElementById('downloadDipoleInversed').addEventListener('click', () => this.downloadStage('final'));
+    // Note: Stage show/download buttons are now created dynamically in addStageButton()
 
     // Mask threshold slider with debounce
     const thresholdSlider = document.getElementById('maskThreshold');
     if (thresholdSlider) {
       thresholdSlider.addEventListener('input', (e) => {
         this.maskThreshold = parseInt(e.target.value);
-        document.getElementById('thresholdValue').textContent = `${this.maskThreshold}%`;
+        document.getElementById('thresholdLabel').textContent = `Threshold (${this.maskThreshold}%)`;
 
         // Debounce the mask preview update
         if (this.maskUpdateTimeout) {
@@ -398,6 +420,27 @@ class QSMApp {
     // BET brain extraction button - opens settings modal
     document.getElementById('runBET')?.addEventListener('click', () => this.openBetSettingsModal());
 
+    // Auto threshold button (Otsu)
+    document.getElementById('autoThreshold')?.addEventListener('click', () => this.autoDetectThreshold());
+
+    // Mask Input Preparation
+    document.getElementById('maskInputSource')?.addEventListener('change', (e) => {
+      this.maskPrepSettings.source = e.target.value;
+      this.maskPrepSettings.prepared = false;
+      this.updatePrepareButtonState();
+    });
+
+    document.getElementById('applyBiasCorrection')?.addEventListener('change', (e) => {
+      this.maskPrepSettings.biasCorrection = e.target.checked;
+      this.maskPrepSettings.prepared = false;
+      console.log('Bias correction checkbox changed:', e.target.checked);
+      this.updatePrepareButtonState();
+    });
+
+    document.getElementById('prepareMaskInput')?.addEventListener('click', () => {
+      this.prepareMaskInput();
+    });
+
     // Pipeline settings modal
     document.getElementById('closePipelineSettings')?.addEventListener('click', () => this.closePipelineSettingsModal());
     document.getElementById('resetPipelineSettings')?.addEventListener('click', () => this.resetPipelineSettings());
@@ -411,6 +454,21 @@ class QSMApp {
     // BET fractional intensity slider value display
     document.getElementById('betFractionalIntensity')?.addEventListener('input', (e) => {
       document.getElementById('betFractionalIntensityValue').textContent = e.target.value;
+    });
+
+    // Overlay opacity slider
+    const opacitySlider = document.getElementById('overlayOpacity');
+    if (opacitySlider) {
+      opacitySlider.addEventListener('input', (e) => {
+        const opacity = parseInt(e.target.value) / 100;
+        document.getElementById('overlayOpacityValue').textContent = `${e.target.value}%`;
+        this.updateOverlayOpacity(opacity);
+      });
+    }
+
+    // Download current volume button
+    document.getElementById('downloadCurrentVolume')?.addEventListener('click', () => {
+      this.downloadCurrentVolume();
     });
 
     // Close modals on overlay click
@@ -458,6 +516,7 @@ class QSMApp {
       document.getElementById('rtsSettings').style.display = method === 'rts' ? 'block' : 'none';
       document.getElementById('nltvSettings').style.display = method === 'nltv' ? 'block' : 'none';
       document.getElementById('mediSettings').style.display = method === 'medi' ? 'block' : 'none';
+      document.getElementById('ilsqrSettings').style.display = method === 'ilsqr' ? 'block' : 'none';
     });
 
     // MEDI SMV checkbox toggle
@@ -549,14 +608,20 @@ class QSMApp {
     // Enable preview buttons when files are loaded
     if (type === 'magnitude') {
       document.getElementById('vis_magnitude').disabled = files.length === 0;
+
+      // Clear prepared state when magnitude files change
+      this.maskPrepSettings.prepared = false;
+      this.preparedMagnitudeData = null;
+      this.preparedMagnitudeMax = 0;
+      this.currentMaskData = null;
+      this.originalMaskData = null;
+      this.updatePrepareButtonState();  // This also calls updateMaskingControlsState
+
       if (files.length > 0) {
         const maskSection = document.getElementById('maskSection');
         if (maskSection) {
           maskSection.classList.remove('section-disabled');
         }
-        // Enable mask buttons
-        document.getElementById('previewMask')?.removeAttribute('disabled');
-        document.getElementById('runBET')?.removeAttribute('disabled');
         // Load magnitude into viewer for visualization
         this.visualizeMagnitude();
       }
@@ -638,16 +703,17 @@ class QSMApp {
   async processJsonFiles(files) {
     console.log('Processing JSON files:', files);
     const echoTimes = [];
-    
+    let fieldStrength = null;
+
     for (const file of files) {
       try {
         const text = await file.text();
         const json = JSON.parse(text);
-        
+
         console.log(`JSON file ${file.name} contents:`, json);
         console.log(`EchoTime field:`, json.EchoTime);
         console.log(`Available fields:`, Object.keys(json));
-        
+
         // Extract echo time (in seconds, convert to ms)
         let echoTime = null;
         if (json.EchoTime) {
@@ -662,7 +728,21 @@ class QSMApp {
         } else {
           console.warn(`No echo time found in ${file.name}. Available fields:`, Object.keys(json));
         }
-        
+
+        // Extract field strength (in Tesla) - only need to find it once
+        if (fieldStrength === null) {
+          if (json.MagneticFieldStrength) {
+            fieldStrength = json.MagneticFieldStrength;
+            console.log(`Found MagneticFieldStrength: ${fieldStrength}T`);
+          } else if (json.FieldStrength) {
+            fieldStrength = json.FieldStrength;
+            console.log(`Found FieldStrength: ${fieldStrength}T`);
+          } else if (json.field_strength) {
+            fieldStrength = json.field_strength;
+            console.log(`Found field_strength: ${fieldStrength}T`);
+          }
+        }
+
         if (echoTime !== null) {
           echoTimes.push({
             file: file.name,
@@ -687,6 +767,16 @@ class QSMApp {
 
     // Populate the editable inputs
     this.populateEchoTimeInputs(echoTimes.map(et => et.echoTime));
+
+    // Populate field strength if found
+    if (fieldStrength !== null) {
+      const fieldInput = document.getElementById('magField');
+      if (fieldInput) {
+        fieldInput.value = fieldStrength;
+        console.log(`Set field strength input to ${fieldStrength}T`);
+        this.updateOutput(`Field strength: ${fieldStrength}T`);
+      }
+    }
   }
 
   updateEchoInfo() {
@@ -858,6 +948,12 @@ class QSMApp {
       // Clean up the blob URL
       URL.revokeObjectURL(url);
 
+      // Hide overlay control (no overlay after loading new volume)
+      this.showOverlayControl(false);
+
+      // Enable download button
+      this.updateDownloadVolumeButton();
+
       this.updateOutput(`${description} loaded`);
       this.currentFile = file;
     } catch (error) {
@@ -866,41 +962,390 @@ class QSMApp {
     }
   }
 
-  async previewMask() {
+  /**
+   * Update the Prepare button state based on current settings
+   */
+  updatePrepareButtonState() {
+    const btn = document.getElementById('prepareMaskInput');
+    const hasMagnitude = this.multiEchoFiles.magnitude.length > 0;
+
+    if (btn) {
+      btn.disabled = !hasMagnitude;
+    }
+
+    // Enable/disable masking controls based on prepared state
+    this.updateMaskingControlsState();
+  }
+
+  /**
+   * Enable or disable masking controls based on whether Prepare has been run
+   */
+  updateMaskingControlsState() {
+    const prepared = this.maskPrepSettings.prepared;
+
+    // Preview Mask (Threshold) button - enabled when prepared
+    const previewBtn = document.getElementById('previewMask');
+    if (previewBtn) previewBtn.disabled = !prepared;
+
+    // BET button - enabled when prepared
+    const betBtn = document.getElementById('runBET');
+    if (betBtn) betBtn.disabled = !prepared;
+
+    // Threshold slider and auto-threshold button:
+    // Only enabled when Threshold method is active (not BET)
+    // This is controlled separately by setThresholdSliderEnabled()
+    // On initial prepare, keep them disabled until user clicks Threshold
+
+    // Morphological operations panel - show/hide based on state
+    const opsPanel = document.getElementById('maskOperations');
+    if (opsPanel) {
+      // Only show if prepared AND we have a mask (from either Threshold or BET)
+      opsPanel.style.display = (prepared && this.currentMaskData) ? 'block' : 'none';
+    }
+  }
+
+  /**
+   * Enable or disable the threshold slider and auto-threshold button
+   */
+  setThresholdSliderEnabled(enabled) {
+    const thresholdSlider = document.getElementById('maskThreshold');
+    if (thresholdSlider) thresholdSlider.disabled = !enabled;
+
+    const autoThresholdBtn = document.getElementById('autoThreshold');
+    if (autoThresholdBtn) autoThresholdBtn.disabled = !enabled;
+  }
+
+  /**
+   * Prepare mask input by combining echoes and/or applying bias correction
+   */
+  async prepareMaskInput() {
     if (this.multiEchoFiles.magnitude.length === 0) {
       this.updateOutput("No magnitude files uploaded");
       return;
     }
 
+    const btn = document.getElementById('prepareMaskInput');
+    const originalBtnHtml = btn?.innerHTML;
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Preparing...';
+    }
+
     try {
-      this.updateOutput("Loading magnitude for mask preview...");
+      // Debug: show current settings
+      console.log('Prepare settings:', this.maskPrepSettings);
+      this.updateOutput(`Preparing: source=${this.maskPrepSettings.source}, biasCorrection=${this.maskPrepSettings.biasCorrection}`);
+
+      // Always load first file into NiiVue first - this handles gzip decompression
+      // and gives us proper header access through the volume object
+      const firstFile = this.multiEchoFiles.magnitude[0].file;
+      const url = URL.createObjectURL(firstFile);
+      await this.nv.loadVolumes([{ url: url, name: firstFile.name }]);
+      URL.revokeObjectURL(url);
+
+      // Get the uncompressed NIfTI data from NiiVue
+      // NiiVue stores the raw (uncompressed) NIfTI in volume.fileObject or we can reconstruct
+      // For header, we'll use the volume's hdr property
+      const vol = this.nv.volumes[0];
+
+      // Store header bytes from NiiVue's volume for createMaskNifti
+      // We need to create a proper uncompressed NIfTI header
+      this.magnitudeFileBytes = this.createNiftiHeaderFromVolume(vol);
+
+      let magnitudeData;
+
+      if (this.maskPrepSettings.source === 'combined') {
+        // Load and combine all echoes with RSS
+        this.updateOutput("Combining magnitude echoes (RSS)...");
+        magnitudeData = await this.combineMagnitudeRSS();
+      } else {
+        // Just use first echo (already loaded)
+        magnitudeData = new Float64Array(vol.img);
+      }
+
+      // Apply bias correction if enabled
+      if (this.maskPrepSettings.biasCorrection) {
+        this.updateOutput("Applying bias correction...");
+        const beforeSum = magnitudeData.reduce((a, b) => a + b, 0);
+        magnitudeData = await this.applyBiasCorrection(magnitudeData);
+        const afterSum = magnitudeData.reduce((a, b) => a + b, 0);
+        console.log(`Bias correction: before sum=${beforeSum.toExponential(3)}, after sum=${afterSum.toExponential(3)}`);
+        this.updateOutput(`Bias correction applied (sum changed: ${(beforeSum !== afterSum)})`);
+      }
+
+      // Cache the prepared data
+      this.preparedMagnitudeData = magnitudeData;
+      this.magnitudeData = magnitudeData;
+
+      // Calculate max
+      let max = -Infinity;
+      for (let i = 0; i < magnitudeData.length; i++) {
+        if (magnitudeData[i] > max) max = magnitudeData[i];
+      }
+      this.preparedMagnitudeMax = max;
+      this.magnitudeMax = max;
+
+      this.maskPrepSettings.prepared = true;
+      this.updatePrepareButtonState();
+
+      // Hide echo navigation (we're viewing combined/processed data now)
+      this.hideEchoNavigation();
+
+      // Display the prepared magnitude as the base volume (no mask yet)
+      await this.displayPreparedMagnitude();
+
+      // Set threshold to Otsu-detected value by default
+      this.autoDetectThreshold();
+
+      this.updateOutput("Magnitude prepared. Click 'Threshold' to generate mask.");
+
+    } catch (error) {
+      this.updateOutput(`Error: ${error.message}`);
+      console.error(error);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalBtnHtml || 'Prepare';
+        this.updatePrepareButtonState();
+      }
+    }
+  }
+
+  /**
+   * Display the prepared magnitude data as the base volume
+   */
+  async displayPreparedMagnitude() {
+    if (!this.preparedMagnitudeData || !this.magnitudeFileBytes) return;
+
+    // Create NIfTI from prepared data (similar to createMaskNifti but with float64 data)
+    const srcView = new DataView(this.magnitudeFileBytes);
+    const voxOffset = srcView.getFloat32(108, true);
+    const headerSize = Math.ceil(voxOffset);
+
+    // Create buffer: header + data as float64
+    const dataSize = this.preparedMagnitudeData.length * 8; // 8 bytes per float64
+    const buffer = new ArrayBuffer(headerSize + dataSize);
+    const destBytes = new Uint8Array(buffer);
+    const destView = new DataView(buffer);
+
+    // Copy header
+    destBytes.set(new Uint8Array(this.magnitudeFileBytes).slice(0, headerSize));
+
+    // Update datatype to FLOAT64 (64) at offset 70
+    destView.setInt16(70, 64, true);
+    // Update bitpix to 64 at offset 72
+    destView.setInt16(72, 64, true);
+
+    // Make it 3D
+    destView.setInt16(40, 3, true);
+    destView.setInt16(48, 1, true);
+
+    // Copy data
+    const dataView = new Float64Array(buffer, headerSize);
+    dataView.set(this.preparedMagnitudeData);
+
+    // Load into NiiVue
+    const blob = new Blob([buffer], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+
+    await this.nv.loadVolumes([{ url: url, name: 'prepared_magnitude.nii' }]);
+    URL.revokeObjectURL(url);
+
+    // Store reference to the volume for header info
+    this.magnitudeVolume = this.nv.volumes[0];
+
+    // Enable download button
+    this.updateDownloadVolumeButton();
+  }
+
+  /**
+   * Create a minimal NIfTI header buffer from a NiiVue volume
+   * This is used when the original file was gzipped and we need uncompressed header
+   */
+  createNiftiHeaderFromVolume(vol) {
+    // NIfTI-1 header is 348 bytes, data starts at 352 (vox_offset)
+    const headerSize = 352;
+    const buffer = new ArrayBuffer(headerSize);
+    const view = new DataView(buffer);
+    const hdr = vol.hdr;
+
+    // sizeof_hdr (offset 0) - must be 348 for NIfTI-1
+    view.setInt32(0, 348, true);
+
+    // dim array (offset 40) - 8 int16 values
+    const dims = hdr.dims || [3, vol.dims[1], vol.dims[2], vol.dims[3], 1, 1, 1, 1];
+    for (let i = 0; i < 8; i++) {
+      view.setInt16(40 + i * 2, dims[i] || 0, true);
+    }
+
+    // datatype (offset 70) - we'll use FLOAT32 = 16
+    view.setInt16(70, 16, true);
+
+    // bitpix (offset 72) - 32 bits for float32
+    view.setInt16(72, 32, true);
+
+    // pixdim array (offset 76) - 8 float32 values
+    const pixdim = hdr.pixDims || [1, vol.pixDims[1] || 1, vol.pixDims[2] || 1, vol.pixDims[3] || 1, 1, 1, 1, 1];
+    for (let i = 0; i < 8; i++) {
+      view.setFloat32(76 + i * 4, pixdim[i] || 1, true);
+    }
+
+    // vox_offset (offset 108) - where data starts
+    view.setFloat32(108, headerSize, true);
+
+    // scl_slope (offset 112) and scl_inter (offset 116)
+    view.setFloat32(112, hdr.scl_slope || 1, true);
+    view.setFloat32(116, hdr.scl_inter || 0, true);
+
+    // xyzt_units (offset 123) - typically 2 (mm) + 8 (sec) = 10
+    view.setUint8(123, 10);
+
+    // qform_code (offset 252) and sform_code (offset 254)
+    view.setInt16(252, hdr.qform_code || 1, true);
+    view.setInt16(254, hdr.sform_code || 1, true);
+
+    // Affine matrix (srow_x, srow_y, srow_z at offsets 280, 296, 312)
+    if (hdr.affine) {
+      for (let i = 0; i < 4; i++) {
+        view.setFloat32(280 + i * 4, hdr.affine[0][i] || 0, true);  // srow_x
+        view.setFloat32(296 + i * 4, hdr.affine[1][i] || 0, true);  // srow_y
+        view.setFloat32(312 + i * 4, hdr.affine[2][i] || 0, true);  // srow_z
+      }
+    }
+
+    // magic (offset 344) - "n+1\0" for NIfTI-1
+    view.setUint8(344, 0x6E);  // 'n'
+    view.setUint8(345, 0x2B);  // '+'
+    view.setUint8(346, 0x31);  // '1'
+    view.setUint8(347, 0x00);  // '\0'
+
+    return buffer;
+  }
+
+  /**
+   * Combine multiple magnitude echoes using Root Sum of Squares (RSS)
+   * @returns {Float64Array} RSS-combined magnitude
+   */
+  async combineMagnitudeRSS() {
+    const nEchoes = this.multiEchoFiles.magnitude.length;
+    if (nEchoes === 0) throw new Error("No magnitude files");
+
+    if (nEchoes === 1) {
+      // Single echo - just return it as Float64Array
       const file = this.multiEchoFiles.magnitude[0].file;
-
-      // Store the original file bytes for header copying
-      this.magnitudeFileBytes = await file.arrayBuffer();
-
-      // Load magnitude into NiiVue
       const url = URL.createObjectURL(file);
       await this.nv.loadVolumes([{ url: url, name: file.name }]);
       URL.revokeObjectURL(url);
+      return new Float64Array(this.nv.volumes[0].img);
+    }
 
-      // Cache magnitude data for threshold updates
-      if (this.nv.volumes.length > 0) {
-        const vol = this.nv.volumes[0];
-        this.magnitudeData = vol.img;
-        // Find max without spread operator (avoids "too many arguments" for large arrays)
-        let max = -Infinity;
-        for (let i = 0; i < this.magnitudeData.length; i++) {
-          if (this.magnitudeData[i] > max) max = this.magnitudeData[i];
-        }
-        this.magnitudeMax = max;
-        // Store the full volume reference for header info
-        this.magnitudeVolume = vol;
+    // Load first echo to get dimensions
+    const firstFile = this.multiEchoFiles.magnitude[0].file;
+    const url = URL.createObjectURL(firstFile);
+    await this.nv.loadVolumes([{ url: url, name: firstFile.name }]);
+    URL.revokeObjectURL(url);
 
-        // Update mask preview
-        await this.updateMaskPreview();
+    const firstData = this.nv.volumes[0].img;
+    const nTotal = firstData.length;
+
+    // Initialize sum of squares
+    const rssData = new Float64Array(nTotal);
+
+    // Add squared values from first echo
+    for (let i = 0; i < nTotal; i++) {
+      rssData[i] = firstData[i] * firstData[i];
+    }
+
+    // Load and add remaining echoes
+    for (let e = 1; e < nEchoes; e++) {
+      const file = this.multiEchoFiles.magnitude[e].file;
+      const echoUrl = URL.createObjectURL(file);
+      await this.nv.loadVolumes([{ url: echoUrl, name: file.name }]);
+      URL.revokeObjectURL(echoUrl);
+
+      const echoData = this.nv.volumes[0].img;
+      for (let i = 0; i < nTotal; i++) {
+        rssData[i] += echoData[i] * echoData[i];
       }
+    }
 
+    // Take square root
+    for (let i = 0; i < nTotal; i++) {
+      rssData[i] = Math.sqrt(rssData[i]);
+    }
+
+    this.updateOutput(`Combined ${nEchoes} echoes with RSS`);
+    return rssData;
+  }
+
+  /**
+   * Apply bias field correction to magnitude data
+   * @param {Float64Array} magnitudeData - Input magnitude
+   * @returns {Float64Array} Bias-corrected magnitude
+   */
+  async applyBiasCorrection(magnitudeData) {
+    // Ensure worker is ready
+    if (!this.workerReady) {
+      await this.ensureWorkerReady();
+    }
+
+    // Get dimensions from NIfTI header
+    const srcView = new DataView(this.magnitudeFileBytes);
+    const nx = srcView.getInt16(42, true);
+    const ny = srcView.getInt16(44, true);
+    const nz = srcView.getInt16(46, true);
+    const vx = srcView.getFloat32(80, true) || 1;
+    const vy = srcView.getFloat32(84, true) || 1;
+    const vz = srcView.getFloat32(88, true) || 1;
+
+    // Call WASM bias correction via worker
+    return new Promise((resolve, reject) => {
+      const messageHandler = (event) => {
+        if (event.data.type === 'biasCorrection') {
+          this.worker.removeEventListener('message', messageHandler);
+          if (event.data.error) {
+            reject(new Error(event.data.error));
+          } else {
+            resolve(new Float64Array(event.data.result));
+          }
+        }
+      };
+
+      this.worker.addEventListener('message', messageHandler);
+      this.worker.postMessage({
+        type: 'biasCorrection',
+        data: {
+          magnitude: magnitudeData,
+          nx, ny, nz,
+          vx, vy, vz,
+          sigma_mm: 7.0,
+          nbox: 15
+        }
+      });
+    });
+  }
+
+  async previewMask() {
+    if (!this.maskPrepSettings.prepared) {
+      this.updateOutput("Please click 'Prepare' first");
+      return;
+    }
+
+    if (!this.preparedMagnitudeData) {
+      this.updateOutput("No prepared magnitude data available");
+      return;
+    }
+
+    try {
+      // Use the prepared data
+      this.magnitudeData = this.preparedMagnitudeData;
+      this.magnitudeMax = this.preparedMagnitudeMax;
+
+      // Enable threshold slider since user chose threshold-based masking
+      this.setThresholdSliderEnabled(true);
+
+      await this.updateMaskPreview();
       this.updateOutput("Adjust threshold slider to refine mask");
     } catch (error) {
       this.updateOutput(`Error: ${error.message}`);
@@ -961,20 +1406,6 @@ class QSMApp {
   async displayCurrentMask() {
     if (!this.currentMaskData) return;
 
-    // Count voxels in mask
-    let maskCount = 0;
-    const totalVoxels = this.currentMaskData.length;
-    for (let i = 0; i < totalVoxels; i++) {
-      if (this.currentMaskData[i] > 0) maskCount++;
-    }
-
-    // Update coverage display
-    const coverage = ((maskCount / totalVoxels) * 100).toFixed(1);
-    const coverageEl = document.getElementById('maskCoverage');
-    if (coverageEl) {
-      coverageEl.textContent = `Coverage: ${maskCount.toLocaleString()} / ${totalVoxels.toLocaleString()} voxels (${coverage}%)`;
-    }
-
     // Close any existing drawing layer
     if (this.nv.drawBitmap) {
       this.nv.closeDrawing();
@@ -990,14 +1421,54 @@ class QSMApp {
     const maskBlob = new Blob([maskNifti], { type: 'application/octet-stream' });
     const maskUrl = URL.createObjectURL(maskBlob);
 
+    // Get current opacity from slider
+    const opacitySlider = document.getElementById('overlayOpacity');
+    const opacity = opacitySlider ? parseInt(opacitySlider.value) / 100 : 0.5;
+
     await this.nv.addVolumeFromUrl({
       url: maskUrl,
       name: 'mask_preview.nii',
       colormap: 'red',
-      opacity: 0.5
+      opacity: opacity
     });
 
     URL.revokeObjectURL(maskUrl);
+
+    // Show overlay opacity control when overlay exists
+    this.showOverlayControl(true);
+  }
+
+  /**
+   * Update the opacity of all overlay volumes
+   */
+  updateOverlayOpacity(opacity) {
+    if (this.nv.volumes.length <= 1) return;
+
+    // Update all overlays (volumes after the first one)
+    for (let i = 1; i < this.nv.volumes.length; i++) {
+      this.nv.setOpacity(i, opacity);
+    }
+    this.nv.updateGLVolume();
+  }
+
+  /**
+   * Show or hide the overlay opacity control
+   */
+  showOverlayControl(show) {
+    const control = document.getElementById('overlayOpacityControl');
+    if (control) {
+      control.style.display = show ? 'flex' : 'none';
+    }
+  }
+
+  /**
+   * Update the download volume button state
+   */
+  updateDownloadVolumeButton() {
+    const btn = document.getElementById('downloadCurrentVolume');
+    if (btn) {
+      btn.disabled = !this.nv.volumes || this.nv.volumes.length === 0;
+    }
   }
 
   // 3D morphological erosion (6-connected)
@@ -1160,11 +1631,8 @@ class QSMApp {
       await this.nv.removeVolumeByIndex(1);
     }
 
-    // Update coverage display
-    const coverageEl = document.getElementById('maskCoverage');
-    if (coverageEl) {
-      coverageEl.textContent = 'No mask';
-    }
+    // Hide overlay control when no overlay
+    this.showOverlayControl(false);
 
     // Update run button state (mask no longer available)
     this.updateEchoInfo();
@@ -1204,6 +1672,9 @@ class QSMApp {
       while (this.nv.volumes.length > 1) {
         await this.nv.removeVolumeByIndex(1);
       }
+
+      // Hide overlay control when in drawing mode (no overlay)
+      this.showOverlayControl(false);
 
       // Create drawing and load current mask into it
       this.nv.createEmptyDrawing();
@@ -1481,6 +1952,11 @@ class QSMApp {
       this.disableAllStageButtons();
 
       // Send to worker with pipeline settings
+      // Include prepared magnitude if available (for MEDI gradient weighting and threshold mask)
+      const preparedMagnitude = this.preparedMagnitudeData
+        ? Array.from(this.preparedMagnitudeData)
+        : null;
+
       this.worker.postMessage({
         type: 'run',
         data: {
@@ -1490,6 +1966,7 @@ class QSMApp {
           magField,
           maskThreshold: this.maskThreshold,
           customMaskBuffer,
+          preparedMagnitude,
           pipelineSettings: this.pipelineSettings,
           skipStages
         }
@@ -1536,52 +2013,121 @@ class QSMApp {
     document.getElementById('stage-buttons').classList.remove('hidden');
   }
 
-  // Enable specific stage buttons when their data becomes available
-  enableStageButtons(stage) {
-    const buttonIds = {
-      'magnitude': ['showMagnitude', 'downloadMagnitude'],
-      'phase': ['showPhase', 'downloadPhase'],
-      'mask': ['showMask', 'downloadMask'],
-      'B0': ['showB0', 'downloadB0'],
-      'bgRemoved': ['showBgRemoved', 'downloadBgRemoved'],
-      'final': ['showDipoleInversed', 'downloadDipoleInversed']
-    };
+  // Create or update a stage button dynamically
+  addStageButton(stage, description) {
+    const container = document.getElementById('dynamicStageButtons');
+    if (!container) return;
 
-    const ids = buttonIds[stage];
-    if (ids) {
-      ids.forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) btn.disabled = false;
-      });
+    // Check if button already exists
+    const existingItem = document.getElementById(`stage-item-${stage}`);
+    if (existingItem) {
+      // Already exists, just make sure it's enabled
+      const showBtn = existingItem.querySelector('.stage-tab');
+      const downloadBtn = existingItem.querySelector('.download-btn');
+      if (showBtn) showBtn.disabled = false;
+      if (downloadBtn) downloadBtn.disabled = false;
+      return;
     }
+
+    // Track stage order
+    if (!this.stageOrder.includes(stage)) {
+      this.stageOrder.push(stage);
+    }
+
+    // Create display name from stage ID or description
+    const displayName = this.getStageDisplayName(stage, description);
+
+    // Create the stage item
+    const stageItem = document.createElement('div');
+    stageItem.className = 'stage-item';
+    stageItem.id = `stage-item-${stage}`;
+
+    // Show button
+    const showBtn = document.createElement('button');
+    showBtn.className = 'btn btn-secondary btn-sm stage-tab';
+    showBtn.textContent = displayName;
+    showBtn.title = description || stage;
+    showBtn.addEventListener('click', () => this.showStage(stage));
+
+    // Download button
+    const downloadBtn = document.createElement('button');
+    downloadBtn.className = 'btn btn-sm download-btn';
+    downloadBtn.title = `Download ${displayName}`;
+    downloadBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+    `;
+    downloadBtn.addEventListener('click', () => this.downloadStage(stage));
+
+    stageItem.appendChild(showBtn);
+    stageItem.appendChild(downloadBtn);
+    container.appendChild(stageItem);
   }
 
-  // Disable all stage buttons (called at pipeline start)
+  // Get a user-friendly display name for a stage
+  getStageDisplayName(stage, description) {
+    // Map of stage IDs to short display names
+    const nameMap = {
+      'magnitude': 'Magnitude',
+      'phase': 'Phase',
+      'mask': 'Mask',
+      'B0': 'B0 Field',
+      'bgRemoved': 'Local Field',
+      'final': 'QSM',
+      'tfs': 'TFS',
+      'lfsStage1': 'LFS 1',
+      'lfsStage2': 'LFS 2',
+      'chiStage1': 'χ1',
+      'chiStage2': 'χ2',
+      'vasculature': 'Vessels',
+      'vascDetect': 'Vessels',
+      'frangi': 'Frangi',
+      'vascMask': 'Vasc Mask',
+      'bottomHat': 'Bottom Hat',
+      'unwrapped': 'Unwrapped'
+    };
+
+    // Use mapped name, or extract short name from description, or use stage ID
+    if (nameMap[stage]) {
+      return nameMap[stage];
+    }
+
+    // Try to extract a short name from description (first 2 words)
+    if (description) {
+      const words = description.split(' ').slice(0, 2).join(' ');
+      if (words.length <= 15) return words;
+    }
+
+    // Fallback to stage ID (camelCase to Title Case)
+    return stage.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim();
+  }
+
+  // Clear all dynamic stage buttons (called at pipeline start)
+  clearStageButtons() {
+    const container = document.getElementById('dynamicStageButtons');
+    if (container) {
+      container.innerHTML = '';
+    }
+    this.stageOrder = [];
+  }
+
+  // Legacy method - now calls addStageButton
+  enableStageButtons(stage) {
+    this.addStageButton(stage);
+  }
+
+  // Legacy method - now calls clearStageButtons
   disableAllStageButtons() {
-    const allButtons = [
-      'showMagnitude', 'downloadMagnitude',
-      'showPhase', 'downloadPhase',
-      'showMask', 'downloadMask',
-      'showB0', 'downloadB0',
-      'showBgRemoved', 'downloadBgRemoved',
-      'showDipoleInversed', 'downloadDipoleInversed'
-    ];
-    allButtons.forEach(id => {
-      const btn = document.getElementById(id);
-      if (btn) btn.disabled = true;
-    });
+    this.clearStageButtons();
   }
 
   // Clear all cached results (called at pipeline start)
   clearResults() {
-    this.results = {
-      magnitude: { path: null, file: null },
-      phase: { path: null, file: null },
-      mask: { path: null, file: null },
-      B0: { path: null, file: null },
-      bgRemoved: { path: null, file: null },
-      final: { path: null, file: null }
-    };
+    this.results = {};
+    this.stageOrder = [];
   }
 
   updateDownloadButtons() {
@@ -1599,13 +2145,14 @@ class QSMApp {
         return;
       }
 
-      // For single 3D volume stages (mask, B0, bgRemoved, final), hide echo navigation
+      // For single 3D volume stages, hide echo navigation
       this.hideEchoNavigation();
 
-      // Check if we have cached results first
+      // Check if we have cached results
       if (this.results[stage]?.file) {
-        this.updateOutput(`Displaying ${stage}...`);
-        await this.loadAndVisualizeFile(this.results[stage].file, stage);
+        const description = this.results[stage].description || stage;
+        this.updateOutput(`Displaying ${description}...`);
+        await this.loadAndVisualizeFile(this.results[stage].file, description);
         return;
       }
 
@@ -1625,8 +2172,8 @@ class QSMApp {
       // Show the stage buttons section as soon as first result arrives
       this.showStageButtons();
 
-      // Enable the buttons for this specific stage
-      this.enableStageButtons(stage);
+      // Add/enable the button for this stage (with description for display name)
+      this.addStageButton(stage, description);
 
       // Hide echo navigation - pipeline results are single 3D volumes, not multi-echo
       this.hideEchoNavigation();
@@ -1638,12 +2185,36 @@ class QSMApp {
       // Load in viewer
       await this.loadAndVisualizeFile(file, description);
 
-      // Cache the result
-      this.results[stage] = { file: file, path: `${stage}.nii` };
+      // Cache the result with description
+      this.results[stage] = { file: file, path: `${stage}.nii`, description: description };
 
       this.updateOutput(`Displaying: ${description}`);
     } catch (error) {
       this.updateOutput(`Error displaying live data: ${error.message}`);
+    }
+  }
+
+  // Cache stage data without displaying (for auxiliary outputs like vasculature mask)
+  cacheStageData(data) {
+    try {
+      const { stage, data: stageBytes, description } = data;
+
+      // Show the stage buttons section
+      this.showStageButtons();
+
+      // Add/enable the button for this stage (with description for display name)
+      this.addStageButton(stage, description);
+
+      // Create file from bytes
+      const blob = new Blob([stageBytes], { type: 'application/octet-stream' });
+      const file = new File([blob], `${stage}.nii`, { type: 'application/octet-stream' });
+
+      // Cache the result (but don't display)
+      this.results[stage] = { file: file, path: `${stage}.nii`, description: description };
+
+      this.updateOutput(`Cached: ${description}`);
+    } catch (error) {
+      this.updateOutput(`Error caching data: ${error.message}`);
     }
   }
 
@@ -1662,6 +2233,123 @@ class QSMApp {
     URL.revokeObjectURL(url);
   }
 
+  /**
+   * Download the currently displayed volume as a NIfTI file
+   */
+  downloadCurrentVolume() {
+    if (!this.nv.volumes || this.nv.volumes.length === 0) {
+      this.updateOutput("No volume loaded to download");
+      return;
+    }
+
+    const vol = this.nv.volumes[0];
+    const name = vol.name || 'volume';
+    const baseName = name.replace(/\.(nii|nii\.gz)$/i, '');
+
+    // Create NIfTI from volume data
+    const niftiBuffer = this.createNiftiFromVolume(vol);
+
+    // Download
+    const blob = new Blob([niftiBuffer], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${baseName}.nii`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    this.updateOutput(`Downloaded: ${baseName}.nii`);
+  }
+
+  /**
+   * Create a NIfTI buffer from a NiiVue volume
+   */
+  createNiftiFromVolume(vol) {
+    const hdr = vol.hdr;
+    const img = vol.img;
+
+    // Determine data type and bytes per voxel
+    let datatype = 16;  // FLOAT32 by default
+    let bitpix = 32;
+    let bytesPerVoxel = 4;
+
+    if (img instanceof Float64Array) {
+      datatype = 64;  // FLOAT64
+      bitpix = 64;
+      bytesPerVoxel = 8;
+    } else if (img instanceof Int16Array) {
+      datatype = 4;   // INT16
+      bitpix = 16;
+      bytesPerVoxel = 2;
+    } else if (img instanceof Uint8Array) {
+      datatype = 2;   // UINT8
+      bitpix = 8;
+      bytesPerVoxel = 1;
+    }
+
+    const headerSize = 352;
+    const dataSize = img.length * bytesPerVoxel;
+    const buffer = new ArrayBuffer(headerSize + dataSize);
+    const view = new DataView(buffer);
+
+    // sizeof_hdr
+    view.setInt32(0, 348, true);
+
+    // dim array
+    const dims = hdr.dims || [3, vol.dims[1], vol.dims[2], vol.dims[3], 1, 1, 1, 1];
+    for (let i = 0; i < 8; i++) {
+      view.setInt16(40 + i * 2, dims[i] || 0, true);
+    }
+
+    // datatype and bitpix
+    view.setInt16(70, datatype, true);
+    view.setInt16(72, bitpix, true);
+
+    // pixdim
+    const pixdim = hdr.pixDims || [1, 1, 1, 1, 1, 1, 1, 1];
+    for (let i = 0; i < 8; i++) {
+      view.setFloat32(76 + i * 4, pixdim[i] || 1, true);
+    }
+
+    // vox_offset
+    view.setFloat32(108, headerSize, true);
+
+    // scl_slope and scl_inter
+    view.setFloat32(112, hdr.scl_slope || 1, true);
+    view.setFloat32(116, hdr.scl_inter || 0, true);
+
+    // xyzt_units
+    view.setUint8(123, 10);  // mm + sec
+
+    // qform_code and sform_code
+    view.setInt16(252, hdr.qform_code || 1, true);
+    view.setInt16(254, hdr.sform_code || 1, true);
+
+    // Affine matrix
+    if (hdr.affine) {
+      for (let i = 0; i < 4; i++) {
+        view.setFloat32(280 + i * 4, hdr.affine[0][i] || 0, true);
+        view.setFloat32(296 + i * 4, hdr.affine[1][i] || 0, true);
+        view.setFloat32(312 + i * 4, hdr.affine[2][i] || 0, true);
+      }
+    }
+
+    // magic
+    view.setUint8(344, 0x6E);  // 'n'
+    view.setUint8(345, 0x2B);  // '+'
+    view.setUint8(346, 0x31);  // '1'
+    view.setUint8(347, 0x00);
+
+    // Copy image data
+    const dataView = new Uint8Array(buffer, headerSize);
+    const imgBytes = new Uint8Array(img.buffer, img.byteOffset, img.byteLength);
+    dataView.set(imgBytes);
+
+    return buffer;
+  }
+
   updateOutput(message) {
     const consoleOutput = document.getElementById('consoleOutput');
     if (consoleOutput) {
@@ -1676,11 +2364,107 @@ class QSMApp {
     console.log(message);
   }
 
+  /**
+   * Auto-detect optimal threshold using Otsu's method and set the slider
+   */
+  autoDetectThreshold() {
+    if (!this.preparedMagnitudeData) {
+      this.updateOutput("Please click Prepare first");
+      return;
+    }
+
+    this.updateOutput("Computing optimal threshold (Otsu)...");
+
+    const data = this.preparedMagnitudeData;
+    const numBins = 256;
+
+    // Find min/max
+    let minVal = Infinity, maxVal = -Infinity;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] < minVal) minVal = data[i];
+      if (data[i] > maxVal) maxVal = data[i];
+    }
+
+    if (maxVal - minVal < 1e-10) {
+      this.updateOutput("Cannot compute threshold: constant image");
+      return;
+    }
+
+    // Build histogram
+    const histogram = new Array(numBins).fill(0);
+    const binWidth = (maxVal - minVal) / numBins;
+
+    for (let i = 0; i < data.length; i++) {
+      let bin = Math.floor((data[i] - minVal) / binWidth);
+      bin = Math.min(bin, numBins - 1);
+      histogram[bin]++;
+    }
+
+    // Compute Otsu threshold
+    const totalPixels = data.length;
+    let sumTotal = 0;
+    for (let i = 0; i < numBins; i++) {
+      sumTotal += i * histogram[i];
+    }
+
+    let sumBackground = 0;
+    let weightBackground = 0;
+    let maxVariance = 0;
+    let optimalThresholdBin = 0;
+
+    for (let t = 0; t < numBins; t++) {
+      weightBackground += histogram[t];
+      if (weightBackground === 0) continue;
+
+      const weightForeground = totalPixels - weightBackground;
+      if (weightForeground === 0) break;
+
+      sumBackground += t * histogram[t];
+
+      const meanBackground = sumBackground / weightBackground;
+      const meanForeground = (sumTotal - sumBackground) / weightForeground;
+
+      const variance = weightBackground * weightForeground *
+        Math.pow(meanBackground - meanForeground, 2);
+
+      if (variance > maxVariance) {
+        maxVariance = variance;
+        optimalThresholdBin = t;
+      }
+    }
+
+    // Convert bin to threshold value
+    const thresholdValue = minVal + (optimalThresholdBin + 0.5) * binWidth;
+
+    // Convert to percentage of max (what the slider uses)
+    const thresholdPercent = Math.round((thresholdValue / maxVal) * 100);
+    const clampedPercent = Math.max(1, Math.min(100, thresholdPercent));
+
+    // Update slider and display
+    const slider = document.getElementById('maskThreshold');
+    if (slider) {
+      slider.value = clampedPercent;
+      this.maskThreshold = clampedPercent;
+      document.getElementById('thresholdLabel').textContent = `Threshold (${clampedPercent}%)`;
+    }
+
+    this.updateOutput(`Otsu threshold: ${clampedPercent}% (${thresholdValue.toFixed(1)})`);
+
+    // Only trigger mask preview if threshold slider is enabled (user has clicked Threshold button)
+    const thresholdSlider = document.getElementById('maskThreshold');
+    if (thresholdSlider && !thresholdSlider.disabled && this.magnitudeData && !this.maskUpdating) {
+      this.updateMaskPreview();
+    }
+  }
+
   async runBET() {
     if (this.multiEchoFiles.magnitude.length === 0) {
       this.updateOutput("No magnitude files uploaded - please load magnitude data first");
       return;
     }
+
+    // Disable threshold slider since user chose BET-based masking
+    this.setThresholdSliderEnabled(false);
 
     try {
       this.updateOutput("Starting BET brain extraction...");
@@ -1692,17 +2476,11 @@ class QSMApp {
         pipelineSection.classList.remove('section-disabled');
       }
 
-      // Initialize worker if needed
-      this.setupWorker();
+      // Initialize worker if needed (must await to ensure WASM is loaded)
+      await this.initializeWorker();
 
-      // Load magnitude file if not already cached
-      if (!this.magnitudeFileBytes) {
-        const file = this.multiEchoFiles.magnitude[0].file;
-        this.magnitudeFileBytes = await file.arrayBuffer();
-      }
-
-      // Load magnitude into NiiVue to get dimensions
-      if (!this.magnitudeVolume) {
+      // Load magnitude into NiiVue to get dimensions (handles gzip decompression)
+      if (!this.magnitudeVolume || this.nv.volumes.length === 0) {
         const file = this.multiEchoFiles.magnitude[0].file;
         const url = URL.createObjectURL(file);
         await this.nv.loadVolumes([{ url: url, name: file.name }]);
@@ -1719,6 +2497,11 @@ class QSMApp {
         }
       }
 
+      // Create header from volume if not already done (handles gzipped files)
+      if (!this.magnitudeFileBytes || this.magnitudeFileBytes.byteLength < 348) {
+        this.magnitudeFileBytes = this.createNiftiHeaderFromVolume(this.magnitudeVolume);
+      }
+
       // Extract dimensions from NIfTI header
       const srcView = new DataView(this.magnitudeFileBytes);
       const nx = srcView.getInt16(42, true);
@@ -1733,6 +2516,40 @@ class QSMApp {
       const voxelSize = [dz || 1, dy || 1, dx || 1]; // z, y, x order for Python
 
       this.updateOutput(`Image dimensions: ${nx}x${ny}x${nz}, voxel size: ${dx.toFixed(2)}x${dy.toFixed(2)}x${dz.toFixed(2)}mm`);
+
+      // Create full NIfTI buffer with header + data for BET
+      // Use prepared data if available, otherwise use raw magnitude data
+      const magData = this.preparedMagnitudeData || this.magnitudeData;
+      if (!magData) {
+        throw new Error("No magnitude data available - run Prepare first");
+      }
+
+      // Create NIfTI from prepared/magnitude data (not raw volume)
+      const voxOffset = srcView.getFloat32(108, true);
+      const headerSize = Math.ceil(voxOffset);
+
+      const dataSize = magData.length * 8; // 8 bytes per float64
+      const buffer = new ArrayBuffer(headerSize + dataSize);
+      const destBytes = new Uint8Array(buffer);
+      const destView = new DataView(buffer);
+
+      // Copy header
+      destBytes.set(new Uint8Array(this.magnitudeFileBytes).slice(0, headerSize));
+
+      // Update datatype to FLOAT64 (64) at offset 70
+      destView.setInt16(70, 64, true);
+      // Update bitpix to 64 at offset 72
+      destView.setInt16(72, 64, true);
+
+      // Make it 3D
+      destView.setInt16(40, 3, true);
+      destView.setInt16(48, 1, true);
+
+      // Copy prepared magnitude data
+      const dataView = new Float64Array(buffer, headerSize);
+      dataView.set(magData);
+
+      const magnitudeNifti = buffer;
 
       // Set up handler for BET messages
       const betHandler = (e) => {
@@ -1763,7 +2580,7 @@ class QSMApp {
       this.worker.postMessage({
         type: 'runBET',
         data: {
-          magnitudeBuffer: this.magnitudeFileBytes,
+          magnitudeBuffer: magnitudeNifti,
           voxelSize: voxelSize,
           fractionalIntensity: this.betSettings.fractionalIntensity,
           iterations: this.betSettings.iterations,
@@ -1914,6 +2731,7 @@ class QSMApp {
     document.getElementById('rtsSettings').style.display = dipoleMethod === 'rts' ? 'block' : 'none';
     document.getElementById('nltvSettings').style.display = dipoleMethod === 'nltv' ? 'block' : 'none';
     document.getElementById('mediSettings').style.display = dipoleMethod === 'medi' ? 'block' : 'none';
+    document.getElementById('ilsqrSettings').style.display = dipoleMethod === 'ilsqr' ? 'block' : 'none';
 
     // TKD settings
     document.getElementById('tkdThreshold').value = this.pipelineSettings.tkd.threshold;
@@ -1953,6 +2771,10 @@ class QSMApp {
     document.getElementById('mediSmvRadiusGroup').style.display = this.pipelineSettings.medi.smv ? 'block' : 'none';
     document.getElementById('mediMerit').checked = this.pipelineSettings.medi.merit;
 
+    // iLSQR settings
+    document.getElementById('ilsqrTol').value = this.pipelineSettings.ilsqr?.tol || 0.01;
+    document.getElementById('ilsqrMaxIter').value = this.pipelineSettings.ilsqr?.maxIter || 50;
+
     document.getElementById('pipelineSettingsModal').classList.add('active');
   }
 
@@ -1970,6 +2792,8 @@ class QSMApp {
     const combinedMethod = document.getElementById('combinedMethod').value;
     const multiEchoMethod = document.getElementById('multiEchoMethod').value;
     const isTgv = combinedMethod === 'tgv';
+    const isQsmart = combinedMethod === 'qsmart';
+    const isCombined = isTgv || isQsmart;  // Methods that handle BG removal + inversion together
     const isMcpc3ds = multiEchoMethod === 'mcpc3ds';
 
     // Count echoes from loaded files
@@ -1979,8 +2803,13 @@ class QSMApp {
     // TGV settings - show only when TGV selected
     document.getElementById('tgvSettings').style.display = isTgv ? 'block' : 'none';
 
-    // Multi-echo section - show only when multi-echo data loaded
-    document.getElementById('multiEchoSection').style.display = isMultiEcho ? 'block' : 'none';
+    // QSMART settings - show only when QSMART selected
+    const qsmartSettings = document.getElementById('qsmartSettings');
+    if (qsmartSettings) qsmartSettings.style.display = isQsmart ? 'block' : 'none';
+
+    // Multi-echo section - show only when multi-echo data loaded AND standard pipeline
+    // (TGV and QSMART have their own multi-echo handling)
+    document.getElementById('multiEchoSection').style.display = (isMultiEcho && !isCombined) ? 'block' : 'none';
 
     // Within multi-echo section:
     // - Unwrap settings: show for OLS methods, hide for MCPC-3D-S
@@ -1994,12 +2823,13 @@ class QSMApp {
     // Single-echo unwrap section - show only for single-echo + standard pipeline
     const singleEchoUnwrapSection = document.getElementById('singleEchoUnwrapSection');
     if (singleEchoUnwrapSection) {
-      singleEchoUnwrapSection.style.display = (!isMultiEcho && !isTgv) ? 'block' : 'none';
+      singleEchoUnwrapSection.style.display = (!isMultiEcho && !isCombined) ? 'block' : 'none';
     }
 
     // Background removal and dipole inversion - show only for standard pipeline
-    document.getElementById('bgRemovalSection').style.display = isTgv ? 'none' : 'block';
-    document.getElementById('dipoleInversionSection').style.display = isTgv ? 'none' : 'block';
+    // (TGV and QSMART handle these internally)
+    document.getElementById('bgRemovalSection').style.display = isCombined ? 'none' : 'block';
+    document.getElementById('dipoleInversionSection').style.display = isCombined ? 'none' : 'block';
   }
 
   resetPipelineSettings() {
@@ -2013,6 +2843,22 @@ class QSMApp {
     document.getElementById('tgvRegularization').value = 2;
     document.getElementById('tgvIterations').value = 1000;
     document.getElementById('tgvErosions').value = 3;
+
+    // QSMART defaults
+    document.getElementById('qsmartSdfSigma1Stage1').value = 10;
+    document.getElementById('qsmartSdfSigma2Stage1').value = 0;
+    document.getElementById('qsmartSdfSigma1Stage2').value = 8;
+    document.getElementById('qsmartSdfSigma2Stage2').value = 2;
+    document.getElementById('qsmartSdfSpatialRadius').value = 8;
+    document.getElementById('qsmartSdfLowerLim').value = 0.6;
+    document.getElementById('qsmartSdfCurvConstant').value = 500;
+    document.getElementById('qsmartVascSphereRadius').value = 8;
+    document.getElementById('qsmartFrangiScaleMin').value = 1.0;
+    document.getElementById('qsmartFrangiScaleMax').value = 10.0;
+    document.getElementById('qsmartFrangiScaleRatio').value = 2.0;
+    document.getElementById('qsmartFrangiC').value = 500;
+    document.getElementById('qsmartIlsqrTol').value = 0.01;
+    document.getElementById('qsmartIlsqrMaxIter').value = 50;
 
     // Multi-echo method - default to OLS with offset
     document.getElementById('multiEchoMethod').value = 'mcpc3ds';
@@ -2074,6 +2920,7 @@ class QSMApp {
     document.getElementById('rtsSettings').style.display = 'block';
     document.getElementById('nltvSettings').style.display = 'none';
     document.getElementById('mediSettings').style.display = 'none';
+    document.getElementById('ilsqrSettings').style.display = 'none';
 
     // TKD
     document.getElementById('tkdThreshold').value = 0.15;
@@ -2112,6 +2959,10 @@ class QSMApp {
     document.getElementById('mediSmvRadius').value = 5;
     document.getElementById('mediSmvRadiusGroup').style.display = 'none';
     document.getElementById('mediMerit').checked = false;
+
+    // iLSQR
+    document.getElementById('ilsqrTol').value = 0.01;
+    document.getElementById('ilsqrMaxIter').value = 50;
   }
 
   runPipelineWithSettings() {
@@ -2136,6 +2987,23 @@ class QSMApp {
         regularization: parseInt(document.getElementById('tgvRegularization').value),
         iterations: parseInt(document.getElementById('tgvIterations').value),
         erosions: parseInt(document.getElementById('tgvErosions').value)
+      },
+      qsmart: {
+        sdfSigma1Stage1: parseFloat(document.getElementById('qsmartSdfSigma1Stage1').value),
+        sdfSigma2Stage1: parseFloat(document.getElementById('qsmartSdfSigma2Stage1').value),
+        sdfSigma1Stage2: parseFloat(document.getElementById('qsmartSdfSigma1Stage2').value),
+        sdfSigma2Stage2: parseFloat(document.getElementById('qsmartSdfSigma2Stage2').value),
+        sdfSpatialRadius: parseInt(document.getElementById('qsmartSdfSpatialRadius').value),
+        sdfLowerLim: parseFloat(document.getElementById('qsmartSdfLowerLim').value),
+        sdfCurvConstant: parseFloat(document.getElementById('qsmartSdfCurvConstant').value),
+        // Vasculature parameters in mm (auto-scaled to voxels based on image resolution)
+        vascSphereRadiusMm: parseFloat(document.getElementById('qsmartVascSphereRadius').value),
+        frangiScaleMinMm: parseFloat(document.getElementById('qsmartFrangiScaleMin').value),
+        frangiScaleMaxMm: parseFloat(document.getElementById('qsmartFrangiScaleMax').value),
+        frangiScaleRatioMm: parseFloat(document.getElementById('qsmartFrangiScaleRatio').value),
+        frangiC: parseFloat(document.getElementById('qsmartFrangiC').value),
+        ilsqrTol: parseFloat(document.getElementById('qsmartIlsqrTol').value),
+        ilsqrMaxIter: parseInt(document.getElementById('qsmartIlsqrMaxIter').value)
       },
       unwrapMethod: unwrapMethod,
       multiEchoMethod: document.getElementById('multiEchoMethod').value,
@@ -2216,6 +3084,10 @@ class QSMApp {
         smvRadius: parseFloat(document.getElementById('mediSmvRadius').value),
         merit: document.getElementById('mediMerit').checked,
         dataWeighting: 1
+      },
+      ilsqr: {
+        tol: parseFloat(document.getElementById('ilsqrTol').value),
+        maxIter: parseInt(document.getElementById('ilsqrMaxIter').value)
       }
     };
 

@@ -35,12 +35,6 @@
         </div>
         <h1>QSMbly <span>Quantitative Susceptibility Mapping</span></h1>
       </div>
-      <div class="header-status">
-        <div class="status-indicator">
-          <div class="status-dot loading" id="pyodideStatus"></div>
-          <span id="statusText">Loading...</span>
-        </div>
-      </div>
     </header>
 
     <!-- Sidebar -->
@@ -165,16 +159,28 @@
           Masking
         </h2>
 
+        <!-- Mask Input Preparation -->
         <div class="param-group">
-          <div class="threshold-header">
-            <label class="param-label" for="maskThreshold">Threshold</label>
-            <span class="threshold-value" id="thresholdValue">15%</span>
-          </div>
-          <input type="range" id="maskThreshold" min="1" max="50" value="15" class="threshold-slider">
-          <div class="threshold-info">
-            <span id="maskCoverage">-</span>
-          </div>
+          <label class="param-label" for="maskInputSource">Mask Input</label>
+          <select id="maskInputSource">
+            <option value="first_echo">First-echo magnitude</option>
+            <option value="combined" selected>Combined magnitude (RSS)</option>
+          </select>
         </div>
+
+        <div class="param-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="applyBiasCorrection" checked>
+            <span>Apply bias correction</span>
+          </label>
+        </div>
+
+        <button class="btn btn-secondary btn-sm" id="prepareMaskInput" style="width: 100%; margin-bottom: var(--space-sm);" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
+          </svg>
+          Prepare
+        </button>
 
         <div class="mask-preview-buttons">
           <button class="btn btn-secondary btn-sm" id="previewMask" title="Generate mask from threshold" disabled>
@@ -191,6 +197,20 @@
             </svg>
             BET
           </button>
+        </div>
+
+        <!-- Threshold Slider (enabled only after Threshold button is pressed) -->
+        <div class="param-group" id="thresholdSliderGroup" style="margin-top: var(--space-sm);">
+          <div class="threshold-header">
+            <label class="param-label" for="maskThreshold" id="thresholdLabel">Threshold</label>
+            <button class="btn-icon" id="autoThreshold" title="Reset to Otsu threshold" disabled>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+            </button>
+          </div>
+          <input type="range" id="maskThreshold" min="1" max="100" value="15" class="threshold-slider" disabled>
         </div>
 
         <!-- Morphological Operations -->
@@ -274,7 +294,7 @@
         </div>
       </section>
 
-      <!-- Results Section -->
+      <!-- Results Section - dynamically populated -->
       <section class="sidebar-section hidden" id="stage-buttons">
         <h2 class="section-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -283,74 +303,8 @@
           </svg>
           Pipeline Results
         </h2>
-
-        <div class="stage-buttons-grid">
-          <div class="stage-item">
-            <button class="btn btn-secondary btn-sm stage-tab" id="showMagnitude" disabled>Magnitude</button>
-            <button class="btn btn-sm" id="downloadMagnitude" title="Download" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </button>
-          </div>
-
-          <div class="stage-item">
-            <button class="btn btn-secondary btn-sm stage-tab" id="showPhase" disabled>Phase</button>
-            <button class="btn btn-sm" id="downloadPhase" title="Download" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </button>
-          </div>
-
-          <div class="stage-item">
-            <button class="btn btn-secondary btn-sm stage-tab" id="showMask" disabled>Mask</button>
-            <button class="btn btn-sm" id="downloadMask" title="Download" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </button>
-          </div>
-
-          <div class="stage-item">
-            <button class="btn btn-secondary btn-sm stage-tab" id="showB0" disabled>B0 Field</button>
-            <button class="btn btn-sm" id="downloadB0" title="Download" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </button>
-          </div>
-
-          <div class="stage-item">
-            <button class="btn btn-secondary btn-sm stage-tab" id="showBgRemoved" disabled>Local Field</button>
-            <button class="btn btn-sm" id="downloadBgRemoved" title="Download" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </button>
-          </div>
-
-          <div class="stage-item">
-            <button class="btn btn-secondary btn-sm stage-tab" id="showDipoleInversed" disabled>QSM</button>
-            <button class="btn btn-sm" id="downloadDipoleInversed" title="Download" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </button>
-          </div>
-        </div>
+        <!-- Stage buttons are dynamically added here -->
+        <div class="stage-buttons-grid" id="dynamicStageButtons"></div>
       </section>
     </aside>
 
@@ -397,6 +351,11 @@
             <input type="checkbox" id="interpolation">
             <span>Interp</span>
           </label>
+          <label class="opacity-control" id="overlayOpacityControl" style="display: none;">
+            <span>Overlay</span>
+            <input type="range" id="overlayOpacity" min="0" max="100" value="50">
+            <span id="overlayOpacityValue">50%</span>
+          </label>
           <select class="colormap-select" id="colormapSelect">
             <option value="gray">Gray</option>
             <option value="hot">Hot</option>
@@ -404,6 +363,13 @@
             <option value="viridis">Viridis</option>
             <option value="plasma">Plasma</option>
           </select>
+          <button class="btn btn-sm btn-icon" id="downloadCurrentVolume" title="Download current image as NIfTI" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -431,7 +397,7 @@
     <!-- Footer -->
     <footer class="app-footer">
       <span>QSMbly | Browser-based Quantitative Susceptibility Mapping</span>
-      <span>Powered by Pyodide, NiiVue &amp; ROMEO</span>
+      <span>Powered by Rust, WebAssembly &amp; NiiVue</span>
     </footer>
   </div>
 
@@ -452,6 +418,7 @@
             <select id="combinedMethod">
               <option value="none" selected>Standard Pipeline (BG Removal + Inversion)</option>
               <option value="tgv">TGV Single-Step</option>
+              <option value="qsmart">QSMART (Two-stage Vessel Artifact Reduction)</option>
             </select>
           </div>
 
@@ -477,6 +444,82 @@
             <div class="param-group">
               <label class="param-label" for="tgvErosions">Mask Erosions</label>
               <input type="number" id="tgvErosions" value="3" min="0" max="10" step="1">
+            </div>
+          </div>
+
+          <!-- QSMART Settings -->
+          <div id="qsmartSettings" class="method-settings" style="display: none;">
+            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
+              QSMART uses two-stage reconstruction with Spatially Dependent Filtering (SDF)
+              to reduce streaking artifacts from vessels and veins. Stage 1 processes the
+              entire ROI, Stage 2 processes tissue only (excluding vessels detected via Frangi).
+            </div>
+
+            <h5 style="margin: var(--space-sm) 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">Stage 1: Whole ROI</h5>
+            <div class="param-group">
+              <label class="param-label" for="qsmartSdfSigma1Stage1">SDF Sigma 1 (voxels)</label>
+              <input type="number" id="qsmartSdfSigma1Stage1" value="10" min="1" max="30" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="qsmartSdfSigma2Stage1">SDF Sigma 2 (voxels)</label>
+              <input type="number" id="qsmartSdfSigma2Stage1" value="0" min="0" max="30" step="1">
+            </div>
+
+            <h5 style="margin: var(--space-sm) 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">Stage 2: Tissue Only</h5>
+            <div class="param-group">
+              <label class="param-label" for="qsmartSdfSigma1Stage2">SDF Sigma 1 (voxels)</label>
+              <input type="number" id="qsmartSdfSigma1Stage2" value="8" min="1" max="30" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="qsmartSdfSigma2Stage2">SDF Sigma 2 (voxels)</label>
+              <input type="number" id="qsmartSdfSigma2Stage2" value="2" min="0" max="30" step="1">
+            </div>
+
+            <h5 style="margin: var(--space-sm) 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">SDF Parameters</h5>
+            <div class="param-group">
+              <label class="param-label" for="qsmartSdfSpatialRadius">Spatial Radius (voxels)</label>
+              <input type="number" id="qsmartSdfSpatialRadius" value="8" min="1" max="20" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="qsmartSdfLowerLim">Lower Limit (proximity)</label>
+              <input type="number" id="qsmartSdfLowerLim" value="0.6" min="0.1" max="1.0" step="0.1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="qsmartSdfCurvConstant">Curvature Constant</label>
+              <input type="number" id="qsmartSdfCurvConstant" value="500" min="100" max="2000" step="50">
+            </div>
+
+            <h5 style="margin: var(--space-sm) 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">Vasculature Detection (Frangi)</h5>
+            <p style="font-size: 0.7rem; color: var(--color-text-muted); margin: 0 0 var(--space-xs);">Parameters in mm - auto-scaled to voxels</p>
+            <div class="param-group">
+              <label class="param-label" for="qsmartVascSphereRadius">Bottom-hat Radius (mm)</label>
+              <input type="number" id="qsmartVascSphereRadius" value="8" min="2" max="20" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="qsmartFrangiScaleMin">Min Vessel Radius (mm)</label>
+              <input type="number" id="qsmartFrangiScaleMin" value="1.0" min="0.5" max="5.0" step="0.5">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="qsmartFrangiScaleMax">Max Vessel Radius (mm)</label>
+              <input type="number" id="qsmartFrangiScaleMax" value="10.0" min="1.0" max="20.0" step="1.0">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="qsmartFrangiScaleRatio">Scale Step (mm)</label>
+              <input type="number" id="qsmartFrangiScaleRatio" value="2.0" min="0.5" max="5.0" step="0.5">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="qsmartFrangiC">Frangi C (noise threshold)</label>
+              <input type="number" id="qsmartFrangiC" value="500" min="100" max="2000" step="50">
+            </div>
+
+            <h5 style="margin: var(--space-sm) 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">iLSQR Inversion</h5>
+            <div class="param-group">
+              <label class="param-label" for="qsmartIlsqrTol">Tolerance</label>
+              <input type="number" id="qsmartIlsqrTol" value="0.01" min="0.001" max="0.1" step="0.001">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="qsmartIlsqrMaxIter">Max Iterations</label>
+              <input type="number" id="qsmartIlsqrMaxIter" value="50" min="10" max="200" step="10">
             </div>
           </div>
         </div>
@@ -700,6 +743,7 @@
               <option value="rts">RTS (Fast - iterative)</option>
               <option value="nltv">NLTV (Slow - non-local TV)</option>
               <option value="medi">MEDI (Morphology-weighted)</option>
+              <option value="ilsqr">iLSQR (Streaking artifact removal)</option>
             </select>
           </div>
 
@@ -844,6 +888,21 @@
               <label class="param-label" for="mediMerit">
                 <input type="checkbox" id="mediMerit"> Enable Merit adjustment
               </label>
+            </div>
+          </div>
+
+          <!-- iLSQR Settings -->
+          <div id="ilsqrSettings" class="method-settings" style="display: none;">
+            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
+              Iterative LSQR with streaking artifact removal (Li et al., 2015)
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="ilsqrTol">Tolerance</label>
+              <input type="number" id="ilsqrTol" value="0.01" min="0.001" max="0.1" step="0.001">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="ilsqrMaxIter">Max Iterations</label>
+              <input type="number" id="ilsqrMaxIter" value="50" min="10" max="200" step="10">
             </div>
           </div>
         </div>
@@ -1094,19 +1153,6 @@
       });
     });
 
-    // Update status when app is ready
-    const checkReady = setInterval(() => {
-      if (window.app) {
-        const statusDot = document.getElementById('pyodideStatus');
-        const statusText = document.getElementById('statusText');
-        if (statusDot && statusText) {
-          statusDot.classList.remove('loading');
-          statusDot.classList.add('ready');
-          statusText.textContent = 'Ready';
-        }
-        clearInterval(checkReady);
-      }
-    }, 500);
   </script>
 
   <style>
@@ -1208,12 +1254,6 @@
       margin-bottom: var(--space-xs);
     }
 
-    .threshold-value {
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--color-primary);
-    }
-
     .threshold-slider {
       width: 100%;
       height: 6px;
@@ -1249,10 +1289,19 @@
       border: none;
     }
 
-    .threshold-info {
-      font-size: 0.7rem;
-      color: var(--color-text-muted);
-      margin-top: var(--space-xs);
+    .threshold-slider:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .threshold-slider:disabled::-webkit-slider-thumb {
+      background: var(--color-text-muted);
+      cursor: not-allowed;
+    }
+
+    .threshold-slider:disabled::-moz-range-thumb {
+      background: var(--color-text-muted);
+      cursor: not-allowed;
     }
 
     /* Compact preview buttons */
