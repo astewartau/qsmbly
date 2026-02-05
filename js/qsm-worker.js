@@ -381,7 +381,7 @@ async function runPipeline(data) {
   };
   const dipoleMethod = pipelineSettings?.dipoleInversion || 'rts';
   const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 };
-  const mediSettings = pipelineSettings?.medi || { lambda: 1000, maxIter: 10, cgMaxIter: 100, cgTol: 0.01, edgePercent: 0.9, merit: false };
+  const mediSettings = pipelineSettings?.medi || { lambda: 7.5e-5, maxIter: 30, cgMaxIter: 10, cgTol: 0.01, edgePercent: 0.3, merit: false };
   const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
   const tikhonovSettings = pipelineSettings?.tikhonov || { lambda: 0.01, reg: 'identity' };
   const tvSettings = pipelineSettings?.tv || { lambda: 0.001, maxIter: 250, tol: 0.001 };
@@ -1200,7 +1200,7 @@ def bdiv(grad_field, voxel_size):
     div[:,:,0] += gz[:,:,0]/dz; div[:,:,1:-1] += (gz[:,:,1:-1]-gz[:,:,:-2])/dz; div[:,:,-1] += -gz[:,:,-2]/dz
     return div
 
-def gradient_mask(magnitude, mask, percentage=0.9):
+def gradient_mask(magnitude, mask, percentage=0.3):
     gy, gx, gz = np.gradient(magnitude)
     grad_mag = np.sqrt(gx**2 + gy**2 + gz**2)
     masked_grad = grad_mag[mask > 0]
@@ -1252,8 +1252,8 @@ def cg_solve(A_op, b, tol=0.01, max_iter=100, precond=None):
             rsold = rsnew
         return x
 
-def medi_l1(local_field, mask, magnitude, voxel_size, lambda_=1000, max_iter=10,
-            cg_max_iter=100, cg_tol=0.01, edge_percent=0.9, merit=False):
+def medi_l1(local_field, mask, magnitude, voxel_size, lambda_=7.5e-5, max_iter=30,
+            cg_max_iter=10, cg_tol=0.01, edge_percent=0.3, merit=False):
     """MEDI L1 dipole inversion via WASM"""
     print(f"MEDI (WASM): lambda={lambda_}, max_iter={max_iter}, cg_max_iter={cg_max_iter}")
     shape = local_field.shape

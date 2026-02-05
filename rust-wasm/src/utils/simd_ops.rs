@@ -294,7 +294,8 @@ pub fn compute_p_weights_f32(
     }
 }
 
-/// Combine regularization and data terms: out[i] = lambda * reg[i] + 2.0 * data[i]
+/// Combine regularization and data terms: out[i] = lambda * reg[i] + data[i]
+/// Matches MATLAB MEDI: y = D + R where D is data term, R = lambda * reg term
 #[cfg(feature = "simd")]
 #[inline]
 pub fn combine_terms_f32(out: &mut [f32], reg: &[f32], data: &[f32], lambda: f32) {
@@ -303,19 +304,18 @@ pub fn combine_terms_f32(out: &mut [f32], reg: &[f32], data: &[f32], lambda: f32
     let remainder = n % SIMD_WIDTH;
 
     let vlambda = f32x4::splat(lambda);
-    let vtwo = f32x4::splat(2.0);
 
     for i in 0..chunks {
         let idx = i * SIMD_WIDTH;
         let vreg = f32x4::from(&reg[idx..idx + SIMD_WIDTH]);
         let vdata = f32x4::from(&data[idx..idx + SIMD_WIDTH]);
-        let result = vlambda * vreg + vtwo * vdata;
+        let result = vlambda * vreg + vdata;
         out[idx..idx + SIMD_WIDTH].copy_from_slice(result.as_array_ref());
     }
 
     let start = chunks * SIMD_WIDTH;
     for i in 0..remainder {
-        out[start + i] = lambda * reg[start + i] + 2.0 * data[start + i];
+        out[start + i] = lambda * reg[start + i] + data[start + i];
     }
 }
 
@@ -323,7 +323,7 @@ pub fn combine_terms_f32(out: &mut [f32], reg: &[f32], data: &[f32], lambda: f32
 #[inline]
 pub fn combine_terms_f32(out: &mut [f32], reg: &[f32], data: &[f32], lambda: f32) {
     for i in 0..out.len() {
-        out[i] = lambda * reg[i] + 2.0 * data[i];
+        out[i] = lambda * reg[i] + data[i];
     }
 }
 

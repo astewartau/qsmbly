@@ -320,7 +320,7 @@ async function runPipeline(data) {
   const tvSettings = pipelineSettings?.tv || { lambda: 0.001, maxIter: 250, tol: 0.001 };
   const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, maxIter: 250, tol: 0.001, newtonMaxIter: 10 };
   const mediSettings = pipelineSettings?.medi || {
-    lambda: 1000, percentage: 0.9, maxIter: 10, cgMaxIter: 100, cgTol: 0.01, tol: 0.1,
+    lambda: 7.5e-5, percentage: 0.3, maxIter: 30, cgMaxIter: 10, cgTol: 0.01, tol: 0.1,
     smv: false, smvRadius: 5, merit: false, dataWeighting: 1
   };
   const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, maxIter: 50 };
@@ -807,8 +807,18 @@ async function runPipeline(data) {
       // Create noise std map (uniform for now - could be computed from data)
       const nStd = new Float64Array(voxelCount).fill(1.0);
 
+      // Convert local field from Hz to radians for MEDI
+      // MEDI uses exp(i*field) internally, so the field must be in radians
+      const te1Sec = echoTimes[0] / 1000; // first echo time in seconds
+      const hzToRad = 2 * Math.PI * te1Sec;
+      const localFieldRad = new Float64Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        localFieldRad[i] = localField[i] * hzToRad;
+      }
+      postLog(`MEDI: Converting local field from Hz to radians (TE1=${(te1Sec * 1000).toFixed(2)}ms, scale=${hzToRad.toFixed(4)})`);
+
       qsmResult = new Float64Array(wasmModule.medi_l1_wasm_with_progress(
-        localField,       // local field
+        localFieldRad,    // local field in radians
         nStd,             // noise standard deviation
         magnitudeData,    // magnitude for edge weighting
         erodedMask,       // mask
@@ -827,6 +837,13 @@ async function runPipeline(data) {
         mediSettings.tol,
         mediProgress
       ));
+
+      // Convert MEDI output from radians-equivalent back to Hz-equivalent
+      // so the generic ppm conversion (chi / (gamma * B0) * 1e6) works correctly
+      const radToHz = 1.0 / hzToRad;
+      for (let i = 0; i < voxelCount; i++) {
+        qsmResult[i] *= radToHz;
+      }
     } else if (dipoleMethod === 'ilsqr') {
       // iLSQR (iterative LSQR with streaking artifact removal)
       const ilsqrProgress = (current, total) => {

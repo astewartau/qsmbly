@@ -470,7 +470,10 @@ pub fn medi_l1(
     let mut n_std_work: Vec<f32> = n_std_f32.clone();
 
     // Small epsilon for numerical stability (matching MATLAB: beta = sqrt(eps))
-    let beta = f32::EPSILON.sqrt();
+    // MATLAB uses double precision where eps ≈ 2.22e-16, so sqrt(eps) ≈ 1.49e-8
+    // Using f32::EPSILON.sqrt() gives ~3.45e-4 which is WAY too large and
+    // causes noisy results by dominating the P weight calculation
+    let beta = 1e-12_f32;
 
     // Gauss-Newton iterations
     for _iter in 0..max_iter {
@@ -1108,7 +1111,10 @@ where
     let mut n_std_work: Vec<f32> = n_std_f32.clone();
 
     // Small epsilon for numerical stability (matching MATLAB: beta = sqrt(eps))
-    let beta = f32::EPSILON.sqrt();
+    // MATLAB uses double precision where eps ≈ 2.22e-16, so sqrt(eps) ≈ 1.49e-8
+    // Using f32::EPSILON.sqrt() gives ~3.45e-4 which is WAY too large and
+    // causes noisy results by dominating the P weight calculation
+    let beta = 1e-12_f32;
 
     // Total progress = GN iterations * CG iterations per GN
     let total_steps = max_iter * cg_max_iter;

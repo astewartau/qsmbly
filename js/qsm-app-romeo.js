@@ -97,7 +97,7 @@ class QSMApp {
       tv: { lambda: 0.001, maxIter: 250, tol: 0.001 },
       rts: { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 },
       nltv: { lambda: 0.001, mu: 1, maxIter: 250, tol: 0.001, newtonMaxIter: 10 },
-      medi: { lambda: 1000, percentage: 0.9, maxIter: 10, cgMaxIter: 100, cgTol: 0.01, tol: 0.1, smv: false, smvRadius: 5, merit: false, dataWeighting: 1 }
+      medi: { lambda: 7.5e-5, percentage: 0.3, maxIter: 30, cgMaxIter: 10, cgTol: 0.01, tol: 0.1, smv: false, smvRadius: 5, merit: false, dataWeighting: 1 }
     };
 
     // BET settings

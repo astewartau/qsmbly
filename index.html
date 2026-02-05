@@ -862,19 +862,19 @@
             </div>
             <div class="param-group">
               <label class="param-label" for="mediLambda">Lambda (regularization)</label>
-              <input type="number" id="mediLambda" value="1000" min="100" max="10000" step="100">
+              <input type="number" id="mediLambda" value="7.5e-5" min="1e-6" max="0.01" step="1e-5">
             </div>
             <div class="param-group">
               <label class="param-label" for="mediPercentage">Edge Percentage</label>
-              <input type="number" id="mediPercentage" value="0.9" min="0.5" max="0.99" step="0.01">
+              <input type="number" id="mediPercentage" value="0.3" min="0.05" max="0.95" step="0.05">
             </div>
             <div class="param-group">
               <label class="param-label" for="mediMaxIter">Max Iterations</label>
-              <input type="number" id="mediMaxIter" value="10" min="1" max="50" step="1">
+              <input type="number" id="mediMaxIter" value="30" min="1" max="100" step="1">
             </div>
             <div class="param-group">
               <label class="param-label" for="mediCgMaxIter">CG Max Iterations</label>
-              <input type="number" id="mediCgMaxIter" value="100" min="10" max="500" step="10">
+              <input type="number" id="mediCgMaxIter" value="10" min="1" max="100" step="1">
             </div>
             <div class="param-group">
               <label class="param-label" for="mediSmv">
