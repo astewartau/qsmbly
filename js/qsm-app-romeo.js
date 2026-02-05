@@ -956,9 +956,29 @@ class QSMApp {
 
       this.updateOutput(`${description} loaded`);
       this.currentFile = file;
+
+      // Update units display from description (e.g. "QSM Result (ppm)" -> "Units: ppm")
+      this.updateDataUnits(description);
     } catch (error) {
       this.updateOutput(`Error loading ${description}: ${error.message}`);
       console.error(error);
+    }
+  }
+
+  /**
+   * Extract units from a description string and display in the toolbar.
+   * Descriptions follow the pattern "Name (units)", e.g. "B0 Field Map (Hz)".
+   * Only recognizes known unit strings to avoid matching things like "(Echo 1)".
+   */
+  updateDataUnits(description) {
+    const el = document.getElementById('dataUnits');
+    if (!el) return;
+    const knownUnits = ['Hz', 'ppm', 'rad', 'rad/s', 'arb', 'T', 'ms'];
+    const match = description && description.match(/\(([^)]+)\)\s*$/);
+    if (match && knownUnits.includes(match[1])) {
+      el.textContent = `Units: ${match[1]}`;
+    } else {
+      el.textContent = '';
     }
   }
 

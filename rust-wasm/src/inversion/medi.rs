@@ -11,7 +11,7 @@
 //! - Optional merit-based outlier adjustment (MERIT)
 //! - **Optimized with f32 single precision for WASM performance**
 //! - **Buffer reuse to minimize allocations**
-//! - **Early CG termination when convergence stalls**
+//! - **Standard CG convergence (relative tolerance)**
 //! - **Linear extrapolation boundary conditions** matching MATLAB's gradf
 //!
 //! Reference:
@@ -34,8 +34,10 @@ use crate::utils::simd_ops::{
     dot_product_f32, norm_squared_f32, axpy_f32, xpby_f32,
     apply_gradient_weights_f32, compute_p_weights_f32, combine_terms_f32, negate_f32,
 };
-// Note: We use local fgrad_linext_inplace_f32 and bdiv_linext_inplace_f32 with
-// linear extrapolation boundary conditions to match MATLAB's gradf behavior
+// Note: Uses fgrad_periodic_inplace_f32 / bdiv_periodic_inplace_f32 (periodic BCs)
+// for the MEDI inner loop matching MATLAB's gradfp_mex / gradfp_adj_mex.
+// Uses fgrad_linext_inplace_f32 (linear extrapolation BCs) only for gradient mask
+// computation, matching MATLAB's gradf_mex.
 
 /// Workspace for MEDI operations - holds all reusable buffers (f32 version)
 /// Uses single precision for ~2x speedup on WASM
@@ -130,7 +132,7 @@ struct MediOpBuffers<'a> {
     complex_buf2: &'a mut [Complex32],
 }
 
-/// Apply MEDI operator in-place: out = reg(dx) + 2*lambda*fidelity(dx)
+/// Apply MEDI operator in-place: out = fidelity(dx) + lambda*reg(dx)
 /// This is the hot path - called many times per Gauss-Newton iteration
 /// Uses per-direction gradient masks (mx, my, mz) matching MATLAB MEDI
 /// SIMD-accelerated for element-wise operations
@@ -151,8 +153,8 @@ fn apply_medi_operator_core(
     lambda: f32,
     out: &mut [f32],
 ) {
-    // 1. Compute gradient of dx (in-place into gx, gy, gz)
-    fgrad_linext_inplace_f32(bufs.gx, bufs.gy, bufs.gz, dx, nx, ny, nz, vsx, vsy, vsz);
+    // 1. Compute gradient of dx (in-place into gx, gy, gz) - periodic BCs matching MATLAB gradfp_mex
+    fgrad_periodic_inplace_f32(bufs.gx, bufs.gy, bufs.gz, dx, nx, ny, nz, vsx, vsy, vsz);
 
     // 2. Apply per-direction weights: reg_i = m_i * P * m_i * g_i (SIMD accelerated)
     // MATLAB: ux = mx .* P .* mx .* ux; uy = my .* P .* my .* uy; uz = mz .* P .* mz .* uz;
@@ -162,8 +164,8 @@ fn apply_medi_operator_core(
         bufs.gx, bufs.gy, bufs.gz,
     );
 
-    // 3. Compute divergence (in-place into div_buf)
-    bdiv_linext_inplace_f32(bufs.div_buf, bufs.reg_x, bufs.reg_y, bufs.reg_z, nx, ny, nz, vsx, vsy, vsz);
+    // 3. Compute divergence (in-place into div_buf) - periodic BCs matching MATLAB gradfp_adj_mex
+    bdiv_periodic_inplace_f32(bufs.div_buf, bufs.reg_x, bufs.reg_y, bufs.reg_z, nx, ny, nz, vsx, vsy, vsz);
 
     // 4. Fidelity term: D^T(|w|^2 * D(dx))
     apply_dipole_conv(fft_ws, dx, d_kernel, bufs.dipole_buf, bufs.complex_buf);
@@ -181,7 +183,7 @@ fn apply_medi_operator_core(
     }
     fft_ws.ifft3d(bufs.complex_buf2);
 
-    // 5. Combine: out = div_buf + 2*lambda*real(complex_buf2)
+    // 5. Combine: out = lambda*div_buf + real(complex_buf2) (matching MATLAB: y = D + R)
     // Extract real parts for SIMD operation
     for i in 0..n {
         bufs.dipole_buf[i] = bufs.complex_buf2[i].re;
@@ -189,9 +191,8 @@ fn apply_medi_operator_core(
     combine_terms_f32(out, bufs.div_buf, bufs.dipole_buf, lambda);
 }
 
-/// Conjugate gradient solver with buffer reuse and early termination
+/// Conjugate gradient solver with buffer reuse
 /// Solves Ax = b where A is the MEDI operator
-/// Early termination when convergence stalls (residual reduction < 1% over 5 iterations)
 ///
 /// The optional progress callback receives (cg_iter, max_iter) for each CG iteration.
 /// Uses per-direction gradient masks (mx, my, mz) matching MATLAB MEDI.
@@ -234,12 +235,6 @@ fn cg_solve_medi<F>(
     if b_norm < 1e-10 {
         return; // b is zero, x=0 is the solution
     }
-
-    // Early termination tracking
-    let mut prev_residual = rsold.sqrt();
-    let mut stall_count = 0;
-    const STALL_THRESHOLD: usize = 5;  // Exit if stalled for 5 iterations
-    const MIN_IMPROVEMENT: f32 = 0.01; // Require at least 1% improvement
 
     // Buffer for p (to avoid borrow conflict)
     let mut p_copy = vec![0.0f32; n];
@@ -294,18 +289,6 @@ fn cg_solve_medi<F>(
         if residual < tol * b_norm {
             break;
         }
-
-        // Early termination: check if convergence has stalled
-        let improvement = (prev_residual - residual) / (prev_residual + 1e-10);
-        if improvement < MIN_IMPROVEMENT {
-            stall_count += 1;
-            if stall_count >= STALL_THRESHOLD {
-                break; // Convergence stalled, exit early
-            }
-        } else {
-            stall_count = 0; // Reset stall counter on good progress
-        }
-        prev_residual = residual;
 
         let beta = rsnew / rsold;
 
@@ -469,11 +452,10 @@ pub fn medi_l1(
     let mut badpoint = vec![0.0f32; n_total];
     let mut n_std_work: Vec<f32> = n_std_f32.clone();
 
-    // Small epsilon for numerical stability (matching MATLAB: beta = sqrt(eps))
-    // MATLAB uses double precision where eps ≈ 2.22e-16, so sqrt(eps) ≈ 1.49e-8
-    // Using f32::EPSILON.sqrt() gives ~3.45e-4 which is WAY too large and
-    // causes noisy results by dominating the P weight calculation
-    let beta = 1e-12_f32;
+    // MATLAB: beta = sqrt(eps(class(f))) where eps for f64 ≈ 2.22e-16, so sqrt(eps) ≈ 1.49e-8.
+    // This is a regularization parameter for the P weight denominator, not a precision limit.
+    // Using the same value as MATLAB (1.49e-8) is fine in f32 (representable, well above f32 eps).
+    let beta = 1.49e-8_f32;
 
     // Gauss-Newton iterations
     for _iter in 0..max_iter {
@@ -483,7 +465,8 @@ pub fn medi_l1(
         // Compute P = 1 / sqrt(|m * grad(chi)|^2 + beta) using per-direction masks (SIMD accelerated)
         // MATLAB: P = 1 ./ sqrt(ux.*ux + uy.*uy + uz.*uz + beta);
         // where ux = mx .* grad_x(chi), uy = my .* grad_y(chi), uz = mz .* grad_z(chi)
-        fgrad_linext_inplace_f32(
+        // Uses periodic BCs matching MATLAB's grad_ (which calls gradfp_mex)
+        fgrad_periodic_inplace_f32(
             &mut ws.gx, &mut ws.gy, &mut ws.gz,
             &chi, nx, ny, nz, vsx_f32, vsy_f32, vsz_f32,
         );
@@ -663,7 +646,8 @@ fn compute_rhs_inplace(
     // Regularization term: div(m * P * m * grad(chi)) for each direction
     // MATLAB: b = lam .* gradAdj_(ux, uy, uz, vsz);
     // where ux = mx .* P .* mx .* grad_x(chi), etc.
-    fgrad_linext_inplace_f32(
+    // Uses periodic BCs matching MATLAB's gradfp_mex / gradfp_adj_mex
+    fgrad_periodic_inplace_f32(
         &mut ws.gx, &mut ws.gy, &mut ws.gz,
         chi, ws.nx, ws.ny, ws.nz,
         ws.vsx, ws.vsy, ws.vsz,
@@ -676,7 +660,7 @@ fn compute_rhs_inplace(
         &ws.gx, &ws.gy, &ws.gz,
     );
 
-    bdiv_linext_inplace_f32(
+    bdiv_periodic_inplace_f32(
         &mut ws.div_buf,
         &ws.reg_x, &ws.reg_y, &ws.reg_z,
         ws.nx, ws.ny, ws.nz,
@@ -706,7 +690,7 @@ fn compute_rhs_inplace(
         ws.dipole_buf[i] = ws.complex_buf2[i].re;
     }
 
-    // Combine terms: rhs = lambda * reg_term + 2 * data_term (SIMD accelerated)
+    // Combine terms: rhs = lambda * reg_term + data_term (SIMD accelerated, matching MATLAB)
     combine_terms_f32(rhs, &ws.div_buf, &ws.dipole_buf, lambda);
 }
 
@@ -973,6 +957,89 @@ fn bdiv_linext_inplace_f32(
     }
 }
 
+/// Forward difference gradient with periodic boundary conditions (f32, in-place)
+/// Matches MATLAB's gradfp_mex used inside MEDI iterations.
+/// At boundaries, wraps around: dx(end) = (x(1) - x(end)) / h
+#[inline]
+fn fgrad_periodic_inplace_f32(
+    gx: &mut [f32], gy: &mut [f32], gz: &mut [f32],
+    x: &[f32],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) {
+    let hx = 1.0 / vsx;
+    let hy = 1.0 / vsy;
+    let hz = 1.0 / vsz;
+    let nxny = nx * ny;
+
+    for k in 0..nz {
+        let k_offset = k * nxny;
+
+        for j in 0..ny {
+            let j_offset = j * nx;
+
+            for i in 0..nx {
+                let idx = i + j_offset + k_offset;
+                let x_val = x[idx];
+
+                // x-direction: periodic wrap at i = nx-1
+                let x_next = if i + 1 < nx { x[idx + 1] } else { x[j_offset + k_offset] };
+                gx[idx] = (x_next - x_val) * hx;
+
+                // y-direction: periodic wrap at j = ny-1
+                let y_next = if j + 1 < ny { x[i + (j + 1) * nx + k_offset] } else { x[i + k_offset] };
+                gy[idx] = (y_next - x_val) * hy;
+
+                // z-direction: periodic wrap at k = nz-1
+                let z_next = if k + 1 < nz { x[i + j_offset + (k + 1) * nxny] } else { x[i + j_offset] };
+                gz[idx] = (z_next - x_val) * hz;
+            }
+        }
+    }
+}
+
+/// Backward divergence with periodic boundary conditions (f32, in-place)
+/// Adjoint of fgrad_periodic_inplace_f32, matching MATLAB's gradfp_adj_mex.
+/// At boundaries, wraps around: at i=0, uses gx(end) instead of zero.
+#[inline]
+fn bdiv_periodic_inplace_f32(
+    div: &mut [f32],
+    gx: &[f32], gy: &[f32], gz: &[f32],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f32, vsy: f32, vsz: f32,
+) {
+    let hx = -1.0 / vsx;  // Negative for adjoint
+    let hy = -1.0 / vsy;
+    let hz = -1.0 / vsz;
+    let nxny = nx * ny;
+
+    for k in 0..nz {
+        let k_offset = k * nxny;
+
+        for j in 0..ny {
+            let j_offset = j * nx;
+
+            for i in 0..nx {
+                let idx = i + j_offset + k_offset;
+
+                // x-direction: at i=0, wrap to gx[nx-1,j,k]
+                let gx_prev = if i > 0 { gx[idx - 1] } else { gx[(nx - 1) + j_offset + k_offset] };
+                let gx_term = (gx[idx] - gx_prev) * hx;
+
+                // y-direction: at j=0, wrap to gy[i,ny-1,k]
+                let gy_prev = if j > 0 { gy[i + (j - 1) * nx + k_offset] } else { gy[i + (ny - 1) * nx + k_offset] };
+                let gy_term = (gy[idx] - gy_prev) * hy;
+
+                // z-direction: at k=0, wrap to gz[i,j,nz-1]
+                let gz_prev = if k > 0 { gz[i + j_offset + (k - 1) * nxny] } else { gz[i + j_offset + (nz - 1) * nxny] };
+                let gz_term = (gz[idx] - gz_prev) * hz;
+
+                div[idx] = gx_term + gy_term + gz_term;
+            }
+        }
+    }
+}
+
 /// MEDI L1 with progress callback (OPTIMIZED f32 VERSION)
 ///
 /// Same as `medi_l1` but calls `progress_callback(iteration, max_iter)` each iteration.
@@ -1110,11 +1177,10 @@ where
     let mut badpoint = vec![0.0f32; n_total];
     let mut n_std_work: Vec<f32> = n_std_f32.clone();
 
-    // Small epsilon for numerical stability (matching MATLAB: beta = sqrt(eps))
-    // MATLAB uses double precision where eps ≈ 2.22e-16, so sqrt(eps) ≈ 1.49e-8
-    // Using f32::EPSILON.sqrt() gives ~3.45e-4 which is WAY too large and
-    // causes noisy results by dominating the P weight calculation
-    let beta = 1e-12_f32;
+    // MATLAB: beta = sqrt(eps(class(f))) where eps for f64 ≈ 2.22e-16, so sqrt(eps) ≈ 1.49e-8.
+    // This is a regularization parameter for the P weight denominator, not a precision limit.
+    // Using the same value as MATLAB (1.49e-8) is fine in f32 (representable, well above f32 eps).
+    let beta = 1.49e-8_f32;
 
     // Total progress = GN iterations * CG iterations per GN
     let total_steps = max_iter * cg_max_iter;
@@ -1125,7 +1191,8 @@ where
 
         // Compute P = 1 / sqrt(|m * grad(chi)|^2 + beta) using per-direction masks (SIMD accelerated)
         // MATLAB: P = 1 ./ sqrt(ux.*ux + uy.*uy + uz.*uz + beta);
-        fgrad_linext_inplace_f32(
+        // Uses periodic BCs matching MATLAB's grad_ (which calls gradfp_mex)
+        fgrad_periodic_inplace_f32(
             &mut ws.gx, &mut ws.gy, &mut ws.gz,
             &chi, nx, ny, nz, vsx_f32, vsy_f32, vsz_f32,
         );
@@ -1419,4 +1486,276 @@ mod tests {
         assert_eq!(chi[0], 0.0, "Masked voxel should be zero");
         assert_eq!(chi[10], 0.0, "Masked voxel should be zero");
     }
+
+    /// Debug test: run MEDI step-by-step on real data, saving intermediates
+    /// for comparison with Octave reference (other/medi_debug_octave.m).
+    /// Run with: cargo test --release test_medi_debug -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn test_medi_debug() {
+        let data_path = "/home/ashley/OUT/2bgRemoved.nii";
+        if !std::path::Path::new(data_path).exists() {
+            eprintln!("Skipping: {} not found", data_path);
+            return;
+        }
+
+        let outdir = "/home/ashley/OUT/debug";
+        std::fs::create_dir_all(outdir).ok();
+
+        // Read NIfTI
+        let bytes = std::fs::read(data_path).unwrap();
+        let nifti_data = crate::nifti_io::load_nifti(&bytes).unwrap();
+        let (nx, ny, nz) = nifti_data.dims;
+        let (vsx, vsy, vsz) = nifti_data.voxel_size;
+
+        let n_total = nx * ny * nz;
+        let vsx_f32 = vsx as f32;
+        let vsy_f32 = vsy as f32;
+        let vsz_f32 = vsz as f32;
+
+        eprintln!("Data: {}x{}x{}, voxel: {}x{}x{}", nx, ny, nz, vsx, vsy, vsz);
+
+        // Convert to f32
+        let local_field: Vec<f32> = nifti_data.data.iter().map(|&v| v as f32).collect();
+
+        // Create mask from non-zero voxels
+        let mask: Vec<u8> = local_field.iter()
+            .map(|&v| if v.abs() > 1e-10 { 1 } else { 0 })
+            .collect();
+        let mask_count: usize = mask.iter().filter(|&&m| m != 0).count();
+        eprintln!("Mask voxels: {} / {}", mask_count, n_total);
+
+        // Save inputs
+        save_f32_raw(&local_field, &format!("{}/f_rust.raw", outdir));
+        let mask_f32: Vec<f32> = mask.iter().map(|&m| m as f32).collect();
+        save_f32_raw(&mask_f32, &format!("{}/mask_rust.raw", outdir));
+
+        // Parameters (matching MATLAB defaults)
+        let lambda: f32 = 7.5e-5;
+        let beta: f32 = 1.49e-8;
+        let bdir = (0.0f32, 0.0f32, 1.0f32);
+        let cg_tol: f32 = 0.1;  // Match MATLAB tolcg default
+        let cg_max_iter: usize = 10;
+
+        // Dipole kernel
+        let d_kernel = crate::kernels::dipole::dipole_kernel_f32(
+            nx, ny, nz, vsx_f32, vsy_f32, vsz_f32, bdir,
+        );
+        save_f32_raw(&d_kernel, &format!("{}/D_rust.raw", outdir));
+        eprintln!("D: min={} max={} D[0]={}", fmin(&d_kernel), fmax(&d_kernel), d_kernel[0]);
+
+        // Workspace
+        let mut ws = MediWorkspace::new(nx, ny, nz, vsx_f32, vsy_f32, vsz_f32);
+
+        // Data weighting: uniform m = mask (matching w=ones in Octave)
+        let m: Vec<f32> = mask.iter().map(|&m| if m != 0 { 1.0 } else { 0.0 }).collect();
+
+        // b0 = m * exp(i * f)
+        let b0: Vec<Complex32> = local_field.iter().zip(m.iter())
+            .map(|(&f, &mi)| {
+                let phase = Complex32::new(0.0, f);
+                mi * phase.exp()
+            })
+            .collect();
+
+        // Gradient mask: uniform magnitude -> mx=my=mz=mask
+        let w_gx: Vec<f32> = m.clone();
+        let w_gy: Vec<f32> = m.clone();
+        let w_gz: Vec<f32> = m.clone();
+
+        // ===== ITERATION 1 (chi = 0) =====
+        eprintln!("\n=== Iteration 1 ===");
+        let mut chi = vec![0.0f32; n_total];
+        let mut dx = vec![0.0f32; n_total];
+        let mut rhs = vec![0.0f32; n_total];
+        let mut vr = vec![0.0f32; n_total];
+        let mut w: Vec<Complex32> = vec![Complex32::new(0.0, 0.0); n_total];
+
+        // P weights (chi=0 -> gradient=0 -> P = 1/sqrt(beta))
+        fgrad_periodic_inplace_f32(
+            &mut ws.gx, &mut ws.gy, &mut ws.gz,
+            &chi, nx, ny, nz, vsx_f32, vsy_f32, vsz_f32,
+        );
+        compute_p_weights_f32(&mut vr, &w_gx, &w_gy, &w_gz, &ws.gx, &ws.gy, &ws.gz, beta);
+        save_f32_raw(&vr, &format!("{}/P1_rust.raw", outdir));
+        eprintln!("P1: min={} max={} mean={}", fmin(&vr), fmax(&vr), fmean(&vr));
+
+        // w = m * exp(i * D*chi) = m (since chi=0)
+        apply_dipole_conv(&mut ws.fft_ws, &chi, &d_kernel, &mut ws.dipole_buf, &mut ws.complex_buf);
+        for i in 0..n_total {
+            let phase = Complex32::new(0.0, ws.dipole_buf[i]);
+            w[i] = m[i] * phase.exp();
+        }
+
+        // RHS
+        compute_rhs_inplace(
+            &chi, &w, &b0, &d_kernel,
+            &w_gx, &w_gy, &w_gz, &vr, lambda,
+            &mut rhs, &mut ws,
+        );
+        save_f32_raw(&rhs, &format!("{}/rhs1_rust.raw", outdir));
+        eprintln!("RHS1: min={} max={} norm={}", fmin(&rhs), fmax(&rhs), fnorm(&rhs));
+
+        // Negate for CG
+        negate_f32(&mut rhs);
+
+        // CG solve (with iteration-level residual logging)
+        let mut cg_residuals: Vec<f32> = Vec::new();
+        {
+            // Manual CG to capture residuals (matching cg_solve_medi but with logging)
+            let n = ws.n_total;
+            let (nx, ny, nz) = (ws.nx, ws.ny, ws.nz);
+            let (vsx, vsy, vsz) = (ws.vsx, ws.vsy, ws.vsz);
+
+            dx.fill(0.0);
+            ws.cg_r.copy_from_slice(&rhs);
+            ws.cg_p.copy_from_slice(&ws.cg_r);
+            let mut rsold: f32 = norm_squared_f32(&ws.cg_r);
+            let b_norm: f32 = norm_squared_f32(&rhs).sqrt();
+
+            let mut p_copy = vec![0.0f32; n];
+            let mut prev_residual = rsold.sqrt();
+
+            for cg_iter in 0..cg_max_iter {
+                let residual_before = rsold.sqrt();
+                cg_residuals.push(residual_before);
+
+                p_copy.copy_from_slice(&ws.cg_p);
+                {
+                    let mut bufs = MediOpBuffers {
+                        gx: &mut ws.gx, gy: &mut ws.gy, gz: &mut ws.gz,
+                        reg_x: &mut ws.reg_x, reg_y: &mut ws.reg_y, reg_z: &mut ws.reg_z,
+                        div_buf: &mut ws.div_buf, dipole_buf: &mut ws.dipole_buf,
+                        complex_buf: &mut ws.complex_buf, complex_buf2: &mut ws.complex_buf2,
+                    };
+                    apply_medi_operator_core(
+                        &mut ws.fft_ws, &mut bufs, n, nx, ny, nz, vsx, vsy, vsz,
+                        &p_copy, &w, &d_kernel, &w_gx, &w_gy, &w_gz, &vr, lambda, &mut ws.cg_ap,
+                    );
+                }
+
+                let pap: f32 = dot_product_f32(&ws.cg_p, &ws.cg_ap);
+                if pap.abs() < 1e-15 { break; }
+                let alpha = rsold / pap;
+
+                axpy_f32(&mut dx, alpha, &ws.cg_p);
+                axpy_f32(&mut ws.cg_r, -alpha, &ws.cg_ap);
+
+                let rsnew: f32 = norm_squared_f32(&ws.cg_r);
+                let residual = rsnew.sqrt();
+
+                eprintln!("  CG iter {}: res={:.6e}, alpha={:.6e}, pap={:.6e}",
+                    cg_iter + 1, residual, alpha, pap);
+
+                if residual < cg_tol * b_norm { break; }
+
+                // No stall detection in this debug version (matching MATLAB)
+
+                let beta_cg = rsnew / rsold;
+                xpby_f32(&mut ws.cg_p, &ws.cg_r, beta_cg);
+                rsold = rsnew;
+                prev_residual = residual;
+            }
+        }
+        save_f32_raw(&dx, &format!("{}/dx1_rust.raw", outdir));
+        eprintln!("dx1: min={} max={} norm={}", fmin(&dx), fmax(&dx), fnorm(&dx));
+
+        // Update chi
+        axpy_f32(&mut chi, 1.0, &dx);
+        save_f32_raw(&chi, &format!("{}/chi1_rust.raw", outdir));
+        eprintln!("chi1: min={} max={} norm={}", fmin(&chi), fmax(&chi), fnorm(&chi));
+
+        // ===== ITERATION 2 =====
+        eprintln!("\n=== Iteration 2 ===");
+
+        // P weights
+        fgrad_periodic_inplace_f32(
+            &mut ws.gx, &mut ws.gy, &mut ws.gz,
+            &chi, nx, ny, nz, vsx_f32, vsy_f32, vsz_f32,
+        );
+        compute_p_weights_f32(&mut vr, &w_gx, &w_gy, &w_gz, &ws.gx, &ws.gy, &ws.gz, beta);
+        save_f32_raw(&vr, &format!("{}/P2_rust.raw", outdir));
+        eprintln!("P2: min={} max={} mean={}", fmin(&vr), fmax(&vr), fmean(&vr));
+
+        // w = m * exp(i * D*chi)
+        apply_dipole_conv(&mut ws.fft_ws, &chi, &d_kernel, &mut ws.dipole_buf, &mut ws.complex_buf);
+        for i in 0..n_total {
+            let phase = Complex32::new(0.0, ws.dipole_buf[i]);
+            w[i] = m[i] * phase.exp();
+        }
+
+        // RHS
+        compute_rhs_inplace(
+            &chi, &w, &b0, &d_kernel,
+            &w_gx, &w_gy, &w_gz, &vr, lambda,
+            &mut rhs, &mut ws,
+        );
+        save_f32_raw(&rhs, &format!("{}/rhs2_rust.raw", outdir));
+        eprintln!("RHS2: min={} max={} norm={}", fmin(&rhs), fmax(&rhs), fnorm(&rhs));
+
+        negate_f32(&mut rhs);
+
+        // CG solve (no stall detection)
+        {
+            let n = ws.n_total;
+            let (nx, ny, nz) = (ws.nx, ws.ny, ws.nz);
+            let (vsx, vsy, vsz) = (ws.vsx, ws.vsy, ws.vsz);
+
+            dx.fill(0.0);
+            ws.cg_r.copy_from_slice(&rhs);
+            ws.cg_p.copy_from_slice(&ws.cg_r);
+            let mut rsold: f32 = norm_squared_f32(&ws.cg_r);
+            let b_norm: f32 = norm_squared_f32(&rhs).sqrt();
+            let mut p_copy = vec![0.0f32; n];
+
+            for cg_iter in 0..cg_max_iter {
+                p_copy.copy_from_slice(&ws.cg_p);
+                {
+                    let mut bufs = MediOpBuffers {
+                        gx: &mut ws.gx, gy: &mut ws.gy, gz: &mut ws.gz,
+                        reg_x: &mut ws.reg_x, reg_y: &mut ws.reg_y, reg_z: &mut ws.reg_z,
+                        div_buf: &mut ws.div_buf, dipole_buf: &mut ws.dipole_buf,
+                        complex_buf: &mut ws.complex_buf, complex_buf2: &mut ws.complex_buf2,
+                    };
+                    apply_medi_operator_core(
+                        &mut ws.fft_ws, &mut bufs, n, nx, ny, nz, vsx, vsy, vsz,
+                        &p_copy, &w, &d_kernel, &w_gx, &w_gy, &w_gz, &vr, lambda, &mut ws.cg_ap,
+                    );
+                }
+                let pap: f32 = dot_product_f32(&ws.cg_p, &ws.cg_ap);
+                if pap.abs() < 1e-15 { break; }
+                let alpha = rsold / pap;
+                axpy_f32(&mut dx, alpha, &ws.cg_p);
+                axpy_f32(&mut ws.cg_r, -alpha, &ws.cg_ap);
+                let rsnew: f32 = norm_squared_f32(&ws.cg_r);
+                let residual = rsnew.sqrt();
+                eprintln!("  CG iter {}: res={:.6e}", cg_iter + 1, residual);
+                if residual < cg_tol * b_norm { break; }
+                let beta_cg = rsnew / rsold;
+                xpby_f32(&mut ws.cg_p, &ws.cg_r, beta_cg);
+                rsold = rsnew;
+            }
+        }
+        save_f32_raw(&dx, &format!("{}/dx2_rust.raw", outdir));
+        eprintln!("dx2: min={} max={} norm={}", fmin(&dx), fmax(&dx), fnorm(&dx));
+
+        axpy_f32(&mut chi, 1.0, &dx);
+        save_f32_raw(&chi, &format!("{}/chi2_rust.raw", outdir));
+        eprintln!("chi2: min={} max={} norm={}", fmin(&chi), fmax(&chi), fnorm(&chi));
+
+        eprintln!("\nDone. Intermediates saved to {}", outdir);
+    }
+
+    fn save_f32_raw(data: &[f32], path: &str) {
+        use std::io::Write;
+        let mut file = std::fs::File::create(path).unwrap();
+        for &val in data {
+            file.write_all(&val.to_le_bytes()).unwrap();
+        }
+    }
+
+    fn fmin(data: &[f32]) -> f32 { data.iter().cloned().fold(f32::MAX, f32::min) }
+    fn fmax(data: &[f32]) -> f32 { data.iter().cloned().fold(f32::MIN, f32::max) }
+    fn fmean(data: &[f32]) -> f32 { data.iter().sum::<f32>() / data.len() as f32 }
+    fn fnorm(data: &[f32]) -> f32 { data.iter().map(|&v| v * v).sum::<f32>().sqrt() }
 }

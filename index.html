@@ -352,6 +352,7 @@
             <input type="checkbox" id="interpolation">
             <span>Interp</span>
           </label>
+          <span class="data-units" id="dataUnits"></span>
           <label class="opacity-control" id="overlayOpacityControl" style="display: none;">
             <span>Overlay</span>
             <input type="range" id="overlayOpacity" min="0" max="100" value="50">
@@ -1618,6 +1619,17 @@
       height: 12px;
       cursor: pointer;
       accent-color: var(--color-primary);
+    }
+
+    .data-units {
+      font-size: 0.7rem;
+      color: var(--color-primary);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .data-units:empty {
+      display: none;
     }
   </style>
 </body>

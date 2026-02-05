@@ -624,12 +624,12 @@ pub fn nltv_wasm_with_progress(
 /// * `nx`, `ny`, `nz` - Array dimensions
 /// * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
 /// * `bx`, `by`, `bz` - B0 field direction
-/// * `lambda` - Regularization parameter (typically 1000)
+/// * `lambda` - Regularization parameter (default 7.5e-5, matching MATLAB MEDI)
 /// * `merit` - Enable merit-based outlier adjustment
 /// * `smv` - Enable SMV preprocessing within MEDI
 /// * `smv_radius` - SMV radius in mm (default 5.0)
 /// * `data_weighting` - 0=uniform, 1=SNR weighting
-/// * `percentage` - Gradient mask percentage (default 0.9)
+/// * `percentage` - Fraction of voxels considered edges (default 0.3 = 30%)
 /// * `cg_tol` - CG solver tolerance
 /// * `cg_max_iter` - CG maximum iterations
 /// * `max_iter` - Maximum Gauss-Newton iterations
