@@ -140,7 +140,7 @@
         <div class="param-group">
           <label class="param-label" for="magField">Field Strength</label>
           <div class="param-inline">
-            <input type="number" id="magField" value="7.0" step="0.1" min="0.1">
+            <input type="number" id="magField" value="3.0" step="0.1" min="0.1">
             <span class="unit">Tesla</span>
           </div>
         </div>
@@ -365,6 +365,14 @@
             <option value="viridis">Viridis</option>
             <option value="plasma">Plasma</option>
           </select>
+          <label class="interp-checkbox">
+            <input type="checkbox" id="colorbarToggle">
+            <span>Colorbar</span>
+          </label>
+          <label class="interp-checkbox">
+            <input type="checkbox" id="crosshairToggle" checked>
+            <span>Crosshair</span>
+          </label>
           <button class="btn btn-sm btn-icon" id="downloadCurrentVolume" title="Download current image as NIfTI" disabled>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -1000,6 +1008,21 @@
       }
     });
 
+    // Colorbar toggle
+    document.getElementById('colorbarToggle').addEventListener('change', (e) => {
+      if (!window.app || !window.app.nv) return;
+      const nv = window.app.nv;
+      nv.opts.isColorbar = e.target.checked;
+      nv.drawScene();
+    });
+
+    // Crosshair toggle
+    document.getElementById('crosshairToggle').addEventListener('change', (e) => {
+      if (!window.app || !window.app.nv) return;
+      const nv = window.app.nv;
+      nv.setCrosshairWidth(e.target.checked ? 0.75 : 0);
+    });
+
     // Window controls (min/max intensity) with dual range slider
     const windowState = { dataMin: 0, dataMax: 100, currentMin: 0, currentMax: 100 };
 
@@ -1525,7 +1548,7 @@
     /* Dual range slider */
     .range-slider-container {
       position: relative;
-      width: 180px;
+      width: 135px;
       height: 20px;
       display: flex;
       align-items: center;
