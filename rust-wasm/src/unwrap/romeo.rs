@@ -56,6 +56,40 @@ pub fn calculate_weights_romeo(
     mask: &[u8],
     nx: usize, ny: usize, nz: usize,
 ) -> Vec<u8> {
+    // Default: all weight components enabled
+    calculate_weights_romeo_configurable(
+        phase, mag, phase2, te1, te2, mask, nx, ny, nz,
+        true, true, true  // use_phase_gradient_coherence, use_mag_coherence, use_mag_weight
+    )
+}
+
+/// Calculate ROMEO edge weights with configurable weight components
+///
+/// # Arguments
+/// * `phase` - Wrapped phase data (nx * ny * nz), first echo
+/// * `mag` - Magnitude data (nx * ny * nz), optional (pass empty slice if none)
+/// * `phase2` - Second echo phase for gradient coherence (optional)
+/// * `te1`, `te2` - Echo times for gradient coherence scaling
+/// * `mask` - Binary mask (nx * ny * nz), 1 = process
+/// * `nx`, `ny`, `nz` - Array dimensions
+/// * `use_phase_gradient_coherence` - Include phase gradient coherence (multi-echo temporal)
+/// * `use_mag_coherence` - Include magnitude coherence (min/max similarity)
+/// * `use_mag_weight` - Include magnitude weight (penalize low signal)
+///
+/// # Returns
+/// Weights array of size 3 * nx * ny * nz in C order [dim][i][j][k]
+pub fn calculate_weights_romeo_configurable(
+    phase: &[f64],
+    mag: &[f64],
+    phase2: Option<&[f64]>,
+    te1: f64,
+    te2: f64,
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    use_phase_gradient_coherence: bool,
+    use_mag_coherence: bool,
+    use_mag_weight: bool,
+) -> Vec<u8> {
     let n_total = nx * ny * nz;
     let mut weights = vec![0u8; 3 * n_total];
 
@@ -64,7 +98,7 @@ pub fn calculate_weights_romeo(
     let te_ratio = if te2.abs() > 1e-10 { te1 / te2 } else { 1.0 };
 
     // Get max magnitude for normalization
-    let max_mag = if has_mag {
+    let max_mag = if has_mag && use_mag_weight {
         mag.iter().cloned().fold(0.0_f64, f64::max)
     } else {
         1.0
@@ -99,11 +133,11 @@ pub fn calculate_weights_romeo(
                     // Phase difference
                     let p1_diff = phase[idx_n] - phase[idx];
 
-                    // 1. Phase coherence: 1 - |wrap(diff)| / π
+                    // 1. Phase coherence: 1 - |wrap(diff)| / π (always on)
                     let pc = 1.0 - wrap_angle(p1_diff).abs() / PI;
 
-                    // 2. Phase gradient coherence
-                    let pgc = if has_phase2 {
+                    // 2. Phase gradient coherence (optional, multi-echo only)
+                    let pgc = if use_phase_gradient_coherence && has_phase2 {
                         let phase2_data = phase2.unwrap();
                         let p2_diff = phase2_data[idx_n] - phase2_data[idx];
                         let wrapped_p1 = wrap_angle(p1_diff);
@@ -113,8 +147,8 @@ pub fn calculate_weights_romeo(
                         1.0
                     };
 
-                    // 3. Magnitude coherence: (min/max)²
-                    let mc = if has_mag {
+                    // 3. Magnitude coherence: (min/max)² (optional)
+                    let mc = if use_mag_coherence && has_mag {
                         let m1 = mag[idx];
                         let m2 = mag[idx_n];
                         let mag_min = m1.min(m2);
@@ -128,8 +162,8 @@ pub fn calculate_weights_romeo(
                         1.0
                     };
 
-                    // 4. Magnitude weights: 0.5 + 0.5 * min(1, mag / (0.5 * max_mag))
-                    let (mw1, mw2) = if has_mag {
+                    // 4. Magnitude weights: 0.5 + 0.5 * min(1, mag / (0.5 * max_mag)) (optional)
+                    let (mw1, mw2) = if use_mag_weight && has_mag {
                         let mw1 = 0.5 + 0.5 * (mag[idx] / half_max_mag).min(1.0);
                         let mw2 = 0.5 + 0.5 * (mag[idx_n] / half_max_mag).min(1.0);
                         (mw1, mw2)

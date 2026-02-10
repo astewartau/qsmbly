@@ -132,7 +132,19 @@ where
         );
         prox_curv
     } else {
-        prox1
+        // Even without curvature, clamp proximity to lower_lim to prevent
+        // filter sizes from getting too small at the edges
+        // (matching calculate_curvature.m line 45: prox(prox < lowerLim & prox ~= 0) = lowerLim)
+        prox1.iter()
+            .zip(mask.iter())
+            .map(|(&p, &m)| {
+                if m > 0.0 && p > 0.0 && p < params.lower_lim {
+                    params.lower_lim
+                } else {
+                    p
+                }
+            })
+            .collect()
     };
 
     // Calculate vasculature proximity (prox2) for stage 2
@@ -158,8 +170,8 @@ where
         })
         .collect();
 
-    // Set alpha=1 for non-vasculature regions within mask
-    // (i.e., where vasc_only=0 but mask>0)
+    // Set alpha=1 for vessel regions within mask
+    // (vasc_only=0 means vessel, matching sdf_curvature.m line 27)
     for i in 0..n_total {
         if mask[i] > 0.0 && vasc_only[i] == 0.0 {
             alpha[i] = 1.0;
@@ -310,7 +322,8 @@ fn gaussian_smooth_3d_masked_f64(
         .collect()
 }
 
-/// 1D convolution along specified axis
+/// 1D convolution along specified axis with replicate padding
+/// Matches MATLAB's imgaussfilt3 default behavior
 fn convolve_1d_direction(
     data: &[f64],
     nx: usize, ny: usize, nz: usize,
@@ -323,25 +336,25 @@ fn convolve_1d_direction(
 
     let idx = |i: usize, j: usize, k: usize| i + j * nx + k * nx * ny;
 
+    // Helper to clamp index for replicate padding
+    let clamp_x = |x: isize| -> usize { x.max(0).min(nx as isize - 1) as usize };
+    let clamp_y = |y: isize| -> usize { y.max(0).min(ny as isize - 1) as usize };
+    let clamp_z = |z: isize| -> usize { z.max(0).min(nz as isize - 1) as usize };
+
     match direction {
         'x' => {
             for k in 0..nz {
                 for j in 0..ny {
                     for i in 0..nx {
                         let mut sum = 0.0;
-                        let mut weight_sum = 0.0;
 
                         for ki in 0..kernel.len() {
                             let offset = ki as isize - kernel_radius as isize;
-                            let ni = i as isize + offset;
-
-                            if ni >= 0 && ni < nx as isize {
-                                sum += data[idx(ni as usize, j, k)] * kernel[ki];
-                                weight_sum += kernel[ki];
-                            }
+                            let ni = clamp_x(i as isize + offset);
+                            sum += data[idx(ni, j, k)] * kernel[ki];
                         }
 
-                        result[idx(i, j, k)] = if weight_sum > 0.0 { sum / weight_sum } else { 0.0 };
+                        result[idx(i, j, k)] = sum;
                     }
                 }
             }
@@ -351,19 +364,14 @@ fn convolve_1d_direction(
                 for j in 0..ny {
                     for i in 0..nx {
                         let mut sum = 0.0;
-                        let mut weight_sum = 0.0;
 
                         for ki in 0..kernel.len() {
                             let offset = ki as isize - kernel_radius as isize;
-                            let nj = j as isize + offset;
-
-                            if nj >= 0 && nj < ny as isize {
-                                sum += data[idx(i, nj as usize, k)] * kernel[ki];
-                                weight_sum += kernel[ki];
-                            }
+                            let nj = clamp_y(j as isize + offset);
+                            sum += data[idx(i, nj, k)] * kernel[ki];
                         }
 
-                        result[idx(i, j, k)] = if weight_sum > 0.0 { sum / weight_sum } else { 0.0 };
+                        result[idx(i, j, k)] = sum;
                     }
                 }
             }
@@ -373,19 +381,14 @@ fn convolve_1d_direction(
                 for j in 0..ny {
                     for i in 0..nx {
                         let mut sum = 0.0;
-                        let mut weight_sum = 0.0;
 
                         for ki in 0..kernel.len() {
                             let offset = ki as isize - kernel_radius as isize;
-                            let nk = k as isize + offset;
-
-                            if nk >= 0 && nk < nz as isize {
-                                sum += data[idx(i, j, nk as usize)] * kernel[ki];
-                                weight_sum += kernel[ki];
-                            }
+                            let nk = clamp_z(k as isize + offset);
+                            sum += data[idx(i, j, nk)] * kernel[ki];
                         }
 
-                        result[idx(i, j, k)] = if weight_sum > 0.0 { sum / weight_sum } else { 0.0 };
+                        result[idx(i, j, k)] = sum;
                     }
                 }
             }

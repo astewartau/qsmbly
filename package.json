@@ -1,0 +1,23 @@
+{
+  "name": "qsm-wasm",
+  "version": "0.3.0",
+  "description": "Quantitative Susceptibility Mapping in WebAssembly",
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.12"
+  },
+  "keywords": [
+    "qsm",
+    "mri",
+    "webassembly",
+    "wasm",
+    "medical-imaging"
+  ],
+  "license": "MIT"
+}

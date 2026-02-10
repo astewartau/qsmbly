@@ -7,9 +7,12 @@
 //!
 //! The curvatures are used in QSMART to weight the spatially-dependent filtering
 //! near brain boundaries to reduce artifacts.
+//!
+//! Uses 2D Delaunay triangulation (via delaunator crate) matching MATLAB's approach:
+//! `tri = delaunay(x, y)` - triangulates on x,y coordinates with z as height.
 
-use std::collections::HashMap;
 use std::f64::consts::PI;
+use delaunator::{triangulate, Point};
 
 /// Result of curvature calculation
 pub struct CurvatureResult {
@@ -125,69 +128,50 @@ fn extract_surface_voxels(
     surface
 }
 
-/// Simple Delaunay-like triangulation of surface points
+/// 2D Delaunay triangulation of surface points
 ///
-/// This uses a simplified approach: for each surface voxel, connect to nearby surface voxels
-/// to form triangles. This is not a true Delaunay triangulation but works well for
-/// voxelized surfaces.
+/// This matches MATLAB's approach: `tri = delaunay(x, y)`
+/// Triangulates on x,y coordinates, treating z as a height field.
+/// This is appropriate for brain surfaces which are mostly single-valued when
+/// viewed from above/below.
 fn triangulate_surface(
     points: &[Point3D],
-    nx: usize, ny: usize, nz: usize,
+    _nx: usize, _ny: usize, _nz: usize,
 ) -> Vec<Triangle> {
-    // Build spatial index for fast neighbor lookup
-    let mut spatial_index: HashMap<(i32, i32, i32), Vec<usize>> = HashMap::new();
-
-    for (idx, p) in points.iter().enumerate() {
-        let key = (p.x.round() as i32, p.y.round() as i32, p.z.round() as i32);
-        spatial_index.entry(key).or_insert_with(Vec::new).push(idx);
+    if points.len() < 3 {
+        return Vec::new();
     }
 
-    let mut triangles = Vec::new();
+    // Convert to delaunator's Point format (2D: x, y only)
+    let coords: Vec<Point> = points.iter()
+        .map(|p| Point { x: p.x, y: p.y })
+        .collect();
 
-    // For each point, find neighbors and create triangles
-    // Use a marching-cubes-like approach with local triangulation
-    for (idx, p) in points.iter().enumerate() {
-        let px = p.x.round() as i32;
-        let py = p.y.round() as i32;
-        let pz = p.z.round() as i32;
+    // Run 2D Delaunay triangulation
+    let result = triangulate(&coords);
 
-        // Find neighbors in 26-connectivity within distance ~2
-        let mut neighbors = Vec::new();
+    // Convert triangles back to our format
+    // delaunator returns triangles as flat array: [t0_v0, t0_v1, t0_v2, t1_v0, t1_v1, t1_v2, ...]
+    let mut triangles = Vec::with_capacity(result.triangles.len() / 3);
 
-        for dz in -2..=2i32 {
-            for dy in -2..=2i32 {
-                for dx in -2..=2i32 {
-                    if dx == 0 && dy == 0 && dz == 0 {
-                        continue;
-                    }
+    for i in (0..result.triangles.len()).step_by(3) {
+        let v0 = result.triangles[i];
+        let v1 = result.triangles[i + 1];
+        let v2 = result.triangles[i + 2];
 
-                    let key = (px + dx, py + dy, pz + dz);
-                    if let Some(indices) = spatial_index.get(&key) {
-                        for &neighbor_idx in indices {
-                            if neighbor_idx > idx {
-                                neighbors.push(neighbor_idx);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Filter out degenerate triangles (edges too long for voxel surface)
+        // Max edge length ~5 voxels to avoid connecting distant surface regions
+        let p0 = &points[v0];
+        let p1 = &points[v1];
+        let p2 = &points[v2];
 
-        // Create triangles from triplets of nearby points
-        // Only create triangles where vertices are within reasonable distance
-        for i in 0..neighbors.len() {
-            for j in (i + 1)..neighbors.len() {
-                let n1 = neighbors[i];
-                let n2 = neighbors[j];
+        let d01 = p0.sub(p1).norm();
+        let d12 = p1.sub(p2).norm();
+        let d20 = p2.sub(p0).norm();
 
-                // Check that n1 and n2 are also neighbors
-                let d12 = points[n1].sub(&points[n2]).norm();
-
-                if d12 <= 3.0 {
-                    // Valid triangle
-                    triangles.push(Triangle { v0: idx, v1: n1, v2: n2 });
-                }
-            }
+        let max_edge = 5.0;  // Maximum edge length in voxels
+        if d01 <= max_edge && d12 <= max_edge && d20 <= max_edge {
+            triangles.push(Triangle { v0, v1, v2 });
         }
     }
 
@@ -583,9 +567,10 @@ fn gaussian_smooth_3d_masked(
 }
 
 /// 1D convolution with Gaussian kernel along specified axis
+/// Uses replicate padding to match MATLAB's imgaussfilt3 behavior
 fn convolve_1d_direction_masked(
     data: &[f64],
-    mask: &[u8],
+    _mask: &[u8],
     nx: usize, ny: usize, nz: usize,
     sigma: f64,
     direction: char,
@@ -616,25 +601,25 @@ fn convolve_1d_direction_masked(
 
     let idx = |i: usize, j: usize, k: usize| i + j * nx + k * nx * ny;
 
+    // Helper functions for replicate padding (clamp to valid range)
+    let clamp_x = |x: i32| -> usize { x.max(0).min(nx as i32 - 1) as usize };
+    let clamp_y = |y: i32| -> usize { y.max(0).min(ny as i32 - 1) as usize };
+    let clamp_z = |z: i32| -> usize { z.max(0).min(nz as i32 - 1) as usize };
+
     match direction {
         'x' => {
             for k in 0..nz {
                 for j in 0..ny {
                     for i in 0..nx {
-                        let mut sum = 0.0;
-                        let mut weight_sum = 0.0;
+                        let mut conv_sum = 0.0;
 
                         for ki in 0..kernel_size {
                             let offset = ki - kernel_radius;
-                            let ni = i as i32 + offset;
-
-                            if ni >= 0 && ni < nx as i32 {
-                                sum += data[idx(ni as usize, j, k)] * kernel[ki as usize];
-                                weight_sum += kernel[ki as usize];
-                            }
+                            let ni = clamp_x(i as i32 + offset);
+                            conv_sum += data[idx(ni, j, k)] * kernel[ki as usize];
                         }
 
-                        result[idx(i, j, k)] = if weight_sum > 0.0 { sum / weight_sum } else { 0.0 };
+                        result[idx(i, j, k)] = conv_sum;
                     }
                 }
             }
@@ -643,20 +628,15 @@ fn convolve_1d_direction_masked(
             for k in 0..nz {
                 for j in 0..ny {
                     for i in 0..nx {
-                        let mut sum = 0.0;
-                        let mut weight_sum = 0.0;
+                        let mut conv_sum = 0.0;
 
                         for ki in 0..kernel_size {
                             let offset = ki - kernel_radius;
-                            let nj = j as i32 + offset;
-
-                            if nj >= 0 && nj < ny as i32 {
-                                sum += data[idx(i, nj as usize, k)] * kernel[ki as usize];
-                                weight_sum += kernel[ki as usize];
-                            }
+                            let nj = clamp_y(j as i32 + offset);
+                            conv_sum += data[idx(i, nj, k)] * kernel[ki as usize];
                         }
 
-                        result[idx(i, j, k)] = if weight_sum > 0.0 { sum / weight_sum } else { 0.0 };
+                        result[idx(i, j, k)] = conv_sum;
                     }
                 }
             }
@@ -665,20 +645,15 @@ fn convolve_1d_direction_masked(
             for k in 0..nz {
                 for j in 0..ny {
                     for i in 0..nx {
-                        let mut sum = 0.0;
-                        let mut weight_sum = 0.0;
+                        let mut conv_sum = 0.0;
 
                         for ki in 0..kernel_size {
                             let offset = ki - kernel_radius;
-                            let nk = k as i32 + offset;
-
-                            if nk >= 0 && nk < nz as i32 {
-                                sum += data[idx(i, j, nk as usize)] * kernel[ki as usize];
-                                weight_sum += kernel[ki as usize];
-                            }
+                            let nk = clamp_z(k as i32 + offset);
+                            conv_sum += data[idx(i, j, nk)] * kernel[ki as usize];
                         }
 
-                        result[idx(i, j, k)] = if weight_sum > 0.0 { sum / weight_sum } else { 0.0 };
+                        result[idx(i, j, k)] = conv_sum;
                     }
                 }
             }

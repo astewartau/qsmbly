@@ -1,6 +1,6 @@
 [package]
 name = "qsm_wasm"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["QSM-WASM"]
 description = "WASM-accelerated QSM processing pipeline"
@@ -30,6 +30,9 @@ bytemuck = "1.24"
 
 # SIMD acceleration (optional)
 wide = { version = "0.7", optional = true }
+
+# 2D Delaunay triangulation for curvature calculation
+delaunator = "1.0"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

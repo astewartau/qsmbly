@@ -150,6 +150,48 @@ pub fn calculate_weights_romeo_wasm(
     weights
 }
 
+/// Calculate ROMEO edge weights with configurable weight components
+///
+/// # Arguments
+/// * `phase` - Phase data (nx * ny * nz)
+/// * `mag` - Magnitude data (nx * ny * nz), can be empty
+/// * `phase2` - Second echo phase for gradient coherence (nx * ny * nz), can be empty
+/// * `te1`, `te2` - Echo times for gradient coherence scaling
+/// * `mask` - Binary mask (nx * ny * nz)
+/// * `nx`, `ny`, `nz` - Array dimensions
+/// * `use_phase_gradient_coherence` - Include phase gradient coherence (multi-echo temporal)
+/// * `use_mag_coherence` - Include magnitude coherence (min/max similarity)
+/// * `use_mag_weight` - Include magnitude weight (penalize low signal)
+///
+/// # Returns
+/// Weights array (3 * nx * ny * nz) for x, y, z directions
+#[wasm_bindgen]
+pub fn calculate_weights_romeo_configurable_wasm(
+    phase: &[f64],
+    mag: &[f64],
+    phase2: &[f64],
+    te1: f64,
+    te2: f64,
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    use_phase_gradient_coherence: bool,
+    use_mag_coherence: bool,
+    use_mag_weight: bool,
+) -> Vec<u8> {
+    console_log!("WASM calculate_weights_romeo_configurable: {}x{}x{}, pgc={}, mc={}, mw={}",
+                 nx, ny, nz, use_phase_gradient_coherence, use_mag_coherence, use_mag_weight);
+
+    let phase2_opt = if phase2.is_empty() { None } else { Some(phase2) };
+
+    let weights = unwrap::romeo::calculate_weights_romeo_configurable(
+        phase, mag, phase2_opt, te1, te2, mask, nx, ny, nz,
+        use_phase_gradient_coherence, use_mag_coherence, use_mag_weight
+    );
+
+    console_log!("WASM weights calculation complete");
+    weights
+}
+
 // ============================================================================
 // WASM Exports: Dipole Inversion
 // ============================================================================
@@ -1327,13 +1369,15 @@ pub fn save_nifti_gz_wasm(
 // WASM Exports: Brain Extraction (BET)
 // ============================================================================
 
-/// BET brain extraction
+/// BET brain extraction (aligned with FSL-BET2)
 ///
 /// # Arguments
 /// * `data` - 3D magnitude image (nx * ny * nz)
 /// * `nx`, `ny`, `nz` - Dimensions
 /// * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
 /// * `fractional_intensity` - Intensity threshold (0.0-1.0, smaller = larger brain)
+/// * `smoothness_factor` - Smoothness constraint (default 1.0, larger = smoother surface)
+/// * `gradient_threshold` - Z-gradient for threshold (-1 to 1, positive = larger brain at bottom)
 /// * `iterations` - Number of surface evolution iterations
 /// * `subdivisions` - Icosphere subdivision level (4 = 2562 vertices)
 ///
@@ -1345,15 +1389,18 @@ pub fn bet_wasm(
     nx: usize, ny: usize, nz: usize,
     vsx: f64, vsy: f64, vsz: f64,
     fractional_intensity: f64,
+    smoothness_factor: f64,
+    gradient_threshold: f64,
     iterations: usize,
     subdivisions: usize,
 ) -> Vec<u8> {
-    console_log!("WASM BET: {}x{}x{}, fi={:.2}, iter={}, subdiv={}",
-                 nx, ny, nz, fractional_intensity, iterations, subdivisions);
+    console_log!("WASM BET: {}x{}x{}, fi={:.2}, smooth={:.2}, grad={:.2}, iter={}, subdiv={}",
+                 nx, ny, nz, fractional_intensity, smoothness_factor, gradient_threshold, iterations, subdivisions);
 
     let mask = bet::run_bet(
         data, nx, ny, nz, vsx, vsy, vsz,
-        fractional_intensity, iterations, subdivisions
+        fractional_intensity, smoothness_factor, gradient_threshold,
+        iterations, subdivisions
     );
 
     let mask_count: usize = mask.iter().map(|&m| m as usize).sum();
@@ -1363,7 +1410,7 @@ pub fn bet_wasm(
     mask
 }
 
-/// Run BET with progress callback
+/// Run BET with progress callback (aligned with FSL-BET2)
 ///
 /// The callback receives (current_iteration, total_iterations)
 #[wasm_bindgen]
@@ -1372,17 +1419,20 @@ pub fn bet_wasm_with_progress(
     nx: usize, ny: usize, nz: usize,
     vsx: f64, vsy: f64, vsz: f64,
     fractional_intensity: f64,
+    smoothness_factor: f64,
+    gradient_threshold: f64,
     iterations: usize,
     subdivisions: usize,
     progress_callback: &js_sys::Function,
 ) -> Vec<u8> {
-    console_log!("WASM BET with progress: {}x{}x{}, fi={:.2}, iter={}, subdiv={}",
-                 nx, ny, nz, fractional_intensity, iterations, subdivisions);
+    console_log!("WASM BET with progress: {}x{}x{}, fi={:.2}, smooth={:.2}, grad={:.2}, iter={}, subdiv={}",
+                 nx, ny, nz, fractional_intensity, smoothness_factor, gradient_threshold, iterations, subdivisions);
 
     let callback = progress_callback.clone();
     let mask = bet::run_bet_with_progress(
         data, nx, ny, nz, vsx, vsy, vsz,
-        fractional_intensity, iterations, subdivisions,
+        fractional_intensity, smoothness_factor, gradient_threshold,
+        iterations, subdivisions,
         |current, total| {
             let this = JsValue::null();
             let _ = callback.call2(&this,
@@ -1763,6 +1813,69 @@ pub fn mcpc3ds_b0_pipeline_wasm(
 
     console_log!("WASM mcpc3ds_b0_pipeline complete");
     result
+}
+
+/// Multi-echo linear fit with magnitude weighting
+///
+/// Fits a linear model: phase = slope * TE + intercept
+/// using weighted least squares with magnitude as weights.
+///
+/// # Arguments
+/// * `unwrapped_phases_flat` - Flattened unwrapped phases [echo0, echo1, ...]
+/// * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
+/// * `tes` - Echo times in seconds
+/// * `mask` - Binary mask
+/// * `n_total` - Voxels per echo
+/// * `estimate_offset` - If true, estimate phase offset (intercept)
+/// * `reliability_percentile` - Percentile for reliability masking (0-100, 0=disable)
+///
+/// # Returns
+/// Flattened [field_hz, phase_offset, fit_residual, reliability_mask]
+/// - First n_total: field in Hz
+/// - Next n_total: phase offset in radians
+/// - Next n_total: fit residual
+/// - Next n_total: reliability mask (as f64, 0 or 1)
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn multi_echo_linear_fit_wasm(
+    unwrapped_phases_flat: &[f64],
+    mags_flat: &[f64],
+    tes: &[f64],
+    mask: &[u8],
+    n_total: usize,
+    estimate_offset: bool,
+    reliability_percentile: f64,
+) -> Vec<f64> {
+    let n_echoes = tes.len();
+
+    console_log!("WASM multi_echo_linear_fit: {} echoes, {} voxels, offset={}, reliability={}%",
+                 n_echoes, n_total, estimate_offset, reliability_percentile);
+
+    // Split flat arrays into per-echo vectors
+    let unwrapped_phases: Vec<Vec<f64>> = (0..n_echoes)
+        .map(|e| unwrapped_phases_flat[e * n_total..(e + 1) * n_total].to_vec())
+        .collect();
+    let mags: Vec<Vec<f64>> = (0..n_echoes)
+        .map(|e| mags_flat[e * n_total..(e + 1) * n_total].to_vec())
+        .collect();
+
+    let result = utils::multi_echo::multi_echo_linear_fit(
+        &unwrapped_phases, &mags, tes, mask,
+        estimate_offset, reliability_percentile
+    );
+
+    // Convert field to Hz
+    let field_hz = utils::multi_echo::field_to_hz(&result.field);
+
+    // Flatten output
+    let mut output = Vec::with_capacity(4 * n_total);
+    output.extend(field_hz);
+    output.extend(result.phase_offset);
+    output.extend(result.fit_residual);
+    output.extend(result.reliability_mask.iter().map(|&v| v as f64));
+
+    console_log!("WASM multi_echo_linear_fit complete");
+    output
 }
 
 // ============================================================================

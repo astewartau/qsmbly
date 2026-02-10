@@ -2,27 +2,29 @@
 /* eslint-disable */
 
 /**
- * BET brain extraction
+ * BET brain extraction (aligned with FSL-BET2)
  *
  * # Arguments
  * * `data` - 3D magnitude image (nx * ny * nz)
  * * `nx`, `ny`, `nz` - Dimensions
  * * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
  * * `fractional_intensity` - Intensity threshold (0.0-1.0, smaller = larger brain)
+ * * `smoothness_factor` - Smoothness constraint (default 1.0, larger = smoother surface)
+ * * `gradient_threshold` - Z-gradient for threshold (-1 to 1, positive = larger brain at bottom)
  * * `iterations` - Number of surface evolution iterations
  * * `subdivisions` - Icosphere subdivision level (4 = 2562 vertices)
  *
  * # Returns
  * Binary mask as Uint8Array (1 = brain, 0 = background)
  */
-export function bet_wasm(data: Float64Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, fractional_intensity: number, iterations: number, subdivisions: number): Uint8Array;
+export function bet_wasm(data: Float64Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, fractional_intensity: number, smoothness_factor: number, gradient_threshold: number, iterations: number, subdivisions: number): Uint8Array;
 
 /**
- * Run BET with progress callback
+ * Run BET with progress callback (aligned with FSL-BET2)
  *
  * The callback receives (current_iteration, total_iterations)
  */
-export function bet_wasm_with_progress(data: Float64Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, fractional_intensity: number, iterations: number, subdivisions: number, progress_callback: Function): Uint8Array;
+export function bet_wasm_with_progress(data: Float64Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, fractional_intensity: number, smoothness_factor: number, gradient_threshold: number, iterations: number, subdivisions: number, progress_callback: Function): Uint8Array;
 
 /**
  * Calculate B0 field from unwrapped phase using weighted averaging
@@ -388,6 +390,30 @@ export function medi_l1_wasm(local_field: Float64Array, n_std: Float64Array, mag
 export function medi_l1_wasm_with_progress(local_field: Float64Array, n_std: Float64Array, magnitude: Float64Array, mask: Uint8Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, bx: number, by: number, bz: number, lambda: number, merit: boolean, smv: boolean, smv_radius: number, data_weighting: number, percentage: number, cg_tol: number, cg_max_iter: number, max_iter: number, tol: number, progress_callback: Function): Float64Array;
 
 /**
+ * Multi-echo linear fit with magnitude weighting
+ *
+ * Fits a linear model: phase = slope * TE + intercept
+ * using weighted least squares with magnitude as weights.
+ *
+ * # Arguments
+ * * `unwrapped_phases_flat` - Flattened unwrapped phases [echo0, echo1, ...]
+ * * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
+ * * `tes` - Echo times in seconds
+ * * `mask` - Binary mask
+ * * `n_total` - Voxels per echo
+ * * `estimate_offset` - If true, estimate phase offset (intercept)
+ * * `reliability_percentile` - Percentile for reliability masking (0-100, 0=disable)
+ *
+ * # Returns
+ * Flattened [field_hz, phase_offset, fit_residual, reliability_mask]
+ * - First n_total: field in Hz
+ * - Next n_total: phase offset in radians
+ * - Next n_total: fit residual
+ * - Next n_total: reliability mask (as f64, 0 or 1)
+ */
+export function multi_echo_linear_fit_wasm(unwrapped_phases_flat: Float64Array, mags_flat: Float64Array, tes: Float64Array, mask: Uint8Array, n_total: number, estimate_offset: boolean, reliability_percentile: number): Float64Array;
+
+/**
  * NLTV (Nonlinear Total Variation) dipole inversion
  *
  * Iteratively reweighted TV for edge-preserving QSM.
@@ -735,8 +761,8 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly bet_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
-    readonly bet_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: any) => [number, number];
+    readonly bet_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number];
+    readonly bet_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: any) => [number, number];
     readonly calculate_b0_weighted_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly calculate_weights_romeo_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number];
     readonly create_sphere_mask: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
@@ -763,6 +789,7 @@ export interface InitOutput {
     readonly mcpc3ds_single_coil_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number];
     readonly medi_l1_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number, t: number, u: number, v: number, w: number, x: number, y: number, z: number, a1: number) => [number, number];
     readonly medi_l1_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number, t: number, u: number, v: number, w: number, x: number, y: number, z: number, a1: number, b1: any) => [number, number];
+    readonly multi_echo_linear_fit_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly nltv_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number];
     readonly nltv_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: any) => [number, number];
     readonly otsu_threshold_wasm: (a: number, b: number, c: number) => [number, number];

@@ -6,7 +6,7 @@
 
 A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs entirely in your web browser using WebAssembly. No installation, no backend servers, no data uploads - just pure client-side MRI processing.
 
-[ACCESS QSMbly HERE](astewartau.github.io/qsmbly/)
+[ACCESS QSMbly HERE](https://astewartau.github.io/qsmbly/)
 
 ## Features
 
@@ -82,8 +82,8 @@ A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs enti
 ### Option 2: Local Development
 ```bash
 # Clone the repository
-git clone https://github.com/astewartau/qsm-wasm.git
-cd qsm-wasm
+git clone https://github.com/astewartau/qsmbly.git
+cd qsmbly
 
 # Serve locally (Python)
 python -m http.server 8080
@@ -113,25 +113,45 @@ npx serve .
 ## Repository Structure
 
 ```
-qsm-wasm/
+qsmbly/
 ├── index.html              # Main application interface
 ├── build.sh                # WASM build script
+├── package.json            # Node.js dependencies (testing)
+├── jest.config.js          # Jest testing configuration
 ├── js/
-│   ├── qsm-app.js          # Main application logic
-│   ├── qsm-app-romeo.js    # Extended ROMEO support
-│   ├── qsm-worker.js       # Web worker for processing
-│   └── qsm-worker-pure.js  # Pure JavaScript worker
+│   ├── qsm-app-romeo.js    # Main application logic
+│   ├── qsm-worker-pure.js  # Web worker for processing
+│   ├── app/
+│   │   └── config.js       # Centralized configuration
+│   ├── modules/
+│   │   ├── file-io/        # NIfTI file I/O utilities
+│   │   │   └── NiftiUtils.js
+│   │   ├── mask/           # Mask creation & morphology
+│   │   │   ├── MorphologyOps.js  # Erosion, dilation, hole filling
+│   │   │   └── ThresholdUtils.js # Otsu thresholding
+│   │   ├── ui/             # UI utilities
+│   │   │   ├── ConsoleOutput.js  # Real-time logging
+│   │   │   └── ProgressManager.js
+│   │   └── viewer/         # Visualization utilities
+│   │       └── EchoNavigator.js  # Multi-echo navigation
+│   ├── worker/
+│   │   └── utils/          # Worker utility functions
+│   │       ├── PhaseUtils.js     # Phase scaling, B0 calculation
+│   │       ├── MaskUtils.js      # Threshold-based masking
+│   │       └── FilterUtils.js    # 3D box filtering
+│   └── test/
+│       └── setup.js        # Jest test setup
 ├── css/
 │   └── modern-styles.css   # Modern UI styling
 ├── wasm/                   # Compiled WebAssembly (served)
 │   ├── qsm_wasm.js         # JS bindings
-│   ├── qsm_wasm_bg.wasm    # WASM binary (~843 KB)
+│   ├── qsm_wasm_bg.wasm    # WASM binary (~1 MB)
 │   ├── romeo_wasm.js       # ROMEO-specific bindings
 │   └── romeo_wasm_bg.wasm  # ROMEO binary (~22 KB)
 ├── rust-wasm/              # Rust source code
 │   ├── Cargo.toml          # Rust dependencies
 │   └── src/
-│       ├── lib.rs          # WASM entry points (37 exports)
+│       ├── lib.rs          # WASM entry points (59 exports)
 │       ├── fft.rs          # FFT with cached plans
 │       ├── nifti_io.rs     # NIfTI file handling
 │       ├── inversion/      # Dipole inversion algorithms
@@ -155,7 +175,10 @@ qsm-wasm/
 │       ├── utils/          # Gradient ops, multi-echo, padding
 │       │   ├── qsmart.rs   # QSMART two-stage reconstruction
 │       │   ├── frangi.rs   # Frangi vesselness filter
-│       │   ├── vasculature.rs # Vessel detection
+│       │   ├── vasculature.rs    # Vessel detection
+│       │   ├── multi_echo.rs     # Multi-echo processing
+│       │   ├── curvature.rs      # Curvature calculations
+│       │   ├── bias_correction.rs # Bias field correction
 │       │   └── simd_ops.rs # SIMD-accelerated operations (optional)
 │       └── bet/            # Brain extraction
 ├── python/                 # Reference implementations
@@ -209,6 +232,21 @@ python -m http.server 8080
 
 Note: You may need to hard-refresh (Ctrl+Shift+R) to clear cached WASM files after rebuilding.
 
+### Running Tests
+```bash
+# Install dependencies
+npm install
+
+# Run all tests
+npm test
+
+# Watch mode for development
+npm run test:watch
+
+# Generate coverage report
+npm run test:coverage
+```
+
 ## Technical Stack
 
 ### Rust/WebAssembly
@@ -250,5 +288,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Issues & Support
 
-- **Bug Reports**: [GitHub Issues](https://github.com/astewartau/qsm-wasm/issues)
-- **Feature Requests**: [GitHub Discussions](https://github.com/astewartau/qsm-wasm/discussions)
+- **Bug Reports**: [GitHub Issues](https://github.com/astewartau/qsmbly/issues)
+- **Feature Requests**: [GitHub Discussions](https://github.com/astewartau/qsmbly/discussions)

@@ -88,7 +88,7 @@ pub fn compute_vertex_normals(vertices: &[[f64; 3]], faces: &[[usize; 3]]) -> Ve
     normals
 }
 
-/// Compute mean edge length in mm
+/// Compute mean edge length for vertices in voxel coordinates (converts to mm)
 pub fn compute_mean_edge_length(vertices: &[[f64; 3]], faces: &[[usize; 3]], voxel_size: &[f64; 3]) -> f64 {
     let mut total_length = 0.0;
     let mut count = 0;
@@ -120,6 +120,118 @@ pub fn compute_mean_edge_length(vertices: &[[f64; 3]], faces: &[[usize; 3]], vox
     } else {
         1.0
     }
+}
+
+/// Compute mean edge length for vertices already in mm coordinates
+pub fn compute_mean_edge_length_mm(vertices_mm: &[[f64; 3]], faces: &[[usize; 3]]) -> f64 {
+    let mut total_length = 0.0;
+    let mut count = 0;
+
+    for &[i0, i1, i2] in faces {
+        // Edge v0-v1
+        let dx = vertices_mm[i1][0] - vertices_mm[i0][0];
+        let dy = vertices_mm[i1][1] - vertices_mm[i0][1];
+        let dz = vertices_mm[i1][2] - vertices_mm[i0][2];
+        total_length += (dx*dx + dy*dy + dz*dz).sqrt();
+
+        // Edge v1-v2
+        let dx = vertices_mm[i2][0] - vertices_mm[i1][0];
+        let dy = vertices_mm[i2][1] - vertices_mm[i1][1];
+        let dz = vertices_mm[i2][2] - vertices_mm[i1][2];
+        total_length += (dx*dx + dy*dy + dz*dz).sqrt();
+
+        // Edge v2-v0
+        let dx = vertices_mm[i0][0] - vertices_mm[i2][0];
+        let dy = vertices_mm[i0][1] - vertices_mm[i2][1];
+        let dz = vertices_mm[i0][2] - vertices_mm[i2][2];
+        total_length += (dx*dx + dy*dy + dz*dz).sqrt();
+
+        count += 3;
+    }
+
+    if count > 0 {
+        total_length / count as f64
+    } else {
+        1.0
+    }
+}
+
+/// Compute distance between two vertices (already in mm)
+fn vertex_distance(v1: &[f64; 3], v2: &[f64; 3]) -> f64 {
+    let dx = v2[0] - v1[0];
+    let dy = v2[1] - v1[1];
+    let dz = v2[2] - v1[2];
+    (dx * dx + dy * dy + dz * dz).sqrt()
+}
+
+/// Compute self-intersection heuristic by comparing vertex distances
+/// between current and original mesh.
+///
+/// This is based on FSL-BET2's self_intersection method which:
+/// 1. Computes mean edge length for both meshes (ml, mlo)
+/// 2. For vertex pairs that are currently close (< ml apart), checks if they've
+///    gotten significantly closer than they were in the original mesh
+/// 3. Accumulates squared differences in normalized distances
+///
+/// Returns a scalar value where > 4000 indicates likely self-intersection.
+/// The threshold of 4000 matches FSL-BET2's self_intersection_threshold.
+///
+/// Note: Vertices are expected to be in mm coordinates.
+pub fn self_intersection_heuristic(
+    current_vertices: &[[f64; 3]],
+    original_vertices: &[[f64; 3]],
+    faces: &[[usize; 3]],
+    _voxel_size: &[f64; 3], // kept for API compatibility, not used (vertices are in mm)
+) -> f64 {
+    if current_vertices.len() != original_vertices.len() {
+        return f64::MAX;
+    }
+
+    let n = current_vertices.len();
+
+    // Compute mean edge length for normalization (like FSL's ml and mlo)
+    // Vertices are in mm, so use the mm version
+    let ml = compute_mean_edge_length_mm(current_vertices, faces);
+    let mlo = compute_mean_edge_length_mm(original_vertices, faces);
+
+    if ml < 1e-10 || mlo < 1e-10 {
+        return f64::MAX;
+    }
+
+    let ml_sq = ml * ml;
+    let mut intersection = 0.0;
+
+    // FSL compares all vertex pairs, but only counts pairs where current distance < ml
+    // This detects when non-adjacent vertices have gotten too close (mesh folding)
+    // For efficiency, we sample a subset of pairs for large meshes
+    let step = if n > 500 { (n / 500).max(1) } else { 1 };
+
+    for i in (0..n).step_by(step) {
+        for j in (i + 1..n).step_by(step) {
+            // Current distance squared (vertices already in mm)
+            let dx = current_vertices[j][0] - current_vertices[i][0];
+            let dy = current_vertices[j][1] - current_vertices[i][1];
+            let dz = current_vertices[j][2] - current_vertices[i][2];
+            let curr_dist_sq = dx * dx + dy * dy + dz * dz;
+
+            // Only consider pairs that are currently close (< ml apart)
+            // This is the key insight from FSL - we're looking for folding
+            if curr_dist_sq < ml_sq {
+                let curr_dist = curr_dist_sq.sqrt();
+                let orig_dist = vertex_distance(&original_vertices[i], &original_vertices[j]);
+
+                // Normalize distances
+                let dist = curr_dist / ml;
+                let disto = orig_dist / mlo;
+
+                // Accumulate squared difference
+                let diff = dist - disto;
+                intersection += diff * diff;
+            }
+        }
+    }
+
+    intersection
 }
 
 #[cfg(test)]

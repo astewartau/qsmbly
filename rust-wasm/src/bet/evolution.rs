@@ -1,17 +1,23 @@
 //! BET surface evolution algorithm
+//!
+//! Based on: Smith, S.M. (2002) "Fast robust automated brain extraction"
+//! Human Brain Mapping, 17(3):143-155
+//!
+//! Aligned with FSL-BET2 implementation.
 
 use super::icosphere::create_icosphere;
-use super::mesh::{build_neighbor_matrix, compute_vertex_normals, compute_mean_edge_length};
+use super::mesh::{build_neighbor_matrix, compute_vertex_normals, compute_mean_edge_length_mm, self_intersection_heuristic};
 use std::collections::VecDeque;
 
 /// Brain parameters struct (like FSL's bet_parameters)
 struct BetParameters {
-    t2: f64,      // 2nd percentile (robust min)
-    t98: f64,     // 98th percentile (robust max)
-    t: f64,       // threshold = t2 + 0.1*(t98-t2)
-    tm: f64,      // median within-brain intensity (critical for proper surface evolution)
+    t2: f64,       // 2nd percentile (robust min)
+    t98: f64,      // 98th percentile (robust max)
+    t: f64,        // threshold = t2 + 0.1*(t98-t2)
+    tm: f64,       // median within-brain intensity (critical for proper surface evolution)
     cog: [f64; 3], // center of gravity in voxel coordinates
-    radius: f64,  // estimated brain radius in mm
+    cog_mm: [f64; 3], // center of gravity in mm (for z-gradient)
+    radius: f64,   // estimated brain radius in mm
 }
 
 /// Estimate brain parameters from the image (matches FSL-BET2's adjust_initial_mesh)
@@ -25,7 +31,8 @@ fn estimate_brain_parameters(
 
     if nonzero.is_empty() {
         let cog = [(nx as f64) / 2.0, (ny as f64) / 2.0, (nz as f64) / 2.0];
-        return BetParameters { t2: 0.0, t98: 1.0, t: 0.1, tm: 0.5, cog, radius: 50.0 };
+        let cog_mm = [cog[0] * voxel_size[0], cog[1] * voxel_size[1], cog[2] * voxel_size[2]];
+        return BetParameters { t2: 0.0, t98: 1.0, t: 0.1, tm: 0.5, cog, cog_mm, radius: 50.0 };
     }
 
     // Sort for percentiles
@@ -111,7 +118,7 @@ fn estimate_brain_parameters(
         within_brain_values[mid]
     };
 
-    BetParameters { t2, t98, t, tm, cog, radius }
+    BetParameters { t2, t98, t, tm, cog, cog_mm, radius }
 }
 
 /// Compute percentile of sorted array
@@ -168,16 +175,22 @@ fn sample_intensity(data: &[f64], nx: usize, ny: usize, nz: usize, x: f64, y: f6
 /// FSL samples from 1mm to d1 (7mm) for Imin, and up to d2 (3mm) for Imax.
 /// Initial values: Imin = tm, Imax = t
 /// Final clamps: Imin >= t2, Imax <= tm
+///
+/// point_mm: vertex position in mm coordinates
+/// normal: unit normal vector (outward pointing)
+///
+/// Returns (i_min, i_max, success) where success=false means sampling failed
+/// and the caller should use f3=0 (like FSL does).
 fn sample_intensities_fsl(
     data: &[f64],
     nx: usize, ny: usize, nz: usize,
-    point: &[f64; 3],
+    point_mm: &[f64; 3],
     normal: &[f64; 3],
     voxel_size: &[f64; 3],
     t2: f64,
     t: f64,
     tm: f64,
-) -> (f64, f64) {
+) -> (f64, f64, bool) {
     let d1 = 7.0; // max search distance for Imin (mm)
     let d2 = 3.0; // max search distance for Imax (mm)
     let dscale = voxel_size[0].min(voxel_size[1]).min(voxel_size[2]).min(1.0);
@@ -186,71 +199,100 @@ fn sample_intensities_fsl(
     let mut i_min = tm;
     let mut i_max = t;
 
-    // Normal direction in voxel units
-    let nxv = normal[0] / voxel_size[0];
-    let nyv = normal[1] / voxel_size[1];
-    let nzv = normal[2] / voxel_size[2];
+    // Convert mm to voxel helper
+    let mm_to_voxel = |p_mm: &[f64; 3]| -> [f64; 3] {
+        [p_mm[0] / voxel_size[0], p_mm[1] / voxel_size[1], p_mm[2] / voxel_size[2]]
+    };
 
-    // Starting position (1mm inward along normal)
-    let mut iv = point[0] - nxv;
-    let mut jv = point[1] - nyv;
-    let mut kv = point[2] - nzv;
+    // Check if voxel position is in bounds
+    let in_bounds = |v: &[f64; 3]| -> bool {
+        v[0] >= 0.0 && v[0] < (nx - 1) as f64 &&
+        v[1] >= 0.0 && v[1] < (ny - 1) as f64 &&
+        v[2] >= 0.0 && v[2] < (nz - 1) as f64
+    };
 
-    // Check if starting point is in bounds
-    if iv >= 0.0 && iv < (nx - 1) as f64 && jv >= 0.0 && jv < (ny - 1) as f64 && kv >= 0.0 && kv < (nz - 1) as f64 {
-        let im = sample_intensity(data, nx, ny, nz, iv, jv, kv);
-        i_min = i_min.min(im);
-        i_max = i_max.max(im);
+    // Starting position in mm (1mm inward along normal)
+    let mut p_mm = [
+        point_mm[0] - normal[0],
+        point_mm[1] - normal[1],
+        point_mm[2] - normal[2],
+    ];
+    let mut p_vox = mm_to_voxel(&p_mm);
 
-        // Check far point at d1-1
-        let iv_far = point[0] - (d1 - 1.0) * nxv;
-        let jv_far = point[1] - (d1 - 1.0) * nyv;
-        let kv_far = point[2] - (d1 - 1.0) * nzv;
+    // Check if starting point is in bounds (FSL: first bounds check)
+    if !in_bounds(&p_vox) {
+        // FSL: if first bounds check fails, f3 = 0 (no intensity force)
+        return (i_min, i_max, false);
+    }
 
-        if iv_far >= 0.0 && iv_far < (nx - 1) as f64 && jv_far >= 0.0 && jv_far < (ny - 1) as f64 && kv_far >= 0.0 && kv_far < (nz - 1) as f64 {
-            let im = sample_intensity(data, nx, ny, nz, iv_far, jv_far, kv_far);
+    let im = sample_intensity(data, nx, ny, nz, p_vox[0], p_vox[1], p_vox[2]);
+    i_min = i_min.min(im);
+    i_max = i_max.max(im);
+
+    // Check far point at d1-1 (FSL: second bounds check)
+    let p_far_mm = [
+        point_mm[0] - (d1 - 1.0) * normal[0],
+        point_mm[1] - (d1 - 1.0) * normal[1],
+        point_mm[2] - (d1 - 1.0) * normal[2],
+    ];
+    let p_far_vox = mm_to_voxel(&p_far_mm);
+
+    if !in_bounds(&p_far_vox) {
+        // FSL: if second bounds check fails, f3 = 0 (no intensity force)
+        return (i_min, i_max, false);
+    }
+
+    let im = sample_intensity(data, nx, ny, nz, p_far_vox[0], p_far_vox[1], p_far_vox[2]);
+    i_min = i_min.min(im);
+
+    // Sample from 2mm to d1 (stepping by dscale mm)
+    let mut gi = 2.0;
+    while gi < d1 {
+        p_mm[0] -= normal[0] * dscale;
+        p_mm[1] -= normal[1] * dscale;
+        p_mm[2] -= normal[2] * dscale;
+        p_vox = mm_to_voxel(&p_mm);
+
+        if in_bounds(&p_vox) {
+            let im = sample_intensity(data, nx, ny, nz, p_vox[0], p_vox[1], p_vox[2]);
             i_min = i_min.min(im);
 
-            // Scale normal for stepping
-            let nxv_scaled = nxv * dscale;
-            let nyv_scaled = nyv * dscale;
-            let nzv_scaled = nzv * dscale;
-
-            // Sample from 2mm to d1
-            let mut gi = 2.0;
-            while gi < d1 {
-                iv -= nxv_scaled;
-                jv -= nyv_scaled;
-                kv -= nzv_scaled;
-
-                if iv >= 0.0 && iv < (nx - 1) as f64 && jv >= 0.0 && jv < (ny - 1) as f64 && kv >= 0.0 && kv < (nz - 1) as f64 {
-                    let im = sample_intensity(data, nx, ny, nz, iv, jv, kv);
-                    i_min = i_min.min(im);
-
-                    // Only update Imax for samples within d2
-                    if gi < d2 {
-                        i_max = i_max.max(im);
-                    }
-                }
-
-                gi += dscale;
+            // Only update Imax for samples within d2
+            if gi < d2 {
+                i_max = i_max.max(im);
             }
         }
+
+        gi += dscale;
     }
 
     // Clamp like FSL does (this is critical for sinus exclusion)
     i_min = i_min.max(t2);    // Imin can't go below noise floor
     i_max = i_max.min(tm);    // Imax can't go above median brain intensity
 
-    (i_min, i_max)
+    (i_min, i_max, true)
 }
 
 /// Convert surface mesh to binary mask using flood fill
+///
+/// vertices_mm: vertex positions in mm coordinates
+/// voxel_size: voxel dimensions in mm
 fn surface_to_mask(
-    vertices: &[[f64; 3]],
+    vertices_mm: &[[f64; 3]],
     faces: &[[usize; 3]],
     nx: usize, ny: usize, nz: usize,
+    voxel_size: &[f64; 3],
 ) -> Vec<u8> {
+    // Convert mm vertices to voxel coordinates
+    let vertices: Vec<[f64; 3]> = vertices_mm
+        .iter()
+        .map(|v| [
+            v[0] / voxel_size[0],
+            v[1] / voxel_size[1],
+            v[2] / voxel_size[2],
+        ])
+        .collect();
+
     let mininc = 0.5;
 
     // Start with all 1s (outside)
@@ -321,7 +363,7 @@ fn surface_to_mask(
 
     // Flood fill from center of mesh
     let mut center = [0.0, 0.0, 0.0];
-    for v in vertices {
+    for v in &vertices {
         center[0] += v[0];
         center[1] += v[1];
         center[2] += v[2];
@@ -449,70 +491,72 @@ fn fill_holes(mask: &mut [u8], nx: usize, ny: usize, nz: usize) {
     }
 }
 
-/// Run BET brain extraction
+/// Self-intersection threshold (matches FSL-BET2)
+const SELF_INTERSECTION_THRESHOLD: f64 = 4000.0;
+
+/// Maximum number of recovery passes (matches FSL-BET2)
+const MAX_PASSES: usize = 10;
+
+/// Run a single pass of surface evolution
 ///
-/// # Arguments
-/// * `data` - 3D magnitude image data (nx * ny * nz, C-order)
-/// * `nx`, `ny`, `nz` - Image dimensions
-/// * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
-/// * `fractional_intensity` - Intensity threshold (0.0-1.0, smaller = larger brain)
-/// * `iterations` - Number of surface evolution iterations
-/// * `subdivisions` - Icosphere subdivision level
-///
-/// # Returns
-/// Binary mask (1 = brain, 0 = background)
-pub fn run_bet(
+/// Returns the final vertices after evolution
+fn evolution_pass(
     data: &[f64],
     nx: usize, ny: usize, nz: usize,
-    vsx: f64, vsy: f64, vsz: f64,
-    fractional_intensity: f64,
+    voxel_size: &[f64; 3],
+    bp: &BetParameters,
+    vertices: &mut Vec<[f64; 3]>,
+    faces: &[[usize; 3]],
+    neighbor_matrix: &[Vec<usize>],
+    neighbor_counts: &[usize],
+    bt: f64,
+    smoothness_factor: f64,
+    gradient_threshold: f64,
     iterations: usize,
-    subdivisions: usize,
-) -> Vec<u8> {
-    let voxel_size = [vsx, vsy, vsz];
+    pass: usize,
+    progress_callback: &mut Option<&mut dyn FnMut(usize, usize)>,
+) {
+    let n_vertices = vertices.len();
 
-    // Step 1: Estimate brain parameters (now includes tm)
-    let bp = estimate_brain_parameters(data, nx, ny, nz, &voxel_size);
-
-    // Step 2: Create icosphere
-    let (unit_vertices, faces) = create_icosphere(subdivisions);
-    let n_vertices = unit_vertices.len();
-
-    // Scale and position sphere (start at 50% of estimated radius)
-    let initial_radius_vox = [
-        (bp.radius * 0.5) / voxel_size[0],
-        (bp.radius * 0.5) / voxel_size[1],
-        (bp.radius * 0.5) / voxel_size[2],
-    ];
-
-    let mut vertices: Vec<[f64; 3]> = unit_vertices
-        .iter()
-        .map(|v| [
-            v[0] * initial_radius_vox[0] + bp.cog[0],
-            v[1] * initial_radius_vox[1] + bp.cog[1],
-            v[2] * initial_radius_vox[2] + bp.cog[2],
-        ])
-        .collect();
-
-    // Build neighbor structure
-    let (neighbor_matrix, neighbor_counts) = build_neighbor_matrix(n_vertices, &faces, 6);
-
-    // BET parameters (from FSL)
-    let bt = fractional_intensity;
-    let rmin = 3.33; // mm
-    let rmax = 10.0; // mm
+    // BET parameters (from FSL) - adjusted by smoothness_factor
+    let rmin = 3.33 * smoothness_factor;
+    let rmax = 10.0 * smoothness_factor;
     let e = (1.0 / rmin + 1.0 / rmax) / 2.0;
     let f = 6.0 / (1.0 / rmin - 1.0 / rmax);
     let normal_max_update_fraction = 0.5;
     let lambda_fit = 0.1;
 
     // Initial mean edge length
-    let mut l = compute_mean_edge_length(&vertices, &faces, &voxel_size);
+    // Vertices are in mm, so use the mm version
+    let mut l = compute_mean_edge_length_mm(vertices, faces);
 
-    // Step 3: Iterative surface evolution
+    // Smoothing increase factor for recovery passes (FSL: 10^(pass+1))
+    let base_increase = if pass > 0 { 10.0_f64.powi((pass + 1) as i32) } else { 1.0 };
+
+    // Report progress at start if first pass
+    let progress_interval = (iterations / 20).max(1);
+
+    // Debug counter for sampling failures
+    let mut sample_fail_count: usize = 0;
+
     for iteration in 0..iterations {
+        // Report progress periodically
+        if let Some(ref mut cb) = progress_callback {
+            if iteration % progress_interval == 0 {
+                cb(iteration, iterations);
+            }
+        }
+
+        // Compute increase factor with tapering in later iterations (FSL: after 75%)
+        let incfactor = if pass > 0 && iteration > (0.75 * iterations as f64) as usize {
+            let t = iteration as f64 / iterations as f64;
+            4.0 * (1.0 - t) * (base_increase - 1.0) + 1.0
+        } else {
+            base_increase
+        };
+
         // Compute vertex normals
-        let normals = compute_vertex_normals(&vertices, &faces);
+        let normals = compute_vertex_normals(vertices, faces);
 
         // Compute updates for each vertex
         let mut updates: Vec<[f64; 3]> = vec![[0.0, 0.0, 0.0]; n_vertices];
@@ -554,24 +598,47 @@ pub fn run_bet(
             // Force 2: Normal (smoothness)
             let sn_mag = dv_dot_n.abs();
             let rinv = (2.0 * sn_mag) / (l * l);
-            let f2 = (1.0 + (f * (rinv - e)).tanh()) * 0.5;
+            let mut f2 = (1.0 + (f * (rinv - e)).tanh()) * 0.5;
+
+            // In recovery passes, increase smoothing for outward-pointing updates (FSL behavior)
+            if pass > 0 && dv_dot_n > 0.0 {
+                f2 *= incfactor;
+                f2 = f2.min(1.0);
+            }
+
             let u2 = [f2 * sn[0], f2 * sn[1], f2 * sn[2]];
 
             // Force 3: Intensity-based (using FSL-style sampling with tm)
-            let (i_min, i_max) = sample_intensities_fsl(
-                data, nx, ny, nz, &v, &n, &voxel_size, bp.t2, bp.t, bp.tm
+            let (i_min, i_max, sample_ok) = sample_intensities_fsl(
+                data, nx, ny, nz, &v, &n, voxel_size, bp.t2, bp.t, bp.tm
             );
 
-            // Compute local threshold and force (matches FSL exactly)
-            let t_l = (i_max - bp.t2) * bt + bp.t2;
-            let f3 = if i_max - bp.t2 > 0.0 {
-                2.0 * (i_min - t_l) / (i_max - bp.t2)
-            } else {
-                2.0 * (i_min - t_l)
-            };
-            let f3 = f3 * normal_max_update_fraction * lambda_fit * l;
+            // FSL: if sampling fails (out of bounds), f3 = 0 (no intensity force)
+            let u3 = if sample_ok {
+                // Apply z-gradient to local threshold (FSL's -g option)
+                let local_bt = if gradient_threshold.abs() > 1e-10 {
+                    // Vertex is already in mm coordinates
+                    let z_offset = (v[2] - bp.cog_mm[2]) / bp.radius;
+                    (bt + gradient_threshold * z_offset).clamp(0.0, 1.0)
+                } else {
+                    bt
+                };
 
-            let u3 = [f3 * n[0], f3 * n[1], f3 * n[2]];
+                // Compute local threshold and force (matches FSL exactly)
+                let t_l = (i_max - bp.t2) * local_bt + bp.t2;
+                let f3 = if i_max - bp.t2 > 0.0 {
+                    2.0 * (i_min - t_l) / (i_max - bp.t2)
+                } else {
+                    2.0 * (i_min - t_l)
+                };
+                let f3 = f3 * normal_max_update_fraction * lambda_fit * l;
+
+                [f3 * n[0], f3 * n[1], f3 * n[2]]
+            } else {
+                // Sampling failed - use f3 = 0 like FSL does
+                sample_fail_count += 1;
+                [0.0, 0.0, 0.0]
+            };
 
             // Combined update
             updates[i] = [u1[0] + u2[0] + u3[0], u1[1] + u2[1] + u3[1], u1[2] + u2[2] + u3[2]];
@@ -586,12 +653,111 @@ pub fn run_bet(
 
         // Update edge length periodically
         if iteration % 100 == 0 {
-            l = compute_mean_edge_length(&vertices, &faces, &voxel_size);
+            l = compute_mean_edge_length_mm(vertices, faces);
         }
     }
 
+    // Debug: report sampling failures
+    if sample_fail_count > 0 {
+        let total_samples = iterations * n_vertices;
+        let fail_pct = 100.0 * sample_fail_count as f64 / total_samples as f64;
+        eprintln!("[BET] Sampling fallback used: {} / {} ({:.1}%)",
+                  sample_fail_count, total_samples, fail_pct);
+    }
+}
+
+/// Run BET brain extraction
+///
+/// # Arguments
+/// * `data` - 3D magnitude image data (nx * ny * nz, Fortran order)
+/// * `nx`, `ny`, `nz` - Image dimensions
+/// * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
+/// * `fractional_intensity` - Intensity threshold (0.0-1.0, smaller = larger brain)
+/// * `smoothness_factor` - Smoothness constraint (default 1.0, larger = smoother)
+/// * `gradient_threshold` - Z-gradient for threshold (-1 to 1, positive = larger at bottom)
+/// * `iterations` - Number of surface evolution iterations
+/// * `subdivisions` - Icosphere subdivision level
+///
+/// # Returns
+/// Binary mask (1 = brain, 0 = background)
+pub fn run_bet(
+    data: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    fractional_intensity: f64,
+    smoothness_factor: f64,
+    gradient_threshold: f64,
+    iterations: usize,
+    subdivisions: usize,
+) -> Vec<u8> {
+    let voxel_size = [vsx, vsy, vsz];
+
+    // Step 1: Estimate brain parameters
+    let bp = estimate_brain_parameters(data, nx, ny, nz, &voxel_size);
+
+    // Step 2: Create icosphere
+    let (unit_vertices, faces) = create_icosphere(subdivisions);
+    let n_vertices = unit_vertices.len();
+
+    // Scale and position sphere in mm coordinates (start at 50% of estimated radius)
+    // Like FSL, we work entirely in mm - voxel conversion only happens at sampling/masking
+    let initial_radius_mm = bp.radius * 0.5;
+
+    let initial_vertices: Vec<[f64; 3]> = unit_vertices
+        .iter()
+        .map(|v| [
+            v[0] * initial_radius_mm + bp.cog_mm[0],
+            v[1] * initial_radius_mm + bp.cog_mm[1],
+            v[2] * initial_radius_mm + bp.cog_mm[2],
+        ])
+        .collect();
+
+    // Build neighbor structure
+    let (neighbor_matrix, neighbor_counts) = build_neighbor_matrix(n_vertices, &faces, 6);
+
+    // FSL power transform: bt = pow(f, 0.275)
+    // This raises 0.5 -> 0.826, which makes the surface more aggressive in expanding
+    let bt = fractional_intensity.powf(0.275);
+
+    // Multi-pass evolution with self-intersection recovery (like FSL-BET2)
+    let mut vertices = initial_vertices.clone();
+    let mut pass = 0;
+
+    loop {
+        // Run evolution pass
+        evolution_pass(
+            data, nx, ny, nz, &voxel_size, &bp,
+            &mut vertices, &faces,
+            &neighbor_matrix, &neighbor_counts,
+            bt, smoothness_factor, gradient_threshold,
+            iterations, pass,
+            &mut None,
+        );
+
+        // Check for self-intersection
+        let si_score = self_intersection_heuristic(&vertices, &initial_vertices, &faces, &voxel_size);
+        let has_self_intersection = si_score > SELF_INTERSECTION_THRESHOLD;
+
+        if has_self_intersection {
+            eprintln!("[BET] Self-intersection detected (score={:.0}, threshold={}), pass {}",
+                      si_score, SELF_INTERSECTION_THRESHOLD, pass + 1);
+        }
+
+        // Exit if no self-intersection or max passes reached
+        if !has_self_intersection || pass >= MAX_PASSES {
+            if pass > 0 {
+                eprintln!("[BET] Completed after {} recovery pass(es)", pass);
+            }
+            break;
+        }
+
+        // Reset to original mesh and try again with higher smoothing
+        vertices = initial_vertices.clone();
+        pass += 1;
+    }
+
     // Step 4: Convert surface to binary mask
-    surface_to_mask(&vertices, &faces, nx, ny, nz)
+    surface_to_mask(&vertices, &faces, nx, ny, nz, &voxel_size)
 }
 
 /// Run BET brain extraction with progress callback
@@ -602,6 +768,8 @@ pub fn run_bet_with_progress<F>(
     nx: usize, ny: usize, nz: usize,
     vsx: f64, vsy: f64, vsz: f64,
     fractional_intensity: f64,
+    smoothness_factor: f64,
+    gradient_threshold: f64,
     iterations: usize,
     subdivisions: usize,
     mut progress_callback: F,
@@ -611,7 +779,7 @@ where
 {
     let voxel_size = [vsx, vsy, vsz];
 
-    // Step 1: Estimate brain parameters (now includes tm)
+    // Step 1: Estimate brain parameters
     progress_callback(0, iterations);
     let bp = estimate_brain_parameters(data, nx, ny, nz, &voxel_size);
 
@@ -619,110 +787,66 @@ where
     let (unit_vertices, faces) = create_icosphere(subdivisions);
     let n_vertices = unit_vertices.len();
 
-    let initial_radius_vox = [
-        (bp.radius * 0.5) / voxel_size[0],
-        (bp.radius * 0.5) / voxel_size[1],
-        (bp.radius * 0.5) / voxel_size[2],
-    ];
+    // Scale and position sphere in mm coordinates (start at 50% of estimated radius)
+    let initial_radius_mm = bp.radius * 0.5;
 
-    let mut vertices: Vec<[f64; 3]> = unit_vertices
+    let initial_vertices: Vec<[f64; 3]> = unit_vertices
         .iter()
         .map(|v| [
-            v[0] * initial_radius_vox[0] + bp.cog[0],
-            v[1] * initial_radius_vox[1] + bp.cog[1],
-            v[2] * initial_radius_vox[2] + bp.cog[2],
+            v[0] * initial_radius_mm + bp.cog_mm[0],
+            v[1] * initial_radius_mm + bp.cog_mm[1],
+            v[2] * initial_radius_mm + bp.cog_mm[2],
         ])
         .collect();
 
     let (neighbor_matrix, neighbor_counts) = build_neighbor_matrix(n_vertices, &faces, 6);
 
-    let bt = fractional_intensity;
-    let rmin = 3.33;
-    let rmax = 10.0;
-    let e = (1.0 / rmin + 1.0 / rmax) / 2.0;
-    let f = 6.0 / (1.0 / rmin - 1.0 / rmax);
-    let normal_max_update_fraction = 0.5;
-    let lambda_fit = 0.1;
+    // FSL power transform: bt = pow(f, 0.275)
+    let bt = fractional_intensity.powf(0.275);
 
-    let mut l = compute_mean_edge_length(&vertices, &faces, &voxel_size);
+    // Multi-pass evolution with self-intersection recovery (like FSL-BET2)
+    let mut vertices = initial_vertices.clone();
+    let mut pass = 0;
 
-    // Step 3: Iterative surface evolution with progress updates
-    let progress_interval = (iterations / 20).max(1); // Report ~20 times
+    loop {
+        // Run evolution pass
+        let mut cb: Option<&mut dyn FnMut(usize, usize)> = Some(&mut progress_callback);
+        evolution_pass(
+            data, nx, ny, nz, &voxel_size, &bp,
+            &mut vertices, &faces,
+            &neighbor_matrix, &neighbor_counts,
+            bt, smoothness_factor, gradient_threshold,
+            iterations, pass,
+            &mut cb,
+        );
 
-    for iteration in 0..iterations {
-        // Report progress periodically
-        if iteration % progress_interval == 0 {
-            progress_callback(iteration, iterations);
+        // Check for self-intersection
+        let si_score = self_intersection_heuristic(&vertices, &initial_vertices, &faces, &voxel_size);
+        let has_self_intersection = si_score > SELF_INTERSECTION_THRESHOLD;
+
+        if has_self_intersection {
+            eprintln!("[BET] Self-intersection detected (score={:.0}, threshold={}), pass {}",
+                      si_score, SELF_INTERSECTION_THRESHOLD, pass + 1);
         }
 
-        let normals = compute_vertex_normals(&vertices, &faces);
-        let mut updates: Vec<[f64; 3]> = vec![[0.0, 0.0, 0.0]; n_vertices];
-
-        for i in 0..n_vertices {
-            let v = vertices[i];
-            let n = normals[i];
-
-            let mut mean_neighbor = [0.0, 0.0, 0.0];
-            let count = neighbor_counts[i];
-            for j in 0..count {
-                let ni = neighbor_matrix[i][j];
-                mean_neighbor[0] += vertices[ni][0];
-                mean_neighbor[1] += vertices[ni][1];
-                mean_neighbor[2] += vertices[ni][2];
+        // Exit if no self-intersection or max passes reached
+        if !has_self_intersection || pass >= MAX_PASSES {
+            if pass > 0 {
+                eprintln!("[BET] Completed after {} recovery pass(es)", pass);
             }
-            if count > 0 {
-                mean_neighbor[0] /= count as f64;
-                mean_neighbor[1] /= count as f64;
-                mean_neighbor[2] /= count as f64;
-            }
-
-            let dv = [mean_neighbor[0] - v[0], mean_neighbor[1] - v[1], mean_neighbor[2] - v[2]];
-            let dv_dot_n = dv[0] * n[0] + dv[1] * n[1] + dv[2] * n[2];
-            let sn = [dv_dot_n * n[0], dv_dot_n * n[1], dv_dot_n * n[2]];
-            let st = [dv[0] - sn[0], dv[1] - sn[1], dv[2] - sn[2]];
-
-            let u1 = [st[0] * 0.5, st[1] * 0.5, st[2] * 0.5];
-
-            let sn_mag = dv_dot_n.abs();
-            let rinv = (2.0 * sn_mag) / (l * l);
-            let f2 = (1.0 + (f * (rinv - e)).tanh()) * 0.5;
-            let u2 = [f2 * sn[0], f2 * sn[1], f2 * sn[2]];
-
-            // Force 3: Intensity-based (using FSL-style sampling with tm)
-            let (i_min, i_max) = sample_intensities_fsl(
-                data, nx, ny, nz, &v, &n, &voxel_size, bp.t2, bp.t, bp.tm
-            );
-
-            // Compute local threshold and force (matches FSL exactly)
-            let t_l = (i_max - bp.t2) * bt + bp.t2;
-            let f3 = if i_max - bp.t2 > 0.0 {
-                2.0 * (i_min - t_l) / (i_max - bp.t2)
-            } else {
-                2.0 * (i_min - t_l)
-            };
-            let f3 = f3 * normal_max_update_fraction * lambda_fit * l;
-
-            let u3 = [f3 * n[0], f3 * n[1], f3 * n[2]];
-
-            updates[i] = [u1[0] + u2[0] + u3[0], u1[1] + u2[1] + u3[1], u1[2] + u2[2] + u3[2]];
+            break;
         }
 
-        for i in 0..n_vertices {
-            vertices[i][0] += updates[i][0];
-            vertices[i][1] += updates[i][1];
-            vertices[i][2] += updates[i][2];
-        }
-
-        if iteration % 100 == 0 {
-            l = compute_mean_edge_length(&vertices, &faces, &voxel_size);
-        }
+        // Reset to original mesh and try again with higher smoothing
+        vertices = initial_vertices.clone();
+        pass += 1;
     }
 
     // Final progress update
     progress_callback(iterations, iterations);
 
     // Step 4: Convert surface to binary mask
-    surface_to_mask(&vertices, &faces, nx, ny, nz)
+    surface_to_mask(&vertices, &faces, nx, ny, nz, &voxel_size)
 }
 
 #[cfg(test)]
@@ -762,6 +886,8 @@ mod tests {
         assert!((bp.cog[2] - 5.0).abs() < 1.0);
         assert!(bp.radius > 0.0);
         assert!(bp.tm > bp.t2 && bp.tm < bp.t98); // tm should be between t2 and t98
+        // Check cog_mm is correctly computed
+        assert!((bp.cog_mm[0] - bp.cog[0]).abs() < 1e-10);
     }
 
     #[test]
@@ -773,5 +899,14 @@ mod tests {
         let val = sample_intensity(&data, 2, 2, 2, 0.5, 0.5, 0.5);
         // Trilinear interpolation of cube corners
         assert!((val - 3.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_power_transform() {
+        // Verify power transform matches FSL
+        let f = 0.5_f64;
+        let bt = f.powf(0.275);
+        // 0.5^0.275 ≈ 0.826
+        assert!((bt - 0.826).abs() < 0.01);
     }
 }

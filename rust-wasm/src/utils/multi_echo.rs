@@ -590,6 +590,219 @@ pub fn mcpc3ds_b0_pipeline(
     (b0, phase_offset, corrected_phases)
 }
 
+//=============================================================================
+// Multi-Echo Linear Fit
+//=============================================================================
+
+/// Result of multi-echo linear fit
+pub struct LinearFitResult {
+    /// Field map (slope) in rad/s (divide by 2π for Hz)
+    pub field: Vec<f64>,
+    /// Phase offset (intercept) in radians
+    pub phase_offset: Vec<f64>,
+    /// Fit residual (normalized by magnitude sum)
+    pub fit_residual: Vec<f64>,
+    /// Reliability mask (1 = reliable, 0 = unreliable)
+    pub reliability_mask: Vec<u8>,
+}
+
+/// Multi-echo linear fit with magnitude weighting
+///
+/// Fits a linear model: phase = slope * TE + intercept
+/// using weighted least squares with magnitude as weights.
+///
+/// Based on QSM.jl multi_echo_linear_fit and QSMART echofit.m
+///
+/// # Arguments
+/// * `unwrapped_phases` - Unwrapped phase for each echo [n_echoes][nx*ny*nz]
+/// * `mags` - Magnitude for each echo [n_echoes][nx*ny*nz]
+/// * `tes` - Echo times in seconds
+/// * `mask` - Binary mask
+/// * `estimate_offset` - If true, estimate phase offset (intercept)
+/// * `reliability_threshold_percentile` - Percentile for reliability masking (0-100, 0=disable)
+///
+/// # Returns
+/// LinearFitResult containing field, phase_offset, fit_residual, reliability_mask
+pub fn multi_echo_linear_fit(
+    unwrapped_phases: &[Vec<f64>],
+    mags: &[Vec<f64>],
+    tes: &[f64],
+    mask: &[u8],
+    estimate_offset: bool,
+    reliability_threshold_percentile: f64,
+) -> LinearFitResult {
+    let n_echoes = unwrapped_phases.len();
+    let n_total = unwrapped_phases[0].len();
+
+    let mut field = vec![0.0; n_total];
+    let mut phase_offset = vec![0.0; n_total];
+    let mut fit_residual = vec![0.0; n_total];
+
+    if estimate_offset {
+        // Weighted linear fit with intercept: phase = α + β * TE
+        // Using centered data approach for numerical stability
+        //
+        // β = Σ w*(TE - TE_mean)*(phase - phase_mean) / Σ w*(TE - TE_mean)²
+        // α = phase_mean - β * TE_mean (weighted means)
+
+        // Precompute weighted TE mean and sum of squared deviations
+        // (These are per-voxel because weights vary)
+        for v in 0..n_total {
+            if mask[v] == 0 {
+                continue;
+            }
+
+            // Compute weighted means
+            let mut sum_w = 0.0;
+            let mut sum_w_te = 0.0;
+            let mut sum_w_phase = 0.0;
+
+            for e in 0..n_echoes {
+                let w = mags[e][v];
+                sum_w += w;
+                sum_w_te += w * tes[e];
+                sum_w_phase += w * unwrapped_phases[e][v];
+            }
+
+            if sum_w < 1e-10 {
+                continue;
+            }
+
+            let te_mean = sum_w_te / sum_w;
+            let phase_mean = sum_w_phase / sum_w;
+
+            // Compute slope using centered data
+            let mut sum_w_te_centered_sq = 0.0;
+            let mut sum_w_te_centered_phase_centered = 0.0;
+
+            for e in 0..n_echoes {
+                let w = mags[e][v];
+                let te_centered = tes[e] - te_mean;
+                let phase_centered = unwrapped_phases[e][v] - phase_mean;
+                sum_w_te_centered_sq += w * te_centered * te_centered;
+                sum_w_te_centered_phase_centered += w * te_centered * phase_centered;
+            }
+
+            if sum_w_te_centered_sq > 1e-10 {
+                let slope = sum_w_te_centered_phase_centered / sum_w_te_centered_sq;
+                let intercept = phase_mean - slope * te_mean;
+                field[v] = slope;
+                phase_offset[v] = intercept;
+
+                // Compute weighted residual
+                let mut sum_w_resid_sq = 0.0;
+                for e in 0..n_echoes {
+                    let w = mags[e][v];
+                    let predicted = intercept + slope * tes[e];
+                    let diff = unwrapped_phases[e][v] - predicted;
+                    sum_w_resid_sq += w * diff * diff;
+                }
+                // Normalize by sum of weights and number of echoes (matching echofit.m)
+                fit_residual[v] = sum_w_resid_sq / sum_w * n_echoes as f64;
+            }
+        }
+    } else {
+        // Weighted linear fit through origin: phase = β * TE
+        // β = Σ w*TE*phase / Σ w*TE²
+        // (matching echofit.m line 40)
+
+        for v in 0..n_total {
+            if mask[v] == 0 {
+                continue;
+            }
+
+            let mut sum_w_te_phase = 0.0;
+            let mut sum_w_te_sq = 0.0;
+            let mut sum_w = 0.0;
+
+            for e in 0..n_echoes {
+                let w = mags[e][v];
+                let te = tes[e];
+                let phase = unwrapped_phases[e][v];
+                sum_w_te_phase += w * te * phase;
+                sum_w_te_sq += w * te * te;
+                sum_w += w;
+            }
+
+            if sum_w_te_sq > 1e-10 {
+                let slope = sum_w_te_phase / sum_w_te_sq;
+                field[v] = slope;
+
+                // Compute weighted residual
+                let mut sum_w_resid_sq = 0.0;
+                for e in 0..n_echoes {
+                    let w = mags[e][v];
+                    let predicted = slope * tes[e];
+                    let diff = unwrapped_phases[e][v] - predicted;
+                    sum_w_resid_sq += w * diff * diff;
+                }
+                // Normalize by sum of weights and number of echoes
+                if sum_w > 1e-10 {
+                    fit_residual[v] = sum_w_resid_sq / sum_w * n_echoes as f64;
+                }
+            }
+        }
+    }
+
+    // Create reliability mask based on fit residuals
+    let reliability_mask = if reliability_threshold_percentile > 0.0 {
+        compute_reliability_mask(&fit_residual, mask, reliability_threshold_percentile)
+    } else {
+        // All masked voxels are reliable
+        mask.to_vec()
+    };
+
+    LinearFitResult {
+        field,
+        phase_offset,
+        fit_residual,
+        reliability_mask,
+    }
+}
+
+/// Compute reliability mask by thresholding fit residuals
+///
+/// Applies Gaussian smoothing to residuals before thresholding (matching echofit.m)
+fn compute_reliability_mask(
+    fit_residual: &[f64],
+    mask: &[u8],
+    threshold_percentile: f64,
+) -> Vec<u8> {
+    let n_total = fit_residual.len();
+
+    // Collect non-zero residuals for percentile calculation
+    let mut residuals: Vec<f64> = fit_residual.iter()
+        .enumerate()
+        .filter(|(i, &r)| mask[*i] > 0 && r > 0.0 && r.is_finite())
+        .map(|(_, &r)| r)
+        .collect();
+
+    if residuals.is_empty() {
+        return mask.to_vec();
+    }
+
+    // Sort and find threshold at given percentile
+    residuals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let percentile_idx = ((threshold_percentile / 100.0) * residuals.len() as f64) as usize;
+    let threshold = residuals[percentile_idx.min(residuals.len() - 1)];
+
+    // Create reliability mask
+    let mut reliability = vec![0u8; n_total];
+    for i in 0..n_total {
+        if mask[i] > 0 && fit_residual[i] < threshold {
+            reliability[i] = 1;
+        }
+    }
+
+    reliability
+}
+
+/// Convert field from rad/s to Hz
+#[inline]
+pub fn field_to_hz(field: &[f64]) -> Vec<f64> {
+    field.iter().map(|&f| f / TWO_PI).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -28,21 +28,32 @@
     <header class="app-header">
       <div class="logo">
         <div class="logo-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-            <path d="M2 17l10 5 10-5"/>
-            <path d="M2 12l10 5 10-5"/>
-          </svg>
+          <img src="QSMbly.png" alt="QSMbly" width="20" height="20">
         </div>
-        <h1>QSMbly <span>Quantitative Susceptibility Mapping</span></h1>
+        <h1>QSMbly <span>Quantitative Susceptibility Mapping</span> <span class="version" id="appVersion"></span></h1>
+      </div>
+      <div class="header-links">
+        <button class="header-link" id="openCitations" title="Citations">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+          <span>Citations</span>
+        </button>
+        <a href="https://github.com/astewartau/qsmbly" target="_blank" rel="noopener noreferrer" class="header-link" title="View on GitHub">
+          <svg viewBox="0 0 16 16" width="20" height="20" fill="white">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          <span>GitHub</span>
+        </a>
       </div>
     </header>
 
     <!-- Sidebar -->
     <aside class="app-sidebar" id="sidebar">
       <!-- File Upload Section -->
-      <section class="sidebar-section">
-        <h2 class="section-title">
+      <section class="sidebar-section" id="inputSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
@@ -50,12 +61,20 @@
           </svg>
           Input Files
         </h2>
-
+        <div class="section-content">
         <!-- Magnitude Files -->
         <div class="file-upload-group">
-          <label class="file-upload-label">
-            Magnitude Images <span class="count" id="magCount"></span>
-          </label>
+          <div class="file-upload-header">
+            <label class="file-upload-label">
+              Magnitude <span class="count" id="magCount"></span>
+            </label>
+            <button class="btn-icon btn-preview" id="vis_magnitude" title="Preview magnitude" disabled>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
           <div class="upload-group">
             <div class="file-upload-zone file-drop" id="magnitudeDrop">
               <input type="file" id="magnitudeFiles" accept=".nii,.nii.gz" multiple>
@@ -64,7 +83,7 @@
                 <polyline points="17 8 12 3 7 8"/>
                 <line x1="12" y1="3" x2="12" y2="15"/>
               </svg>
-              <p class="upload-text file-drop-label"><span>Drop files or click</span></p>
+              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
             </div>
             <div class="file-list" id="magnitudeList"></div>
           </div>
@@ -72,9 +91,17 @@
 
         <!-- Phase Files -->
         <div class="file-upload-group">
-          <label class="file-upload-label">
-            Phase Images <span class="count" id="phaseCount"></span>
-          </label>
+          <div class="file-upload-header">
+            <label class="file-upload-label">
+              Phase <span class="count" id="phaseCount"></span>
+            </label>
+            <button class="btn-icon btn-preview" id="vis_phase" title="Preview phase" disabled>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
           <div class="upload-group">
             <div class="file-upload-zone file-drop" id="phaseDrop">
               <input type="file" id="phaseFiles" accept=".nii,.nii.gz" multiple>
@@ -83,41 +110,24 @@
                 <polyline points="17 8 12 3 7 8"/>
                 <line x1="12" y1="3" x2="12" y2="15"/>
               </svg>
-              <p class="upload-text file-drop-label"><span>Drop files or click</span></p>
+              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
             </div>
             <div class="file-list" id="phaseList"></div>
           </div>
         </div>
-
-        <!-- Preview Buttons -->
-        <div class="preview-buttons">
-          <button class="btn btn-secondary btn-sm" id="vis_magnitude" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-            Mag
-          </button>
-          <button class="btn btn-secondary btn-sm" id="vis_phase" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-            Phase
-          </button>
         </div>
       </section>
 
-      <!-- Parameters Section -->
-      <section class="sidebar-section">
-        <h2 class="section-title">
+      <!-- Input Parameters Section -->
+      <section class="sidebar-section collapsed" id="paramsSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
-          Parameters
+          Input Parameters
         </h2>
-
+        <div class="section-content">
         <!-- JSON Metadata Upload -->
         <div class="param-group">
           <label class="param-label">
@@ -149,17 +159,18 @@
           <label class="param-label">Echo Times <span class="unit-inline">(ms)</span></label>
           <input type="text" id="echoTimesTagify" placeholder="Type values...">
         </div>
+        </div>
       </section>
 
       <!-- Mask Threshold Section -->
-      <section class="sidebar-section section-disabled" id="maskSection">
-        <h2 class="section-title">
+      <section class="sidebar-section section-disabled collapsed" id="maskSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
           </svg>
           Masking
         </h2>
-
+        <div class="section-content">
         <!-- Mask Input Preparation -->
         <div class="param-group">
           <label class="param-label" for="maskInputSource">Mask Input</label>
@@ -214,99 +225,129 @@
           <input type="range" id="maskThreshold" min="1" max="100" value="15" class="threshold-slider" disabled>
         </div>
 
-        <!-- Morphological Operations -->
-        <div class="mask-operations" id="maskOperations" style="display: none; margin-top: var(--space-sm);">
-          <label class="param-label" style="margin-bottom: var(--space-xs);">Refine Mask</label>
-          <div class="mask-op-buttons">
-            <button class="btn btn-secondary btn-sm" id="fillHoles" title="Fill holes inside the mask">
-              Fill Holes
-            </button>
-            <button class="btn btn-secondary btn-sm" id="erodeMask" title="Shrink mask boundaries">
-              Erode
-            </button>
-            <button class="btn btn-secondary btn-sm" id="dilateMask" title="Expand mask boundaries">
-              Dilate
-            </button>
-            <button class="btn btn-secondary btn-sm" id="resetMask" title="Reset to threshold-based mask">
-              Reset
-            </button>
-          </div>
+        <!-- Morphological Operations (collapsible subsection) -->
+        <div class="mask-operations subsection collapsed" id="maskOperations" style="display: none;">
+          <div class="subsection-title" onclick="this.parentElement.classList.toggle('collapsed')">Refine Mask</div>
+          <div class="subsection-content">
+            <div class="mask-op-buttons">
+              <button class="btn btn-secondary btn-sm" id="fillHoles" title="Fill holes inside the mask">
+                Fill Holes
+              </button>
+              <button class="btn btn-secondary btn-sm" id="erodeMask" title="Shrink mask boundaries">
+                Erode
+              </button>
+              <button class="btn btn-secondary btn-sm" id="dilateMask" title="Expand mask boundaries">
+                Dilate
+              </button>
+              <button class="btn btn-secondary btn-sm" id="resetMask" title="Reset to threshold-based mask">
+                Reset
+              </button>
+            </div>
 
-          <!-- Drawing/Painting Tools -->
-          <label class="param-label" style="margin-top: var(--space-sm); margin-bottom: var(--space-xs);">Paint Mask</label>
-          <div class="drawing-controls">
-            <div class="brush-mode-buttons">
-              <button class="btn btn-secondary btn-sm" id="enableDrawing" title="Enable brush painting">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 19l7-7 3 3-7 7-3-3z"/>
-                  <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
-                  <path d="M2 2l7.586 7.586"/>
-                </svg>
-                Draw
-              </button>
-              <button class="btn btn-secondary btn-sm" id="brushAdd" title="Add to mask" disabled>
-                + Add
-              </button>
-              <button class="btn btn-secondary btn-sm" id="brushRemove" title="Remove from mask" disabled>
-                - Remove
-              </button>
-            </div>
-            <div class="brush-size-control" id="brushSizeControl" style="display: none;">
-              <label class="param-label" style="font-size: 0.7rem;">Brush Size: <span id="brushSizeValue">2</span></label>
-              <input type="range" id="brushSize" min="1" max="10" value="2" class="threshold-slider">
-            </div>
-            <div class="drawing-actions" id="drawingActions" style="display: none;">
-              <button class="btn btn-secondary btn-sm" id="undoDraw" title="Undo last stroke">
-                Undo
-              </button>
-              <button class="btn btn-primary btn-sm" id="applyDrawing" title="Apply drawing to mask">
-                Apply
-              </button>
+            <!-- Drawing/Painting Tools -->
+            <label class="param-label" style="margin-top: var(--space-sm); margin-bottom: var(--space-xs);">Paint Mask</label>
+            <div class="drawing-controls">
+              <div class="brush-mode-buttons">
+                <button class="btn btn-secondary btn-sm" id="enableDrawing" title="Enable brush painting">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                    <path d="M2 2l7.586 7.586"/>
+                  </svg>
+                  Draw
+                </button>
+                <button class="btn btn-secondary btn-sm" id="brushAdd" title="Add to mask" disabled>
+                  + Add
+                </button>
+                <button class="btn btn-secondary btn-sm" id="brushRemove" title="Remove from mask" disabled>
+                  - Remove
+                </button>
+              </div>
+              <div class="brush-size-control" id="brushSizeControl" style="display: none;">
+                <label class="param-label" style="font-size: 0.7rem;">Brush Size: <span id="brushSizeValue">2</span></label>
+                <input type="range" id="brushSize" min="1" max="10" value="2" class="threshold-slider">
+              </div>
+              <div class="drawing-actions" id="drawingActions" style="display: none;">
+                <button class="btn btn-secondary btn-sm" id="undoDraw" title="Undo last stroke">
+                  Undo
+                </button>
+                <button class="btn btn-primary btn-sm" id="applyDrawing" title="Apply drawing to mask">
+                  Apply
+                </button>
+              </div>
             </div>
           </div>
+        </div>
         </div>
       </section>
 
-      <!-- Progress & Run Section -->
-      <section class="sidebar-section section-disabled" id="pipelineSection">
-        <div class="progress-container">
-          <div class="progress-header">
-            <span class="progress-title">Pipeline Progress</span>
-            <span class="progress-value" id="progressText">0%</span>
+      <!-- Pipeline Section -->
+      <section class="sidebar-section collapsed" id="pipelineSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          QSM Pipeline
+        </h2>
+        <div class="section-content">
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" id="openPipelineSettings" style="flex: 1;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </button>
+            <button class="btn btn-primary" id="runPipelineSidebar" style="flex: 3;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              <span>Start QSM</span>
+            </button>
           </div>
-          <div class="progress-bar">
-            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-          </div>
-        </div>
-
-        <div class="run-button-group">
-          <button class="btn btn-primary" id="run" disabled>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"/>
-            </svg>
-            <span>Run Pipeline</span>
-          </button>
-          <button class="btn btn-danger" id="cancelPipeline" disabled>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-            </svg>
-            <span>Cancel</span>
-          </button>
         </div>
       </section>
 
       <!-- Results Section - dynamically populated -->
-      <section class="sidebar-section hidden" id="stage-buttons">
-        <h2 class="section-title">
+      <section class="sidebar-section hidden collapsed" id="stage-buttons">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
             <polyline points="22 4 12 14.01 9 11.01"/>
           </svg>
-          Pipeline Results
+          Results
         </h2>
+        <div class="section-content">
         <!-- Stage buttons are dynamically added here -->
         <div class="stage-buttons-grid" id="dynamicStageButtons"></div>
+        <button class="btn btn-secondary btn-sm" id="clearAllResults" style="width: 100%; margin-top: var(--space-sm);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+          Clear All
+        </button>
+        </div>
       </section>
+
+      <!-- Status Bar (fixed at bottom) -->
+      <div class="sidebar-status" id="statusBar">
+        <div class="status-header">
+          <span class="status-label">Status</span>
+          <div class="status-right">
+            <span class="status-value" id="progressText">Ready</span>
+            <button class="btn-status-cancel" id="cancelPipeline" title="Cancel pipeline" disabled>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+        </div>
+      </div>
     </aside>
 
     <!-- Main Content -->
@@ -380,6 +421,13 @@
               <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
           </button>
+          <button class="btn btn-sm btn-icon" id="screenshotViewer" title="Save screenshot as PNG">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -420,23 +468,24 @@
         <button class="modal-close" id="closePipelineSettings">&times;</button>
       </div>
       <div class="modal-body">
-        <!-- QSM Reconstruction Method Section -->
+        <!-- QSM Pipeline Method Section -->
         <div class="settings-section">
-          <h4>QSM Reconstruction</h4>
+          <h4>QSM Pipeline</h4>
           <div class="param-group">
             <label class="param-label" for="combinedMethod">Method</label>
             <select id="combinedMethod">
-              <option value="none" selected>Standard Pipeline (BG Removal + Inversion)</option>
-              <option value="tgv">TGV Single-Step</option>
-              <option value="qsmart">QSMART (Two-stage Vessel Artifact Reduction)</option>
+              <option value="none" selected>Standard Pipeline</option>
+              <option value="tgv">TGV</option>
+              <option value="qsmart">QSMART</option>
             </select>
           </div>
 
           <!-- TGV Settings -->
           <div id="tgvSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              TGV performs background removal and dipole inversion in one step.
-              For multi-echo data, B0 estimation is still performed first.
+            <div class="method-links">
+              <a href="https://doi.org/10.1016/j.neuroimage.2015.02.041" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2015.02.041"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://doi.org/10.1002/nbm.3570" target="_blank" rel="noopener" title="DOI: 10.1002/nbm.3570"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/korbinian90/QuantitativeSusceptibilityMappingTGV.jl" target="_blank" rel="noopener" title="Code: QuantitativeSusceptibilityMappingTGV.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="tgvRegularization">Regularization Level</label>
@@ -459,10 +508,9 @@
 
           <!-- QSMART Settings -->
           <div id="qsmartSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              QSMART uses two-stage reconstruction with Spatially Dependent Filtering (SDF)
-              to reduce streaking artifacts from vessels and veins. Stage 1 processes the
-              entire ROI, Stage 2 processes tissue only (excluding vessels detected via Frangi).
+            <div class="method-links">
+              <a href="https://doi.org/10.1016/j.neuroimage.2021.117701" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2021.117701"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/wtsyeda/QSMART" target="_blank" rel="noopener" title="Code: QSMART"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
 
             <h5 style="margin: var(--space-sm) 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">Stage 1: Whole ROI</h5>
@@ -534,57 +582,26 @@
           </div>
         </div>
 
-        <!-- Multi-echo B0 Estimation Section -->
+        <!-- ============================================================ -->
+        <!-- Phase Processing Section (Multi-Echo) -->
+        <!-- ============================================================ -->
         <div class="settings-section" id="multiEchoSection">
-          <h4>Multi-echo B0 Estimation</h4>
-          <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-            Combines multiple echoes to estimate B0. All methods require phase unwrapping
-            (OLS methods use settings below; MCPC-3D-S uses ROMEO internally).
-          </div>
+          <h4>Phase Processing</h4>
 
+          <!-- Step 1: Phase Offset Removal -->
           <div class="param-group">
-            <label class="param-label" for="multiEchoMethod">Method</label>
-            <select id="multiEchoMethod">
-              <option value="ols">OLS (assumes zero phase offset)</option>
-              <option value="ols_offset">OLS with Offset</option>
-              <option value="mcpc3ds" selected>MCPC-3D-S (Recommended)</option>
+            <label class="param-label" for="phaseOffsetMethod">Phase Offset Removal</label>
+            <select id="phaseOffsetMethod">
+              <option value="mcpc3ds" selected>MCPC-3D-S</option>
+              <option value="none">None (skip)</option>
             </select>
           </div>
 
-          <!-- Nested Phase Unwrapping for OLS methods -->
-          <div id="multiEchoUnwrapSettings" class="method-settings" style="margin-left: var(--space-md); padding-left: var(--space-md); border-left: 2px solid var(--color-border);">
-            <div class="param-group">
-              <label class="param-label" for="unwrapMethod">Phase Unwrapping</label>
-              <select id="unwrapMethod">
-                <option value="romeo" selected>ROMEO (Quality-guided)</option>
-                <option value="laplacian">Laplacian (Fast)</option>
-              </select>
-            </div>
-
-            <!-- ROMEO Settings -->
-            <div id="romeoSettings" class="method-settings">
-              <div class="param-group">
-                <label class="param-label" for="romeoWeighting">ROMEO Weighting</label>
-                <select id="romeoWeighting">
-                  <option value="phase_snr" selected>Phase SNR (Recommended)</option>
-                  <option value="magnitude">Magnitude</option>
-                  <option value="uniform">Uniform</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Laplacian Settings -->
-            <div id="laplacianSettings" class="method-settings" style="display: none;">
-              <div class="param-hint" style="color: var(--color-text-muted);">
-                Laplacian is faster but may have residual wraps in noisy regions
-              </div>
-            </div>
-          </div>
-
           <!-- MCPC-3D-S Settings -->
-          <div id="mcpc3dsSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              Estimates phase offset using Hermitian Inner Product with Gaussian smoothing.
+          <div id="mcpc3dsSettings" class="method-settings" style="margin-left: var(--space-md); padding-left: var(--space-md); border-left: 2px solid var(--color-border);">
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/mrm.27277" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.27277"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener" title="Code: MriResearchTools.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="mcpc3dsSigmaX">Smoothing Sigma X (voxels)</label>
@@ -598,9 +615,68 @@
               <label class="param-label" for="mcpc3dsSigmaZ">Smoothing Sigma Z (voxels)</label>
               <input type="number" id="mcpc3dsSigmaZ" value="5" min="1" max="30" step="1">
             </div>
+          </div>
+
+          <!-- Step 2: Phase Unwrapping -->
+          <div class="param-group" style="margin-top: var(--space-md);">
+            <label class="param-label" for="unwrapMethod">Phase Unwrapping</label>
+            <select id="unwrapMethod">
+              <option value="romeo" selected>ROMEO</option>
+              <option value="laplacian">Laplacian</option>
+            </select>
+            <div id="unwrapLockedHint" class="param-hint" style="display: none; color: var(--color-text-muted); font-style: italic;">
+              Locked to ROMEO (required by MCPC-3D-S)
+            </div>
+          </div>
+
+          <!-- ROMEO Settings -->
+          <div id="romeoSettings" class="method-settings" style="margin-left: var(--space-md); padding-left: var(--space-md); border-left: 2px solid var(--color-border);">
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/mrm.28563" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.28563"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener" title="Code: MriResearchTools.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+            </div>
+            <div class="param-group" style="display: flex; flex-direction: column; gap: var(--space-xs); font-size: 0.8rem;">
+              <label style="display: flex; align-items: center; gap: var(--space-xs);">
+                <input type="checkbox" id="romeoPhaseCoherence" checked disabled>
+                Phase Coherence
+              </label>
+              <label style="display: flex; align-items: center; gap: var(--space-xs);">
+                <input type="checkbox" id="romeoPhaseGradientCoherence" checked>
+                Phase Gradient Coherence
+              </label>
+              <label style="display: flex; align-items: center; gap: var(--space-xs);">
+                <input type="checkbox" id="romeoMagCoherence" checked>
+                Magnitude Coherence
+              </label>
+              <label style="display: flex; align-items: center; gap: var(--space-xs);">
+                <input type="checkbox" id="romeoMagWeight" checked>
+                Magnitude Weight
+              </label>
+            </div>
+          </div>
+
+          <!-- Laplacian Settings -->
+          <div id="laplacianSettings" class="method-settings" style="display: none; margin-left: var(--space-md); padding-left: var(--space-md); border-left: 2px solid var(--color-border);">
+            <div class="method-links">
+              <a href="https://doi.org/10.1364/OL.28.001194" target="_blank" rel="noopener" title="DOI: 10.1364/OL.28.001194"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+            </div>
+          </div>
+
+          <!-- Step 3: Multi-Echo Fitting -->
+          <div class="param-group" style="margin-top: var(--space-md);">
+            <label class="param-label" for="fieldCalculationMethod">Multi-Echo Fitting</label>
+            <select id="fieldCalculationMethod">
+              <option value="weighted_avg" selected>Weighted Averaging</option>
+              <option value="linear_fit">Linear Fit</option>
+            </select>
+          </div>
+
+          <!-- Weighted Averaging Settings -->
+          <div id="weightedAvgSettings" class="method-settings" style="margin-left: var(--space-md); padding-left: var(--space-md); border-left: 2px solid var(--color-border);">
             <div class="param-group">
-              <label class="param-label" for="mcpc3dsWeightType">B0 Weighting</label>
-              <select id="mcpc3dsWeightType">
+              <label class="param-label" for="b0WeightType">Weight Type</label>
+              <select id="b0WeightType">
                 <option value="phase_snr" selected>Phase SNR (mag × TE)</option>
                 <option value="phase_var">Phase Variance (mag² × TE²)</option>
                 <option value="average">Uniform</option>
@@ -609,29 +685,46 @@
               </select>
             </div>
           </div>
+
+          <!-- Linear Fit Settings -->
+          <div id="linearFitSettings" class="method-settings" style="display: none; margin-left: var(--space-md); padding-left: var(--space-md); border-left: 2px solid var(--color-border);">
+          </div>
         </div>
 
-        <!-- Phase Unwrapping for Single-echo (Standard pipeline only) -->
+        <!-- Phase Unwrapping for Single-echo -->
         <div class="settings-section" id="singleEchoUnwrapSection" style="display: none;">
           <h4>Phase Unwrapping</h4>
-          <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-            Single-echo phase unwrapping settings
-          </div>
           <div class="param-group">
             <label class="param-label" for="singleEchoUnwrapMethod">Method</label>
             <select id="singleEchoUnwrapMethod">
-              <option value="romeo" selected>ROMEO (Quality-guided)</option>
-              <option value="laplacian">Laplacian (Fast)</option>
+              <option value="romeo" selected>ROMEO</option>
+              <option value="laplacian">Laplacian</option>
             </select>
           </div>
           <div id="singleEchoRomeoSettings" class="method-settings">
-            <div class="param-group">
-              <label class="param-label" for="singleEchoRomeoWeighting">ROMEO Weighting</label>
-              <select id="singleEchoRomeoWeighting">
-                <option value="phase_snr" selected>Phase SNR (Recommended)</option>
-                <option value="magnitude">Magnitude</option>
-                <option value="uniform">Uniform</option>
-              </select>
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/mrm.28563" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.28563"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener" title="Code: MriResearchTools.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+            </div>
+            <div class="param-group" style="display: flex; flex-direction: column; gap: var(--space-xs); font-size: 0.8rem;">
+              <label style="display: flex; align-items: center; gap: var(--space-xs);">
+                <input type="checkbox" id="singleEchoRomeoPhaseCoherence" checked disabled>
+                Phase Coherence
+              </label>
+              <label style="display: flex; align-items: center; gap: var(--space-xs);">
+                <input type="checkbox" id="singleEchoRomeoMagCoherence" checked>
+                Magnitude Coherence
+              </label>
+              <label style="display: flex; align-items: center; gap: var(--space-xs);">
+                <input type="checkbox" id="singleEchoRomeoMagWeight" checked>
+                Magnitude Weight
+              </label>
+            </div>
+          </div>
+          <div id="singleEchoLaplacianSettings" class="method-settings" style="display: none;">
+            <div class="method-links">
+              <a href="https://doi.org/10.1364/OL.28.001194" target="_blank" rel="noopener" title="DOI: 10.1364/OL.28.001194"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
           </div>
         </div>
@@ -639,20 +732,27 @@
         <!-- Background Removal -->
         <div class="settings-section" id="bgRemovalSection">
           <h4>Background Removal</h4>
+          <div id="bgRemovalDisabledHint" class="param-hint" style="display: none; margin-bottom: var(--space-sm); color: var(--color-text-muted); font-style: italic;">
+            Disabled — MEDI with SMV preprocessing handles background removal internally using differential form (avoids deconvolution artifacts).
+          </div>
           <div class="param-group">
             <label class="param-label" for="bgRemovalMethod">Method</label>
             <select id="bgRemovalMethod">
-              <option value="vsharp" selected>V-SHARP (Variable radii)</option>
-              <option value="sharp">SHARP (Single radius + deconvolution)</option>
-              <option value="smv">SMV (Single radius)</option>
-              <option value="ismv">iSMV (Iterative)</option>
-              <option value="pdf">PDF (Projection onto Dipole Fields)</option>
-              <option value="lbv">LBV (Laplacian Boundary Value)</option>
+              <option value="vsharp" selected>V-SHARP</option>
+              <option value="sharp">SHARP</option>
+              <option value="smv">SMV</option>
+              <option value="ismv">iSMV</option>
+              <option value="pdf">PDF</option>
+              <option value="lbv">LBV</option>
             </select>
           </div>
 
           <!-- V-SHARP Settings -->
           <div id="vsharpSettings" class="method-settings">
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/mrm.23000" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.23000"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+            </div>
             <div class="param-group">
               <label class="param-label" for="vsharpMaxRadius">Max Radius (mm)</label>
               <input type="number" id="vsharpMaxRadius" value="18" min="4" max="30" step="1">
@@ -669,8 +769,9 @@
 
           <!-- SHARP Settings -->
           <div id="sharpSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              High-pass filter with deconvolution - more aggressive than simple SMV
+            <div class="method-links">
+              <a href="https://doi.org/10.1016/j.neuroimage.2010.10.070" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2010.10.070"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="sharpRadius">Radius (mm)</label>
@@ -684,6 +785,10 @@
 
           <!-- SMV Settings -->
           <div id="smvSettings" class="method-settings">
+            <div class="method-links">
+              <a href="https://doi.org/10.1016/j.neuroimage.2010.10.070" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2010.10.070"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+            </div>
             <div class="param-group">
               <label class="param-label" for="smvRadius">Radius (mm)</label>
               <input type="number" id="smvRadius" value="5" min="1" max="20" step="1">
@@ -692,8 +797,9 @@
 
           <!-- iSMV Settings -->
           <div id="ismvSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              Iterative SMV - more accurate than single-pass SMV
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/mrm.24998" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.24998"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="ismvRadius">Radius (mm)</label>
@@ -711,8 +817,9 @@
 
           <!-- PDF Settings -->
           <div id="pdfSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              Projects field onto space orthogonal to background dipole fields
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/nbm.1670" target="_blank" rel="noopener" title="DOI: 10.1002/nbm.1670"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="pdfTol">Tolerance</label>
@@ -726,8 +833,9 @@
 
           <!-- LBV Settings -->
           <div id="lbvSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              Laplacian Boundary Value - solves Poisson equation with Dirichlet BCs
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/nbm.3064" target="_blank" rel="noopener" title="DOI: 10.1002/nbm.3064"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="lbvTol">Tolerance</label>
@@ -746,21 +854,22 @@
           <div class="param-group">
             <label class="param-label" for="dipoleMethod">Method</label>
             <select id="dipoleMethod">
-              <option value="tkd">TKD (Instant - basic)</option>
-              <option value="tsvd">TSVD (Instant - smoother)</option>
-              <option value="tikhonov">Tikhonov (Instant - smooth)</option>
-              <option value="tv" selected>TV-ADMM (Fast - edge-preserving)</option>
-              <option value="rts">RTS (Fast - iterative)</option>
-              <option value="nltv">NLTV (Slow - non-local TV)</option>
-              <option value="medi">MEDI (Morphology-weighted)</option>
-              <option value="ilsqr">iLSQR (Streaking artifact removal)</option>
+              <option value="tkd">TKD</option>
+              <option value="tsvd">TSVD</option>
+              <option value="tikhonov">Tikhonov</option>
+              <option value="tv" selected>TV-ADMM</option>
+              <option value="rts">RTS</option>
+              <option value="nltv">NLTV</option>
+              <option value="medi">MEDI</option>
+              <option value="ilsqr">iLSQR</option>
             </select>
           </div>
 
           <!-- TKD Settings -->
           <div id="tkdSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              Truncated K-space Division - instant but may have streaking artifacts
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/mrm.22135" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.22135"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="tkdThreshold">Threshold</label>
@@ -770,8 +879,9 @@
 
           <!-- TSVD Settings -->
           <div id="tsvdSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              Truncated SVD - zeros small values (smoother than TKD)
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/mrm.22135" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.22135"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="tsvdThreshold">Threshold</label>
@@ -781,8 +891,9 @@
 
           <!-- Tikhonov Settings -->
           <div id="tikhonovSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              L2-regularized solution - instant with smooth results
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/jmri.24365" target="_blank" rel="noopener" title="DOI: 10.1002/jmri.24365"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="tikhLambda">Lambda (regularization)</label>
@@ -800,8 +911,9 @@
 
           <!-- TV-ADMM Settings -->
           <div id="tvSettings" class="method-settings">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              Total Variation with ADMM - fast iterative, edge-preserving
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/mrm.25029" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.25029"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="tvLambda">Lambda (TV regularization)</label>
@@ -819,6 +931,10 @@
 
           <!-- RTS Settings -->
           <div id="rtsSettings" class="method-settings" style="display: none;">
+            <div class="method-links">
+              <a href="https://doi.org/10.1016/j.neuroimage.2017.11.018" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2017.11.018"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+            </div>
             <div class="param-group">
               <label class="param-label" for="rtsDelta">Delta (threshold)</label>
               <input type="number" id="rtsDelta" value="0.15" min="0.05" max="0.3" step="0.01">
@@ -839,8 +955,9 @@
 
           <!-- NLTV Settings -->
           <div id="nltvSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              Non-linear TV with ADMM - best quality but slow
+            <div class="method-links">
+              <a href="https://doi.org/10.1016/j.neuroimage.2017.11.018" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2017.11.018"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="nltvLambda">Lambda (TV regularization)</label>
@@ -866,8 +983,9 @@
 
           <!-- MEDI Settings -->
           <div id="mediSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              Morphology Enabled Dipole Inversion - uses magnitude edges for regularization
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/mrm.22816" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.22816"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/huawu02/MEDI_toolbox" target="_blank" rel="noopener" title="Code: MEDI_toolbox"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="mediLambda">Lambda (regularization)</label>
@@ -903,8 +1021,9 @@
 
           <!-- iLSQR Settings -->
           <div id="ilsqrSettings" class="method-settings" style="display: none;">
-            <div class="param-hint" style="margin-bottom: var(--space-sm); color: var(--color-text-muted);">
-              Iterative LSQR with streaking artifact removal (Li et al., 2015)
+            <div class="method-links">
+              <a href="https://doi.org/10.1016/j.neuroimage.2014.12.043" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2014.12.043"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://github.com/kamesy/QSM.m" target="_blank" rel="noopener" title="Code: QSM.m"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="ilsqrTol">Tolerance</label>
@@ -919,7 +1038,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="resetPipelineSettings">Reset Defaults</button>
-        <button class="btn btn-primary" id="runPipelineWithSettings">Run Pipeline</button>
+        <button class="btn btn-primary" id="savePipelineSettings">Save Settings</button>
       </div>
     </div>
   </div>
@@ -959,11 +1078,264 @@
     </div>
   </div>
 
-  <!-- Application Script -->
-  <script src="js/qsm-app-romeo.js"></script>
+  <!-- Citations Modal -->
+  <div class="modal-overlay" id="citationsModal">
+    <div class="modal citations-modal">
+      <div class="modal-header">
+        <h3>Citations</h3>
+        <button class="modal-close" id="closeCitations">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="citation-section citation-primary">
+          <div class="citation-item">
+            <strong>QSMbly</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/astewartau/qsmbly" target="_blank" rel="noopener">GitHub</a></span>
+            <p>Stewart, A.W. (2026). "QSMbly: Browser-based Quantitative Susceptibility Mapping."</p>
+            <a href="https://github.com/astewartau/qsmbly" target="_blank" rel="noopener">https://github.com/astewartau/qsmbly</a>
+          </div>
+        </div>
+
+        <p class="citations-intro">QSMbly implements algorithms from the following publications. Please cite the relevant papers if you use these methods in your research.</p>
+
+        <div class="citation-section">
+          <h4>Brain Extraction</h4>
+          <div class="citation-item">
+            <strong>BET (Brain Extraction Tool)</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/Bostrix/FSL-BET2" target="_blank" rel="noopener">FSL-BET2</a></span>
+            <p>Smith, S.M. (2002). "Fast robust automated brain extraction." <em>Human Brain Mapping</em>, 17(3):143-155.</p>
+            <a href="https://doi.org/10.1002/hbm.10062" target="_blank" rel="noopener">DOI: 10.1002/hbm.10062</a>
+          </div>
+        </div>
+
+        <div class="citation-section">
+          <h4>Phase Unwrapping</h4>
+          <div class="citation-item">
+            <strong>ROMEO</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener">MriResearchTools.jl</a></span>
+            <p>Dymerska, B., Eckstein, K., Bachrata, B., Siow, B., Trattnig, S., Shmueli, K., Robinson, S.D. (2021). "Phase Unwrapping with a Rapid Opensource Minimum Spanning TreE AlgOrithm (ROMEO)." <em>Magnetic Resonance in Medicine</em>, 85(4):2294-2308.</p>
+            <a href="https://doi.org/10.1002/mrm.28563" target="_blank" rel="noopener">DOI: 10.1002/mrm.28563</a>
+          </div>
+          <div class="citation-item">
+            <strong>Laplacian Phase Unwrapping</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
+            <p>Schofield, M.A., Zhu, Y. (2003). "Fast phase unwrapping algorithm for interferometric applications." <em>Optics Letters</em>, 28(14):1194-1196.</p>
+            <a href="https://doi.org/10.1364/OL.28.001194" target="_blank" rel="noopener">DOI: 10.1364/OL.28.001194</a>
+          </div>
+        </div>
+
+        <div class="citation-section">
+          <h4>Multi-Echo Processing</h4>
+          <div class="citation-item">
+            <strong>MCPC-3D-S (ASPIRE)</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener">MriResearchTools.jl</a></span>
+            <p>Eckstein, K., Dymerska, B., Bachrata, B., Bogner, W., Poljanc, K., Trattnig, S., Robinson, S.D. (2018). "Computationally Efficient Combination of Multi-channel Phase Data From Multi-echo Acquisitions (ASPIRE)." <em>Magnetic Resonance in Medicine</em>, 79:2996-3006.</p>
+            <a href="https://doi.org/10.1002/mrm.26963" target="_blank" rel="noopener">DOI: 10.1002/mrm.26963</a>
+          </div>
+          <div class="citation-item">
+            <strong>Multi-Echo B0 Estimation</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a>, <a href="https://github.com/wtsyeda/QSMART" target="_blank" rel="noopener">QSMART</a></span>
+            <p>Linear fit across echo times for B0 field estimation.</p>
+          </div>
+          <div class="citation-item">
+            <strong>Bias Field Correction</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener">MriResearchTools.jl</a></span>
+            <p>Eckstein, K., Trattnig, S., Robinson, S.D. (2019). "A Simple Homogeneity Correction for Neuroimaging at 7T." <em>Proc. ISMRM 27th Annual Meeting</em>.</p>
+          </div>
+        </div>
+
+        <div class="citation-section">
+          <h4>Background Field Removal</h4>
+          <div class="citation-item">
+            <strong>V-SHARP</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
+            <p>Wu, B., Li, W., Guidon, A., Liu, C. (2012). "Whole brain susceptibility mapping using compressed sensing." <em>Magnetic Resonance in Medicine</em>, 67(1):137-147.</p>
+            <a href="https://doi.org/10.1002/mrm.23000" target="_blank" rel="noopener">DOI: 10.1002/mrm.23000</a>
+          </div>
+          <div class="citation-item">
+            <strong>SHARP</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
+            <p>Schweser, F., Deistung, A., Lehr, B.W., Reichenbach, J.R. (2011). "Quantitative imaging of intrinsic magnetic tissue properties using MRI signal phase." <em>NeuroImage</em>, 54(4):2789-2807.</p>
+            <a href="https://doi.org/10.1016/j.neuroimage.2010.10.070" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2010.10.070</a>
+          </div>
+          <div class="citation-item">
+            <strong>iSMV</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
+            <p>Wen, Y., Zhou, D., Liu, T., Spincemaille, P., Wang, Y. (2014). "An iterative spherical mean value method for background field removal in MRI." <em>Magnetic Resonance in Medicine</em>, 72(4):1065-1071.</p>
+            <a href="https://doi.org/10.1002/mrm.24998" target="_blank" rel="noopener">DOI: 10.1002/mrm.24998</a>
+          </div>
+          <div class="citation-item">
+            <strong>PDF</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
+            <p>Liu, T., Khalidov, I., de Rochefort, L., Spincemaille, P., Liu, J., Tsiouris, A.J., Wang, Y. (2011). "A novel background field removal method for MRI using projection onto dipole fields." <em>NMR in Biomedicine</em>, 24(9):1129-1136.</p>
+            <a href="https://doi.org/10.1002/nbm.1670" target="_blank" rel="noopener">DOI: 10.1002/nbm.1670</a>
+          </div>
+          <div class="citation-item">
+            <strong>LBV</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
+            <p>Zhou, D., Liu, T., Spincemaille, P., Wang, Y. (2014). "Background field removal by solving the Laplacian boundary value problem." <em>NMR in Biomedicine</em>, 27(3):312-319.</p>
+            <a href="https://doi.org/10.1002/nbm.3064" target="_blank" rel="noopener">DOI: 10.1002/nbm.3064</a>
+          </div>
+          <div class="citation-item">
+            <strong>SDF (for QSMART)</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/wtsyeda/QSMART" target="_blank" rel="noopener">QSMART</a></span>
+            <p>Yaghmaie, N., Syeda, W., et al. (2021). "QSMART: Quantitative Susceptibility Mapping Artifact Reduction Technique." <em>NeuroImage</em>, 231:117701.</p>
+            <a href="https://doi.org/10.1016/j.neuroimage.2020.117701" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2020.117701</a>
+          </div>
+        </div>
+
+        <div class="citation-section">
+          <h4>Dipole Inversion</h4>
+          <div class="citation-item">
+            <strong>TKD / TSVD</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
+            <p>Shmueli, K., de Zwart, J.A., van Gelderen, P., Li, T.Q., Dodd, S.J., Duyn, J.H. (2009). "Magnetic susceptibility mapping of brain tissue in vivo using MRI phase data." <em>Magnetic Resonance in Medicine</em>, 62(6):1510-1522.</p>
+            <a href="https://doi.org/10.1002/mrm.22135" target="_blank" rel="noopener">DOI: 10.1002/mrm.22135</a>
+          </div>
+          <div class="citation-item">
+            <strong>Tikhonov</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
+            <p>Bilgic, B., et al. (2014). "Fast image reconstruction with L2-regularization." <em>Journal of Magnetic Resonance Imaging</em>, 40(1):181-191.</p>
+            <a href="https://doi.org/10.1002/jmri.24365" target="_blank" rel="noopener">DOI: 10.1002/jmri.24365</a>
+          </div>
+          <div class="citation-item">
+            <strong>TV-ADMM</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
+            <p>Bilgic, B., Fan, A.P., Polimeni, J.R., et al. (2014). "Fast quantitative susceptibility mapping with L1-regularization and automatic parameter selection." <em>Magnetic Resonance in Medicine</em>, 72(5):1444-1459.</p>
+            <a href="https://doi.org/10.1002/mrm.25029" target="_blank" rel="noopener">DOI: 10.1002/mrm.25029</a>
+          </div>
+          <div class="citation-item">
+            <strong>RTS (Rapid Two-Step)</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
+            <p>Kames, C., Wiggermann, V., Rauscher, A. (2018). "Rapid two-step dipole inversion for susceptibility mapping with sparsity priors." <em>NeuroImage</em>, 167:276-283.</p>
+            <a href="https://doi.org/10.1016/j.neuroimage.2017.11.018" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2017.11.018</a>
+          </div>
+          <div class="citation-item">
+            <strong>NLTV (Nonlinear TV)</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
+            <p>Kames, C., Wiggermann, V., Rauscher, A. (2018). "Rapid two-step dipole inversion for susceptibility mapping with sparsity priors." <em>NeuroImage</em>, 167:276-283.</p>
+            <a href="https://doi.org/10.1016/j.neuroimage.2017.11.018" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2017.11.018</a>
+          </div>
+          <div class="citation-item">
+            <strong>MEDI</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/huawu02/MEDI_toolbox" target="_blank" rel="noopener">MEDI_toolbox</a></span>
+            <p>Liu, T., Liu, J., de Rochefort, L., et al. (2011). "Morphology enabled dipole inversion (MEDI) from a single-angle acquisition." <em>Magnetic Resonance in Medicine</em>, 66(3):777-783.</p>
+            <a href="https://doi.org/10.1002/mrm.22816" target="_blank" rel="noopener">DOI: 10.1002/mrm.22816</a>
+          </div>
+          <div class="citation-item">
+            <strong>iLSQR</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.m" target="_blank" rel="noopener">QSM.m</a></span>
+            <p>Li, W., Wang, N., Yu, F., et al. (2015). "A method for estimating and removing streaking artifacts in quantitative susceptibility mapping." <em>NeuroImage</em>, 108:111-122.</p>
+            <a href="https://doi.org/10.1016/j.neuroimage.2014.12.043" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2014.12.043</a>
+          </div>
+          <div class="citation-item">
+            <strong>TGV</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/korbinian90/QuantitativeSusceptibilityMappingTGV.jl" target="_blank" rel="noopener">QuantitativeSusceptibilityMappingTGV.jl</a></span>
+            <p>Langkammer, C., Bredies, K., Poser, B.A., et al. (2015). "Fast quantitative susceptibility mapping using 3D EPI and total generalized variation." <em>NeuroImage</em>, 111:622-630.</p>
+            <a href="https://doi.org/10.1016/j.neuroimage.2015.02.041" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2015.02.041</a>
+            <p style="margin-top: 4px;">Chatnuntawech, I., McDaniel, P., et al. (2017). "Single-step quantitative susceptibility mapping with variational penalties." <em>NMR in Biomedicine</em>, 30(4):e3570.</p>
+            <a href="https://doi.org/10.1002/nbm.3570" target="_blank" rel="noopener">DOI: 10.1002/nbm.3570</a>
+          </div>
+        </div>
+
+        <div class="citation-section">
+          <h4>QSMART Pipeline</h4>
+          <div class="citation-item">
+            <strong>QSMART (Two-Stage Reconstruction)</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/wtsyeda/QSMART" target="_blank" rel="noopener">QSMART</a></span>
+            <p>Yaghmaie, N., Syeda, W., Wu, C., Zhang, Y., Zhang, T., Burrows, E.L., Moffat, B.A., Wright, D.K., Glarin, R., Kolbe, S., Johnston, L.A. (2021). "QSMART: Quantitative Susceptibility Mapping Artifact Reduction Technique." <em>NeuroImage</em>, 231:117701.</p>
+            <a href="https://doi.org/10.1016/j.neuroimage.2020.117701" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2020.117701</a>
+          </div>
+        </div>
+
+        <div class="citation-section">
+          <h4>Utility Algorithms</h4>
+          <div class="citation-item">
+            <strong>Frangi Vesselness Filter</strong>
+            <span class="citation-ref">Code: <a href="https://www.mathworks.com/matlabcentral/fileexchange/24409-hessian-based-frangi-vesselness-filter" target="_blank" rel="noopener">MATLAB File Exchange</a> (Dirk-Jan Kroon)</span>
+            <p>Frangi, A.F., Niessen, W.J., Vincken, K.L., Viergever, M.A. (1998). "Multiscale vessel enhancement filtering." <em>MICCAI'98</em>, LNCS vol 1496, 130-137.</p>
+            <a href="https://doi.org/10.1007/BFb0056195" target="_blank" rel="noopener">DOI: 10.1007/BFb0056195</a>
+          </div>
+          <div class="citation-item">
+            <strong>Surface Curvature Calculation</strong>
+            <span class="citation-ref">Code: <a href="https://www.mathworks.com/matlabcentral/fileexchange/61136-curvatures" target="_blank" rel="noopener">MATLAB File Exchange</a> (Alireza Dastan)</span>
+            <p>Meyer, M., Desbrun, M., Schroder, P., Barr, A.H. (2003). "Discrete Differential-Geometry Operators for Triangulated 2-Manifolds." <em>Visualization and Mathematics III</em>, 35-57.</p>
+            <a href="https://doi.org/10.1007/978-3-662-05105-4_2" target="_blank" rel="noopener">DOI: 10.1007/978-3-662-05105-4_2</a>
+          </div>
+        </div>
+
+        <div class="citation-section">
+          <h4>QSM Review Papers</h4>
+          <div class="citation-item">
+            <p>Deistung, A., Schweser, F., Reichenbach, J.R. (2017). "Overview of quantitative susceptibility mapping." <em>NMR in Biomedicine</em>, 30(4):e3569.</p>
+            <a href="https://doi.org/10.1002/nbm.3569" target="_blank" rel="noopener">DOI: 10.1002/nbm.3569</a>
+          </div>
+          <div class="citation-item">
+            <p>Schweser, F., Deistung, A., Reichenbach, J.R. (2016). "Foundations of MRI phase imaging and processing for Quantitative Susceptibility Mapping (QSM)." <em>Zeitschrift fur Medizinische Physik</em>, 26(1):6-34.</p>
+            <a href="https://doi.org/10.1016/j.zemedi.2015.10.002" target="_blank" rel="noopener">DOI: 10.1016/j.zemedi.2015.10.002</a>
+          </div>
+          <div class="citation-item">
+            <p>Harada, T., Kudo, K., Fujima, N., et al. (2022). "Quantitative Susceptibility Mapping: Basic Methods and Clinical Applications." <em>RadioGraphics</em>, 42(4):1161-1176.</p>
+            <a href="https://doi.org/10.1148/rg.210054" target="_blank" rel="noopener">DOI: 10.1148/rg.210054</a>
+          </div>
+        </div>
+
+        <div class="citation-section">
+          <h4>Reference Implementations</h4>
+          <p class="citations-intro" style="margin-bottom: var(--space-sm);">The following repositories were used as references:</p>
+          <div class="ref-list">
+            <a href="https://github.com/Bostrix/FSL-BET2" target="_blank" rel="noopener">FSL-BET2</a> - BET brain extraction
+          </div>
+          <div class="ref-list">
+            <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener">MriResearchTools.jl</a> - ROMEO, MCPC-3D-S, Bias correction
+          </div>
+          <div class="ref-list">
+            <a href="https://github.com/huawu02/MEDI_toolbox" target="_blank" rel="noopener">MEDI_toolbox</a> - MEDI
+          </div>
+          <div class="ref-list">
+            <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a> - Laplacian unwrap, V-SHARP, SHARP, iSMV, PDF, LBV, TKD, TSVD, RTS, NLTV, Tikhonov, TV-ADMM
+          </div>
+          <div class="ref-list">
+            <a href="https://github.com/kamesy/QSM.m" target="_blank" rel="noopener">QSM.m</a> - iLSQR
+          </div>
+          <div class="ref-list">
+            <a href="https://github.com/wtsyeda/QSMART" target="_blank" rel="noopener">QSMART</a> - SDF, Frangi filter, curvature, two-stage pipeline
+          </div>
+          <div class="ref-list">
+            <a href="https://github.com/korbinian90/QuantitativeSusceptibilityMappingTGV.jl" target="_blank" rel="noopener">QuantitativeSusceptibilityMappingTGV.jl</a> - TGV-QSM
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main App Module (imports config and utilities internally) -->
+  <script type="module" src="js/qsm-app-romeo.js"></script>
 
   <!-- Additional UI Interactions -->
   <script>
+    // Accordion toggle for sidebar sections
+    function toggleSection(section) {
+      const wasCollapsed = section.classList.contains('collapsed');
+      const isResultsSection = section.id === 'stage-buttons';
+
+      // Close all other sections (accordion behavior), except Results which can stay open
+      document.querySelectorAll('.sidebar-section:not(.hidden)').forEach(s => {
+        const isResults = s.id === 'stage-buttons';
+        // Don't close Results section when opening other sections
+        // Don't close other sections when toggling Results
+        if (s !== section && !s.classList.contains('collapsed') && !isResults && !isResultsSection) {
+          s.classList.add('collapsed');
+        }
+      });
+
+      // Toggle the clicked section
+      if (wasCollapsed) {
+        section.classList.remove('collapsed');
+      } else {
+        section.classList.add('collapsed');
+      }
+    }
+
     // View tab switching
     document.querySelectorAll('.view-tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -1178,6 +1550,78 @@
       });
     });
 
+    // =========================================================================
+    // Phase Processing UI Controls
+    // =========================================================================
+
+    // Phase offset method (MCPC-3D-S / None) controls
+    const phaseOffsetMethod = document.getElementById('phaseOffsetMethod');
+    const mcpc3dsSettings = document.getElementById('mcpc3dsSettings');
+    const unwrapMethod = document.getElementById('unwrapMethod');
+    const unwrapLockedHint = document.getElementById('unwrapLockedHint');
+    const romeoSettings = document.getElementById('romeoSettings');
+    const laplacianSettings = document.getElementById('laplacianSettings');
+
+    function updatePhaseOffsetUI() {
+      const method = phaseOffsetMethod.value;
+      const isMcpc3ds = method === 'mcpc3ds';
+
+      // Show/hide MCPC-3D-S settings
+      mcpc3dsSettings.style.display = isMcpc3ds ? 'block' : 'none';
+
+      // Lock unwrap method to ROMEO when MCPC-3D-S is selected
+      if (isMcpc3ds) {
+        unwrapMethod.value = 'romeo';
+        unwrapMethod.disabled = true;
+        unwrapLockedHint.style.display = 'block';
+      } else {
+        unwrapMethod.disabled = false;
+        unwrapLockedHint.style.display = 'none';
+      }
+
+      updateUnwrapUI();
+    }
+
+    function updateUnwrapUI() {
+      const method = unwrapMethod.value;
+      romeoSettings.style.display = method === 'romeo' ? 'block' : 'none';
+      laplacianSettings.style.display = method === 'laplacian' ? 'block' : 'none';
+    }
+
+    phaseOffsetMethod.addEventListener('change', updatePhaseOffsetUI);
+    unwrapMethod.addEventListener('change', updateUnwrapUI);
+
+    // Field calculation method controls
+    const fieldCalculationMethod = document.getElementById('fieldCalculationMethod');
+    const weightedAvgSettings = document.getElementById('weightedAvgSettings');
+    const linearFitSettings = document.getElementById('linearFitSettings');
+
+    function updateFieldCalculationUI() {
+      const method = fieldCalculationMethod.value;
+      weightedAvgSettings.style.display = method === 'weighted_avg' ? 'block' : 'none';
+      linearFitSettings.style.display = method === 'linear_fit' ? 'block' : 'none';
+    }
+
+    fieldCalculationMethod.addEventListener('change', updateFieldCalculationUI);
+
+    // Single-echo unwrap method controls
+    const singleEchoUnwrapMethod = document.getElementById('singleEchoUnwrapMethod');
+    const singleEchoRomeoSettings = document.getElementById('singleEchoRomeoSettings');
+    const singleEchoLaplacianSettings = document.getElementById('singleEchoLaplacianSettings');
+
+    function updateSingleEchoUnwrapUI() {
+      const method = singleEchoUnwrapMethod.value;
+      singleEchoRomeoSettings.style.display = method === 'romeo' ? 'block' : 'none';
+      singleEchoLaplacianSettings.style.display = method === 'laplacian' ? 'block' : 'none';
+    }
+
+    singleEchoUnwrapMethod.addEventListener('change', updateSingleEchoUnwrapUI);
+
+    // Initialize UI state
+    updatePhaseOffsetUI();
+    updateFieldCalculationUI();
+    updateSingleEchoUnwrapUI();
+
   </script>
 
   <style>
@@ -1199,11 +1643,16 @@
       padding: var(--space-xs);
     }
 
-    .stage-item .btn:last-child {
+    .stage-item .download-btn {
       padding: var(--space-xs);
+      opacity: 0.6;
     }
 
-    .stage-item .btn:last-child svg {
+    .stage-item .download-btn:hover {
+      opacity: 1;
+    }
+
+    .stage-item .download-btn svg {
       width: 12px;
       height: 12px;
     }
@@ -1485,6 +1934,32 @@
       margin-bottom: 0;
     }
 
+    .method-links {
+      display: flex;
+      gap: var(--space-xs);
+      margin-bottom: var(--space-sm);
+    }
+
+    .method-links a {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      color: var(--color-text-muted);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      transition: all 0.15s;
+      font-size: 0.7rem;
+      text-decoration: none;
+    }
+
+    .method-links a:hover {
+      color: var(--color-primary);
+      border-color: var(--color-primary);
+      background: var(--color-surface-alt);
+    }
+
     /* Checkbox styling */
     .checkbox-label {
       display: flex;
@@ -1653,6 +2128,152 @@
 
     .data-units:empty {
       display: none;
+    }
+
+    /* Header links */
+    .header-links {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+    }
+
+    .header-link {
+      color: white;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      transition: opacity 0.15s;
+      opacity: 0.8;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    .header-link:hover {
+      opacity: 1;
+    }
+
+    .header-link svg {
+      display: block;
+    }
+
+    .citation-primary {
+      background: var(--color-surface-alt);
+      border: 1px solid var(--color-primary);
+      border-radius: var(--radius-md);
+      padding: var(--space-md);
+      margin-bottom: var(--space-md);
+    }
+
+    .citation-primary .citation-item {
+      margin-bottom: 0;
+    }
+
+    .citation-primary strong {
+      font-size: 1.1rem;
+      color: var(--color-primary);
+    }
+
+    /* Citations modal */
+    .citations-modal {
+      max-width: 700px;
+      max-height: 80vh;
+    }
+
+    .citations-intro {
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+      margin: 0 0 var(--space-lg) 0;
+      line-height: 1.5;
+    }
+
+    .citation-section {
+      margin-bottom: var(--space-lg);
+    }
+
+    .citation-section h4 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--color-primary);
+      margin: 0 0 var(--space-sm) 0;
+      padding-bottom: var(--space-xs);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .citation-item {
+      margin-bottom: var(--space-md);
+      padding-left: var(--space-sm);
+      border-left: 2px solid var(--color-border);
+    }
+
+    .citation-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .citation-item strong {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--color-text);
+      margin-bottom: 4px;
+    }
+
+    .citation-item p {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+      margin: 0 0 4px 0;
+      line-height: 1.4;
+    }
+
+    .citation-item em {
+      font-style: italic;
+    }
+
+    .citation-item a {
+      font-size: 0.75rem;
+      color: var(--color-primary);
+      text-decoration: none;
+    }
+
+    .citation-item a:hover {
+      text-decoration: underline;
+    }
+
+    .citation-ref {
+      display: block;
+      font-size: 0.7rem;
+      color: var(--color-text-muted);
+      margin-bottom: 4px;
+    }
+
+    .citation-ref a {
+      color: var(--color-primary);
+      text-decoration: none;
+    }
+
+    .citation-ref a:hover {
+      text-decoration: underline;
+    }
+
+    .ref-list {
+      font-size: 0.8rem;
+      color: var(--color-text-muted);
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+
+    .ref-list a {
+      color: var(--color-primary);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .ref-list a:hover {
+      text-decoration: underline;
     }
   </style>
 </body>

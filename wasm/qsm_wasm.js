@@ -1,13 +1,15 @@
 /* @ts-self-types="./qsm_wasm.d.ts" */
 
 /**
- * BET brain extraction
+ * BET brain extraction (aligned with FSL-BET2)
  *
  * # Arguments
  * * `data` - 3D magnitude image (nx * ny * nz)
  * * `nx`, `ny`, `nz` - Dimensions
  * * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
  * * `fractional_intensity` - Intensity threshold (0.0-1.0, smaller = larger brain)
+ * * `smoothness_factor` - Smoothness constraint (default 1.0, larger = smoother surface)
+ * * `gradient_threshold` - Z-gradient for threshold (-1 to 1, positive = larger brain at bottom)
  * * `iterations` - Number of surface evolution iterations
  * * `subdivisions` - Icosphere subdivision level (4 = 2562 vertices)
  *
@@ -21,21 +23,23 @@
  * @param {number} vsy
  * @param {number} vsz
  * @param {number} fractional_intensity
+ * @param {number} smoothness_factor
+ * @param {number} gradient_threshold
  * @param {number} iterations
  * @param {number} subdivisions
  * @returns {Uint8Array}
  */
-export function bet_wasm(data, nx, ny, nz, vsx, vsy, vsz, fractional_intensity, iterations, subdivisions) {
+export function bet_wasm(data, nx, ny, nz, vsx, vsy, vsz, fractional_intensity, smoothness_factor, gradient_threshold, iterations, subdivisions) {
     const ptr0 = passArrayF64ToWasm0(data, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.bet_wasm(ptr0, len0, nx, ny, nz, vsx, vsy, vsz, fractional_intensity, iterations, subdivisions);
+    const ret = wasm.bet_wasm(ptr0, len0, nx, ny, nz, vsx, vsy, vsz, fractional_intensity, smoothness_factor, gradient_threshold, iterations, subdivisions);
     var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v2;
 }
 
 /**
- * Run BET with progress callback
+ * Run BET with progress callback (aligned with FSL-BET2)
  *
  * The callback receives (current_iteration, total_iterations)
  * @param {Float64Array} data
@@ -46,15 +50,17 @@ export function bet_wasm(data, nx, ny, nz, vsx, vsy, vsz, fractional_intensity, 
  * @param {number} vsy
  * @param {number} vsz
  * @param {number} fractional_intensity
+ * @param {number} smoothness_factor
+ * @param {number} gradient_threshold
  * @param {number} iterations
  * @param {number} subdivisions
  * @param {Function} progress_callback
  * @returns {Uint8Array}
  */
-export function bet_wasm_with_progress(data, nx, ny, nz, vsx, vsy, vsz, fractional_intensity, iterations, subdivisions, progress_callback) {
+export function bet_wasm_with_progress(data, nx, ny, nz, vsx, vsy, vsz, fractional_intensity, smoothness_factor, gradient_threshold, iterations, subdivisions, progress_callback) {
     const ptr0 = passArrayF64ToWasm0(data, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.bet_wasm_with_progress(ptr0, len0, nx, ny, nz, vsx, vsy, vsz, fractional_intensity, iterations, subdivisions, progress_callback);
+    const ret = wasm.bet_wasm_with_progress(ptr0, len0, nx, ny, nz, vsx, vsy, vsz, fractional_intensity, smoothness_factor, gradient_threshold, iterations, subdivisions, progress_callback);
     var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v2;
@@ -952,6 +958,51 @@ export function medi_l1_wasm_with_progress(local_field, n_std, magnitude, mask, 
     const ptr3 = passArray8ToWasm0(mask, wasm.__wbindgen_malloc);
     const len3 = WASM_VECTOR_LEN;
     const ret = wasm.medi_l1_wasm_with_progress(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, nx, ny, nz, vsx, vsy, vsz, bx, by, bz, lambda, merit, smv, smv_radius, data_weighting, percentage, cg_tol, cg_max_iter, max_iter, tol, progress_callback);
+    var v5 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v5;
+}
+
+/**
+ * Multi-echo linear fit with magnitude weighting
+ *
+ * Fits a linear model: phase = slope * TE + intercept
+ * using weighted least squares with magnitude as weights.
+ *
+ * # Arguments
+ * * `unwrapped_phases_flat` - Flattened unwrapped phases [echo0, echo1, ...]
+ * * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
+ * * `tes` - Echo times in seconds
+ * * `mask` - Binary mask
+ * * `n_total` - Voxels per echo
+ * * `estimate_offset` - If true, estimate phase offset (intercept)
+ * * `reliability_percentile` - Percentile for reliability masking (0-100, 0=disable)
+ *
+ * # Returns
+ * Flattened [field_hz, phase_offset, fit_residual, reliability_mask]
+ * - First n_total: field in Hz
+ * - Next n_total: phase offset in radians
+ * - Next n_total: fit residual
+ * - Next n_total: reliability mask (as f64, 0 or 1)
+ * @param {Float64Array} unwrapped_phases_flat
+ * @param {Float64Array} mags_flat
+ * @param {Float64Array} tes
+ * @param {Uint8Array} mask
+ * @param {number} n_total
+ * @param {boolean} estimate_offset
+ * @param {number} reliability_percentile
+ * @returns {Float64Array}
+ */
+export function multi_echo_linear_fit_wasm(unwrapped_phases_flat, mags_flat, tes, mask, n_total, estimate_offset, reliability_percentile) {
+    const ptr0 = passArrayF64ToWasm0(unwrapped_phases_flat, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayF64ToWasm0(mags_flat, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArrayF64ToWasm0(tes, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passArray8ToWasm0(mask, wasm.__wbindgen_malloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.multi_echo_linear_fit_wasm(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, n_total, estimate_offset, reliability_percentile);
     var v5 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
     return v5;
