@@ -108,6 +108,51 @@ export function calculate_b0_weighted_wasm(unwrapped_phases_flat, mags_flat, tes
 }
 
 /**
+ * Calculate ROMEO edge weights with configurable weight components
+ *
+ * # Arguments
+ * * `phase` - Phase data (nx * ny * nz)
+ * * `mag` - Magnitude data (nx * ny * nz), can be empty
+ * * `phase2` - Second echo phase for gradient coherence (nx * ny * nz), can be empty
+ * * `te1`, `te2` - Echo times for gradient coherence scaling
+ * * `mask` - Binary mask (nx * ny * nz)
+ * * `nx`, `ny`, `nz` - Array dimensions
+ * * `use_phase_gradient_coherence` - Include phase gradient coherence (multi-echo temporal)
+ * * `use_mag_coherence` - Include magnitude coherence (min/max similarity)
+ * * `use_mag_weight` - Include magnitude weight (penalize low signal)
+ *
+ * # Returns
+ * Weights array (3 * nx * ny * nz) for x, y, z directions
+ * @param {Float64Array} phase
+ * @param {Float64Array} mag
+ * @param {Float64Array} phase2
+ * @param {number} te1
+ * @param {number} te2
+ * @param {Uint8Array} mask
+ * @param {number} nx
+ * @param {number} ny
+ * @param {number} nz
+ * @param {boolean} use_phase_gradient_coherence
+ * @param {boolean} use_mag_coherence
+ * @param {boolean} use_mag_weight
+ * @returns {Uint8Array}
+ */
+export function calculate_weights_romeo_configurable_wasm(phase, mag, phase2, te1, te2, mask, nx, ny, nz, use_phase_gradient_coherence, use_mag_coherence, use_mag_weight) {
+    const ptr0 = passArrayF64ToWasm0(phase, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArrayF64ToWasm0(mag, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArrayF64ToWasm0(phase2, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passArray8ToWasm0(mask, wasm.__wbindgen_malloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.calculate_weights_romeo_configurable_wasm(ptr0, len0, ptr1, len1, ptr2, len2, te1, te2, ptr3, len3, nx, ny, nz, use_phase_gradient_coherence, use_mag_coherence, use_mag_weight);
+    var v5 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v5;
+}
+
+/**
  * Calculate ROMEO edge weights for phase unwrapping
  *
  * # Arguments
@@ -1979,7 +2024,7 @@ function __wbg_get_imports() {
                 wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
             }
         },
-        __wbg_log_65983a65561bdd32: function(arg0, arg1) {
+        __wbg_log_797102678ea9a65a: function(arg0, arg1) {
             console.log(getStringFromWasm0(arg0, arg1));
         },
         __wbg_new_361308b2356cecd0: function() {

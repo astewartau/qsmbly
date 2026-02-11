@@ -10,9 +10,10 @@ import {
   createFloat64Nifti
 } from './modules/file-io/NiftiUtils.js';
 import { ConsoleOutput } from './modules/ui/ConsoleOutput.js';
+import { ModalManager } from './modules/ui/ModalManager.js';
 import { ProgressManager } from './modules/ui/ProgressManager.js';
 import { EchoNavigator } from './modules/viewer/EchoNavigator.js';
-import { PipelineSettingsController, MaskController, ViewerController } from './controllers/index.js';
+import { FileIOController, PipelineExecutor, PipelineSettingsController, MaskController, ViewerController } from './controllers/index.js';
 import * as QSMConfig from './app/config.js';
 
 // Make config available globally for backward compatibility
@@ -22,10 +23,6 @@ class QSMApp {
   constructor() {
     // Config is required - no fallbacks
     const cfg = window.QSMConfig;
-
-    this.worker = null;
-    this.workerReady = false;
-    this.workerInitializing = false;
 
     this.nv = new window.Niivue({
       ...cfg.VIEWER_CONFIG,
@@ -44,24 +41,9 @@ class QSMApp {
     this.lastAnimationTime = 0;
     this.progressAnimationSpeed = cfg.PROGRESS_CONFIG.animationSpeed;
 
-    // Multi-echo file storage
-    this.multiEchoFiles = {
-      magnitude: [],
-      phase: [],
-      json: [],
-      echoTimes: [],
-      combinedMagnitude: null,
-      combinedPhase: null
-    };
-
-    // Processing results - dynamically populated as stages arrive
-    this.results = {};
-
-    // Track stage order for display (in order they arrive)
-    this.stageOrder = [];
-
-    // Pending stage requests
-    this.pendingStageResolve = null;
+    // Controllers (initialized in init() after DOM ready)
+    this.fileIOController = null;
+    this.pipelineExecutor = null;
 
     // Mask threshold (percentage of max magnitude)
     this.maskThreshold = cfg.MASK_CONFIG.defaultThreshold;
@@ -91,23 +73,50 @@ class QSMApp {
     this.preparedMagnitudeData = null;
     this.preparedMagnitudeMax = 0;
 
-    // Track last run settings for intelligent caching
-    this.lastRunSettings = null;
-    this.pipelineHasRun = false;
-
     // Echo navigation state
     this.currentEchoIndex = 0;
     this.currentViewType = null;
-
-    // Pipeline running state
-    this.pipelineRunning = false;
 
     // Controllers (initialized in init() after DOM ready)
     this.pipelineSettingsController = null;
     this.maskController = null;
     this.viewerController = null;
 
+    // Modal managers (initialized in init() after DOM ready)
+    this.betModal = null;
+    this.citationsModal = null;
+    this.privacyModal = null;
+
     this.init();
+  }
+
+  // Getter for backward compatibility - delegates to FileIOController
+  get multiEchoFiles() {
+    return this.fileIOController?.getMultiEchoFiles() || {
+      magnitude: [], phase: [], json: [], echoTimes: [],
+      combinedMagnitude: null, combinedPhase: null
+    };
+  }
+
+  // Getters for backward compatibility - delegates to PipelineExecutor
+  get pipelineRunning() {
+    return this.pipelineExecutor?.isRunning() || false;
+  }
+
+  get worker() {
+    return this.pipelineExecutor?.getWorker() || null;
+  }
+
+  get workerReady() {
+    return this.pipelineExecutor?.isReady() || false;
+  }
+
+  get results() {
+    return this.pipelineExecutor?.getResults() || {};
+  }
+
+  get stageOrder() {
+    return this.pipelineExecutor?.getStageOrder() || [];
   }
 
   async init() {
@@ -117,15 +126,24 @@ class QSMApp {
       versionEl.textContent = `v${window.QSMConfig.VERSION}`;
     }
 
+    // Initialize FileIOController first (other controllers depend on it)
+    this.fileIOController = new FileIOController({
+      updateOutput: (msg) => this.updateOutput(msg),
+      onFilesChanged: () => this.updateEchoInfo(),
+      onMagnitudeFilesChanged: (files) => this._onMagnitudeFilesChanged(files),
+      onPhaseFilesChanged: (files) => this._onPhaseFilesChanged(files)
+    });
+    this.fileIOController.setupEchoTagify();
+
     await this.setupViewer();
     this.setupUIControls();
     this.setupEventListeners();
     this.updateDownloadButtons();
 
-    // Initialize file lists
-    this.updateFileList('magnitude', []);
-    this.updateFileList('phase', []);
-    this.updateFileList('json', []);
+    // Initialize file lists via controller
+    this.fileIOController.updateFileList('magnitude', []);
+    this.fileIOController.updateFileList('phase', []);
+    this.fileIOController.updateFileList('json', []);
 
     // Initialize masking controls state (disabled until Prepare is clicked)
     this.updateMaskingControlsState();
@@ -142,13 +160,23 @@ class QSMApp {
       this.pipelineSettingsController = new PipelineSettingsController(pipelineModal);
     }
 
+    // Initialize pipeline executor (before mask controller, provides worker)
+    this.pipelineExecutor = new PipelineExecutor({
+      updateOutput: (msg) => this.updateOutput(msg),
+      setProgress: (val, text) => this.setProgress(val, text),
+      onStageData: (data) => this._onStageData(data),
+      onPipelineComplete: () => this._onPipelineComplete(),
+      onPipelineError: () => this._onPipelineError(),
+      config: window.QSMConfig
+    });
+
     // Initialize mask controller
     this.maskController = new MaskController({
       nv: this.nv,
-      getWorker: () => this.worker,
+      getWorker: () => this.pipelineExecutor?.getWorker(),
       updateOutput: (msg) => this.updateOutput(msg),
       setProgress: (val, text) => this.setProgress(val, text),
-      initializeWorker: () => this.initializeWorker(),
+      initializeWorker: () => this.pipelineExecutor?.initialize(),
       config: window.QSMConfig
     });
 
@@ -161,118 +189,35 @@ class QSMApp {
       updateDownloadVolumeButton: () => this.updateDownloadVolumeButton()
     });
 
+    // Initialize modal managers
+    this.betModal = new ModalManager('betSettingsModal');
+    this.citationsModal = new ModalManager('citationsModal');
+    this.privacyModal = new ModalManager('privacyModal');
+
     // Start loading WASM in the background immediately
-    this.initializeWorker();
+    this.pipelineExecutor.initialize();
   }
 
-  setupWorker() {
-    if (this.worker) return;
-
-    this.worker = new Worker('js/qsm-worker-pure.js', { type: 'module' });
-
-    this.worker.onmessage = (e) => {
-      const { type, ...data } = e.data;
-
-      switch (type) {
-        case 'progress':
-          this.setProgress(data.value, data.text);
-          break;
-
-        case 'log':
-          this.updateOutput(data.message);
-          break;
-
-        case 'error':
-          this.updateOutput(`Error: ${data.message}`);
-          this.setProgress(0, 'Failed');
-          this.pipelineRunning = false;
-          document.getElementById('cancelPipeline').disabled = true;
-          this.updateEchoInfo(); // Re-enable run button if valid
-          break;
-
-        case 'initialized':
-          this.workerReady = true;
-          this.updateOutput("WASM ready");
-          break;
-
-        case 'complete':
-          this.updateOutput("Pipeline completed successfully!");
-          this.showStageButtons();
-          // Save settings for intelligent caching on next run
-          this.lastRunSettings = JSON.parse(JSON.stringify(this.pipelineSettings));
-          this.pipelineHasRun = true;
-          this.pipelineRunning = false;
-          document.getElementById('cancelPipeline').disabled = true;
-          this.updateEchoInfo(); // Re-enable run button
-          break;
-
-        case 'stageData':
-          // Handle both live stage updates and explicit requests
-          if (this.pendingStageResolve) {
-            this.pendingStageResolve(data);
-            this.pendingStageResolve = null;
-          } else if (this.pipelineRunning) {
-            // Live update during pipeline
-            // displayNow defaults to true for backward compatibility
-            const displayNow = data.displayNow !== false;
-            if (displayNow) {
-              this.displayLiveStageData(data);
-            } else {
-              // Just cache without displaying
-              this.cacheStageData(data);
-            }
-          }
-          break;
-      }
-    };
-
-    this.worker.onerror = (e) => {
-      this.updateOutput(`Worker error: ${e.message}`);
-      console.error('Worker error:', e);
-      this.pipelineRunning = false;
-      document.getElementById('cancelPipeline').disabled = true;
-      this.updateEchoInfo(); // Re-enable run button if valid
-    };
-  }
-
-  async initializeWorker() {
-    this.setupWorker();
-
-    // Already initialized
-    if (this.workerReady) return;
-
-    // Already initializing - just wait for it
-    if (this.workerInitializing) {
-      return new Promise((resolve) => {
-        const checkReady = setInterval(() => {
-          if (this.workerReady) {
-            clearInterval(checkReady);
-            resolve();
-          }
-        }, 100);
-      });
+  // Pipeline executor callbacks
+  _onStageData(data) {
+    // displayNow defaults to true for backward compatibility
+    const displayNow = data.displayNow !== false;
+    if (displayNow) {
+      this.displayLiveStageData(data);
+    } else {
+      this.cacheStageData(data);
     }
+  }
 
-    // Start initialization
-    this.workerInitializing = true;
-    this.updateOutput("Initializing WASM...");
+  _onPipelineComplete() {
+    this.showStageButtons();
+    document.getElementById('cancelPipeline').disabled = true;
+    this.updateEchoInfo();
+  }
 
-    // Send init message to worker (no Python code needed)
-    this.worker.postMessage({
-      type: 'init',
-      data: {}
-    });
-
-    // Wait for initialization
-    return new Promise((resolve) => {
-      const checkReady = setInterval(() => {
-        if (this.workerReady) {
-          clearInterval(checkReady);
-          this.workerInitializing = false;
-          resolve();
-        }
-      }, 100);
-    });
+  _onPipelineError() {
+    document.getElementById('cancelPipeline').disabled = true;
+    this.updateEchoInfo();
   }
 
   async setupViewer() {
@@ -379,9 +324,6 @@ class QSMApp {
       this.handleMultipleFiles(e, 'json');
     });
 
-    // Echo time Tagify input
-    this.setupEchoTagify();
-
     // Processing buttons
     document.getElementById('openPipelineSettings').addEventListener('click', () => this.openPipelineSettingsModal());
     document.getElementById('cancelPipeline')?.addEventListener('click', () => this.cancelPipeline());
@@ -450,13 +392,17 @@ class QSMApp {
     document.getElementById('runPipelineSidebar')?.addEventListener('click', () => this.runPipelineFromSidebar());
 
     // BET settings modal
-    document.getElementById('closeBetSettings')?.addEventListener('click', () => this.closeBetSettingsModal());
+    document.getElementById('closeBetSettings')?.addEventListener('click', () => this.betModal?.close());
     document.getElementById('resetBetSettings')?.addEventListener('click', () => this.resetBetSettings());
     document.getElementById('runBetWithSettings')?.addEventListener('click', () => this.runBetWithSettings());
 
     // Citations modal
-    document.getElementById('openCitations')?.addEventListener('click', () => this.openCitationsModal());
-    document.getElementById('closeCitations')?.addEventListener('click', () => this.closeCitationsModal());
+    document.getElementById('openCitations')?.addEventListener('click', () => this.citationsModal?.open());
+    document.getElementById('closeCitations')?.addEventListener('click', () => this.citationsModal?.close());
+
+    // Privacy modal
+    document.getElementById('openPrivacy')?.addEventListener('click', () => this.privacyModal?.open());
+    document.getElementById('closePrivacy')?.addEventListener('click', () => this.privacyModal?.close());
 
     // BET fractional intensity slider value display
     document.getElementById('betFractionalIntensity')?.addEventListener('input', (e) => {
@@ -488,15 +434,9 @@ class QSMApp {
       this.clearAllResults();
     });
 
-    // Close modals on overlay click
+    // Close modals on overlay click (BET and Citations handled by ModalManager)
     document.getElementById('pipelineSettingsModal')?.addEventListener('click', (e) => {
       if (e.target.id === 'pipelineSettingsModal') this.closePipelineSettingsModal();
-    });
-    document.getElementById('betSettingsModal')?.addEventListener('click', (e) => {
-      if (e.target.id === 'betSettingsModal') this.closeBetSettingsModal();
-    });
-    document.getElementById('citationsModal')?.addEventListener('click', (e) => {
-      if (e.target.id === 'citationsModal') this.closeCitationsModal();
     });
 
     // Note: Pipeline settings form event listeners are now handled by PipelineSettingsController
@@ -560,257 +500,64 @@ class QSMApp {
     });
   }
 
+  // Delegate file handling to FileIOController
   async handleMultipleFiles(event, type) {
-    const files = Array.from(event.target.files);
-
-    // Store files
-    this.multiEchoFiles[type] = files.map(file => ({
-      file: file,
-      name: file.name
-    }));
-
-    // Update UI
-    this.updateFileList(type, this.multiEchoFiles[type]);
-
-    // Process JSON files immediately to extract echo times
-    if (type === 'json') {
-      await this.processJsonFiles(files);
-    }
-
-    // Enable preview buttons when files are loaded
-    if (type === 'magnitude') {
-      document.getElementById('vis_magnitude').disabled = files.length === 0;
-
-      // Clear prepared state when magnitude files change
-      this.maskPrepSettings.prepared = false;
-      this.preparedMagnitudeData = null;
-      this.preparedMagnitudeMax = 0;
-      this.currentMaskData = null;
-      this.originalMaskData = null;
-      this.updatePrepareButtonState();  // This also calls updateMaskingControlsState
-
-      if (files.length > 0) {
-        const maskSection = document.getElementById('maskSection');
-        if (maskSection) {
-          maskSection.classList.remove('section-disabled');
-        }
-        // Load magnitude into viewer for visualization
-        this.visualizeMagnitude();
-      }
-    }
-
-    if (type === 'phase') {
-      document.getElementById('vis_phase').disabled = files.length === 0;
-    }
-
-    // Update echo information
-    this.updateEchoInfo();
+    await this.fileIOController.handleFileInput(event, type);
   }
 
-  updateFileList(type, fileList) {
-    const listElement = document.getElementById(`${type}List`);
-    const fileDrop = listElement?.closest('.upload-group')?.querySelector('.file-drop');
-
-    if (!listElement) {
-      console.error(`File list element not found: ${type}List`);
-      return;
-    }
-
-    listElement.innerHTML = '';
-
-    if (fileList.length > 0) {
-      fileDrop?.classList.add('has-files');
-      fileList.forEach((fileData, index) => {
-        const fileItem = document.createElement('div');
-        fileItem.className = 'file-item';
-        fileItem.innerHTML = `
-          <span>${fileData.name}</span>
-          <button class="file-remove" onclick="app.removeFile('${type}', ${index})">×</button>
-        `;
-        listElement.appendChild(fileItem);
-      });
-
-      // Update drop label
-      const label = fileDrop?.querySelector('.file-drop-label span');
-      if (label) {
-        label.textContent = `${fileList.length} file${fileList.length > 1 ? 's' : ''} selected`;
-      }
-    } else {
-      fileDrop?.classList.remove('has-files');
-      const label = fileDrop?.querySelector('.file-drop-label span');
-      if (label) {
-        const defaults = {
-          'magnitude': 'Drop files or click',
-          'phase': 'Drop files or click',
-          'json': 'Drop files or click'
-        };
-        label.textContent = defaults[type] || 'Drop files or click';
-      }
-    }
-  }
-
+  // Passthrough for backward compatibility (HTML onclick uses app.removeFile)
   removeFile(type, index) {
-    this.multiEchoFiles[type].splice(index, 1);
-    this.updateFileList(type, this.multiEchoFiles[type]);
-    this.updateEchoInfo();
+    this.fileIOController.removeFile(type, index);
+  }
 
-    // Re-disable buttons when files are removed
-    if (type === 'magnitude') {
-      document.getElementById('vis_magnitude').disabled = this.multiEchoFiles.magnitude.length === 0;
-      if (this.multiEchoFiles.magnitude.length === 0) {
-        const maskSection = document.getElementById('maskSection');
-        if (maskSection) {
-          maskSection.classList.add('section-disabled');
-        }
-        document.getElementById('previewMask')?.setAttribute('disabled', '');
-        document.getElementById('runBET')?.setAttribute('disabled', '');
+  // Callbacks from FileIOController
+  _onMagnitudeFilesChanged(files) {
+    document.getElementById('vis_magnitude').disabled = files.length === 0;
+
+    // Clear prepared state when magnitude files change
+    this.maskPrepSettings.prepared = false;
+    this.preparedMagnitudeData = null;
+    this.preparedMagnitudeMax = 0;
+    this.currentMaskData = null;
+    this.originalMaskData = null;
+    this.updatePrepareButtonState();
+
+    if (files.length > 0) {
+      const maskSection = document.getElementById('maskSection');
+      if (maskSection) {
+        maskSection.classList.remove('section-disabled');
       }
-    }
-
-    if (type === 'phase') {
-      document.getElementById('vis_phase').disabled = this.multiEchoFiles.phase.length === 0;
+      this.visualizeMagnitude();
+    } else {
+      const maskSection = document.getElementById('maskSection');
+      if (maskSection) {
+        maskSection.classList.add('section-disabled');
+      }
+      document.getElementById('previewMask')?.setAttribute('disabled', '');
+      document.getElementById('runBET')?.setAttribute('disabled', '');
     }
   }
 
-  async processJsonFiles(files) {
-    console.log('Processing JSON files:', files);
-    const echoTimes = [];
-    let fieldStrength = null;
-
-    for (const file of files) {
-      try {
-        const text = await file.text();
-        const json = JSON.parse(text);
-
-        console.log(`JSON file ${file.name} contents:`, json);
-        console.log(`EchoTime field:`, json.EchoTime);
-        console.log(`Available fields:`, Object.keys(json));
-
-        // Extract echo time (in seconds, convert to ms)
-        let echoTime = null;
-        if (json.EchoTime) {
-          echoTime = json.EchoTime * 1000; // Convert to ms
-          console.log(`Found EchoTime: ${json.EchoTime}s -> ${echoTime}ms`);
-        } else if (json.echo_time) {
-          echoTime = json.echo_time * 1000;
-          console.log(`Found echo_time: ${json.echo_time}s -> ${echoTime}ms`);
-        } else if (json.TE) {
-          echoTime = json.TE;
-          console.log(`Found TE: ${json.TE}ms`);
-        } else {
-          console.warn(`No echo time found in ${file.name}. Available fields:`, Object.keys(json));
-        }
-
-        // Extract field strength (in Tesla) - only need to find it once
-        if (fieldStrength === null) {
-          if (json.MagneticFieldStrength) {
-            fieldStrength = json.MagneticFieldStrength;
-            console.log(`Found MagneticFieldStrength: ${fieldStrength}T`);
-          } else if (json.FieldStrength) {
-            fieldStrength = json.FieldStrength;
-            console.log(`Found FieldStrength: ${fieldStrength}T`);
-          } else if (json.field_strength) {
-            fieldStrength = json.field_strength;
-            console.log(`Found field_strength: ${fieldStrength}T`);
-          }
-        }
-
-        if (echoTime !== null) {
-          echoTimes.push({
-            file: file.name,
-            echoTime: echoTime,
-            json: json
-          });
-          console.log(`Added echo time for ${file.name}: ${echoTime}ms`);
-        } else {
-          console.error(`Could not extract echo time from ${file.name}`);
-        }
-      } catch (error) {
-        console.error(`Error parsing JSON file ${file.name}:`, error);
-      }
-    }
-
-    // Sort by echo time
-    echoTimes.sort((a, b) => a.echoTime - b.echoTime);
-    this.multiEchoFiles.echoTimes = echoTimes;
-
-    console.log(`Final processed echo times:`, echoTimes);
-    console.log(`Stored in multiEchoFiles:`, this.multiEchoFiles.echoTimes);
-
-    // Populate the editable inputs
-    this.populateEchoTimeInputs(echoTimes.map(et => et.echoTime));
-
-    // Populate field strength if found
-    if (fieldStrength !== null) {
-      const fieldInput = document.getElementById('magField');
-      if (fieldInput) {
-        fieldInput.value = fieldStrength;
-        console.log(`Set field strength input to ${fieldStrength}T`);
-        this.updateOutput(`Field strength: ${fieldStrength}T`);
-      }
-    }
+  _onPhaseFilesChanged(files) {
+    document.getElementById('vis_phase').disabled = files.length === 0;
   }
 
+  // Update run button state based on file/mask state
   updateEchoInfo() {
-    const magCount = this.multiEchoFiles.magnitude.length;
-    const phaseCount = this.multiEchoFiles.phase.length;
-    const echoTimes = this.getEchoTimesFromInputs();
-    const echoTimeCount = echoTimes.length;
-
-    const runButton = document.getElementById('runPipelineSidebar');
-
-    const isValid = magCount === phaseCount && magCount > 0;
-    const hasEchoTimes = echoTimeCount > 0;
+    const isValid = this.fileIOController?.hasValidData() || false;
+    const hasEchoTimes = this.fileIOController?.hasEchoTimes() || false;
     const hasMask = this.currentMaskData !== null;
     const canRun = isValid && hasEchoTimes && hasMask;
 
-    // Update run button in sidebar
+    const runButton = document.getElementById('runPipelineSidebar');
     if (runButton) {
       runButton.disabled = !canRun || this.pipelineRunning;
     }
   }
 
-  // Echo time Tagify management
-  setupEchoTagify() {
-    const input = document.getElementById('echoTimesTagify');
-    if (!input || this.echoTagify) return;
-
-    this.echoTagify = new Tagify(input, {
-      delimiters: ',| ',
-      pattern: /^[\d.]+$/,
-      transformTag: (tagData) => {
-        const num = parseFloat(tagData.value);
-        if (!isNaN(num) && num > 0) {
-          tagData.value = num.toFixed(2);
-        }
-      },
-      validate: (tagData) => {
-        const num = parseFloat(tagData.value);
-        return !isNaN(num) && num > 0;
-      },
-      editTags: 1,
-      placeholder: 'Type values...'
-    });
-
-    this.echoTagify.on('change', () => this.updateEchoInfo());
-  }
-
-  populateEchoTimeInputs(echoTimes) {
-    if (!this.echoTagify) return;
-
-    const tags = echoTimes.map(t => ({ value: t.toFixed(2) }));
-    this.echoTagify.removeAllTags();
-    this.echoTagify.addTags(tags);
-    this.updateEchoInfo();
-  }
-
+  // Delegate to FileIOController
   getEchoTimesFromInputs() {
-    if (!this.echoTagify) return [];
-
-    return this.echoTagify.value
-      .map(tag => parseFloat(tag.value))
-      .filter(n => !isNaN(n) && n > 0)
-      .sort((a, b) => a - b);
+    return this.fileIOController?.getEchoTimesFromInputs() || [];
   }
 
   // Visualization methods - delegate to ViewerController
@@ -1187,46 +934,6 @@ class QSMApp {
     return createMaskNifti(maskData, this.magnitudeFileBytes);
   }
 
-  // Determine which pipeline stages can be skipped based on settings changes
-  determineSkipStages() {
-    if (!this.pipelineHasRun || !this.lastRunSettings) {
-      return { skipUnwrap: false, skipBgRemoval: false };
-    }
-
-    const current = this.pipelineSettings;
-    const last = this.lastRunSettings;
-
-    // Check if unwrapping settings changed
-    const unwrapChanged =
-      current.unwrapMethod !== last.unwrapMethod ||
-      (current.unwrapMethod === 'romeo' &&
-       current.romeo.weighting !== last.romeo?.weighting);
-
-    // Check if background removal settings changed
-    const bgChanged =
-      current.backgroundRemoval !== last.backgroundRemoval ||
-      (current.backgroundRemoval === 'vsharp' && (
-        current.vsharp.maxRadius !== last.vsharp?.maxRadius ||
-        current.vsharp.minRadius !== last.vsharp?.minRadius ||
-        current.vsharp.threshold !== last.vsharp?.threshold
-      )) ||
-      (current.backgroundRemoval === 'smv' &&
-        current.smv.radius !== last.smv?.radius);
-
-    // If unwrap changed, can't skip anything
-    if (unwrapChanged) {
-      return { skipUnwrap: false, skipBgRemoval: false };
-    }
-
-    // If only dipole inversion changed, can skip both unwrap and bg removal
-    if (!bgChanged) {
-      return { skipUnwrap: true, skipBgRemoval: true };
-    }
-
-    // If bg removal changed but not unwrap, can skip unwrap only
-    return { skipUnwrap: true, skipBgRemoval: false };
-  }
-
   async runRomeoQSM() {
     // Validation
     const magCount = this.multiEchoFiles.magnitude.length;
@@ -1258,11 +965,6 @@ class QSMApp {
     }
 
     try {
-      // Initialize worker if needed
-      await this.initializeWorker();
-
-      this.updateOutput("Starting ROMEO QSM Pipeline...");
-
       // Read file buffers
       const magnitudeBuffers = [];
       const phaseBuffers = [];
@@ -1286,7 +988,7 @@ class QSMApp {
       }
 
       // Determine which stages can be skipped based on settings changes
-      const skipStages = this.determineSkipStages();
+      const skipStages = this.pipelineExecutor.determineSkipStages(this.pipelineSettings);
       if (skipStages.skipUnwrap) {
         this.updateOutput("Reusing cached unwrapped phase data");
       }
@@ -1297,62 +999,42 @@ class QSMApp {
       // Show phase image at the start
       await this.visualizePhase();
 
-      // Send to worker with pipeline settings
       // Include prepared magnitude if available (for MEDI gradient weighting and threshold mask)
       const preparedMagnitude = this.preparedMagnitudeData
         ? Array.from(this.preparedMagnitudeData)
         : null;
 
-      this.worker.postMessage({
-        type: 'run',
-        data: {
-          magnitudeBuffers,
-          phaseBuffers,
-          echoTimes,
-          magField,
-          maskThreshold: this.maskThreshold,
-          customMaskBuffer,
-          preparedMagnitude,
-          pipelineSettings: this.pipelineSettings,
-          skipStages
-        }
+      // Run pipeline via executor
+      const started = await this.pipelineExecutor.run({
+        magnitudeBuffers,
+        phaseBuffers,
+        echoTimes,
+        magField,
+        maskThreshold: this.maskThreshold,
+        customMaskBuffer,
+        preparedMagnitude,
+        pipelineSettings: this.pipelineSettings,
+        skipStages
       });
 
-      // Enable cancel button and update state
-      this.pipelineRunning = true;
-      document.getElementById('cancelPipeline').disabled = false;
-      document.getElementById('runPipelineSidebar').disabled = true;
+      if (started) {
+        document.getElementById('cancelPipeline').disabled = false;
+        document.getElementById('runPipelineSidebar').disabled = true;
+      }
 
     } catch (error) {
       this.updateOutput(`Error: ${error.message}`);
       this.setProgress(0, 'Failed');
-      this.pipelineRunning = false;
       document.getElementById('cancelPipeline').disabled = true;
-      this.updateEchoInfo(); // Re-enable run button if valid
+      this.updateEchoInfo();
       console.error(error);
     }
   }
 
   cancelPipeline() {
-    if (!this.pipelineRunning) return;
-
-    this.updateOutput("Cancelling pipeline...");
-
-    // Terminate the worker to stop all processing
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
-      this.workerReady = false;
-      this.workerInitializing = false;
-    }
-
-    // Reset state
-    this.pipelineRunning = false;
-    this.setProgress(0, 'Cancelled');
+    this.pipelineExecutor?.cancel();
     document.getElementById('cancelPipeline').disabled = true;
-    this.updateEchoInfo(); // Re-enable run button if valid
-
-    this.updateOutput("Pipeline cancelled. Worker will be reinitialized on next run.");
+    this.updateEchoInfo();
   }
 
   showStageButtons() {
@@ -1429,23 +1111,11 @@ class QSMApp {
     if (container) {
       container.innerHTML = '';
     }
-    this.stageOrder = [];
-  }
-
-  // Legacy method - now calls addStageButton
-  enableStageButtons(stage) {
-    this.addStageButton(stage);
-  }
-
-  // Legacy method - now calls clearStageButtons
-  disableAllStageButtons() {
-    this.clearStageButtons();
   }
 
   // Clear all cached results (internal use)
   clearResults() {
-    this.results = {};
-    this.stageOrder = [];
+    this.pipelineExecutor?.clearResults();
   }
 
   // Clear all results including prepared magnitude and mask (user-triggered)
@@ -1503,6 +1173,7 @@ class QSMApp {
       if (stage === 'preparedMagnitude') {
         if (this.preparedMagnitudeData) {
           await this.displayPreparedMagnitude();
+          this.updateDataUnits(null);
           this.updateOutput("Displaying: Prepared Magnitude");
         } else {
           this.updateOutput("Prepared magnitude not available - click Prepare first");
@@ -1514,6 +1185,7 @@ class QSMApp {
       if (stage === 'mask') {
         if (this.currentMaskData) {
           await this.displayCurrentMask();
+          this.updateDataUnits(null);
           this.updateOutput("Displaying: Brain Mask");
         } else {
           this.updateOutput("Mask not available - generate one first");
@@ -1930,11 +1602,7 @@ class QSMApp {
     document.getElementById('betIterations').value = this.betSettings.iterations;
     document.getElementById('betSubdivisions').value = this.betSettings.subdivisions;
 
-    document.getElementById('betSettingsModal').classList.add('active');
-  }
-
-  closeBetSettingsModal() {
-    document.getElementById('betSettingsModal').classList.remove('active');
+    this.betModal?.open();
   }
 
   resetBetSettings() {
@@ -1953,16 +1621,8 @@ class QSMApp {
       subdivisions: parseInt(document.getElementById('betSubdivisions').value)
     };
 
-    this.closeBetSettingsModal();
+    this.betModal?.close();
     this.runBET();
-  }
-
-  openCitationsModal() {
-    document.getElementById('citationsModal').classList.add('active');
-  }
-
-  closeCitationsModal() {
-    document.getElementById('citationsModal').classList.remove('active');
   }
 }
 

@@ -5,4 +5,5 @@
  */
 
 export * from './ConsoleOutput.js';
+export * from './ModalManager.js';
 export * from './ProgressManager.js';

@@ -21,55 +21,59 @@ A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs enti
 
 ### Phase Unwrapping (2 methods)
 
-| Algorithm | Description |
-|-----------|-------------|
-| **ROMEO** | Region-growing with quality-guided ordering. Uses magnitude and gradient coherence weighting for robust unwrapping. |
-| **Laplacian** | FFT-based Poisson solver approach. Fast and effective for well-conditioned data. |
+| Algorithm | Full Name | Description |
+|-----------|-----------|-------------|
+| **ROMEO** | Rapid Opensource Minimum Spanning TreE AlgOrithm | Region-growing with quality-guided ordering. Uses magnitude and gradient coherence weighting for robust unwrapping. |
+| **Laplacian** | Laplacian Phase Unwrapping | FFT-based Poisson solver approach. Fast and effective for well-conditioned data. |
 
-### Background Field Removal (6 methods)
+### Background Field Removal (7 methods)
 
-| Algorithm | Description |
-|-----------|-------------|
-| **SMV** | Spherical Mean Value - simple baseline subtraction method |
-| **SHARP** | Sophisticated Harmonic Artifact Reduction for Phase data |
-| **V-SHARP** | Variable-radius SHARP with multi-scale kernel approach |
-| **PDF** | Projection onto Dipole Fields |
-| **iSMV** | Iterative Spherical Mean Value deconvolution |
-| **LBV** | Laplacian Boundary Value method |
+| Algorithm | Full Name | Description |
+|-----------|-----------|-------------|
+| **V-SHARP** | Variable-radius Sophisticated Harmonic Artifact Reduction for Phase data | Multi-scale kernel approach for robust background removal |
+| **SHARP** | Sophisticated Harmonic Artifact Reduction for Phase data | Deconvolution-based harmonic field removal |
+| **SMV** | Spherical Mean Value | Simple mean value subtraction method |
+| **iSMV** | iterative Spherical Mean Value | Iterative deconvolution-based SMV |
+| **PDF** | Projection onto Dipole Fields | Orthogonal projection approach to background removal |
+| **LBV** | Laplacian Boundary Value | Boundary value problem approach using the Laplacian |
+| **SDF** | Spatial Domain Filtering | Spatially dependent filtering for QSMART pipeline |
 
 ### Dipole Inversion (9 methods)
 
-| Algorithm | Description |
-|-----------|-------------|
-| **TKD** | Truncated K-space Division - fast closed-form solution |
-| **TSVD** | Truncated Singular Value Decomposition |
-| **Tikhonov** | L2 regularization with configurable kernels (identity, gradient, Laplacian) |
-| **TV-ADMM** | Total Variation via ADMM - edge-preserving regularization |
-| **NLTV** | Nonlinear Total Variation with iterative reweighting |
-| **RTS** | Rapid Two-Step method (LSMR + TV refinement) |
-| **MEDI** | Morphology-Enabled Dipole Inversion with gradient and SNR weighting |
-| **iLSQR** | Iterative LSQR with streaking artifact removal (Li et al., 2015) |
-| **TGV** | Total Generalized Variation - direct QSM from wrapped phase without separate unwrapping |
+| Algorithm | Full Name | Description |
+|-----------|-----------|-------------|
+| **TKD** | Thresholded K-space Division | Fast closed-form solution with k-space thresholding |
+| **TSVD** | Truncated Singular Value Decomposition | Closed-form solution via truncated SVD |
+| **Tikhonov** | Tikhonov Regularization | L2 regularization with configurable kernels (identity, gradient, Laplacian) |
+| **TV-ADMM** | Total Variation via Alternating Direction Method of Multipliers | Edge-preserving L1 regularization |
+| **NLTV** | Nonlinear Total Variation | Nonlinear data fidelity with iterative reweighting |
+| **RTS** | Rapid Two-Step | Two-step method (LSMR + TV refinement) |
+| **MEDI** | Morphology Enabled Dipole Inversion | L1 regularization with gradient and SNR weighting |
+| **iLSQR** | iterative Least Squares QR | Iterative LSQR with streaking artifact removal |
+| **TGV** | Total Generalized Variation | Direct QSM from wrapped phase without separate unwrapping |
 
 ### Multi-Echo Processing
 
-| Algorithm | Description |
-|-----------|-------------|
-| **MCPC-3DS** | Multi-Channel Phase Combination with 3D smoothing. Removes phase offsets across echoes. |
-| **Weighted B0** | Field map calculation with multiple weighting strategies (SNR, variance, magnitude, TEs) |
+| Algorithm | Full Name | Description |
+|-----------|-----------|-------------|
+| **MCPC-3D-S** | Multi-Channel Phase Combination 3D-Simplified (ASPIRE) | Removes phase offsets across echoes |
+| **Weighted B0** | -- | Field map calculation with multiple weighting strategies (SNR, variance, magnitude, TEs) |
 
-### Advanced Reconstruction Methods
+### Combined Pipelines
 
-| Algorithm | Description |
-|-----------|-------------|
-| **QSMART** | Two-stage QSM with Artifact Reduction using Tissue maps. Uses Spatially Dependent Filtering (SDF) and Frangi vesselness to separate tissue and vasculature, reducing streaking artifacts from veins. |
-| **TGV Single-Step** | Combines background removal and dipole inversion in one optimization. Useful for challenging data. |
+| Algorithm | Full Name | Description |
+|-----------|-----------|-------------|
+| **QSMART** | Quantitative Susceptibility Mapping Artifact Reduction Technique | Two-stage reconstruction using SDF and Frangi vesselness to separate tissue and vasculature, reducing streaking artifacts from veins. |
+| **TGV** | Total Generalized Variation (single-step) | Combines background removal and dipole inversion in one optimization. Useful for challenging data. |
 
 ### Additional Tools
 
-- **Phase Scaling**: Automatic normalization to [-π, π] range
-- **Brain Extraction (BET)**: Region-growing based brain masking with mesh evolution
-- **Gaussian Smoothing**: 3D phase-aware smoothing with wrap handling
+| Algorithm | Full Name | Description |
+|-----------|-----------|-------------|
+| **BET** | Brain Extraction Tool | Region-growing based brain masking with mesh evolution |
+| **Frangi** | Frangi Vesselness Filter | Multi-scale vessel enhancement filtering |
+| -- | Phase Scaling | Automatic normalization to [-π, π] range |
+| -- | Gaussian Smoothing | 3D phase-aware smoothing with wrap handling |
 
 ## Quick Start
 
@@ -262,19 +266,24 @@ npm run test:coverage
 
 ## References
 
-1. **ROMEO**: Dymerska et al. "Phase unwrapping with a rapid opensource minimum spanning tree algorithm (ROMEO)." *Magnetic Resonance in Medicine* (2021)
-2. **Laplacian Unwrapping**: Schofield & Zhu. "Fast phase unwrapping algorithm for interferometric applications." *Optics Letters* (2003)
-3. **SHARP**: Schweser et al. "Quantitative imaging of intrinsic magnetic tissue properties using MRI signal phase." *MRM* (2011)
-4. **V-SHARP**: Li et al. "A method for estimating and removing streaking artifacts in quantitative susceptibility mapping." *NeuroImage* (2015)
-5. **PDF**: Liu et al. "A novel background field removal method for MRI using projection onto dipole fields." *NMR in Biomedicine* (2011)
-6. **LBV**: Zhou et al. "Background field removal by solving the Laplacian boundary value problem." *NMR in Biomedicine* (2014)
-7. **TKD**: Shmueli et al. "Magnetic susceptibility mapping of brain tissue in vivo using MRI phase data." *MRM* (2009)
-8. **MEDI**: Liu et al. "Morphology enabled dipole inversion (MEDI) from a single-angle acquisition." *MRM* (2011)
-9. **TGV-QSM**: Langkammer et al. "Fast quantitative susceptibility mapping using 3D EPI and total generalized variation." *NeuroImage* (2015)
-10. **RTS**: Kames et al. "Rapid two-step dipole inversion for susceptibility mapping with sparsity priors." *NeuroImage* (2018)
-11. **MCPC-3DS**: Eckstein et al. "Computationally efficient combination of multi-channel phase data from multi-echo acquisitions (ASPIRE)." *MRM* (2018)
-12. **QSMART**: Özbay et al. "A comprehensive numerical analysis of background phase correction with V-SHARP." *NMR in Biomedicine* (2017)
-13. **iLSQR**: Li et al. "A method for estimating and removing streaking artifacts in quantitative susceptibility mapping." *NeuroImage* (2015)
+1. **BET**: Smith, S.M. "Fast robust automated brain extraction." *Human Brain Mapping* (2002)
+2. **ROMEO**: Dymerska et al. "Phase unwrapping with a rapid opensource minimum spanning tree algorithm (ROMEO)." *Magnetic Resonance in Medicine* (2021)
+3. **Laplacian Unwrapping**: Schofield & Zhu. "Fast phase unwrapping algorithm for interferometric applications." *Optics Letters* (2003)
+4. **MCPC-3D-S (ASPIRE)**: Eckstein et al. "Computationally efficient combination of multi-channel phase data from multi-echo acquisitions (ASPIRE)." *Magnetic Resonance in Medicine* (2018)
+5. **V-SHARP**: Wu et al. "Whole brain susceptibility mapping using compressed sensing." *Magnetic Resonance in Medicine* (2012)
+6. **SHARP**: Schweser et al. "Quantitative imaging of intrinsic magnetic tissue properties using MRI signal phase." *NeuroImage* (2011)
+7. **iSMV**: Wen et al. "An iterative spherical mean value method for background field removal in MRI." *Magnetic Resonance in Medicine* (2014)
+8. **PDF**: Liu et al. "A novel background field removal method for MRI using projection onto dipole fields." *NMR in Biomedicine* (2011)
+9. **LBV**: Zhou et al. "Background field removal by solving the Laplacian boundary value problem." *NMR in Biomedicine* (2014)
+10. **TKD/TSVD**: Shmueli et al. "Magnetic susceptibility mapping of brain tissue in vivo using MRI phase data." *Magnetic Resonance in Medicine* (2009)
+11. **Tikhonov**: Bilgic et al. "Fast image reconstruction with L2-regularization." *Journal of Magnetic Resonance Imaging* (2014)
+12. **TV-ADMM**: Bilgic et al. "Fast quantitative susceptibility mapping with L1-regularization and automatic parameter selection." *Magnetic Resonance in Medicine* (2014)
+13. **RTS/NLTV**: Kames et al. "Rapid two-step dipole inversion for susceptibility mapping with sparsity priors." *NeuroImage* (2018)
+14. **MEDI**: Liu et al. "Morphology enabled dipole inversion (MEDI) from a single-angle acquisition." *Magnetic Resonance in Medicine* (2011)
+15. **iLSQR**: Li et al. "A method for estimating and removing streaking artifacts in quantitative susceptibility mapping." *NeuroImage* (2015)
+16. **TGV**: Langkammer et al. "Fast quantitative susceptibility mapping using 3D EPI and total generalized variation." *NeuroImage* (2015)
+17. **QSMART/SDF**: Yaghmaie et al. "QSMART: Quantitative susceptibility mapping artifact reduction technique." *NeuroImage* (2021)
+18. **Frangi**: Frangi et al. "Multiscale vessel enhancement filtering." *MICCAI* (1998)
 
 ## License
 

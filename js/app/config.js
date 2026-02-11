@@ -163,7 +163,7 @@ export const TV_DEFAULTS = {
   tol: 0.001
 };
 
-// RTS (R2* Thresholded Susceptibility) defaults
+// RTS (Rapid Two-Step) defaults
 export const RTS_DEFAULTS = {
   delta: 0.15,
   mu: 100000,
@@ -171,7 +171,7 @@ export const RTS_DEFAULTS = {
   maxIter: 20
 };
 
-// NLTV (Non-Local Total Variation) defaults
+// NLTV (Nonlinear Total Variation) defaults
 export const NLTV_DEFAULTS = {
   lambda: 0.001,
   mu: 1,

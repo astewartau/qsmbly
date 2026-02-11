@@ -40,6 +40,12 @@
           </svg>
           <span>Citations</span>
         </button>
+        <button class="header-link" id="openPrivacy" title="Privacy">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <span>Privacy</span>
+        </button>
         <a href="https://github.com/astewartau/qsmbly" target="_blank" rel="noopener noreferrer" class="header-link" title="View on GitHub">
           <svg viewBox="0 0 16 16" width="20" height="20" fill="white">
             <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
@@ -475,8 +481,8 @@
             <label class="param-label" for="combinedMethod">Method</label>
             <select id="combinedMethod">
               <option value="none" selected>Standard Pipeline</option>
-              <option value="tgv">TGV</option>
-              <option value="qsmart">QSMART</option>
+              <option value="tgv">TGV (Total Generalized Variation)</option>
+              <option value="qsmart">QSMART (QSM Artifact Reduction Technique)</option>
             </select>
           </div>
 
@@ -592,7 +598,7 @@
           <div class="param-group">
             <label class="param-label" for="phaseOffsetMethod">Phase Offset Removal</label>
             <select id="phaseOffsetMethod">
-              <option value="mcpc3ds" selected>MCPC-3D-S</option>
+              <option value="mcpc3ds" selected>MCPC-3D-S (Multi-Channel Phase Combination 3D-Simplified)</option>
               <option value="none">None (skip)</option>
             </select>
           </div>
@@ -621,7 +627,7 @@
           <div class="param-group" style="margin-top: var(--space-md);">
             <label class="param-label" for="unwrapMethod">Phase Unwrapping</label>
             <select id="unwrapMethod">
-              <option value="romeo" selected>ROMEO</option>
+              <option value="romeo" selected>ROMEO (Rapid Opensource Minimum Spanning TreE AlgOrithm)</option>
               <option value="laplacian">Laplacian</option>
             </select>
             <div id="unwrapLockedHint" class="param-hint" style="display: none; color: var(--color-text-muted); font-style: italic;">
@@ -697,7 +703,7 @@
           <div class="param-group">
             <label class="param-label" for="singleEchoUnwrapMethod">Method</label>
             <select id="singleEchoUnwrapMethod">
-              <option value="romeo" selected>ROMEO</option>
+              <option value="romeo" selected>ROMEO (Rapid Opensource Minimum Spanning TreE AlgOrithm)</option>
               <option value="laplacian">Laplacian</option>
             </select>
           </div>
@@ -738,12 +744,12 @@
           <div class="param-group">
             <label class="param-label" for="bgRemovalMethod">Method</label>
             <select id="bgRemovalMethod">
-              <option value="vsharp" selected>V-SHARP</option>
-              <option value="sharp">SHARP</option>
-              <option value="smv">SMV</option>
-              <option value="ismv">iSMV</option>
-              <option value="pdf">PDF</option>
-              <option value="lbv">LBV</option>
+              <option value="vsharp" selected>V-SHARP (Variable-radius SHARP)</option>
+              <option value="sharp">SHARP (Sophisticated Harmonic Artifact Reduction for Phase data)</option>
+              <option value="smv">SMV (Spherical Mean Value)</option>
+              <option value="ismv">iSMV (iterative Spherical Mean Value)</option>
+              <option value="pdf">PDF (Projection onto Dipole Fields)</option>
+              <option value="lbv">LBV (Laplacian Boundary Value)</option>
             </select>
           </div>
 
@@ -754,15 +760,15 @@
               <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="vsharpMaxRadius">Max Radius (mm)</label>
+              <label class="param-label" for="vsharpMaxRadius">Largest kernel radius (mm)</label>
               <input type="number" id="vsharpMaxRadius" value="18" min="4" max="30" step="1">
             </div>
             <div class="param-group">
-              <label class="param-label" for="vsharpMinRadius">Min Radius (mm)</label>
+              <label class="param-label" for="vsharpMinRadius">Smallest kernel radius (mm)</label>
               <input type="number" id="vsharpMinRadius" value="2" min="1" max="10" step="1">
             </div>
             <div class="param-group">
-              <label class="param-label" for="vsharpThreshold">Threshold</label>
+              <label class="param-label" for="vsharpThreshold">Deconvolution threshold</label>
               <input type="number" id="vsharpThreshold" value="0.05" min="0.01" max="0.2" step="0.01">
             </div>
           </div>
@@ -774,11 +780,11 @@
               <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="sharpRadius">Radius (mm)</label>
+              <label class="param-label" for="sharpRadius">Kernel radius (mm)</label>
               <input type="number" id="sharpRadius" value="6" min="1" max="20" step="1">
             </div>
             <div class="param-group">
-              <label class="param-label" for="sharpThreshold">Threshold</label>
+              <label class="param-label" for="sharpThreshold">Deconvolution threshold</label>
               <input type="number" id="sharpThreshold" value="0.05" min="0.01" max="0.2" step="0.01">
             </div>
           </div>
@@ -790,7 +796,7 @@
               <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="smvRadius">Radius (mm)</label>
+              <label class="param-label" for="smvRadius">Kernel radius (mm)</label>
               <input type="number" id="smvRadius" value="5" min="1" max="20" step="1">
             </div>
           </div>
@@ -802,15 +808,15 @@
               <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="ismvRadius">Radius (mm)</label>
+              <label class="param-label" for="ismvRadius">Kernel radius (mm)</label>
               <input type="number" id="ismvRadius" value="5" min="1" max="20" step="1">
             </div>
             <div class="param-group">
-              <label class="param-label" for="ismvTol">Tolerance</label>
+              <label class="param-label" for="ismvTol">Convergence tolerance</label>
               <input type="number" id="ismvTol" value="0.001" min="0.0001" max="0.01" step="0.0001">
             </div>
             <div class="param-group">
-              <label class="param-label" for="ismvMaxit">Max Iterations</label>
+              <label class="param-label" for="ismvMaxit">Max solver iterations</label>
               <input type="number" id="ismvMaxit" value="500" min="50" max="1000" step="50">
             </div>
           </div>
@@ -822,11 +828,11 @@
               <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="pdfTol">Tolerance</label>
+              <label class="param-label" for="pdfTol">Convergence tolerance</label>
               <input type="number" id="pdfTol" value="0.00001" min="0.000001" max="0.001" step="0.000001">
             </div>
             <div class="param-group">
-              <label class="param-label" for="pdfMaxit">Max Iterations</label>
+              <label class="param-label" for="pdfMaxit">Max solver iterations</label>
               <input type="number" id="pdfMaxit" value="100" min="10" max="500" step="10">
             </div>
           </div>
@@ -838,11 +844,11 @@
               <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="lbvTol">Tolerance</label>
+              <label class="param-label" for="lbvTol">Convergence tolerance</label>
               <input type="number" id="lbvTol" value="0.001" min="0.0001" max="0.01" step="0.0001">
             </div>
             <div class="param-group">
-              <label class="param-label" for="lbvMaxit">Max Iterations</label>
+              <label class="param-label" for="lbvMaxit">Max solver iterations</label>
               <input type="number" id="lbvMaxit" value="500" min="50" max="2000" step="50">
             </div>
           </div>
@@ -854,14 +860,14 @@
           <div class="param-group">
             <label class="param-label" for="dipoleMethod">Method</label>
             <select id="dipoleMethod">
-              <option value="tkd">TKD</option>
-              <option value="tsvd">TSVD</option>
-              <option value="tikhonov">Tikhonov</option>
-              <option value="tv" selected>TV-ADMM</option>
-              <option value="rts">RTS</option>
-              <option value="nltv">NLTV</option>
-              <option value="medi">MEDI</option>
-              <option value="ilsqr">iLSQR</option>
+              <option value="tkd">TKD (Thresholded K-space Division)</option>
+              <option value="tsvd">TSVD (Truncated Singular Value Decomposition)</option>
+              <option value="tikhonov">Tikhonov Regularization</option>
+              <option value="tv" selected>TV-ADMM (Total Variation)</option>
+              <option value="rts">RTS (Rapid Two-Step)</option>
+              <option value="nltv">NLTV (Nonlinear Total Variation)</option>
+              <option value="medi">MEDI (Morphology Enabled Dipole Inversion)</option>
+              <option value="ilsqr">iLSQR (iterative Least Squares QR)</option>
             </select>
           </div>
 
@@ -872,7 +878,7 @@
               <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="tkdThreshold">Threshold</label>
+              <label class="param-label" for="tkdThreshold">K-space truncation threshold</label>
               <input type="number" id="tkdThreshold" value="0.15" min="0.05" max="0.3" step="0.01">
             </div>
           </div>
@@ -884,7 +890,7 @@
               <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="tsvdThreshold">Threshold</label>
+              <label class="param-label" for="tsvdThreshold">Singular value cutoff</label>
               <input type="number" id="tsvdThreshold" value="0.15" min="0.05" max="0.3" step="0.01">
             </div>
           </div>
@@ -896,7 +902,7 @@
               <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="tikhLambda">Lambda (regularization)</label>
+              <label class="param-label" for="tikhLambda">Regularization strength</label>
               <input type="number" id="tikhLambda" value="0.01" min="0.001" max="1.0" step="0.001">
             </div>
             <div class="param-group">
@@ -916,15 +922,15 @@
               <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="tvLambda">Lambda (TV regularization)</label>
+              <label class="param-label" for="tvLambda">Regularization strength</label>
               <input type="number" id="tvLambda" value="0.001" min="0.0001" max="0.1" step="0.0001">
             </div>
             <div class="param-group">
-              <label class="param-label" for="tvMaxIter">Max Iterations</label>
+              <label class="param-label" for="tvMaxIter">Max ADMM iterations</label>
               <input type="number" id="tvMaxIter" value="250" min="10" max="500" step="10">
             </div>
             <div class="param-group">
-              <label class="param-label" for="tvTol">Tolerance</label>
+              <label class="param-label" for="tvTol">Convergence tolerance</label>
               <input type="number" id="tvTol" value="0.001" min="0.0001" max="0.01" step="0.0001">
             </div>
           </div>
@@ -936,19 +942,19 @@
               <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="rtsDelta">Delta (threshold)</label>
+              <label class="param-label" for="rtsDelta">K-space region threshold</label>
               <input type="number" id="rtsDelta" value="0.15" min="0.05" max="0.3" step="0.01">
             </div>
             <div class="param-group">
-              <label class="param-label" for="rtsMu">Mu (data fidelity)</label>
+              <label class="param-label" for="rtsMu">Data fidelity weight</label>
               <input type="number" id="rtsMu" value="100000" min="1000" max="1000000" step="1000">
             </div>
             <div class="param-group">
-              <label class="param-label" for="rtsRho">Rho (ADMM penalty)</label>
+              <label class="param-label" for="rtsRho">ADMM penalty</label>
               <input type="number" id="rtsRho" value="10" min="1" max="100" step="1">
             </div>
             <div class="param-group">
-              <label class="param-label" for="rtsMaxIter">Max Iterations</label>
+              <label class="param-label" for="rtsMaxIter">Max TV refinement iterations</label>
               <input type="number" id="rtsMaxIter" value="20" min="5" max="100" step="5">
             </div>
           </div>
@@ -960,23 +966,23 @@
               <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="nltvLambda">Lambda (TV regularization)</label>
+              <label class="param-label" for="nltvLambda">Regularization strength</label>
               <input type="number" id="nltvLambda" value="0.001" min="0.0001" max="0.1" step="0.0001">
             </div>
             <div class="param-group">
-              <label class="param-label" for="nltvMu">Mu (data fidelity)</label>
+              <label class="param-label" for="nltvMu">Reweighting strength</label>
               <input type="number" id="nltvMu" value="1" min="0.1" max="10" step="0.1">
             </div>
             <div class="param-group">
-              <label class="param-label" for="nltvMaxIter">Max Iterations</label>
+              <label class="param-label" for="nltvMaxIter">Max ADMM iterations</label>
               <input type="number" id="nltvMaxIter" value="250" min="50" max="1000" step="50">
             </div>
             <div class="param-group">
-              <label class="param-label" for="nltvTol">Tolerance</label>
+              <label class="param-label" for="nltvTol">Convergence tolerance</label>
               <input type="number" id="nltvTol" value="0.001" min="0.0001" max="0.01" step="0.0001">
             </div>
             <div class="param-group">
-              <label class="param-label" for="nltvNewtonMaxIter">Newton Max Iterations</label>
+              <label class="param-label" for="nltvNewtonMaxIter">Max reweighting iterations</label>
               <input type="number" id="nltvNewtonMaxIter" value="10" min="1" max="50" step="1">
             </div>
           </div>
@@ -988,33 +994,33 @@
               <a href="https://github.com/huawu02/MEDI_toolbox" target="_blank" rel="noopener" title="Code: MEDI_toolbox"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="mediLambda">Lambda (regularization)</label>
+              <label class="param-label" for="mediLambda">Regularization strength</label>
               <input type="number" id="mediLambda" value="7.5e-5" min="1e-6" max="0.01" step="1e-5">
             </div>
             <div class="param-group">
-              <label class="param-label" for="mediPercentage">Edge Percentage</label>
+              <label class="param-label" for="mediPercentage">Edge reliability threshold</label>
               <input type="number" id="mediPercentage" value="0.3" min="0.05" max="0.95" step="0.05">
             </div>
             <div class="param-group">
-              <label class="param-label" for="mediMaxIter">Max Iterations</label>
+              <label class="param-label" for="mediMaxIter">Max outer iterations</label>
               <input type="number" id="mediMaxIter" value="30" min="1" max="100" step="1">
             </div>
             <div class="param-group">
-              <label class="param-label" for="mediCgMaxIter">CG Max Iterations</label>
+              <label class="param-label" for="mediCgMaxIter">Max CG solver iterations</label>
               <input type="number" id="mediCgMaxIter" value="10" min="1" max="100" step="1">
             </div>
             <div class="param-group">
               <label class="param-label" for="mediSmv">
-                <input type="checkbox" id="mediSmv"> Enable SMV preprocessing
+                <input type="checkbox" id="mediSmv"> Pre-filter with SMV (reduces streaking)
               </label>
             </div>
             <div class="param-group" id="mediSmvRadiusGroup" style="display: none;">
-              <label class="param-label" for="mediSmvRadius">SMV Radius (mm)</label>
+              <label class="param-label" for="mediSmvRadius">SMV kernel radius (mm)</label>
               <input type="number" id="mediSmvRadius" value="5" min="1" max="20" step="1">
             </div>
             <div class="param-group">
               <label class="param-label" for="mediMerit">
-                <input type="checkbox" id="mediMerit"> Enable Merit adjustment
+                <input type="checkbox" id="mediMerit"> MERIT auto-tuning (preserves fine detail)
               </label>
             </div>
           </div>
@@ -1026,11 +1032,11 @@
               <a href="https://github.com/kamesy/QSM.m" target="_blank" rel="noopener" title="Code: QSM.m"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
             <div class="param-group">
-              <label class="param-label" for="ilsqrTol">Tolerance</label>
+              <label class="param-label" for="ilsqrTol">Convergence tolerance</label>
               <input type="number" id="ilsqrTol" value="0.01" min="0.001" max="0.1" step="0.001">
             </div>
             <div class="param-group">
-              <label class="param-label" for="ilsqrMaxIter">Max Iterations</label>
+              <label class="param-label" for="ilsqrMaxIter">Max solver iterations</label>
               <input type="number" id="ilsqrMaxIter" value="50" min="10" max="200" step="10">
             </div>
           </div>
@@ -1078,6 +1084,41 @@
     </div>
   </div>
 
+  <!-- Privacy Modal -->
+  <div class="modal-overlay" id="privacyModal">
+    <div class="modal privacy-modal">
+      <div class="modal-header">
+        <h3>Privacy</h3>
+        <button class="modal-close" id="closePrivacy">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="privacy-highlight">
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <div>
+            <strong>Your data never leaves your device.</strong>
+            <p>QSMbly runs entirely in your web browser using WebAssembly. All processing occurs locally on your machine.</p>
+          </div>
+        </div>
+
+        <h4>What this means</h4>
+        <ul class="privacy-list">
+          <li>No data is uploaded to any server or cloud service</li>
+          <li>No internet connection is required after the page loads</li>
+          <li>Sensitive patient data remains on your computer at all times</li>
+          <li>There is no need to anonymise, deface, or otherwise de-identify your data before use</li>
+        </ul>
+
+        <h4>How it works</h4>
+        <p>QSMbly compiles its processing algorithms from Rust to WebAssembly (WASM), which runs natively in the browser at near-native speed. Your NIfTI files are read directly into browser memory, processed locally, and results are displayed without any network transfer.</p>
+
+        <h4>Third-party services</h4>
+        <p>QSMbly does not use analytics, tracking, cookies, or any external services. The only network request is loading the application itself (HTML, JavaScript, and WASM files).</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Citations Modal -->
   <div class="modal-overlay" id="citationsModal">
     <div class="modal citations-modal">
@@ -1110,7 +1151,7 @@
         <div class="citation-section">
           <h4>Phase Unwrapping</h4>
           <div class="citation-item">
-            <strong>ROMEO</strong>
+            <strong>ROMEO (Rapid Opensource Minimum Spanning TreE AlgOrithm)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener">MriResearchTools.jl</a></span>
             <p>Dymerska, B., Eckstein, K., Bachrata, B., Siow, B., Trattnig, S., Shmueli, K., Robinson, S.D. (2021). "Phase Unwrapping with a Rapid Opensource Minimum Spanning TreE AlgOrithm (ROMEO)." <em>Magnetic Resonance in Medicine</em>, 85(4):2294-2308.</p>
             <a href="https://doi.org/10.1002/mrm.28563" target="_blank" rel="noopener">DOI: 10.1002/mrm.28563</a>
@@ -1126,7 +1167,7 @@
         <div class="citation-section">
           <h4>Multi-Echo Processing</h4>
           <div class="citation-item">
-            <strong>MCPC-3D-S (ASPIRE)</strong>
+            <strong>MCPC-3D-S (Multi-Channel Phase Combination 3D-Simplified; ASPIRE)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener">MriResearchTools.jl</a></span>
             <p>Eckstein, K., Dymerska, B., Bachrata, B., Bogner, W., Poljanc, K., Trattnig, S., Robinson, S.D. (2018). "Computationally Efficient Combination of Multi-channel Phase Data From Multi-echo Acquisitions (ASPIRE)." <em>Magnetic Resonance in Medicine</em>, 79:2996-3006.</p>
             <a href="https://doi.org/10.1002/mrm.26963" target="_blank" rel="noopener">DOI: 10.1002/mrm.26963</a>
@@ -1146,37 +1187,37 @@
         <div class="citation-section">
           <h4>Background Field Removal</h4>
           <div class="citation-item">
-            <strong>V-SHARP</strong>
+            <strong>V-SHARP (Variable-radius Sophisticated Harmonic Artifact Reduction for Phase data)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
             <p>Wu, B., Li, W., Guidon, A., Liu, C. (2012). "Whole brain susceptibility mapping using compressed sensing." <em>Magnetic Resonance in Medicine</em>, 67(1):137-147.</p>
             <a href="https://doi.org/10.1002/mrm.23000" target="_blank" rel="noopener">DOI: 10.1002/mrm.23000</a>
           </div>
           <div class="citation-item">
-            <strong>SHARP</strong>
+            <strong>SHARP (Sophisticated Harmonic Artifact Reduction for Phase data)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
             <p>Schweser, F., Deistung, A., Lehr, B.W., Reichenbach, J.R. (2011). "Quantitative imaging of intrinsic magnetic tissue properties using MRI signal phase." <em>NeuroImage</em>, 54(4):2789-2807.</p>
             <a href="https://doi.org/10.1016/j.neuroimage.2010.10.070" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2010.10.070</a>
           </div>
           <div class="citation-item">
-            <strong>iSMV</strong>
+            <strong>iSMV (iterative Spherical Mean Value)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
             <p>Wen, Y., Zhou, D., Liu, T., Spincemaille, P., Wang, Y. (2014). "An iterative spherical mean value method for background field removal in MRI." <em>Magnetic Resonance in Medicine</em>, 72(4):1065-1071.</p>
             <a href="https://doi.org/10.1002/mrm.24998" target="_blank" rel="noopener">DOI: 10.1002/mrm.24998</a>
           </div>
           <div class="citation-item">
-            <strong>PDF</strong>
+            <strong>PDF (Projection onto Dipole Fields)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
             <p>Liu, T., Khalidov, I., de Rochefort, L., Spincemaille, P., Liu, J., Tsiouris, A.J., Wang, Y. (2011). "A novel background field removal method for MRI using projection onto dipole fields." <em>NMR in Biomedicine</em>, 24(9):1129-1136.</p>
             <a href="https://doi.org/10.1002/nbm.1670" target="_blank" rel="noopener">DOI: 10.1002/nbm.1670</a>
           </div>
           <div class="citation-item">
-            <strong>LBV</strong>
+            <strong>LBV (Laplacian Boundary Value)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
             <p>Zhou, D., Liu, T., Spincemaille, P., Wang, Y. (2014). "Background field removal by solving the Laplacian boundary value problem." <em>NMR in Biomedicine</em>, 27(3):312-319.</p>
             <a href="https://doi.org/10.1002/nbm.3064" target="_blank" rel="noopener">DOI: 10.1002/nbm.3064</a>
           </div>
           <div class="citation-item">
-            <strong>SDF (for QSMART)</strong>
+            <strong>SDF (Spatial Domain Filtering; for QSMART)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/wtsyeda/QSMART" target="_blank" rel="noopener">QSMART</a></span>
             <p>Yaghmaie, N., Syeda, W., et al. (2021). "QSMART: Quantitative Susceptibility Mapping Artifact Reduction Technique." <em>NeuroImage</em>, 231:117701.</p>
             <a href="https://doi.org/10.1016/j.neuroimage.2020.117701" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2020.117701</a>
@@ -1186,7 +1227,7 @@
         <div class="citation-section">
           <h4>Dipole Inversion</h4>
           <div class="citation-item">
-            <strong>TKD / TSVD</strong>
+            <strong>TKD (Thresholded K-space Division) / TSVD (Truncated Singular Value Decomposition)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
             <p>Shmueli, K., de Zwart, J.A., van Gelderen, P., Li, T.Q., Dodd, S.J., Duyn, J.H. (2009). "Magnetic susceptibility mapping of brain tissue in vivo using MRI phase data." <em>Magnetic Resonance in Medicine</em>, 62(6):1510-1522.</p>
             <a href="https://doi.org/10.1002/mrm.22135" target="_blank" rel="noopener">DOI: 10.1002/mrm.22135</a>
@@ -1198,7 +1239,7 @@
             <a href="https://doi.org/10.1002/jmri.24365" target="_blank" rel="noopener">DOI: 10.1002/jmri.24365</a>
           </div>
           <div class="citation-item">
-            <strong>TV-ADMM</strong>
+            <strong>TV-ADMM (Total Variation via Alternating Direction Method of Multipliers)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
             <p>Bilgic, B., Fan, A.P., Polimeni, J.R., et al. (2014). "Fast quantitative susceptibility mapping with L1-regularization and automatic parameter selection." <em>Magnetic Resonance in Medicine</em>, 72(5):1444-1459.</p>
             <a href="https://doi.org/10.1002/mrm.25029" target="_blank" rel="noopener">DOI: 10.1002/mrm.25029</a>
@@ -1210,25 +1251,25 @@
             <a href="https://doi.org/10.1016/j.neuroimage.2017.11.018" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2017.11.018</a>
           </div>
           <div class="citation-item">
-            <strong>NLTV (Nonlinear TV)</strong>
+            <strong>NLTV (Nonlinear Total Variation)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
             <p>Kames, C., Wiggermann, V., Rauscher, A. (2018). "Rapid two-step dipole inversion for susceptibility mapping with sparsity priors." <em>NeuroImage</em>, 167:276-283.</p>
             <a href="https://doi.org/10.1016/j.neuroimage.2017.11.018" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2017.11.018</a>
           </div>
           <div class="citation-item">
-            <strong>MEDI</strong>
+            <strong>MEDI (Morphology Enabled Dipole Inversion)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/huawu02/MEDI_toolbox" target="_blank" rel="noopener">MEDI_toolbox</a></span>
             <p>Liu, T., Liu, J., de Rochefort, L., et al. (2011). "Morphology enabled dipole inversion (MEDI) from a single-angle acquisition." <em>Magnetic Resonance in Medicine</em>, 66(3):777-783.</p>
             <a href="https://doi.org/10.1002/mrm.22816" target="_blank" rel="noopener">DOI: 10.1002/mrm.22816</a>
           </div>
           <div class="citation-item">
-            <strong>iLSQR</strong>
+            <strong>iLSQR (iterative Least Squares QR)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.m" target="_blank" rel="noopener">QSM.m</a></span>
             <p>Li, W., Wang, N., Yu, F., et al. (2015). "A method for estimating and removing streaking artifacts in quantitative susceptibility mapping." <em>NeuroImage</em>, 108:111-122.</p>
             <a href="https://doi.org/10.1016/j.neuroimage.2014.12.043" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2014.12.043</a>
           </div>
           <div class="citation-item">
-            <strong>TGV</strong>
+            <strong>TGV (Total Generalized Variation)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/korbinian90/QuantitativeSusceptibilityMappingTGV.jl" target="_blank" rel="noopener">QuantitativeSusceptibilityMappingTGV.jl</a></span>
             <p>Langkammer, C., Bredies, K., Poser, B.A., et al. (2015). "Fast quantitative susceptibility mapping using 3D EPI and total generalized variation." <em>NeuroImage</em>, 111:622-630.</p>
             <a href="https://doi.org/10.1016/j.neuroimage.2015.02.041" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2015.02.041</a>
@@ -1240,7 +1281,7 @@
         <div class="citation-section">
           <h4>QSMART Pipeline</h4>
           <div class="citation-item">
-            <strong>QSMART (Two-Stage Reconstruction)</strong>
+            <strong>QSMART (Quantitative Susceptibility Mapping Artifact Reduction Technique)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/wtsyeda/QSMART" target="_blank" rel="noopener">QSMART</a></span>
             <p>Yaghmaie, N., Syeda, W., Wu, C., Zhang, Y., Zhang, T., Burrows, E.L., Moffat, B.A., Wright, D.K., Glarin, R., Kolbe, S., Johnston, L.A. (2021). "QSMART: Quantitative Susceptibility Mapping Artifact Reduction Technique." <em>NeuroImage</em>, 231:117701.</p>
             <a href="https://doi.org/10.1016/j.neuroimage.2020.117701" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2020.117701</a>
@@ -2177,6 +2218,57 @@
     .citation-primary strong {
       font-size: 1.1rem;
       color: var(--color-primary);
+    }
+
+    /* Privacy modal */
+    .privacy-modal {
+      max-width: 550px;
+    }
+
+    .privacy-highlight {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-md);
+      background: var(--color-surface-alt);
+      border: 1px solid var(--color-primary);
+      border-radius: var(--radius-md);
+      padding: var(--space-md);
+      margin-bottom: var(--space-lg);
+    }
+
+    .privacy-highlight strong {
+      font-size: 1rem;
+      color: var(--color-primary);
+      display: block;
+      margin-bottom: var(--space-xs);
+    }
+
+    .privacy-highlight p {
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .privacy-modal h4 {
+      font-size: 0.9rem;
+      margin: var(--space-md) 0 var(--space-xs);
+      color: var(--color-text);
+    }
+
+    .privacy-modal p {
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+      line-height: 1.6;
+      margin: 0 0 var(--space-sm);
+    }
+
+    .privacy-list {
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+      line-height: 1.8;
+      padding-left: var(--space-lg);
+      margin: 0 0 var(--space-sm);
     }
 
     /* Citations modal */

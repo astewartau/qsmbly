@@ -46,6 +46,25 @@ export function bet_wasm_with_progress(data: Float64Array, nx: number, ny: numbe
 export function calculate_b0_weighted_wasm(unwrapped_phases_flat: Float64Array, mags_flat: Float64Array, tes: Float64Array, mask: Uint8Array, weight_type: string, n_total: number): Float64Array;
 
 /**
+ * Calculate ROMEO edge weights with configurable weight components
+ *
+ * # Arguments
+ * * `phase` - Phase data (nx * ny * nz)
+ * * `mag` - Magnitude data (nx * ny * nz), can be empty
+ * * `phase2` - Second echo phase for gradient coherence (nx * ny * nz), can be empty
+ * * `te1`, `te2` - Echo times for gradient coherence scaling
+ * * `mask` - Binary mask (nx * ny * nz)
+ * * `nx`, `ny`, `nz` - Array dimensions
+ * * `use_phase_gradient_coherence` - Include phase gradient coherence (multi-echo temporal)
+ * * `use_mag_coherence` - Include magnitude coherence (min/max similarity)
+ * * `use_mag_weight` - Include magnitude weight (penalize low signal)
+ *
+ * # Returns
+ * Weights array (3 * nx * ny * nz) for x, y, z directions
+ */
+export function calculate_weights_romeo_configurable_wasm(phase: Float64Array, mag: Float64Array, phase2: Float64Array, te1: number, te2: number, mask: Uint8Array, nx: number, ny: number, nz: number, use_phase_gradient_coherence: boolean, use_mag_coherence: boolean, use_mag_weight: boolean): Uint8Array;
+
+/**
  * Calculate ROMEO edge weights for phase unwrapping
  *
  * # Arguments
@@ -764,6 +783,7 @@ export interface InitOutput {
     readonly bet_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number];
     readonly bet_wasm_with_progress: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: any) => [number, number];
     readonly calculate_b0_weighted_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
+    readonly calculate_weights_romeo_configurable_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number];
     readonly calculate_weights_romeo_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number];
     readonly create_sphere_mask: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly curvature_wasm: (a: number, b: number, c: number, d: number, e: number) => [number, number];

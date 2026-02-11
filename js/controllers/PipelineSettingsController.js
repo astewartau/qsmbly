@@ -335,8 +335,8 @@ export class PipelineSettingsController {
     // QSMART settings - show only when QSMART selected
     this._showEl('qsmartSettings', isQsmart);
 
-    // Multi-echo section - show when multi-echo data loaded
-    this._showEl('multiEchoSection', isMultiEcho);
+    // Multi-echo section - always visible, but disabled when single-echo
+    this._disableSection('multiEchoSection', !isMultiEcho, 'Requires multi-echo data');
 
     // MCPC-3D-S settings and unwrap locking
     this._showEl('mcpc3dsSettings', isMcpc3ds);
@@ -618,6 +618,48 @@ export class PipelineSettingsController {
   _disableEl(id, disabled) {
     const el = document.getElementById(id);
     if (el) el.disabled = disabled;
+  }
+
+  /**
+   * Disable/enable an entire section (greyed out with hint message)
+   * @param {string} id - Section element ID
+   * @param {boolean} disabled - Whether to disable
+   * @param {string} [hintText] - Optional hint text shown when disabled
+   */
+  _disableSection(id, disabled, hintText) {
+    const section = document.getElementById(id);
+    if (!section) return;
+
+    // Disable/enable all inputs and selects
+    const inputs = section.querySelectorAll('input, select');
+    inputs.forEach(input => { input.disabled = disabled; });
+
+    // Visual feedback
+    section.style.opacity = disabled ? '0.5' : '1';
+    section.style.pointerEvents = disabled ? 'none' : '';
+
+    // Show/hide disabled hint
+    const hintId = id + 'DisabledHint';
+    let hint = document.getElementById(hintId);
+    if (disabled && hintText) {
+      if (!hint) {
+        hint = document.createElement('p');
+        hint.id = hintId;
+        hint.className = 'param-hint';
+        hint.style.cssText = 'color: var(--color-text-muted); font-style: italic; margin-bottom: var(--space-sm);';
+        // Insert after the h4 heading
+        const heading = section.querySelector('h4');
+        if (heading) {
+          heading.after(hint);
+        } else {
+          section.prepend(hint);
+        }
+      }
+      hint.textContent = hintText;
+      hint.style.display = 'block';
+    } else if (hint) {
+      hint.style.display = 'none';
+    }
   }
 
   _on(id, event, handler) {
