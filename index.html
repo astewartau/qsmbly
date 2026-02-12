@@ -68,6 +68,15 @@
           Input Files
         </h2>
         <div class="section-content">
+        <!-- Input Mode Tabs -->
+        <div class="input-mode-tabs" id="inputModeTabs">
+          <button class="input-mode-tab active" data-mode="raw">Raw Images</button>
+          <button class="input-mode-tab" data-mode="totalField">Total Field</button>
+          <button class="input-mode-tab" data-mode="localField">Local Field</button>
+        </div>
+
+        <!-- Raw Images Mode -->
+        <div class="input-mode-content active" id="inputModeRaw" data-mode="raw">
         <!-- Magnitude Files -->
         <div class="file-upload-group">
           <div class="file-upload-header">
@@ -122,6 +131,96 @@
           </div>
         </div>
         </div>
+
+        <!-- Total Field Map Mode -->
+        <div class="input-mode-content" id="inputModeTotalField" data-mode="totalField">
+        <div class="file-upload-group">
+          <div class="file-upload-header">
+            <label class="file-upload-label">Total Field Map</label>
+            <button class="btn-icon btn-preview" id="vis_totalField" title="Preview total field map" disabled>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+          <div class="upload-group">
+            <div class="file-upload-zone file-drop" id="totalFieldDrop">
+              <input type="file" id="totalFieldFiles" accept=".nii,.nii.gz">
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
+            </div>
+            <div class="file-list" id="totalFieldList"></div>
+          </div>
+        </div>
+        <div class="file-upload-group">
+          <div class="file-upload-header">
+            <label class="file-upload-label">Magnitude <span class="optional-label">(optional)</span></label>
+          </div>
+          <div class="upload-group">
+            <div class="file-upload-zone file-drop" id="magnitudeTFDrop">
+              <input type="file" id="magnitudeTFFiles" accept=".nii,.nii.gz" multiple>
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
+            </div>
+            <div class="file-list" id="magnitudeTFList"></div>
+          </div>
+        </div>
+        </div>
+
+        <!-- Local Field Map Mode -->
+        <div class="input-mode-content" id="inputModeLocalField" data-mode="localField">
+        <div class="file-upload-group">
+          <div class="file-upload-header">
+            <label class="file-upload-label">Local Field Map</label>
+            <button class="btn-icon btn-preview" id="vis_localField" title="Preview local field map" disabled>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+          <div class="upload-group">
+            <div class="file-upload-zone file-drop" id="localFieldDrop">
+              <input type="file" id="localFieldFiles" accept=".nii,.nii.gz">
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
+            </div>
+            <div class="file-list" id="localFieldList"></div>
+          </div>
+        </div>
+        <div class="file-upload-group">
+          <div class="file-upload-header">
+            <label class="file-upload-label">Magnitude <span class="optional-label">(optional)</span></label>
+          </div>
+          <div class="upload-group">
+            <div class="file-upload-zone file-drop" id="magnitudeLFDrop">
+              <input type="file" id="magnitudeLFFiles" accept=".nii,.nii.gz" multiple>
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
+            </div>
+            <div class="file-list" id="magnitudeLFList"></div>
+          </div>
+        </div>
+        </div>
+
+        </div>
       </section>
 
       <!-- Input Parameters Section -->
@@ -134,8 +233,18 @@
           Input Parameters
         </h2>
         <div class="section-content">
-        <!-- JSON Metadata Upload -->
-        <div class="param-group">
+        <!-- Field Map Units (shown for totalField and localField modes) -->
+        <div class="param-group input-param-fieldmap" id="fieldMapUnitsGroup" style="display: none;">
+          <label class="param-label" for="fieldMapUnits">Field Map Units</label>
+          <select id="fieldMapUnits">
+            <option value="hz">Hz</option>
+            <option value="rad_s">rad/s</option>
+            <option value="ppm">ppm</option>
+          </select>
+        </div>
+
+        <!-- JSON Metadata Upload (raw mode only) -->
+        <div class="param-group input-param-raw" id="jsonMetadataGroup">
           <label class="param-label">
             JSON Metadata <span class="count" id="jsonCount"></span>
           </label>
@@ -153,7 +262,8 @@
           </div>
         </div>
 
-        <div class="param-group">
+        <!-- Field Strength (hidden when units are ppm) -->
+        <div class="param-group" id="fieldStrengthGroup">
           <label class="param-label" for="magField">Field Strength</label>
           <div class="param-inline">
             <input type="number" id="magField" value="3.0" step="0.1" min="0.1">
@@ -161,25 +271,25 @@
           </div>
         </div>
 
-        <div class="param-group">
+        <!-- Echo Times (raw mode only) -->
+        <div class="param-group input-param-raw" id="echoTimesGroup">
           <label class="param-label">Echo Times <span class="unit-inline">(ms)</span></label>
           <input type="text" id="echoTimesTagify" placeholder="Type values...">
         </div>
         </div>
       </section>
 
-      <!-- Mask Threshold Section -->
-      <section class="sidebar-section section-disabled collapsed" id="maskSection">
+      <!-- Magnitude Preparation Section -->
+      <section class="sidebar-section section-disabled collapsed" id="magnitudePrepSection">
         <h2 class="section-title" onclick="toggleSection(this.parentElement)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+            <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
           </svg>
-          Masking
+          Magnitude Preparation
         </h2>
         <div class="section-content">
-        <!-- Mask Input Preparation -->
         <div class="param-group">
-          <label class="param-label" for="maskInputSource">Mask Input</label>
+          <label class="param-label" for="maskInputSource">Magnitude Source</label>
           <select id="maskInputSource">
             <option value="first_echo">First-echo magnitude</option>
             <option value="combined" selected>Combined magnitude (RSS)</option>
@@ -193,14 +303,47 @@
           </label>
         </div>
 
-        <button class="btn btn-secondary btn-sm" id="prepareMaskInput" style="width: 100%; margin-bottom: var(--space-sm);" disabled>
+        <button class="btn btn-secondary btn-sm" id="prepareMaskInput" style="width: 100%; margin-bottom: 0;" disabled>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
           </svg>
           Prepare
         </button>
+        </div>
+      </section>
 
-        <div class="mask-preview-buttons">
+      <!-- Masking Section -->
+      <section class="sidebar-section collapsed" id="maskSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+          </svg>
+          Masking
+        </h2>
+        <div class="section-content">
+        <!-- Direct mask file upload -->
+        <div class="param-group" id="maskUploadGroup">
+          <label class="param-label">Upload Mask <span class="optional-label">(optional)</span></label>
+          <div class="upload-group compact">
+            <div class="file-upload-zone file-drop compact" id="maskDrop">
+              <input type="file" id="maskFiles" accept=".nii,.nii.gz">
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
+            </div>
+            <div class="file-list" id="maskList"></div>
+          </div>
+        </div>
+
+        <!-- Divider shown when magnitude is prepared -->
+        <div class="mask-divider" id="maskDivider" style="display: none;">
+          <span>or generate from magnitude</span>
+        </div>
+
+        <div class="mask-preview-buttons" id="maskGenerateButtons">
           <button class="btn btn-secondary btn-sm" id="previewMask" title="Generate mask from threshold" disabled>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -1567,7 +1710,10 @@
     });
 
     // Drag and drop enhancement
-    ['magnitudeDrop', 'phaseDrop', 'jsonDrop'].forEach(id => {
+    ['magnitudeDrop', 'phaseDrop', 'jsonDrop',
+     'totalFieldDrop', 'magnitudeTFDrop',
+     'localFieldDrop', 'magnitudeLFDrop',
+     'maskDrop'].forEach(id => {
       const dropZone = document.getElementById(id);
       if (!dropZone) return;
 

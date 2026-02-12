@@ -162,6 +162,25 @@ function computeWeightedEchoFit(allUnwrapped, magnitude4d, echoTimes, nx, ny, nz
 }
 
 async function runPipeline(data) {
+  // Dispatch to the appropriate pipeline based on input mode
+  const inputMode = data.inputMode || 'raw';
+
+  if (inputMode === 'totalField' || inputMode === 'localField') {
+    const combinedMethod = data.pipelineSettings?.combinedMethod || 'none';
+    if (combinedMethod === 'tgv') {
+      return await runTgvFieldMapPipeline(data);
+    } else if (combinedMethod === 'qsmart') {
+      return await runQsmartFieldMapPipeline(data);
+    }
+    // Standard pipeline for field map inputs
+    if (inputMode === 'totalField') {
+      return await runTotalFieldPipeline(data);
+    } else {
+      return await runLocalFieldPipeline(data);
+    }
+  }
+
+  // Standard raw pipeline continues below
   const {
     magnitudeBuffers, phaseBuffers, echoTimes, magField,
     maskThreshold, customMaskBuffer, preparedMagnitude, pipelineSettings
@@ -872,7 +891,57 @@ async function runPipeline(data) {
   }
 }
 
-// TGV single-step pipeline
+// =========================================================================
+// TGV Core — shared reconstruction step for all TGV pipelines
+// =========================================================================
+async function runTgvCore({
+  tgvInputPhase, mask, dims, voxelSize, affine,
+  te, fieldstrength, tgvSettings,
+  progressStart = 0.40, progressEnd = 0.95, label = 'QSM Result (ppm) - TGV'
+}) {
+  const [nx, ny, nz] = dims;
+  const [vsx, vsy, vsz] = voxelSize;
+  const voxelCount = nx * ny * nz;
+
+  const alphas = wasmModule.tgv_get_default_alpha(tgvSettings.regularization);
+  const alpha0 = alphas[0];
+  const alpha1 = alphas[1];
+
+  postProgress(progressStart, 'Starting TGV reconstruction...');
+  postLog(`TGV parameters: alpha0=${alpha0.toFixed(4)}, alpha1=${alpha1.toFixed(4)}, iterations=${tgvSettings.iterations}, erosions=${tgvSettings.erosions}`);
+  postLog(`Using TE=${(te * 1000).toFixed(2)}ms, B0=${fieldstrength}T`);
+
+  const progressRange = progressEnd - progressStart;
+  const tgvProgress = (current, total) => {
+    const progress = progressStart + (current / total) * progressRange;
+    postProgress(progress, `TGV: Iteration ${current}/${total}`);
+  };
+
+  const qsmResult = new Float64Array(wasmModule.tgv_qsm_wasm_with_progress(
+    tgvInputPhase, mask, nx, ny, nz, vsx, vsy, vsz,
+    0, 0, 1,  // B0 direction
+    alpha0, alpha1,
+    tgvSettings.iterations, tgvSettings.erosions,
+    te, fieldstrength,
+    tgvProgress
+  ));
+
+  let qsmMin = Infinity, qsmMax = -Infinity;
+  for (let i = 0; i < voxelCount; i++) {
+    if (mask[i] && qsmResult[i] !== 0) {
+      if (qsmResult[i] < qsmMin) qsmMin = qsmResult[i];
+      if (qsmResult[i] > qsmMax) qsmMax = qsmResult[i];
+    }
+  }
+  postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
+
+  postProgress(progressEnd, 'Sending QSM result...');
+  sendStageData('final', qsmResult, dims, voxelSize, affine, label);
+
+  return qsmResult;
+}
+
+// TGV single-step pipeline (raw multi-echo input)
 async function runTgvPipeline(data) {
   const {
     magnitudeBuffers, phaseBuffers, echoTimes, magField,
@@ -883,11 +952,7 @@ async function runTgvPipeline(data) {
   const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
   const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
 
-  // TGV settings
   const tgvSettings = pipelineSettings?.tgv || { regularization: 2, iterations: 1000, erosions: 3 };
-  const alphas = wasmModule.tgv_get_default_alpha(tgvSettings.regularization);
-  const alpha0 = alphas[0];
-  const alpha1 = alphas[1];
 
   // Multi-echo combination settings (same as standard pipeline)
   const unwrapMethod = pipelineSettings?.unwrapMethod || 'romeo';
@@ -1190,38 +1255,11 @@ async function runTgvPipeline(data) {
     // =========================================================================
     // Step 4: TGV reconstruction (40% - 95%)
     // =========================================================================
-    postProgress(0.40, 'Starting TGV reconstruction...');
-    postLog(`TGV parameters: alpha0=${alpha0.toFixed(4)}, alpha1=${alpha1.toFixed(4)}, iterations=${tgvSettings.iterations}, erosions=${tgvSettings.erosions}`);
-    postLog(`Using TE=${(te * 1000).toFixed(2)}ms, B0=${fieldstrength}T`);
-
-    // Progress callback
-    const tgvProgress = (current, total) => {
-      const progress = 0.40 + (current / total) * 0.55;
-      postProgress(progress, `TGV: Iteration ${current}/${total}`);
-    };
-
-    const qsmResult = new Float64Array(wasmModule.tgv_qsm_wasm_with_progress(
-      tgvInputPhase, mask, nx, ny, nz, vsx, vsy, vsz,
-      0, 0, 1,  // B0 direction
-      alpha0, alpha1,
-      tgvSettings.iterations, tgvSettings.erosions,
-      te, fieldstrength,
-      tgvProgress
-    ));
-
-    // Calculate QSM range
-    let qsmMin = Infinity, qsmMax = -Infinity;
-    for (let i = 0; i < voxelCount; i++) {
-      if (mask[i] && qsmResult[i] !== 0) {
-        if (qsmResult[i] < qsmMin) qsmMin = qsmResult[i];
-        if (qsmResult[i] > qsmMax) qsmMax = qsmResult[i];
-      }
-    }
-    postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
-
-    // Send QSM result for display
-    postProgress(0.95, 'Sending QSM result...');
-    sendStageData('final', qsmResult, dims, voxelSize, affine, 'QSM Result (ppm) - TGV');
+    await runTgvCore({
+      tgvInputPhase, mask, dims, voxelSize, affine,
+      te, fieldstrength, tgvSettings,
+      progressStart: 0.40, progressEnd: 0.95
+    });
 
     postProgress(1.0, 'TGV pipeline complete!');
     postLog("TGV pipeline completed successfully!");
@@ -1233,16 +1271,25 @@ async function runTgvPipeline(data) {
   }
 }
 
-// QSMART two-stage pipeline
-async function runQsmartPipeline(data) {
-  const {
-    magnitudeBuffers, phaseBuffers, echoTimes, magField,
-    maskThreshold, customMaskBuffer, preparedMagnitude, pipelineSettings
-  } = data;
-
-  const thresholdFraction = (maskThreshold || 15) / 100;
-  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
-  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
+// =========================================================================
+// QSMART Core — shared stages for all QSMART pipelines
+// Handles: vasculature detection, two-stage SDF+iLSQR (or iLSQR-only),
+// offset adjustment, and ppm scaling.
+// =========================================================================
+async function runQsmartCore({
+  fieldMap,         // Float64Array - total field (Hz) or local field (Hz/ppm)
+  mask,             // Uint8Array - brain mask
+  R_0,              // Uint8Array - reliability map (all-ones if unavailable)
+  magnitudeData,    // Float64Array or null - for vasculature detection
+  dims, voxelSize, affine,
+  pipelineSettings,
+  magField,         // B0 in Tesla
+  skipSdf = false,  // true for local field inputs (skip background removal)
+  isPpm = false     // true if input is ppm (skip final Hz->ppm conversion)
+}) {
+  const [nx, ny, nz] = dims;
+  const [vsx, vsy, vsz] = voxelSize;
+  const voxelCount = nx * ny * nz;
 
   // QSMART settings with defaults from Demo_QSMART.m
   const qsmartSettings = pipelineSettings?.qsmart || {};
@@ -1253,39 +1300,289 @@ async function runQsmartPipeline(data) {
   const sdfSpatialRadius = qsmartSettings.sdfSpatialRadius ?? 8;
   const sdfLowerLim = qsmartSettings.sdfLowerLim ?? 0.6;
   const sdfCurvConstant = qsmartSettings.sdfCurvConstant ?? 500;
-  // Curvature: Now using proper 2D Delaunay triangulation (delaunator crate) matching
-  // MATLAB's approach: `tri = delaunay(x, y)`. This should give correct curvature values
-  // for reducing cortical boundary artifacts. Set useCurvature=false to disable.
   const useCurvature = qsmartSettings.useCurvature !== false;
-  // Vasculature sphere radius - can be specified in mm or voxels
-  // Default 8mm - the reference uses 8 voxels tuned for ~1mm isotropic data
-  const vasculatureSphereRadiusMm = qsmartSettings.vascSphereRadiusMm ?? 8.0;  // mm
-  // Legacy support: direct voxel-based radius (will be overridden by mm-based if not set)
+  const vasculatureSphereRadiusMm = qsmartSettings.vascSphereRadiusMm ?? 8.0;
   const vasculatureSphereRadiusOverride = qsmartSettings.vascSphereRadius ?? qsmartSettings.vasculatureSphereRadius;
-  // Frangi scale parameters - can be specified in mm (physical) or voxels
-  // Default values from Demo_QSMART.m lines 41-43:
-  //   qsm_params.frangi_scaleRange=[0.5 6];
-  //   qsm_params.frangi_scaleRatio=0.5;
-  const frangiScaleMinMm = qsmartSettings.frangiScaleMinMm ?? 0.5;  // mm - minimum vessel radius (Demo_QSMART: 0.5)
-  const frangiScaleMaxMm = qsmartSettings.frangiScaleMaxMm ?? 6.0;  // mm - maximum vessel radius (Demo_QSMART: 6)
-  const frangiScaleRatioMm = qsmartSettings.frangiScaleRatioMm ?? 0.5;  // mm - step between scales (Demo_QSMART: 0.5)
-  // Legacy support: direct voxel-based scales (will be overridden by mm-based if not set)
+  const frangiScaleMinMm = qsmartSettings.frangiScaleMinMm ?? 0.5;
+  const frangiScaleMaxMm = qsmartSettings.frangiScaleMaxMm ?? 6.0;
+  const frangiScaleRatioMm = qsmartSettings.frangiScaleRatioMm ?? 0.5;
   const frangiScaleMinVoxelOverride = qsmartSettings.frangiScaleRange?.[0] ?? qsmartSettings.frangiScaleMin;
   const frangiScaleMaxVoxelOverride = qsmartSettings.frangiScaleRange?.[1] ?? qsmartSettings.frangiScaleMax;
   const frangiScaleRatioOverride = qsmartSettings.frangiScaleRatio;
   const frangiC = qsmartSettings.frangiC ?? 500;
   const ilsqrTol = qsmartSettings.ilsqrTol ?? 0.01;
   const ilsqrMaxIter = qsmartSettings.ilsqrMaxIter ?? 50;
-  const enableVasculature = qsmartSettings.enableVasculature !== false;
-  // R_0 reliability threshold (matching Demo_QSMART.m defaults)
-  // Fixed threshold of 40 by default; set fitThreshPercentile to enable adaptive mode
+  const enableVasculature = qsmartSettings.enableVasculature !== false && magnitudeData !== null;
+
+  const b0Tesla = magField || 7.0;
+  const gyro = 2.675e8;
+  const ppmFactor = gyro * b0Tesla / 1e6;
+
+  const maskCount = mask.reduce((a, b) => a + b, 0);
+
+  // =========================================================================
+  // Vasculature detection
+  // =========================================================================
+  let vascOnly;
+  if (enableVasculature) {
+    postProgress(0.20, 'Detecting vasculature (Frangi filter)...');
+
+    const avgVoxelSize = (vsx + vsy + vsz) / 3.0;
+    const sphereRadiusVoxels = vasculatureSphereRadiusOverride ?? Math.round(vasculatureSphereRadiusMm / avgVoxelSize);
+    const effectiveSphereRadius = Math.max(sphereRadiusVoxels, 2);
+    const frangiScaleMin = frangiScaleMinVoxelOverride ?? (frangiScaleMinMm / avgVoxelSize);
+    const frangiScaleMax = frangiScaleMaxVoxelOverride ?? (frangiScaleMaxMm / avgVoxelSize);
+    const frangiScaleRatio = frangiScaleRatioOverride ?? (frangiScaleRatioMm / avgVoxelSize);
+    const effectiveScaleRatio = Math.max(frangiScaleRatio, 0.1);
+
+    postLog(`Generating vasculature mask:`);
+    postLog(`  Voxel size: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm (avg=${avgVoxelSize.toFixed(2)}mm)`);
+    postLog(`  Sphere radius: ${effectiveSphereRadius} voxels (${vasculatureSphereRadiusMm.toFixed(1)}mm)`);
+    postLog(`  Frangi scales: [${frangiScaleMin.toFixed(2)}, ${frangiScaleMax.toFixed(2)}] voxels (step=${effectiveScaleRatio.toFixed(2)})`);
+    postLog(`  (Physical: [${frangiScaleMinMm.toFixed(1)}, ${frangiScaleMaxMm.toFixed(1)}]mm, Frangi C: ${frangiC})`);
+
+    const vascProgress = (current, total) => {
+      postProgress(0.20 + (current / total) * 0.10, `Vasculature: Step ${current}/${total}`);
+    };
+
+    vascOnly = new Float64Array(wasmModule.vasculature_mask_wasm_with_progress(
+      magnitudeData, mask, nx, ny, nz,
+      effectiveSphereRadius,
+      frangiScaleMin, frangiScaleMax, effectiveScaleRatio,
+      frangiC,
+      vascProgress
+    ));
+
+    const vascCount = vascOnly.filter(v => v === 0).length;
+    postLog(`Vessel voxels: ${vascCount} (${(100 * vascCount / maskCount).toFixed(1)}% of brain)`);
+
+    const vascDisplay = new Float64Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      vascDisplay[i] = mask[i] ? (1 - vascOnly[i]) : 0;
+    }
+    sendStageData('vascDetect', vascDisplay, dims, voxelSize, affine, 'Vessel Detection (Frangi)');
+  } else {
+    if (!magnitudeData) {
+      postLog("No magnitude available - vasculature detection disabled, using full mask for both stages");
+    } else {
+      postLog("Vasculature detection disabled - using full mask for both stages");
+    }
+    vascOnly = new Float64Array(voxelCount).fill(1.0);
+  }
+
+  // =========================================================================
+  // Create weighted mask (mask * R_0)
+  // =========================================================================
+  const weightedMask = new Float64Array(voxelCount);
+  let weightedCount = 0;
+  for (let i = 0; i < voxelCount; i++) {
+    weightedMask[i] = (mask[i] && R_0[i]) ? 1.0 : 0.0;
+    if (weightedMask[i] > 0) weightedCount++;
+  }
+  postLog(`Weighted mask (mask * R_0): ${weightedCount}/${maskCount} voxels (${(100 * weightedCount / maskCount).toFixed(1)}% of brain)`);
+
+  // =========================================================================
+  // Stage 1: SDF (optional) + iLSQR on whole ROI (30% - 50%)
+  // =========================================================================
+  let lfsStage1;
+  if (skipSdf) {
+    // Local field input: field map IS the local field, skip SDF
+    postLog("Skipping SDF background removal (local field input)");
+    lfsStage1 = fieldMap;
+  } else {
+    postProgress(0.30, 'Stage 1: SDF background removal...');
+    postLog(`Stage 1 SDF: sigma1=${sdfSigma1Stage1}, sigma2=${sdfSigma2Stage1}, curvature=${useCurvature}`);
+
+    const onesArray = new Float64Array(voxelCount).fill(1.0);
+    const sdfProgress1 = (current, total) => {
+      postProgress(0.30 + (current / total) * 0.10, `Stage 1 SDF: ${current}/${total} alphas`);
+    };
+
+    lfsStage1 = new Float64Array(wasmModule.sdf_wasm_with_progress(
+      fieldMap, weightedMask, onesArray,
+      nx, ny, nz,
+      sdfSigma1Stage1, sdfSigma2Stage1,
+      sdfSpatialRadius,
+      sdfLowerLim, sdfCurvConstant,
+      useCurvature,
+      sdfProgress1
+    ));
+
+    let lfs1Min = Infinity, lfs1Max = -Infinity;
+    for (let i = 0; i < voxelCount; i++) {
+      if (weightedMask[i] > 0) {
+        if (lfsStage1[i] < lfs1Min) lfs1Min = lfsStage1[i];
+        if (lfsStage1[i] > lfs1Max) lfs1Max = lfsStage1[i];
+      }
+    }
+    postLog(`Stage 1 LFS range: [${lfs1Min.toFixed(2)}, ${lfs1Max.toFixed(2)}] ${isPpm ? 'ppm' : 'Hz'}`);
+    sendStageData('lfsStage1', lfsStage1, dims, voxelSize, affine, `Stage 1 Local Field (${isPpm ? 'ppm' : 'Hz'})`);
+  }
+
+  // Scale local field to ppm for offset adjustment
+  const lfsStage1Ppm = new Float64Array(voxelCount);
+  if (isPpm) {
+    // Already in ppm
+    for (let i = 0; i < voxelCount; i++) {
+      lfsStage1Ppm[i] = lfsStage1[i];
+    }
+  } else {
+    for (let i = 0; i < voxelCount; i++) {
+      lfsStage1Ppm[i] = lfsStage1[i] * ppmFactor;
+    }
+  }
+
+  postProgress(0.42, 'Stage 1: iLSQR inversion...');
+  postLog(`Stage 1 iLSQR: tol=${ilsqrTol}, maxIter=${ilsqrMaxIter}`);
+
+  const maskStage1 = new Uint8Array(voxelCount);
+  for (let i = 0; i < voxelCount; i++) {
+    maskStage1[i] = weightedMask[i] > 0.1 ? 1 : 0;
+  }
+
+  const ilsqrProgress1 = (current, total) => {
+    postProgress(0.42 + (current / total) * 0.08, `Stage 1 iLSQR: Step ${current}/${total}`);
+  };
+
+  const chiStage1 = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
+    lfsStage1, maskStage1, nx, ny, nz, vsx, vsy, vsz,
+    0, 0, 1,
+    ilsqrTol, ilsqrMaxIter,
+    ilsqrProgress1
+  ));
+
+  let chi1Min = Infinity, chi1Max = -Infinity;
+  for (let i = 0; i < voxelCount; i++) {
+    if (maskStage1[i]) {
+      if (chiStage1[i] < chi1Min) chi1Min = chiStage1[i];
+      if (chiStage1[i] > chi1Max) chi1Max = chiStage1[i];
+    }
+  }
+  postLog(`Stage 1 Chi range: [${chi1Min.toFixed(4)}, ${chi1Max.toFixed(4)}]`);
+  sendStageData('chiStage1', chiStage1, dims, voxelSize, affine, 'Stage 1 QSM (arb)');
+
+  // =========================================================================
+  // Stage 2: SDF (optional) + iLSQR on tissue only (50% - 75%)
+  // =========================================================================
+  let lfsStage2;
+  if (skipSdf) {
+    // Local field input: same local field, different mask
+    lfsStage2 = fieldMap;
+  } else {
+    postProgress(0.50, 'Stage 2: SDF on tissue region...');
+    postLog(`Stage 2 SDF: sigma1=${sdfSigma1Stage2}, sigma2=${sdfSigma2Stage2}`);
+
+    const tfsWeighted = new Float64Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      tfsWeighted[i] = fieldMap[i] * weightedMask[i];
+    }
+
+    const sdfProgress2 = (current, total) => {
+      postProgress(0.50 + (current / total) * 0.12, `Stage 2 SDF: ${current}/${total} alphas`);
+    };
+
+    lfsStage2 = new Float64Array(wasmModule.sdf_wasm_with_progress(
+      tfsWeighted, weightedMask, vascOnly,
+      nx, ny, nz,
+      sdfSigma1Stage2, sdfSigma2Stage2,
+      sdfSpatialRadius,
+      sdfLowerLim, sdfCurvConstant,
+      useCurvature,
+      sdfProgress2
+    ));
+
+    sendStageData('lfsStage2', lfsStage2, dims, voxelSize, affine, `Stage 2 Local Field (${isPpm ? 'ppm' : 'Hz'})`);
+  }
+
+  postProgress(0.64, 'Stage 2: iLSQR inversion...');
+
+  const maskStage2 = new Uint8Array(voxelCount);
+  for (let i = 0; i < voxelCount; i++) {
+    maskStage2[i] = (weightedMask[i] > 0.1 && vascOnly[i] > 0.5) ? 1 : 0;
+  }
+
+  const ilsqrProgress2 = (current, total) => {
+    postProgress(0.64 + (current / total) * 0.10, `Stage 2 iLSQR: Step ${current}/${total}`);
+  };
+
+  const chiStage2 = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
+    lfsStage2, maskStage2, nx, ny, nz, vsx, vsy, vsz,
+    0, 0, 1,
+    ilsqrTol, ilsqrMaxIter,
+    ilsqrProgress2
+  ));
+
+  sendStageData('chiStage2', chiStage2, dims, voxelSize, affine, 'Stage 2 QSM (arb)');
+
+  // =========================================================================
+  // Combine stages with offset adjustment (75% - 90%)
+  // =========================================================================
+  postProgress(0.75, 'Combining stages with offset adjustment...');
+  postLog("Computing offset adjustment in Fourier space...");
+
+  const removedVoxels = new Float64Array(voxelCount);
+  for (let i = 0; i < voxelCount; i++) {
+    removedVoxels[i] = weightedMask[i] - vascOnly[i];
+  }
+
+  const chiQsmart = new Float64Array(wasmModule.qsmart_adjust_offset_wasm(
+    removedVoxels, lfsStage1Ppm, chiStage1, chiStage2,
+    nx, ny, nz, vsx, vsy, vsz,
+    0, 0, 1,
+    ppmFactor
+  ));
+
+  // =========================================================================
+  // Scale to ppm and finalize (90% - 100%)
+  // =========================================================================
+  postProgress(0.90, 'Scaling to ppm...');
+
+  const qsmResult = new Float64Array(voxelCount);
+  if (!isPpm) {
+    const gamma = QSMConfig.PHYSICS.GYROMAGNETIC_RATIO;
+    const scaleFactor = 1e6 / (gamma * b0Tesla);
+    for (let i = 0; i < voxelCount; i++) {
+      qsmResult[i] = chiQsmart[i] * scaleFactor;
+      if (!mask[i]) qsmResult[i] = 0;
+    }
+  } else {
+    for (let i = 0; i < voxelCount; i++) {
+      qsmResult[i] = chiQsmart[i];
+      if (!mask[i]) qsmResult[i] = 0;
+    }
+  }
+
+  let qsmMin = Infinity, qsmMax = -Infinity;
+  for (let i = 0; i < voxelCount; i++) {
+    if (mask[i] && qsmResult[i] !== 0) {
+      if (qsmResult[i] < qsmMin) qsmMin = qsmResult[i];
+      if (qsmResult[i] > qsmMax) qsmMax = qsmResult[i];
+    }
+  }
+  postLog(`QSMART QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
+
+  postProgress(0.95, 'Sending QSMART result...');
+  sendStageData('final', qsmResult, dims, voxelSize, affine, 'QSMART QSM (ppm)');
+
+  return qsmResult;
+}
+
+// QSMART two-stage pipeline (raw multi-echo input)
+async function runQsmartPipeline(data) {
+  const {
+    magnitudeBuffers, phaseBuffers, echoTimes, magField,
+    maskThreshold, customMaskBuffer, preparedMagnitude, pipelineSettings
+  } = data;
+
+  const thresholdFraction = (maskThreshold || 15) / 100;
+  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
+  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
+
+  // Settings used in steps 1-3 (remaining QSMART settings parsed in runQsmartCore)
+  const qsmartSettings = pipelineSettings?.qsmart || {};
   const fitThreshold = qsmartSettings.fitThreshold ?? 40;
   const fitThreshPercentile = qsmartSettings.fitThreshPercentile ?? null;
-
-  // Compute ppm conversion factor (gyro * B0 / 1e6)
-  const gyro = 2.675e8;  // Proton gyromagnetic ratio rad/s/T
   const b0Tesla = magField || 7.0;  // QSMART optimized for 7T
-  const ppmFactor = gyro * b0Tesla / 1e6;
 
   try {
     // =========================================================================
@@ -1424,255 +1721,20 @@ async function runQsmartPipeline(data) {
     }
 
     // =========================================================================
-    // Step 4: Generate vasculature mask (20% - 30%)
+    // Steps 4-9: QSMART core (vasculature, two-stage SDF+iLSQR, combine, ppm)
     // =========================================================================
-    let vascOnly;
-    if (enableVasculature) {
-      postProgress(0.20, 'Detecting vasculature (Frangi filter)...');
+    const magnitudeForVasc = hasPreparedMagnitude
+      ? new Float64Array(preparedMagnitude)
+      : new Float64Array(magnitude4d[0]);
 
-      // Compute parameters in voxels from mm-based parameters
-      // Use average voxel size for isotropic-equivalent scaling
-      const avgVoxelSize = (vsx + vsy + vsz) / 3.0;
-
-      // Morphological sphere radius: use override if set, otherwise compute from mm
-      const sphereRadiusVoxels = vasculatureSphereRadiusOverride ?? Math.round(vasculatureSphereRadiusMm / avgVoxelSize);
-      // Ensure minimum radius of 2 voxels for meaningful morphological filtering
-      const effectiveSphereRadius = Math.max(sphereRadiusVoxels, 2);
-
-      // Frangi scales: use override values if explicitly set, otherwise compute from mm
-      const frangiScaleMin = frangiScaleMinVoxelOverride ?? (frangiScaleMinMm / avgVoxelSize);
-      const frangiScaleMax = frangiScaleMaxVoxelOverride ?? (frangiScaleMaxMm / avgVoxelSize);
-      const frangiScaleRatio = frangiScaleRatioOverride ?? (frangiScaleRatioMm / avgVoxelSize);
-
-      // Ensure minimum scale ratio to avoid too many iterations
-      const effectiveScaleRatio = Math.max(frangiScaleRatio, 0.1);
-
-      postLog(`Generating vasculature mask:`);
-      postLog(`  Voxel size: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm (avg=${avgVoxelSize.toFixed(2)}mm)`);
-      postLog(`  Sphere radius: ${effectiveSphereRadius} voxels (${vasculatureSphereRadiusMm.toFixed(1)}mm)`);
-      postLog(`  Frangi scales: [${frangiScaleMin.toFixed(2)}, ${frangiScaleMax.toFixed(2)}] voxels (step=${effectiveScaleRatio.toFixed(2)})`);
-      postLog(`  (Physical: [${frangiScaleMinMm.toFixed(1)}, ${frangiScaleMaxMm.toFixed(1)}]mm, Frangi C: ${frangiC})`);
-
-      const avgMag = hasPreparedMagnitude
-        ? new Float64Array(preparedMagnitude)
-        : new Float64Array(magnitude4d[0]);
-
-      const vascProgress = (current, total) => {
-        postProgress(0.20 + (current / total) * 0.10, `Vasculature: Step ${current}/${total}`);
-      };
-
-      vascOnly = new Float64Array(wasmModule.vasculature_mask_wasm_with_progress(
-        avgMag, mask, nx, ny, nz,
-        effectiveSphereRadius,
-        frangiScaleMin, frangiScaleMax, effectiveScaleRatio,
-        frangiC,
-        vascProgress
-      ));
-
-      const vascCount = vascOnly.filter(v => v === 0).length;
-      postLog(`Vessel voxels: ${vascCount} (${(100 * vascCount / maskCount).toFixed(1)}% of brain)`);
-
-      // Send vasculature detection result (inverted: 1 = vessel, 0 = tissue)
-      const vascDisplay = new Float64Array(voxelCount);
-      for (let i = 0; i < voxelCount; i++) {
-        vascDisplay[i] = mask[i] ? (1 - vascOnly[i]) : 0;
-      }
-      sendStageData('vascDetect', vascDisplay, dims, voxelSize, affine, 'Vessel Detection (Frangi)');
-    } else {
-      postLog("Vasculature detection disabled - using full mask for both stages");
-      vascOnly = new Float64Array(voxelCount).fill(1.0);
-    }
-
-    // =========================================================================
-    // Step 5: Create weighted mask using R_0 reliability (mask * R_0)
-    // =========================================================================
-    // R_0 excludes voxels with poor multi-echo fitting (air-tissue interfaces,
-    // brain boundaries, low SNR regions). Matching echofit.m from reference QSMART.
-
-    const weightedMask = new Float64Array(voxelCount);
-    let weightedCount = 0;
-    for (let i = 0; i < voxelCount; i++) {
-      weightedMask[i] = (mask[i] && R_0[i]) ? 1.0 : 0.0;
-      if (weightedMask[i] > 0) weightedCount++;
-    }
-
-    postLog(`Weighted mask (mask * R_0): ${weightedCount}/${maskCount} voxels (${(100 * weightedCount / maskCount).toFixed(1)}% of brain)`);
-
-    // =========================================================================
-    // Step 6: Stage 1 - SDF + iLSQR on whole ROI (30% - 50%)
-    // =========================================================================
-    postProgress(0.30, 'Stage 1: SDF background removal...');
-    postLog(`Stage 1 SDF: sigma1=${sdfSigma1Stage1}, sigma2=${sdfSigma2Stage1}, curvature=${useCurvature}`);
-
-    // All-ones for vasc_only in stage 1
-    const onesArray = new Float64Array(voxelCount).fill(1.0);
-
-    const sdfProgress1 = (current, total) => {
-      postProgress(0.30 + (current / total) * 0.10, `Stage 1 SDF: ${current}/${total} alphas`);
-    };
-
-    const lfsStage1 = new Float64Array(wasmModule.sdf_wasm_with_progress(
-      tfs, weightedMask, onesArray,
-      nx, ny, nz,
-      sdfSigma1Stage1, sdfSigma2Stage1,
-      sdfSpatialRadius,
-      sdfLowerLim, sdfCurvConstant,
-      useCurvature,
-      sdfProgress1
-    ));
-
-    // Compute LFS range for diagnostics
-    let lfs1Min = Infinity, lfs1Max = -Infinity;
-    for (let i = 0; i < voxelCount; i++) {
-      if (weightedMask[i] > 0) {
-        if (lfsStage1[i] < lfs1Min) lfs1Min = lfsStage1[i];
-        if (lfsStage1[i] > lfs1Max) lfs1Max = lfsStage1[i];
-      }
-    }
-    postLog(`Stage 1 LFS range: [${lfs1Min.toFixed(2)}, ${lfs1Max.toFixed(2)}] Hz`);
-
-    // Scale to ppm for storage (will scale back for offset adjustment)
-    const lfsStage1Ppm = new Float64Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      lfsStage1Ppm[i] = lfsStage1[i] * ppmFactor;
-    }
-
-    // Send stage 1 local field for display
-    sendStageData('lfsStage1', lfsStage1, dims, voxelSize, affine, 'Stage 1 Local Field (Hz)');
-
-    postProgress(0.42, 'Stage 1: iLSQR inversion...');
-    postLog(`Stage 1 iLSQR: tol=${ilsqrTol}, maxIter=${ilsqrMaxIter}`);
-
-    // Create binary mask for iLSQR
-    const maskStage1 = new Uint8Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      maskStage1[i] = weightedMask[i] > 0.1 ? 1 : 0;
-    }
-
-    const ilsqrProgress1 = (current, total) => {
-      postProgress(0.42 + (current / total) * 0.08, `Stage 1 iLSQR: Step ${current}/${total}`);
-    };
-
-    const chiStage1 = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
-      lfsStage1, maskStage1, nx, ny, nz, vsx, vsy, vsz,
-      0, 0, 1,  // B0 direction
-      ilsqrTol, ilsqrMaxIter,
-      ilsqrProgress1
-    ));
-
-    // Compute chi1 range for diagnostics
-    let chi1Min = Infinity, chi1Max = -Infinity;
-    for (let i = 0; i < voxelCount; i++) {
-      if (maskStage1[i]) {
-        if (chiStage1[i] < chi1Min) chi1Min = chiStage1[i];
-        if (chiStage1[i] > chi1Max) chi1Max = chiStage1[i];
-      }
-    }
-    postLog(`Stage 1 Chi range: [${chi1Min.toFixed(4)}, ${chi1Max.toFixed(4)}]`);
-
-    sendStageData('chiStage1', chiStage1, dims, voxelSize, affine, 'Stage 1 QSM (arb)');
-
-    // =========================================================================
-    // Step 7: Stage 2 - SDF + iLSQR on tissue only (50% - 75%)
-    // =========================================================================
-    postProgress(0.50, 'Stage 2: SDF on tissue region...');
-    postLog(`Stage 2 SDF: sigma1=${sdfSigma1Stage2}, sigma2=${sdfSigma2Stage2}`);
-
-    // Weighted TFS for stage 2: tfs * mask * R_0
-    const tfsWeighted = new Float64Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      tfsWeighted[i] = tfs[i] * weightedMask[i];
-    }
-
-    const sdfProgress2 = (current, total) => {
-      postProgress(0.50 + (current / total) * 0.12, `Stage 2 SDF: ${current}/${total} alphas`);
-    };
-
-    const lfsStage2 = new Float64Array(wasmModule.sdf_wasm_with_progress(
-      tfsWeighted, weightedMask, vascOnly,
-      nx, ny, nz,
-      sdfSigma1Stage2, sdfSigma2Stage2,
-      sdfSpatialRadius,
-      sdfLowerLim, sdfCurvConstant,
-      useCurvature,
-      sdfProgress2
-    ));
-
-    const lfsStage2Ppm = new Float64Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      lfsStage2Ppm[i] = lfsStage2[i] * ppmFactor;
-    }
-
-    sendStageData('lfsStage2', lfsStage2, dims, voxelSize, affine, 'Stage 2 Local Field (Hz)');
-
-    postProgress(0.64, 'Stage 2: iLSQR inversion...');
-
-    // Mask for stage 2: mask * vasc_only * R_0
-    const maskStage2 = new Uint8Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      maskStage2[i] = (weightedMask[i] > 0.1 && vascOnly[i] > 0.5) ? 1 : 0;
-    }
-
-    const ilsqrProgress2 = (current, total) => {
-      postProgress(0.64 + (current / total) * 0.10, `Stage 2 iLSQR: Step ${current}/${total}`);
-    };
-
-    const chiStage2 = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
-      lfsStage2, maskStage2, nx, ny, nz, vsx, vsy, vsz,
-      0, 0, 1,
-      ilsqrTol, ilsqrMaxIter,
-      ilsqrProgress2
-    ));
-
-    sendStageData('chiStage2', chiStage2, dims, voxelSize, affine, 'Stage 2 QSM (arb)');
-
-    // =========================================================================
-    // Step 8: Combine stages with offset adjustment (75% - 90%)
-    // =========================================================================
-    postProgress(0.75, 'Combining stages with offset adjustment...');
-    postLog("Computing offset adjustment in Fourier space...");
-
-    // Removed voxels = mask * R_0 - vasc_only
-    const removedVoxels = new Float64Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      removedVoxels[i] = weightedMask[i] - vascOnly[i];
-    }
-
-    const chiQsmart = new Float64Array(wasmModule.qsmart_adjust_offset_wasm(
-      removedVoxels, lfsStage1Ppm, chiStage1, chiStage2,
-      nx, ny, nz, vsx, vsy, vsz,
-      0, 0, 1,  // B0 direction
-      ppmFactor
-    ));
-
-    // =========================================================================
-    // Step 9: Scale to ppm and finalize (90% - 100%)
-    // =========================================================================
-    postProgress(0.90, 'Scaling to ppm...');
-
-    // Scale to ppm: χ (ppm) = χ_raw / (γ × B0) × 1e6
-    const gamma = QSMConfig.PHYSICS.GYROMAGNETIC_RATIO; // Hz/T
-    const scaleFactor = 1e6 / (gamma * b0Tesla);
-
-    const qsmResult = new Float64Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      qsmResult[i] = chiQsmart[i] * scaleFactor;
-      if (!mask[i]) qsmResult[i] = 0;
-    }
-
-    // Calculate QSM range
-    let qsmMin = Infinity, qsmMax = -Infinity;
-    for (let i = 0; i < voxelCount; i++) {
-      if (mask[i] && qsmResult[i] !== 0) {
-        if (qsmResult[i] < qsmMin) qsmMin = qsmResult[i];
-        if (qsmResult[i] > qsmMax) qsmMax = qsmResult[i];
-      }
-    }
-    postLog(`QSMART QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
-
-    // Send final result
-    postProgress(0.95, 'Sending QSMART result...');
-    sendStageData('final', qsmResult, dims, voxelSize, affine, 'QSMART QSM (ppm)');
+    await runQsmartCore({
+      fieldMap: tfs,
+      mask, R_0,
+      magnitudeData: magnitudeForVasc,
+      dims, voxelSize, affine,
+      pipelineSettings,
+      magField: b0Tesla
+    });
 
     postProgress(1.0, 'QSMART pipeline complete!');
     postLog("QSMART two-stage pipeline completed successfully!");
@@ -1823,6 +1885,908 @@ async function runBiasCorrection(data) {
       error: error.message
     });
   }
+}
+
+// =========================================================================
+// Total Field Map Pipeline
+// Skips phase unwrapping/combination, starts from B0 field map
+// =========================================================================
+async function runTotalFieldPipeline(data) {
+  const {
+    totalFieldBuffer, fieldMapUnits, magnitudeBuffer, maskBuffer,
+    customMaskBuffer, magField, maskThreshold, preparedMagnitude, pipelineSettings
+  } = data;
+
+  const thresholdFraction = (maskThreshold || 15) / 100;
+  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
+  const hasMaskFile = maskBuffer !== null && maskBuffer !== undefined;
+  const hasMagnitude = magnitudeBuffer !== null && magnitudeBuffer !== undefined;
+  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
+
+  // Extract pipeline settings
+  const backgroundMethod = pipelineSettings?.backgroundRemoval || 'vsharp';
+  const dipoleMethod = pipelineSettings?.dipoleInversion || 'rts';
+
+  // Validate methods
+  const validBgMethods = ['vsharp', 'sharp', 'smv', 'ismv', 'pdf', 'lbv'];
+  const validInversionMethods = ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr'];
+  if (!validBgMethods.includes(backgroundMethod)) {
+    throw new Error(`Unknown background removal method: '${backgroundMethod}'`);
+  }
+  if (!validInversionMethods.includes(dipoleMethod)) {
+    throw new Error(`Unknown dipole inversion method: '${dipoleMethod}'`);
+  }
+
+  // Extract method-specific settings (same as standard pipeline)
+  const vsharpSettings = {
+    maxRadius: pipelineSettings?.vsharp?.maxRadius ?? 18,
+    minRadius: pipelineSettings?.vsharp?.minRadius ?? 2,
+    threshold: pipelineSettings?.vsharp?.threshold ?? 0.05
+  };
+  const lbvSettings = pipelineSettings?.lbv || { tol: 0.001, maxit: 500 };
+  const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 };
+  const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
+  const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
+  const tikhonovSettings = pipelineSettings?.tikhonov || { lambda: 0.01, reg: 'identity' };
+  const tvSettings = pipelineSettings?.tv || { lambda: 0.001, maxIter: 250, tol: 0.001 };
+  const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, maxIter: 250, tol: 0.001, newtonMaxIter: 10 };
+  const mediSettings = pipelineSettings?.medi || {
+    lambda: 7.5e-5, percentage: 0.3, maxIter: 30, cgMaxIter: 10, cgTol: 0.01, tol: 0.1,
+    smv: false, smvRadius: 5, merit: false, dataWeighting: 1
+  };
+  const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, maxIter: 50 };
+
+  try {
+    // =========================================================================
+    // Step 1: Load total field map
+    // =========================================================================
+    postProgress(0.05, 'Loading total field map...');
+    postLog("Loading total field map...");
+
+    const fieldResult = wasmModule.load_nifti_wasm(new Uint8Array(totalFieldBuffer));
+    let fieldData = new Float64Array(fieldResult.data);
+    const dims = Array.from(fieldResult.dims);
+    const voxelSize = Array.from(fieldResult.voxelSize);
+    const affine = Array.from(fieldResult.affine);
+    const [nx, ny, nz] = dims;
+    const [vsx, vsy, vsz] = voxelSize;
+    const voxelCount = nx * ny * nz;
+
+    postLog(`Field map shape: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm`);
+
+    // Load optional magnitude
+    // Prefer prepared magnitude (RSS-combined, bias-corrected) over raw file
+    let magnitudeData = null;
+    if (hasPreparedMagnitude) {
+      magnitudeData = new Float64Array(preparedMagnitude);
+      postLog("Using prepared magnitude for weighting");
+    } else if (hasMagnitude) {
+      postProgress(0.08, 'Loading magnitude...');
+      const magResult = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffer));
+      magnitudeData = new Float64Array(magResult.data);
+      postLog("Loaded magnitude image");
+    }
+
+    // =========================================================================
+    // Step 2: Convert field map units to Hz
+    // =========================================================================
+    postProgress(0.10, 'Converting field map units...');
+
+    const isPpm = fieldMapUnits === 'ppm';
+    if (fieldMapUnits === 'rad_s') {
+      // rad/s -> Hz: divide by 2π
+      postLog("Converting field map from rad/s to Hz...");
+      for (let i = 0; i < voxelCount; i++) {
+        fieldData[i] /= (2 * Math.PI);
+      }
+    } else if (isPpm) {
+      // ppm -> Hz: multiply by γ * B0
+      // Actually we keep it in ppm and skip the final conversion
+      postLog("Field map in ppm - will skip final Hz->ppm conversion");
+    } else {
+      postLog("Field map already in Hz");
+    }
+
+    // =========================================================================
+    // Step 3: Load or create mask
+    // =========================================================================
+    postProgress(0.12, 'Loading mask...');
+    let mask;
+
+    if (hasCustomMask) {
+      postLog("Loading custom edited mask...");
+      const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+      const maskData = Array.from(maskResult.data);
+      mask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        mask[i] = maskData[i] > 0.5 ? 1 : 0;
+      }
+    } else if (hasMaskFile) {
+      postLog("Loading mask from file...");
+      const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(maskBuffer));
+      const maskData = Array.from(maskResult.data);
+      mask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        mask[i] = maskData[i] > 0.5 ? 1 : 0;
+      }
+    } else if (hasPreparedMagnitude) {
+      postLog(`Creating threshold mask from prepared magnitude (${thresholdFraction * 100}%)...`);
+      mask = createThresholdMask(new Float64Array(preparedMagnitude), thresholdFraction);
+    } else if (magnitudeData) {
+      postLog(`Creating threshold mask from magnitude (${thresholdFraction * 100}%)...`);
+      mask = createThresholdMask(magnitudeData, thresholdFraction);
+    } else {
+      throw new Error("No mask source available. Provide a mask file or magnitude image.");
+    }
+
+    const maskCount = mask.reduce((a, b) => a + b, 0);
+    postLog(`Mask coverage: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
+
+    // Apply mask to field data
+    for (let i = 0; i < voxelCount; i++) {
+      if (!mask[i]) fieldData[i] = 0;
+    }
+
+    // Send B0 for display
+    sendStageData('B0', fieldData, dims, voxelSize, affine,
+      `Total Field Map (${isPpm ? 'ppm' : 'Hz'})`);
+
+    // =========================================================================
+    // Step 4: Background field removal
+    // =========================================================================
+    // Check if MEDI with SMV is enabled - skip background removal
+    const skipBgRemoval = dipoleMethod === 'medi' && mediSettings.smv;
+    let localField, erodedMask;
+
+    if (skipBgRemoval) {
+      postProgress(0.42, 'Skipping background removal (MEDI SMV handles it)...');
+      postLog('Background removal: Skipped - MEDI with SMV enabled');
+      localField = fieldData;
+      erodedMask = mask;
+    } else {
+      // Run background removal (reuse same logic as standard pipeline)
+      const bgResult = await runBackgroundRemoval(
+        fieldData, mask, nx, ny, nz, vsx, vsy, vsz,
+        backgroundMethod, pipelineSettings
+      );
+      localField = bgResult.localField;
+      erodedMask = bgResult.erodedMask;
+    }
+
+    const erodedCount = erodedMask.reduce((a, b) => a + b, 0);
+    postLog(`Eroded mask: ${erodedCount} voxels (${(100 * erodedCount / voxelCount).toFixed(1)}%)`);
+
+    const localFieldLabel = skipBgRemoval ? 'Total Field (MEDI SMV will handle BG removal)' : `Local Field Map (${isPpm ? 'ppm' : 'Hz'})`;
+    sendStageData('bgRemoved', localField, dims, voxelSize, affine, localFieldLabel);
+
+    // =========================================================================
+    // Step 5: Dipole inversion
+    // =========================================================================
+    const qsmResult = await runDipoleInversion(
+      localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+      dipoleMethod, pipelineSettings,
+      magnitudeData,
+      isPpm ? null : [20], // nominal TE (ms) for MEDI Hz->rad conversion (arbitrary, cancels out); null if ppm
+      isPpm
+    );
+
+    // Scale to ppm (skip if input was already in ppm)
+    if (!isPpm) {
+      postProgress(0.92, 'Scaling to ppm...');
+      const gamma = QSMConfig.PHYSICS.GYROMAGNETIC_RATIO;
+      const b0Tesla = magField || 3.0;
+      const scaleFactor = 1e6 / (gamma * b0Tesla);
+      for (let i = 0; i < voxelCount; i++) {
+        qsmResult[i] *= scaleFactor;
+        if (!erodedMask[i]) qsmResult[i] = 0;
+      }
+    } else {
+      for (let i = 0; i < voxelCount; i++) {
+        if (!erodedMask[i]) qsmResult[i] = 0;
+      }
+    }
+
+    let qsmMin = Infinity, qsmMax = -Infinity;
+    for (let i = 0; i < voxelCount; i++) {
+      if (erodedMask[i]) {
+        if (qsmResult[i] < qsmMin) qsmMin = qsmResult[i];
+        if (qsmResult[i] > qsmMax) qsmMax = qsmResult[i];
+      }
+    }
+    postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
+
+    postProgress(0.95, 'Sending QSM result...');
+    sendStageData('final', qsmResult, dims, voxelSize, affine, 'QSM Result (ppm)');
+
+    postProgress(1.0, 'Pipeline complete!');
+    postLog("Total field map pipeline completed successfully!");
+    postComplete({ success: true });
+
+  } catch (error) {
+    postError(error.message);
+    throw error;
+  }
+}
+
+// =========================================================================
+// Local Field Map Pipeline
+// Skips unwrapping and background removal, starts from local field
+// =========================================================================
+async function runLocalFieldPipeline(data) {
+  const {
+    localFieldBuffer, fieldMapUnits, magnitudeBuffer, maskBuffer,
+    customMaskBuffer, magField, maskThreshold, preparedMagnitude, pipelineSettings
+  } = data;
+
+  const hasMagnitude = magnitudeBuffer !== null && magnitudeBuffer !== undefined;
+  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
+  const hasMaskFile = maskBuffer !== null && maskBuffer !== undefined;
+  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
+
+  const dipoleMethod = pipelineSettings?.dipoleInversion || 'rts';
+  const validInversionMethods = ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr'];
+  if (!validInversionMethods.includes(dipoleMethod)) {
+    throw new Error(`Unknown dipole inversion method: '${dipoleMethod}'`);
+  }
+
+  try {
+    // =========================================================================
+    // Step 1: Load local field map
+    // =========================================================================
+    postProgress(0.05, 'Loading local field map...');
+    postLog("Loading local field map...");
+
+    const fieldResult = wasmModule.load_nifti_wasm(new Uint8Array(localFieldBuffer));
+    let localField = new Float64Array(fieldResult.data);
+    const dims = Array.from(fieldResult.dims);
+    const voxelSize = Array.from(fieldResult.voxelSize);
+    const affine = Array.from(fieldResult.affine);
+    const [nx, ny, nz] = dims;
+    const [vsx, vsy, vsz] = voxelSize;
+    const voxelCount = nx * ny * nz;
+
+    postLog(`Field map shape: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm`);
+
+    // Load optional magnitude for MEDI/weighting
+    // Prefer prepared magnitude (RSS-combined, bias-corrected) over raw file
+    let magnitudeData = null;
+    if (hasPreparedMagnitude) {
+      magnitudeData = new Float64Array(preparedMagnitude);
+      postLog("Using prepared magnitude for weighting");
+    } else if (hasMagnitude) {
+      postProgress(0.08, 'Loading magnitude...');
+      const magResult = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffer));
+      magnitudeData = new Float64Array(magResult.data);
+      postLog("Loaded magnitude image for weighting");
+    }
+
+    // =========================================================================
+    // Step 2: Convert field map units to Hz
+    // =========================================================================
+    postProgress(0.10, 'Converting field map units...');
+
+    const isPpm = fieldMapUnits === 'ppm';
+    if (fieldMapUnits === 'rad_s') {
+      postLog("Converting field map from rad/s to Hz...");
+      for (let i = 0; i < voxelCount; i++) {
+        localField[i] /= (2 * Math.PI);
+      }
+    } else if (isPpm) {
+      postLog("Field map in ppm - will skip final Hz->ppm conversion");
+    } else {
+      postLog("Field map already in Hz");
+    }
+
+    // =========================================================================
+    // Step 3: Load mask
+    // =========================================================================
+    postProgress(0.15, 'Loading mask...');
+    let mask;
+
+    if (hasCustomMask) {
+      postLog("Loading custom edited mask...");
+      const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+      const maskData = Array.from(maskResult.data);
+      mask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        mask[i] = maskData[i] > 0.5 ? 1 : 0;
+      }
+    } else if (hasMaskFile) {
+      postLog("Loading mask from file...");
+      const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(maskBuffer));
+      const maskData = Array.from(maskResult.data);
+      mask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        mask[i] = maskData[i] > 0.5 ? 1 : 0;
+      }
+    } else {
+      throw new Error("Mask is required for local field map pipeline");
+    }
+
+    const maskCount = mask.reduce((a, b) => a + b, 0);
+    postLog(`Mask coverage: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
+
+    // Apply mask
+    for (let i = 0; i < voxelCount; i++) {
+      if (!mask[i]) localField[i] = 0;
+    }
+
+    // Send local field for display
+    sendStageData('bgRemoved', localField, dims, voxelSize, affine,
+      `Local Field Map (${isPpm ? 'ppm' : 'Hz'})`);
+
+    // =========================================================================
+    // Step 4: Dipole inversion
+    // =========================================================================
+    const qsmResult = await runDipoleInversion(
+      localField, mask, nx, ny, nz, vsx, vsy, vsz,
+      dipoleMethod, pipelineSettings,
+      magnitudeData,
+      isPpm ? null : [20], // dummy echo time for MEDI
+      isPpm
+    );
+
+    // Scale to ppm (skip if input was already in ppm)
+    if (!isPpm) {
+      postProgress(0.92, 'Scaling to ppm...');
+      const gamma = QSMConfig.PHYSICS.GYROMAGNETIC_RATIO;
+      const b0Tesla = magField || 3.0;
+      const scaleFactor = 1e6 / (gamma * b0Tesla);
+      for (let i = 0; i < voxelCount; i++) {
+        qsmResult[i] *= scaleFactor;
+        if (!mask[i]) qsmResult[i] = 0;
+      }
+    } else {
+      for (let i = 0; i < voxelCount; i++) {
+        if (!mask[i]) qsmResult[i] = 0;
+      }
+    }
+
+    let qsmMin = Infinity, qsmMax = -Infinity;
+    for (let i = 0; i < voxelCount; i++) {
+      if (mask[i]) {
+        if (qsmResult[i] < qsmMin) qsmMin = qsmResult[i];
+        if (qsmResult[i] > qsmMax) qsmMax = qsmResult[i];
+      }
+    }
+    postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
+
+    postProgress(0.95, 'Sending QSM result...');
+    sendStageData('final', qsmResult, dims, voxelSize, affine, 'QSM Result (ppm)');
+
+    postProgress(1.0, 'Pipeline complete!');
+    postLog("Local field map pipeline completed successfully!");
+    postComplete({ success: true });
+
+  } catch (error) {
+    postError(error.message);
+    throw error;
+  }
+}
+
+// =========================================================================
+// TGV Field Map Pipeline
+// Handles both totalField and localField inputs with TGV reconstruction
+// =========================================================================
+async function runTgvFieldMapPipeline(data) {
+  const {
+    totalFieldBuffer, localFieldBuffer, fieldMapUnits,
+    magnitudeBuffer, maskBuffer, customMaskBuffer,
+    magField, maskThreshold, preparedMagnitude, pipelineSettings
+  } = data;
+
+  const inputMode = data.inputMode;
+  const isLocalField = inputMode === 'localField';
+  const fieldBuffer = isLocalField ? localFieldBuffer : totalFieldBuffer;
+
+  const thresholdFraction = (maskThreshold || 15) / 100;
+  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
+  const hasMaskFile = maskBuffer !== null && maskBuffer !== undefined;
+  const hasMagnitude = magnitudeBuffer !== null && magnitudeBuffer !== undefined;
+  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
+
+  const tgvSettings = pipelineSettings?.tgv || { regularization: 2, iterations: 1000, erosions: 3 };
+
+  try {
+    // Load field map
+    postProgress(0.05, 'Loading field map...');
+    const fieldLabel = isLocalField ? 'local' : 'total';
+    postLog(`TGV: Loading ${fieldLabel} field map...`);
+
+    const fieldResult = wasmModule.load_nifti_wasm(new Uint8Array(fieldBuffer));
+    let fieldData = new Float64Array(fieldResult.data);
+    const dims = Array.from(fieldResult.dims);
+    const voxelSize = Array.from(fieldResult.voxelSize);
+    const affine = Array.from(fieldResult.affine);
+    const [nx, ny, nz] = dims;
+    const voxelCount = nx * ny * nz;
+
+    postLog(`Field map shape: ${nx}x${ny}x${nz}, voxel: ${voxelSize[0].toFixed(2)}x${voxelSize[1].toFixed(2)}x${voxelSize[2].toFixed(2)}mm`);
+
+    // Load optional magnitude
+    // Prefer prepared magnitude (RSS-combined, bias-corrected) over raw file
+    let magnitudeData = null;
+    if (hasPreparedMagnitude) {
+      magnitudeData = new Float64Array(preparedMagnitude);
+      postLog("Using prepared magnitude");
+    } else if (hasMagnitude) {
+      const magResult = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffer));
+      magnitudeData = new Float64Array(magResult.data);
+    }
+
+    // Convert units to Hz
+    postProgress(0.10, 'Converting field map units...');
+    const fieldstrength = magField || 3.0;
+    const isPpm = fieldMapUnits === 'ppm';
+
+    if (fieldMapUnits === 'rad_s') {
+      postLog("Converting field map from rad/s to Hz...");
+      for (let i = 0; i < voxelCount; i++) {
+        fieldData[i] /= (2 * Math.PI);
+      }
+    } else if (isPpm) {
+      // Convert ppm to Hz for phase conversion: Hz = ppm * γ * B0 / 1e6
+      postLog("Converting field map from ppm to Hz for TGV...");
+      const gamma = QSMConfig.PHYSICS.GYROMAGNETIC_RATIO;
+      const ppmToHz = gamma * fieldstrength / 1e6;
+      for (let i = 0; i < voxelCount; i++) {
+        fieldData[i] *= ppmToHz;
+      }
+    } else {
+      postLog("Field map already in Hz");
+    }
+
+    // Load or create mask
+    postProgress(0.12, 'Loading mask...');
+    let mask;
+
+    if (hasCustomMask) {
+      postLog("Loading custom edited mask...");
+      const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+      mask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
+      }
+    } else if (hasMaskFile) {
+      postLog("Loading mask from file...");
+      const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(maskBuffer));
+      mask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
+      }
+    } else if (hasPreparedMagnitude) {
+      postLog(`Creating threshold mask from prepared magnitude (${thresholdFraction * 100}%)...`);
+      mask = createThresholdMask(new Float64Array(preparedMagnitude), thresholdFraction);
+    } else if (magnitudeData) {
+      postLog(`Creating threshold mask from magnitude (${thresholdFraction * 100}%)...`);
+      mask = createThresholdMask(magnitudeData, thresholdFraction);
+    } else {
+      throw new Error("No mask source available. Provide a mask file or magnitude image.");
+    }
+
+    const maskCount = mask.reduce((a, b) => a + b, 0);
+    postLog(`Mask coverage: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
+
+    // Apply mask
+    for (let i = 0; i < voxelCount; i++) {
+      if (!mask[i]) fieldData[i] = 0;
+    }
+
+    // Send field map for display
+    sendStageData('B0', fieldData, dims, voxelSize, affine,
+      `${isLocalField ? 'Local' : 'Total'} Field Map (Hz)`);
+
+    // Convert Hz to phase for TGV: phase = 2π × f_Hz × TE
+    const te = 0.020;  // Nominal 20ms TE (arbitrary, TGV uses TE+B0 for correct scaling)
+    const tgvInputPhase = new Float64Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      tgvInputPhase[i] = 2 * Math.PI * fieldData[i] * te;
+    }
+    postLog(`Converted field map to phase using nominal TE=${(te * 1000).toFixed(1)}ms`);
+
+    // Run TGV reconstruction
+    await runTgvCore({
+      tgvInputPhase, mask, dims, voxelSize, affine,
+      te, fieldstrength, tgvSettings,
+      progressStart: 0.15, progressEnd: 0.95,
+      label: `QSM Result (ppm) - TGV (from ${fieldLabel} field)`
+    });
+
+    postProgress(1.0, 'TGV pipeline complete!');
+    postLog(`TGV ${fieldLabel} field pipeline completed successfully!`);
+    postComplete({ success: true });
+
+  } catch (error) {
+    postError(error.message);
+    throw error;
+  }
+}
+
+// =========================================================================
+// QSMART Field Map Pipeline
+// Handles both totalField and localField inputs with QSMART reconstruction
+// =========================================================================
+async function runQsmartFieldMapPipeline(data) {
+  const {
+    totalFieldBuffer, localFieldBuffer, fieldMapUnits,
+    magnitudeBuffer, maskBuffer, customMaskBuffer,
+    magField, maskThreshold, preparedMagnitude, pipelineSettings
+  } = data;
+
+  const inputMode = data.inputMode;
+  const isLocalField = inputMode === 'localField';
+  const fieldBuffer = isLocalField ? localFieldBuffer : totalFieldBuffer;
+
+  const thresholdFraction = (maskThreshold || 15) / 100;
+  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
+  const hasMaskFile = maskBuffer !== null && maskBuffer !== undefined;
+  const hasMagnitude = magnitudeBuffer !== null && magnitudeBuffer !== undefined;
+  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
+
+  try {
+    // Load field map
+    postProgress(0.05, 'Loading field map...');
+    const fieldLabel = isLocalField ? 'local' : 'total';
+    postLog(`QSMART: Loading ${fieldLabel} field map...`);
+
+    const fieldResult = wasmModule.load_nifti_wasm(new Uint8Array(fieldBuffer));
+    let fieldData = new Float64Array(fieldResult.data);
+    const dims = Array.from(fieldResult.dims);
+    const voxelSize = Array.from(fieldResult.voxelSize);
+    const affine = Array.from(fieldResult.affine);
+    const [nx, ny, nz] = dims;
+    const voxelCount = nx * ny * nz;
+    const b0Tesla = magField || 7.0;
+
+    postLog(`Field map: ${nx}x${ny}x${nz}, voxel: ${voxelSize[0].toFixed(2)}x${voxelSize[1].toFixed(2)}x${voxelSize[2].toFixed(2)}mm, B0=${b0Tesla}T`);
+
+    // Load optional magnitude (for vasculature detection)
+    // Prefer prepared magnitude (RSS-combined, bias-corrected) over raw file
+    let magnitudeData = null;
+    if (hasPreparedMagnitude) {
+      magnitudeData = new Float64Array(preparedMagnitude);
+      postLog("Using prepared magnitude for vasculature detection");
+    } else if (hasMagnitude) {
+      postProgress(0.08, 'Loading magnitude...');
+      const magResult = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffer));
+      magnitudeData = new Float64Array(magResult.data);
+      postLog("Loaded magnitude image for vasculature detection");
+    }
+
+    // Convert units to Hz
+    postProgress(0.10, 'Converting field map units...');
+    const isPpm = fieldMapUnits === 'ppm';
+
+    if (fieldMapUnits === 'rad_s') {
+      postLog("Converting field map from rad/s to Hz...");
+      for (let i = 0; i < voxelCount; i++) {
+        fieldData[i] /= (2 * Math.PI);
+      }
+    } else if (isPpm) {
+      postLog("Field map in ppm - will skip final Hz->ppm conversion");
+    } else {
+      postLog("Field map already in Hz");
+    }
+
+    // Load or create mask
+    postProgress(0.12, 'Loading mask...');
+    let mask;
+
+    if (hasCustomMask) {
+      postLog("Loading custom edited mask...");
+      const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+      mask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
+      }
+    } else if (hasMaskFile) {
+      postLog("Loading mask from file...");
+      const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(maskBuffer));
+      mask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
+      }
+    } else if (magnitudeData) {
+      postLog(`Creating threshold mask from magnitude (${thresholdFraction * 100}%)...`);
+      mask = createThresholdMask(magnitudeData, thresholdFraction);
+    } else {
+      throw new Error("Mask is required for QSMART. Provide a mask file or magnitude image.");
+    }
+
+    const maskCount = mask.reduce((a, b) => a + b, 0);
+    postLog(`Mask coverage: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
+
+    // Apply mask
+    for (let i = 0; i < voxelCount; i++) {
+      if (!mask[i]) fieldData[i] = 0;
+    }
+
+    // Send field map for display
+    sendStageData(isLocalField ? 'bgRemoved' : 'tfs', fieldData, dims, voxelSize, affine,
+      `${isLocalField ? 'Local' : 'Total'} Field Map (${isPpm ? 'ppm' : 'Hz'})`);
+
+    // R_0 = all-ones (no multi-echo data for reliability estimation)
+    const R_0 = new Uint8Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      R_0[i] = mask[i];
+    }
+    postLog("R_0 set to mask (no multi-echo data for reliability estimation)");
+
+    // Run QSMART core
+    await runQsmartCore({
+      fieldMap: fieldData,
+      mask, R_0,
+      magnitudeData,
+      dims, voxelSize, affine,
+      pipelineSettings,
+      magField: b0Tesla,
+      skipSdf: isLocalField,
+      isPpm
+    });
+
+    postProgress(1.0, 'QSMART pipeline complete!');
+    postLog(`QSMART ${fieldLabel} field pipeline completed successfully!`);
+    postComplete({ success: true });
+
+  } catch (error) {
+    postError(error.message);
+    throw error;
+  }
+}
+
+// =========================================================================
+// Shared helper: Background field removal
+// Extracted from runPipeline to reuse in totalField mode
+// =========================================================================
+async function runBackgroundRemoval(
+  b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
+  backgroundMethod, pipelineSettings
+) {
+  const voxelCount = nx * ny * nz;
+  const vsharpSettings = {
+    maxRadius: pipelineSettings?.vsharp?.maxRadius ?? 18,
+    minRadius: pipelineSettings?.vsharp?.minRadius ?? 2,
+    threshold: pipelineSettings?.vsharp?.threshold ?? 0.05
+  };
+  let localField, erodedMask;
+
+  if (backgroundMethod === 'vsharp') {
+    postProgress(0.42, 'Preparing V-SHARP background removal...');
+    postLog(`Removing background field using V-SHARP...`);
+    const radii = [];
+    for (let r = vsharpSettings.maxRadius; r >= vsharpSettings.minRadius; r -= 2) {
+      radii.push(r);
+    }
+    postLog(`  V-SHARP radii: ${radii.map(r => r.toFixed(1)).join(', ')}`);
+    const vsharpProgress = (current, total) => {
+      postProgress(0.42 + (current / total) * 0.20, `V-SHARP: Radius ${current}/${total}`);
+    };
+    const result = wasmModule.vsharp_wasm_with_progress(
+      b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
+      new Float64Array(radii), vsharpSettings.threshold, vsharpProgress
+    );
+    localField = new Float64Array(result.slice(0, voxelCount));
+    erodedMask = new Uint8Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
+    }
+  } else if (backgroundMethod === 'pdf') {
+    postProgress(0.42, 'Preparing PDF background removal...');
+    postLog(`Removing background field using PDF...`);
+    const pdfSettings = pipelineSettings?.pdf || { tol: 0.00001, maxit: 100 };
+    const pdfProgress = (current, total) => {
+      postProgress(0.42 + (current / total) * 0.20, `PDF: Iteration ${current}/${total}`);
+    };
+    localField = new Float64Array(wasmModule.pdf_wasm_with_progress(
+      b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
+      0, 0, 1, pdfSettings.tol, pdfSettings.maxit, pdfProgress
+    ));
+    erodedMask = mask;
+  } else if (backgroundMethod === 'ismv') {
+    postProgress(0.42, 'Preparing iSMV background removal...');
+    postLog(`Removing background field using iSMV...`);
+    const ismvSettings = pipelineSettings?.ismv || { radius: 5, tol: 0.001, maxit: 500 };
+    const ismvProgress = (current, total) => {
+      postProgress(0.42 + (current / total) * 0.20, `iSMV: Iteration ${current}/${total}`);
+    };
+    const result = wasmModule.ismv_wasm_with_progress(
+      b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
+      ismvSettings.radius, ismvSettings.tol, ismvSettings.maxit, ismvProgress
+    );
+    localField = new Float64Array(result.slice(0, voxelCount));
+    erodedMask = new Uint8Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
+    }
+  } else if (backgroundMethod === 'smv') {
+    postProgress(0.42, 'Preparing SMV background removal...');
+    postLog(`Removing background field using SMV...`);
+    const smvSettings = pipelineSettings?.smv || { radius: 5 };
+    postProgress(0.45, `SMV: Processing radius ${smvSettings.radius}mm...`);
+    const result = wasmModule.smv_wasm(
+      b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz, smvSettings.radius
+    );
+    localField = new Float64Array(result.slice(0, voxelCount));
+    erodedMask = new Uint8Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
+    }
+  } else if (backgroundMethod === 'sharp') {
+    postProgress(0.42, 'Preparing SHARP background removal...');
+    postLog(`Removing background field using SHARP...`);
+    const sharpSettings = pipelineSettings?.sharp || { radius: 6, threshold: 0.05 };
+    postProgress(0.45, `SHARP: Processing radius ${sharpSettings.radius}mm...`);
+    const result = wasmModule.sharp_wasm(
+      b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
+      sharpSettings.radius, sharpSettings.threshold
+    );
+    localField = new Float64Array(result.slice(0, voxelCount));
+    erodedMask = new Uint8Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
+    }
+  } else if (backgroundMethod === 'lbv') {
+    postProgress(0.42, 'Preparing LBV background removal...');
+    postLog(`Removing background field using LBV...`);
+    const lbvSettings = pipelineSettings?.lbv || { tol: 0.001, maxit: 500 };
+    const lbvProgress = (current, total) => {
+      postProgress(0.42 + (current / total) * 0.20, `LBV: Iteration ${current}/${total}`);
+    };
+    const result = wasmModule.lbv_wasm_with_progress(
+      b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
+      lbvSettings.tol, lbvSettings.maxit, lbvProgress
+    );
+    localField = new Float64Array(result.slice(0, voxelCount));
+    erodedMask = new Uint8Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
+    }
+  } else {
+    throw new Error(`Unknown background removal method: '${backgroundMethod}'`);
+  }
+
+  return { localField, erodedMask };
+}
+
+// =========================================================================
+// Shared helper: Dipole inversion
+// Extracted from runPipeline to reuse in field map modes
+// =========================================================================
+async function runDipoleInversion(
+  localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+  dipoleMethod, pipelineSettings,
+  magnitudeData, echoTimes, skipHzConversion
+) {
+  const voxelCount = nx * ny * nz;
+  const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 };
+  const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
+  const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
+  const tikhonovSettings = pipelineSettings?.tikhonov || { lambda: 0.01, reg: 'identity' };
+  const tvSettings = pipelineSettings?.tv || { lambda: 0.001, maxIter: 250, tol: 0.001 };
+  const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, maxIter: 250, tol: 0.001, newtonMaxIter: 10 };
+  const mediSettings = pipelineSettings?.medi || {
+    lambda: 7.5e-5, percentage: 0.3, maxIter: 30, cgMaxIter: 10, cgTol: 0.01, tol: 0.1,
+    smv: false, smvRadius: 5, merit: false, dataWeighting: 1
+  };
+  const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, maxIter: 50 };
+
+  postProgress(0.67, `Preparing ${dipoleMethod.toUpperCase()} dipole inversion...`);
+  postLog(`Running ${dipoleMethod.toUpperCase()} dipole inversion...`);
+
+  let qsmResult;
+
+  if (dipoleMethod === 'tkd') {
+    postProgress(0.70, 'TKD: Computing thresholded k-space division...');
+    qsmResult = new Float64Array(wasmModule.tkd_wasm(
+      localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+      0, 0, 1, tkdSettings.threshold
+    ));
+    postProgress(0.90, 'TKD: Complete');
+  } else if (dipoleMethod === 'tsvd') {
+    postProgress(0.70, 'TSVD: Computing truncated SVD inversion...');
+    qsmResult = new Float64Array(wasmModule.tsvd_wasm(
+      localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+      0, 0, 1, tsvdSettings.threshold
+    ));
+    postProgress(0.90, 'TSVD: Complete');
+  } else if (dipoleMethod === 'tikhonov') {
+    const regType = { 'identity': 0, 'gradient': 1, 'laplacian': 2 }[tikhonovSettings.reg] || 0;
+    postProgress(0.70, `Tikhonov: Solving...`);
+    qsmResult = new Float64Array(wasmModule.tikhonov_wasm(
+      localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+      0, 0, 1, tikhonovSettings.lambda, regType
+    ));
+    postProgress(0.90, 'Tikhonov: Complete');
+  } else if (dipoleMethod === 'tv') {
+    const rho = tvSettings.rho || 100 * tvSettings.lambda;
+    const tvProgress = (current, total) => {
+      postProgress(0.67 + (current / total) * 0.25, `TV-ADMM: Iteration ${current}/${total}`);
+    };
+    qsmResult = new Float64Array(wasmModule.tv_admm_wasm_with_progress(
+      localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+      0, 0, 1, tvSettings.lambda, rho, tvSettings.tol, tvSettings.maxIter, tvProgress
+    ));
+  } else if (dipoleMethod === 'rts') {
+    const rtsProgress = (current, total) => {
+      postProgress(0.67 + (current / total) * 0.25, `RTS: Iteration ${current}/${total}`);
+    };
+    qsmResult = new Float64Array(wasmModule.rts_wasm_with_progress(
+      localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+      0, 0, 1,
+      rtsSettings.delta, rtsSettings.mu, rtsSettings.rho,
+      0.01, rtsSettings.maxIter, 4, rtsProgress
+    ));
+  } else if (dipoleMethod === 'nltv') {
+    const nltvProgress = (current, total) => {
+      postProgress(0.67 + (current / total) * 0.25, `NLTV: Iteration ${current}/${total}`);
+    };
+    qsmResult = new Float64Array(wasmModule.nltv_wasm_with_progress(
+      localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+      0, 0, 1,
+      nltvSettings.lambda, nltvSettings.mu,
+      nltvSettings.tol, nltvSettings.maxIter, nltvSettings.newtonMaxIter, nltvProgress
+    ));
+  } else if (dipoleMethod === 'medi') {
+    const mediProgress = (current, total) => {
+      postProgress(0.67 + (current / total) * 0.25, `MEDI: Iteration ${current}/${total}`);
+    };
+
+    // MEDI requires magnitude for gradient weighting
+    const magData = magnitudeData || new Float64Array(voxelCount).fill(1.0);
+    if (!magnitudeData) {
+      postLog("MEDI: No magnitude available, using uniform weighting");
+    }
+    if (mediSettings.smv) {
+      postLog(`MEDI SMV preprocessing enabled: radius=${mediSettings.smvRadius}mm`);
+    }
+
+    const nStd = new Float64Array(voxelCount).fill(1.0);
+
+    // Convert local field from Hz to radians for MEDI (unless already ppm)
+    let localFieldForMedi = localField;
+    let hzToRad = 1.0;
+    if (!skipHzConversion && echoTimes && echoTimes.length > 0) {
+      const te1Sec = echoTimes[0] / 1000;
+      hzToRad = 2 * Math.PI * te1Sec;
+      localFieldForMedi = new Float64Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        localFieldForMedi[i] = localField[i] * hzToRad;
+      }
+      postLog(`MEDI: Converting local field to radians (TE1=${(te1Sec * 1000).toFixed(2)}ms)`);
+    } else if (skipHzConversion) {
+      postLog("MEDI: Field map in ppm - using values directly (no Hz-to-rad conversion)");
+    }
+
+    qsmResult = new Float64Array(wasmModule.medi_l1_wasm_with_progress(
+      localFieldForMedi, nStd, magData, erodedMask,
+      nx, ny, nz, vsx, vsy, vsz, 0, 0, 1,
+      mediSettings.lambda, mediSettings.merit, mediSettings.smv, mediSettings.smvRadius,
+      mediSettings.dataWeighting, mediSettings.percentage,
+      mediSettings.cgTol, mediSettings.cgMaxIter, mediSettings.maxIter, mediSettings.tol,
+      mediProgress
+    ));
+
+    // Convert back from radians if needed
+    if (!skipHzConversion && hzToRad !== 1.0) {
+      const radToHz = 1.0 / hzToRad;
+      for (let i = 0; i < voxelCount; i++) {
+        qsmResult[i] *= radToHz;
+      }
+    }
+  } else if (dipoleMethod === 'ilsqr') {
+    const ilsqrProgress = (current, total) => {
+      postProgress(0.67 + (current / total) * 0.25, `iLSQR: Step ${current}/${total}`);
+    };
+    postProgress(0.70, 'iLSQR: Running...');
+    qsmResult = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
+      localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+      0, 0, 1, ilsqrSettings.tol, ilsqrSettings.maxIter, ilsqrProgress
+    ));
+  } else {
+    throw new Error(`Unknown dipole inversion method: '${dipoleMethod}'`);
+  }
+
+  return qsmResult;
 }
 
 // Handle messages from main thread

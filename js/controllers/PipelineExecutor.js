@@ -193,40 +193,25 @@ export class PipelineExecutor {
   // ==================== Pipeline Execution ====================
 
   async run(pipelineConfig) {
-    const {
-      magnitudeBuffers,
-      phaseBuffers,
-      echoTimes,
-      magField,
-      maskThreshold,
-      customMaskBuffer,
-      preparedMagnitude,
-      pipelineSettings,
-      skipStages
-    } = pipelineConfig;
-
     try {
       await this.initialize();
 
-      this.updateOutput("Starting ROMEO QSM Pipeline...");
+      const inputMode = pipelineConfig.inputMode || 'raw';
+      const modeLabels = {
+        raw: 'ROMEO QSM Pipeline',
+        totalField: 'Total Field Map Pipeline',
+        localField: 'Local Field Map Pipeline'
+      };
+      this.updateOutput(`Starting ${modeLabels[inputMode] || 'Pipeline'}...`);
       this.pipelineRunning = true;
 
       // Save settings for intelligent caching
-      this.lastRunSettings = JSON.parse(JSON.stringify(pipelineSettings));
+      this.lastRunSettings = JSON.parse(JSON.stringify(pipelineConfig.pipelineSettings));
 
+      // Pass through all pipeline config to the worker
       this.worker.postMessage({
         type: 'run',
-        data: {
-          magnitudeBuffers,
-          phaseBuffers,
-          echoTimes,
-          magField,
-          maskThreshold,
-          customMaskBuffer,
-          preparedMagnitude,
-          pipelineSettings,
-          skipStages
-        }
+        data: pipelineConfig
       });
 
       return true;

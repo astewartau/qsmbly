@@ -311,18 +311,54 @@ class QSMApp {
   }
 
   setupEventListeners() {
-    // Multi-echo file inputs
+    // Input mode tab switching
+    document.querySelectorAll('.input-mode-tab').forEach(tab => {
+      tab.addEventListener('click', () => this.switchInputMode(tab.dataset.mode));
+    });
+
+    // Field map units dropdown
+    document.getElementById('fieldMapUnits')?.addEventListener('change', () => {
+      this.updateInputParamsVisibility();
+      this.updateEchoInfo();
+    });
+
+    // Multi-echo file inputs (raw mode)
     document.getElementById('magnitudeFiles').addEventListener('change', (e) => {
       this.handleMultipleFiles(e, 'magnitude');
     });
-    
+
     document.getElementById('phaseFiles').addEventListener('change', (e) => {
       this.handleMultipleFiles(e, 'phase');
     });
-    
+
     document.getElementById('jsonFiles').addEventListener('change', (e) => {
       this.handleMultipleFiles(e, 'json');
     });
+
+    // Total field map mode file inputs
+    document.getElementById('totalFieldFiles')?.addEventListener('change', (e) => {
+      this.handleMultipleFiles(e, 'totalField');
+    });
+    document.getElementById('magnitudeTFFiles')?.addEventListener('change', (e) => {
+      this.handleMultipleFiles(e, 'magnitudeTF');
+    });
+
+    // Local field map mode file inputs
+    document.getElementById('localFieldFiles')?.addEventListener('change', (e) => {
+      this.handleMultipleFiles(e, 'localField');
+    });
+    document.getElementById('magnitudeLFFiles')?.addEventListener('change', (e) => {
+      this.handleMultipleFiles(e, 'magnitudeLF');
+    });
+
+    // Centralized mask file input (in Masking section)
+    document.getElementById('maskFiles')?.addEventListener('change', (e) => {
+      this.handleMultipleFiles(e, 'mask');
+    });
+
+    // Preview buttons for field map modes
+    document.getElementById('vis_totalField')?.addEventListener('click', () => this.visualizeFieldMap('totalField'));
+    document.getElementById('vis_localField')?.addEventListener('click', () => this.visualizeFieldMap('localField'));
 
     // Processing buttons
     document.getElementById('openPipelineSettings').addEventListener('click', () => this.openPipelineSettingsModal());
@@ -503,6 +539,32 @@ class QSMApp {
   // Delegate file handling to FileIOController
   async handleMultipleFiles(event, type) {
     await this.fileIOController.handleFileInput(event, type);
+
+    // Handle field map mode file changes
+    const mode = this.fileIOController.getInputMode();
+    if (type === 'totalField' || type === 'localField') {
+      // Update preview button state
+      const btnId = type === 'totalField' ? 'vis_totalField' : 'vis_localField';
+      const file = type === 'totalField'
+        ? this.fileIOController.getTotalFieldFile()
+        : this.fileIOController.getLocalFieldFile();
+      const btn = document.getElementById(btnId);
+      if (btn) btn.disabled = !file;
+    }
+
+    // Handle magnitude files in field map modes
+    if (type === 'magnitudeTF' || type === 'magnitudeLF') {
+      this.updateMagnitudePrepSection();
+      this.updateMaskInputSourceOptions();
+      this.updateMaskSectionState();
+      this.updatePrepareButtonState();
+    }
+
+    // Handle centralized mask file
+    if (type === 'mask') {
+      this.updateMaskSectionState();
+      this.updateEchoInfo();
+    }
   }
 
   // Passthrough for backward compatibility (HTML onclick uses app.removeFile)
@@ -520,21 +582,15 @@ class QSMApp {
     this.preparedMagnitudeMax = 0;
     this.currentMaskData = null;
     this.originalMaskData = null;
+
+    // Update all dependent sections
+    this.updateMagnitudePrepSection();
+    this.updateMaskInputSourceOptions();
     this.updatePrepareButtonState();
+    this.updateMaskSectionState();
 
     if (files.length > 0) {
-      const maskSection = document.getElementById('maskSection');
-      if (maskSection) {
-        maskSection.classList.remove('section-disabled');
-      }
       this.visualizeMagnitude();
-    } else {
-      const maskSection = document.getElementById('maskSection');
-      if (maskSection) {
-        maskSection.classList.add('section-disabled');
-      }
-      document.getElementById('previewMask')?.setAttribute('disabled', '');
-      document.getElementById('runBET')?.setAttribute('disabled', '');
     }
   }
 
@@ -542,12 +598,205 @@ class QSMApp {
     document.getElementById('vis_phase').disabled = files.length === 0;
   }
 
-  // Update run button state based on file/mask state
+  // ==================== Input Mode Switching ====================
+
+  switchInputMode(mode) {
+    // Update tab UI
+    document.querySelectorAll('.input-mode-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.mode === mode);
+    });
+    document.querySelectorAll('.input-mode-content').forEach(content => {
+      content.classList.toggle('active', content.dataset.mode === mode);
+    });
+
+    // Update controller
+    this.fileIOController.setInputMode(mode);
+
+    // Update input parameters visibility
+    this.updateInputParamsVisibility();
+
+    // Update magnitude prep and masking sections
+    this.updateMagnitudePrepSection();
+    this.updateMaskInputSourceOptions();
+    this.updateMaskSectionState();
+
+    // Update pipeline settings visibility
+    if (this.pipelineSettingsController) {
+      this.pipelineSettingsController.setInputMode(mode);
+    }
+
+    // Update sidebar pipeline section labels
+    this.updatePipelineSectionForMode(mode);
+
+    // Update run button state
+    this.updateEchoInfo();
+
+    // Update preview button states for field map modes
+    if (mode === 'totalField') {
+      const hasFile = this.fileIOController.getTotalFieldFile() !== null;
+      document.getElementById('vis_totalField').disabled = !hasFile;
+    } else if (mode === 'localField') {
+      const hasFile = this.fileIOController.getLocalFieldFile() !== null;
+      document.getElementById('vis_localField').disabled = !hasFile;
+    }
+  }
+
+  updateInputParamsVisibility() {
+    const mode = this.fileIOController.getInputMode();
+    const isRaw = mode === 'raw';
+    const units = this.fileIOController.getFieldMapUnits();
+    const combinedMethod = this.pipelineSettings?.combinedMethod || 'none';
+    // Field strength needed for: raw mode, Hz/rad_s units, or TGV/QSMART (internal scaling)
+    const needsFieldStrength = isRaw || units !== 'ppm' || combinedMethod !== 'none';
+
+    // Show/hide raw-mode-only parameters
+    document.getElementById('jsonMetadataGroup').style.display = isRaw ? '' : 'none';
+    document.getElementById('echoTimesGroup').style.display = isRaw ? '' : 'none';
+
+    // Show/hide field map units (only for field map modes)
+    document.getElementById('fieldMapUnitsGroup').style.display = isRaw ? 'none' : '';
+
+    // Show/hide field strength
+    document.getElementById('fieldStrengthGroup').style.display =
+      needsFieldStrength ? '' : 'none';
+  }
+
+  updateMagnitudePrepSection() {
+    const section = document.getElementById('magnitudePrepSection');
+    if (!section) return;
+
+    const mode = this.fileIOController.getInputMode();
+    let hasMag = false;
+
+    if (mode === 'raw') {
+      hasMag = this.multiEchoFiles.magnitude.length > 0;
+    } else {
+      hasMag = this.fileIOController.hasFieldMapMagnitude();
+    }
+
+    section.classList.toggle('section-disabled', !hasMag);
+  }
+
+  updateMaskSectionState() {
+    const section = document.getElementById('maskSection');
+    if (!section) return;
+
+    const hasMaskFile = this.fileIOController.hasMask();
+    const hasPrepared = this.maskPrepSettings.prepared;
+
+    // Masking section is always enabled (user can always upload a mask file)
+    section.classList.remove('section-disabled');
+
+    // Show/hide the "or generate from magnitude" divider
+    const divider = document.getElementById('maskDivider');
+    if (divider) {
+      divider.style.display = hasPrepared ? '' : 'none';
+    }
+
+    // When mask file uploaded: disable Threshold/BET generation controls
+    if (hasMaskFile) {
+      const generateButtons = document.getElementById('maskGenerateButtons');
+      if (generateButtons) generateButtons.style.opacity = '0.5';
+      document.getElementById('previewMask')?.setAttribute('disabled', '');
+      document.getElementById('runBET')?.setAttribute('disabled', '');
+      document.getElementById('maskThreshold')?.setAttribute('disabled', '');
+      const maskOps = document.getElementById('maskOperations');
+      if (maskOps) maskOps.style.display = 'none';
+    } else if (hasPrepared) {
+      // Magnitude prepared: enable generation controls
+      const generateButtons = document.getElementById('maskGenerateButtons');
+      if (generateButtons) generateButtons.style.opacity = '1';
+      document.getElementById('previewMask')?.removeAttribute('disabled');
+      document.getElementById('runBET')?.removeAttribute('disabled');
+    }
+  }
+
+  updateMaskInputSourceOptions() {
+    const mode = this.fileIOController.getInputMode();
+    let magCount = 0;
+
+    if (mode === 'raw') {
+      magCount = this.multiEchoFiles.magnitude.length;
+    } else {
+      magCount = this.fileIOController.getFieldMapMagnitudeCount();
+    }
+
+    const select = document.getElementById('maskInputSource');
+    if (!select) return;
+
+    const combinedOption = select.querySelector('option[value="combined"]');
+    if (combinedOption) {
+      combinedOption.disabled = magCount <= 1;
+      // Force to first_echo if combined was selected but only 1 file
+      if (magCount <= 1 && select.value === 'combined') {
+        select.value = 'first_echo';
+        this.maskPrepSettings.source = 'first_echo';
+      }
+    }
+  }
+
+  updatePipelineSectionForMode(mode) {
+    // Update the run button label based on input mode
+    const runButton = document.getElementById('runPipelineSidebar');
+    if (runButton) {
+      const label = runButton.querySelector('span');
+      if (label) {
+        const labels = {
+          raw: 'Start QSM',
+          totalField: 'Start QSM',
+          localField: 'Start QSM'
+        };
+        label.textContent = labels[mode] || 'Start QSM';
+      }
+    }
+  }
+
+  async visualizeFieldMap(type) {
+    const file = type === 'totalField'
+      ? this.fileIOController.getTotalFieldFile()
+      : this.fileIOController.getLocalFieldFile();
+    if (!file) return;
+
+    const label = type === 'totalField' ? 'Total Field Map' : 'Local Field Map';
+    await this.loadAndVisualizeFile(file, label);
+    this.hideEchoNavigation();
+  }
+
+  // Update run button state based on file/mask state (mode-aware)
   updateEchoInfo() {
+    const mode = this.fileIOController?.getInputMode() || 'raw';
     const isValid = this.fileIOController?.hasValidData() || false;
-    const hasEchoTimes = this.fileIOController?.hasEchoTimes() || false;
-    const hasMask = this.currentMaskData !== null;
-    const canRun = isValid && hasEchoTimes && hasMask;
+    const combinedMethod = this.pipelineSettings?.combinedMethod || 'none';
+    let canRun = false;
+
+    switch (mode) {
+      case 'raw': {
+        const hasEchoTimes = this.fileIOController?.hasEchoTimes() || false;
+        const hasMask = this.currentMaskData !== null;
+        canRun = isValid && hasEchoTimes && hasMask;
+        break;
+      }
+      case 'totalField':
+      case 'localField': {
+        const units = this.fileIOController.getFieldMapUnits();
+        // Field strength needed for Hz/rad_s, and for TGV/QSMART internal scaling
+        const needsFieldStrength = units !== 'ppm' || combinedMethod !== 'none';
+        const hasFieldStrength = !needsFieldStrength || (this.fileIOController.getFieldStrength() > 0);
+        // Mask can come from: UI editing, mask file upload, or magnitude (for threshold generation)
+        const hasMaskSource = this.currentMaskData !== null
+          || this.fileIOController.hasMask()
+          || this.fileIOController.hasFieldMapMagnitude()
+          || this.preparedMagnitudeData !== null;
+        // QSMART and MEDI require magnitude
+        const dipoleMethod = this.pipelineSettings?.dipoleInversion || 'rts';
+        const needsMagnitude = combinedMethod === 'qsmart' || dipoleMethod === 'medi';
+        const hasMagnitude = this.fileIOController.hasFieldMapMagnitude()
+          || this.preparedMagnitudeData !== null;
+        const algorithmOk = !needsMagnitude || hasMagnitude;
+        canRun = isValid && hasFieldStrength && hasMaskSource && algorithmOk;
+        break;
+      }
+    }
 
     const runButton = document.getElementById('runPipelineSidebar');
     if (runButton) {
@@ -611,7 +860,13 @@ class QSMApp {
    */
   updatePrepareButtonState() {
     const btn = document.getElementById('prepareMaskInput');
-    const hasMagnitude = this.multiEchoFiles.magnitude.length > 0;
+    const mode = this.fileIOController?.getInputMode() || 'raw';
+    let hasMagnitude;
+    if (mode === 'raw') {
+      hasMagnitude = this.multiEchoFiles.magnitude.length > 0;
+    } else {
+      hasMagnitude = this.fileIOController?.hasFieldMapMagnitude() || false;
+    }
 
     if (btn) {
       btn.disabled = !hasMagnitude;
@@ -626,14 +881,18 @@ class QSMApp {
    */
   updateMaskingControlsState() {
     const prepared = this.maskPrepSettings.prepared;
+    const hasMaskFile = this.fileIOController?.hasMask() || false;
 
-    // Preview Mask (Threshold) button - enabled when prepared
+    // Threshold/BET enabled when prepared AND no mask file uploaded directly
+    const canGenerate = prepared && !hasMaskFile;
+
+    // Preview Mask (Threshold) button
     const previewBtn = document.getElementById('previewMask');
-    if (previewBtn) previewBtn.disabled = !prepared;
+    if (previewBtn) previewBtn.disabled = !canGenerate;
 
-    // BET button - enabled when prepared
+    // BET button
     const betBtn = document.getElementById('runBET');
-    if (betBtn) betBtn.disabled = !prepared;
+    if (betBtn) betBtn.disabled = !canGenerate;
 
     // Threshold slider and auto-threshold button:
     // Only enabled when Threshold method is active (not BET)
@@ -664,8 +923,18 @@ class QSMApp {
    * Delegates to MaskController
    */
   async prepareMaskInput() {
+    // Get magnitude files based on current input mode
+    const mode = this.fileIOController.getInputMode();
+    let magnitudeFiles;
+    if (mode === 'raw') {
+      magnitudeFiles = this.multiEchoFiles.magnitude;
+    } else {
+      // Field map modes: use all magnitude files (may be multiple)
+      magnitudeFiles = this.fileIOController.getFieldMapMagnitudeFiles();
+    }
+
     await this.maskController.prepareMaskInput({
-      magnitudeFiles: this.multiEchoFiles.magnitude,
+      magnitudeFiles: magnitudeFiles,
       maskPrepSettings: this.maskPrepSettings,
       onComplete: () => {
         // Sync state from controller to app
@@ -678,6 +947,7 @@ class QSMApp {
 
         this.maskPrepSettings.prepared = true;
         this.updatePrepareButtonState();
+        this.updateMaskSectionState();
         this.hideEchoNavigation();
         this.showStageButtons();
         this.addStageButton('preparedMagnitude', 'Prepared Magnitude');
@@ -935,6 +1205,18 @@ class QSMApp {
   }
 
   async runRomeoQSM() {
+    const mode = this.fileIOController.getInputMode();
+
+    if (mode === 'raw') {
+      await this._runRawPipeline();
+    } else if (mode === 'totalField') {
+      await this._runTotalFieldPipeline();
+    } else if (mode === 'localField') {
+      await this._runLocalFieldPipeline();
+    }
+  }
+
+  async _runRawPipeline() {
     // Validation
     const magCount = this.multiEchoFiles.magnitude.length;
     const phaseCount = this.multiEchoFiles.phase.length;
@@ -1006,6 +1288,7 @@ class QSMApp {
 
       // Run pipeline via executor
       const started = await this.pipelineExecutor.run({
+        inputMode: 'raw',
         magnitudeBuffers,
         phaseBuffers,
         echoTimes,
@@ -1022,6 +1305,159 @@ class QSMApp {
         document.getElementById('runPipelineSidebar').disabled = true;
       }
 
+    } catch (error) {
+      this.updateOutput(`Error: ${error.message}`);
+      this.setProgress(0, 'Failed');
+      document.getElementById('cancelPipeline').disabled = true;
+      this.updateEchoInfo();
+      console.error(error);
+    }
+  }
+
+  async _runTotalFieldPipeline() {
+    const totalFieldFile = this.fileIOController.getTotalFieldFile();
+    if (!totalFieldFile) {
+      this.updateOutput("Please upload a total field map file");
+      return;
+    }
+
+    const units = this.fileIOController.getFieldMapUnits();
+    const combinedMethod = this.pipelineSettings?.combinedMethod || 'none';
+    // Field strength needed for Hz/rad_s conversion, and for TGV/QSMART internal scaling
+    const needsFieldStrength = units !== 'ppm' || combinedMethod !== 'none';
+    const magField = needsFieldStrength ? parseFloat(document.getElementById('magField').value) : null;
+
+    if (needsFieldStrength && (!magField || magField <= 0)) {
+      this.updateOutput("Please enter a valid magnetic field strength");
+      return;
+    }
+
+    // QSMART and MEDI require magnitude
+    const dipoleMethod = this.pipelineSettings?.dipoleInversion || 'rts';
+    if ((combinedMethod === 'qsmart' || dipoleMethod === 'medi')
+        && !this.fileIOController.hasFieldMapMagnitude() && !this.preparedMagnitudeData) {
+      const method = combinedMethod === 'qsmart' ? 'QSMART' : 'MEDI';
+      this.updateOutput(`${method} requires a magnitude image`);
+      return;
+    }
+
+    try {
+      const totalFieldBuffer = await totalFieldFile.arrayBuffer();
+
+      // Optional magnitude for masking/MEDI/QSMART vasculature
+      const magFile = this.fileIOController.getFieldMapMagnitudeFile();
+      const magnitudeBuffer = magFile ? await magFile.arrayBuffer() : null;
+
+      // Mask: from centralized upload, from UI editing, or will be generated from magnitude
+      const maskFile = this.fileIOController.getMaskFile();
+      let maskBuffer = maskFile ? await maskFile.arrayBuffer() : null;
+
+      // Use custom edited mask if available
+      let customMaskBuffer = null;
+      if (this.currentMaskData && this.magnitudeFileBytes) {
+        const maskNifti = this.createMaskNifti(this.currentMaskData);
+        customMaskBuffer = maskNifti;
+        this.updateOutput("Using custom edited mask");
+      }
+
+      // Preview the field map
+      await this.visualizeFieldMap('totalField');
+
+      const started = await this.pipelineExecutor.run({
+        inputMode: 'totalField',
+        totalFieldBuffer,
+        fieldMapUnits: units,
+        magnitudeBuffer,
+        maskBuffer,
+        customMaskBuffer,
+        magField,
+        maskThreshold: this.maskThreshold,
+        preparedMagnitude: this.preparedMagnitudeData ? Array.from(this.preparedMagnitudeData) : null,
+        pipelineSettings: this.pipelineSettings
+      });
+
+      if (started) {
+        document.getElementById('cancelPipeline').disabled = false;
+        document.getElementById('runPipelineSidebar').disabled = true;
+      }
+    } catch (error) {
+      this.updateOutput(`Error: ${error.message}`);
+      this.setProgress(0, 'Failed');
+      document.getElementById('cancelPipeline').disabled = true;
+      this.updateEchoInfo();
+      console.error(error);
+    }
+  }
+
+  async _runLocalFieldPipeline() {
+    const localFieldFile = this.fileIOController.getLocalFieldFile();
+    if (!localFieldFile) {
+      this.updateOutput("Please upload a local field map file");
+      return;
+    }
+
+    const units = this.fileIOController.getFieldMapUnits();
+    const combinedMethod = this.pipelineSettings?.combinedMethod || 'none';
+    const needsFieldStrength = units !== 'ppm' || combinedMethod !== 'none';
+    const magField = needsFieldStrength ? parseFloat(document.getElementById('magField').value) : null;
+
+    if (needsFieldStrength && (!magField || magField <= 0)) {
+      this.updateOutput("Please enter a valid magnetic field strength");
+      return;
+    }
+
+    // QSMART and MEDI require magnitude
+    const dipoleMethod = this.pipelineSettings?.dipoleInversion || 'rts';
+    if ((combinedMethod === 'qsmart' || dipoleMethod === 'medi')
+        && !this.fileIOController.hasFieldMapMagnitude() && !this.preparedMagnitudeData) {
+      const method = combinedMethod === 'qsmart' ? 'QSMART' : 'MEDI';
+      this.updateOutput(`${method} requires a magnitude image`);
+      return;
+    }
+
+    try {
+      const localFieldBuffer = await localFieldFile.arrayBuffer();
+
+      // Optional magnitude for MEDI/QSMART vasculature
+      const magFile = this.fileIOController.getFieldMapMagnitudeFile();
+      const magnitudeBuffer = magFile ? await magFile.arrayBuffer() : null;
+
+      // Mask: from centralized upload or from UI editing
+      const maskFile = this.fileIOController.getMaskFile();
+      let maskBuffer = maskFile ? await maskFile.arrayBuffer() : null;
+
+      let customMaskBuffer = null;
+      if (this.currentMaskData && this.magnitudeFileBytes) {
+        const maskNifti = this.createMaskNifti(this.currentMaskData);
+        customMaskBuffer = maskNifti;
+        this.updateOutput("Using custom edited mask");
+      }
+
+      if (!maskBuffer && !customMaskBuffer && combinedMethod === 'none') {
+        this.updateOutput("Please provide a mask file or create one from magnitude");
+        return;
+      }
+
+      // Preview the field map
+      await this.visualizeFieldMap('localField');
+
+      const started = await this.pipelineExecutor.run({
+        inputMode: 'localField',
+        localFieldBuffer,
+        fieldMapUnits: units,
+        magnitudeBuffer,
+        maskBuffer,
+        customMaskBuffer,
+        magField,
+        maskThreshold: this.maskThreshold,
+        preparedMagnitude: this.preparedMagnitudeData ? Array.from(this.preparedMagnitudeData) : null,
+        pipelineSettings: this.pipelineSettings
+      });
+
+      if (started) {
+        document.getElementById('cancelPipeline').disabled = false;
+        document.getElementById('runPipelineSidebar').disabled = true;
+      }
     } catch (error) {
       this.updateOutput(`Error: ${error.message}`);
       this.setProgress(0, 'Failed');
@@ -1494,8 +1930,17 @@ class QSMApp {
     this.maskController.preparedMagnitudeData = this.preparedMagnitudeData;
     this.maskController.maskDims = this.maskDims;
 
+    // Get magnitude files based on current input mode
+    const mode = this.fileIOController.getInputMode();
+    let magnitudeFilesForBET;
+    if (mode === 'raw') {
+      magnitudeFilesForBET = this.multiEchoFiles.magnitude;
+    } else {
+      magnitudeFilesForBET = this.fileIOController.getFieldMapMagnitudeFiles();
+    }
+
     await this.maskController.runBET({
-      magnitudeFiles: this.multiEchoFiles.magnitude,
+      magnitudeFiles: magnitudeFilesForBET,
       betSettings: this.betSettings,
       createNiftiHeaderFromVolume: (vol) => this.createNiftiHeaderFromVolume(vol),
       onComplete: () => {
@@ -1557,7 +2002,12 @@ class QSMApp {
     if (!this.pipelineSettingsController) return;
     const defaults = this.getVoxelBasedDefaults();
     const nEchoes = this.multiEchoFiles?.phase?.filter(f => f.file)?.length || 0;
-    this.pipelineSettingsController.open(this.pipelineSettings, defaults, nEchoes);
+    const inputMode = this.fileIOController?.getInputMode() || 'raw';
+    const hasMagnitude = inputMode === 'raw'
+      ? this.multiEchoFiles.magnitude.length > 0
+      : (this.fileIOController.hasFieldMapMagnitude() || this.preparedMagnitudeData !== null);
+    this.pipelineSettingsController.setInputMode(inputMode);
+    this.pipelineSettingsController.open(this.pipelineSettings, defaults, nEchoes, hasMagnitude);
     this.updateEchoInfo();
   }
 
@@ -1578,6 +2028,9 @@ class QSMApp {
     const nEchoes = this.multiEchoFiles?.phase?.filter(f => f.file)?.length || 0;
     this.pipelineSettings = this.pipelineSettingsController.save(nEchoes);
     this.closePipelineSettingsModal();
+    // Combined method may affect which input params are visible and run button state
+    this.updateInputParamsVisibility();
+    this.updateEchoInfo();
   }
 
   runPipelineFromSidebar() {
@@ -1591,7 +2044,12 @@ class QSMApp {
 
   // BET Settings Modal
   openBetSettingsModal() {
-    if (this.multiEchoFiles.magnitude.length === 0) {
+    const mode = this.fileIOController.getInputMode();
+    const hasMag = mode === 'raw'
+      ? this.multiEchoFiles.magnitude.length > 0
+      : this.fileIOController.hasFieldMapMagnitude();
+
+    if (!hasMag) {
       this.updateOutput("No magnitude files uploaded - please load magnitude data first");
       return;
     }

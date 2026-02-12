@@ -2,6 +2,7 @@
  * FileIOController
  *
  * Handles file input management, echo time extraction, and file list UI updates.
+ * Supports multiple input modes: raw (magnitude+phase), totalField, and localField.
  */
 
 export class FileIOController {
@@ -11,7 +12,10 @@ export class FileIOController {
     this.onMagnitudeFilesChanged = options.onMagnitudeFilesChanged || (() => {});
     this.onPhaseFilesChanged = options.onPhaseFilesChanged || (() => {});
 
-    // File storage
+    // Current input mode: 'raw', 'totalField', or 'localField'
+    this.inputMode = 'raw';
+
+    // File storage - raw mode
     this.multiEchoFiles = {
       magnitude: [],
       phase: [],
@@ -21,8 +25,29 @@ export class FileIOController {
       combinedPhase: null
     };
 
+    // File storage - field map modes
+    this.fieldMapFiles = {
+      totalField: [],     // single file as array for consistency
+      localField: [],     // single file as array for consistency
+      magnitudeTF: [],    // optional magnitude for total field mode (multi-file)
+      magnitudeLF: [],    // optional magnitude for local field mode (multi-file)
+    };
+
+    // Centralized mask file storage (used by all modes)
+    this.maskFile = [];
+
     // Tagify instance for echo times
     this.echoTagify = null;
+  }
+
+  // ==================== Input Mode ====================
+
+  getInputMode() {
+    return this.inputMode;
+  }
+
+  setInputMode(mode) {
+    this.inputMode = mode;
   }
 
   // ==================== State Accessors ====================
@@ -46,10 +71,23 @@ export class FileIOController {
     );
   }
 
+  /**
+   * Check if we have valid data for the current input mode.
+   */
   hasValidData() {
-    const magCount = this.multiEchoFiles.magnitude.length;
-    const phaseCount = this.multiEchoFiles.phase.length;
-    return magCount === phaseCount && magCount > 0;
+    switch (this.inputMode) {
+      case 'raw': {
+        const magCount = this.multiEchoFiles.magnitude.length;
+        const phaseCount = this.multiEchoFiles.phase.length;
+        return magCount === phaseCount && magCount > 0;
+      }
+      case 'totalField':
+        return this.fieldMapFiles.totalField.length > 0;
+      case 'localField':
+        return this.fieldMapFiles.localField.length > 0;
+      default:
+        return false;
+    }
   }
 
   hasEchoTimes() {
@@ -60,19 +98,81 @@ export class FileIOController {
     return this.multiEchoFiles;
   }
 
+  // Field map mode accessors
+
+  getTotalFieldFile() {
+    return this.fieldMapFiles.totalField[0]?.file || null;
+  }
+
+  getLocalFieldFile() {
+    return this.fieldMapFiles.localField[0]?.file || null;
+  }
+
+  getFieldMapMagnitudeFile() {
+    return this.getFieldMapMagnitudeFiles()[0]?.file || null;
+  }
+
+  getFieldMapMagnitudeFiles() {
+    if (this.inputMode === 'totalField') {
+      return this.fieldMapFiles.magnitudeTF;
+    } else if (this.inputMode === 'localField') {
+      return this.fieldMapFiles.magnitudeLF;
+    }
+    return [];
+  }
+
+  getFieldMapMagnitudeCount() {
+    return this.getFieldMapMagnitudeFiles().length;
+  }
+
+  hasFieldMapMagnitude() {
+    return this.getFieldMapMagnitudeFile() !== null;
+  }
+
+  getMaskFile() {
+    return this.maskFile[0]?.file || null;
+  }
+
+  hasMask() {
+    return this.getMaskFile() !== null;
+  }
+
+  getFieldMapUnits() {
+    const select = document.getElementById('fieldMapUnits');
+    return select ? select.value : 'hz';
+  }
+
   // ==================== File Handling ====================
 
   async handleFileInput(event, type) {
     const files = Array.from(event.target.files);
 
-    // Store files
-    this.multiEchoFiles[type] = files.map(file => ({
-      file: file,
-      name: file.name
-    }));
+    // Determine which storage to use
+    if (type in this.multiEchoFiles) {
+      // Raw mode file types
+      this.multiEchoFiles[type] = files.map(file => ({
+        file: file,
+        name: file.name
+      }));
+    } else if (type === 'mask') {
+      // Centralized mask file (single file)
+      this.maskFile = files.slice(0, 1).map(file => ({
+        file: file,
+        name: file.name
+      }));
+    } else if (type in this.fieldMapFiles) {
+      // Field map mode file types
+      // Single file for field maps, multi-file for magnitude
+      const isSingleFileType = (type === 'totalField' || type === 'localField');
+      const selectedFiles = isSingleFileType ? files.slice(0, 1) : files;
+      this.fieldMapFiles[type] = selectedFiles.map(file => ({
+        file: file,
+        name: file.name
+      }));
+    }
 
     // Update UI
-    this.updateFileList(type, this.multiEchoFiles[type]);
+    this.updateFileList(type, this._getFileList(type));
 
     // Process JSON files immediately to extract echo times
     if (type === 'json') {
@@ -89,12 +189,29 @@ export class FileIOController {
     this.onFilesChanged(type, files);
   }
 
+  _getFileList(type) {
+    if (type in this.multiEchoFiles) {
+      return this.multiEchoFiles[type];
+    } else if (type === 'mask') {
+      return this.maskFile;
+    } else if (type in this.fieldMapFiles) {
+      return this.fieldMapFiles[type];
+    }
+    return [];
+  }
+
   removeFile(type, index) {
-    this.multiEchoFiles[type].splice(index, 1);
-    this.updateFileList(type, this.multiEchoFiles[type]);
+    if (type in this.multiEchoFiles) {
+      this.multiEchoFiles[type].splice(index, 1);
+    } else if (type === 'mask') {
+      this.maskFile.splice(index, 1);
+    } else if (type in this.fieldMapFiles) {
+      this.fieldMapFiles[type].splice(index, 1);
+    }
+    this.updateFileList(type, this._getFileList(type));
 
     // Notify listeners
-    const files = this.multiEchoFiles[type].map(f => f.file);
+    const files = this._getFileList(type).map(f => f.file);
     if (type === 'magnitude') {
       this.onMagnitudeFilesChanged(files);
     } else if (type === 'phase') {
@@ -105,7 +222,13 @@ export class FileIOController {
   }
 
   clearFiles(type) {
-    this.multiEchoFiles[type] = [];
+    if (type in this.multiEchoFiles) {
+      this.multiEchoFiles[type] = [];
+    } else if (type === 'mask') {
+      this.maskFile = [];
+    } else if (type in this.fieldMapFiles) {
+      this.fieldMapFiles[type] = [];
+    }
     this.updateFileList(type, []);
 
     if (type === 'magnitude') {
@@ -124,6 +247,16 @@ export class FileIOController {
     this.multiEchoFiles.echoTimes = [];
     this.multiEchoFiles.combinedMagnitude = null;
     this.multiEchoFiles.combinedPhase = null;
+
+    // Clear field map files
+    for (const key of Object.keys(this.fieldMapFiles)) {
+      this.fieldMapFiles[key] = [];
+      this.updateFileList(key, []);
+    }
+
+    // Clear centralized mask
+    this.maskFile = [];
+    this.updateFileList('mask', []);
   }
 
   // ==================== File List UI ====================
@@ -133,7 +266,7 @@ export class FileIOController {
     const fileDrop = listElement?.closest('.upload-group')?.querySelector('.file-drop');
 
     if (!listElement) {
-      console.error(`File list element not found: ${type}List`);
+      // Not an error - some list elements may not exist for all modes
       return;
     }
 
@@ -160,12 +293,7 @@ export class FileIOController {
       fileDrop?.classList.remove('has-files');
       const label = fileDrop?.querySelector('.file-drop-label span');
       if (label) {
-        const defaults = {
-          'magnitude': 'Drop files or click',
-          'phase': 'Drop files or click',
-          'json': 'Drop files or click'
-        };
-        label.textContent = defaults[type] || 'Drop files or click';
+        label.textContent = 'Drop or click';
       }
     }
   }

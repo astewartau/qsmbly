@@ -31,6 +31,24 @@ export const VIEWER_CONFIG = {
   crosshairWidth: 0.75
 };
 
+// Input mode configuration
+export const INPUT_MODES = {
+  RAW: 'raw',              // Raw magnitude + phase images (default)
+  TOTAL_FIELD: 'totalField', // Pre-computed total field map (B0)
+  LOCAL_FIELD: 'localField'  // Pre-computed local field map
+};
+
+export const FIELD_MAP_UNITS = {
+  HZ: 'hz',       // Hertz
+  RAD_S: 'rad_s',  // Radians per second
+  PPM: 'ppm'       // Parts per million (already normalized)
+};
+
+export const INPUT_DEFAULTS = {
+  inputMode: 'raw',
+  fieldMapUnits: 'hz'
+};
+
 // Mask configuration defaults
 export const MASK_CONFIG = {
   defaultThreshold: 15,         // Percentage of max magnitude
@@ -303,6 +321,9 @@ export const BOX_FILTER_DEFAULTS = {
 // Make config available globally for non-module scripts and workers
 const QSMConfig = {
   PHYSICS,
+  INPUT_MODES,
+  FIELD_MAP_UNITS,
+  INPUT_DEFAULTS,
   VIEWER_CONFIG,
   MASK_CONFIG,
   BET_DEFAULTS,

@@ -406,6 +406,59 @@ input[type="range"]:disabled::-moz-range-thumb {
   opacity: 0;
 }
 
+/* Input Mode Tabs */
+.input-mode-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: var(--space-sm);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  border: 1px solid var(--color-border);
+}
+
+.input-mode-tab {
+  flex: 1;
+  padding: 5px 4px;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.input-mode-tab:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.input-mode-tab.active {
+  color: var(--color-text);
+  background: var(--color-primary);
+  font-weight: 600;
+}
+
+/* Input mode content visibility */
+.input-mode-content {
+  display: none;
+}
+
+.input-mode-content.active {
+  display: block;
+}
+
+/* Optional label styling */
+.optional-label {
+  font-weight: 400;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 /* File Upload */
 .file-upload-group {
   margin-bottom: var(--space-sm);
@@ -796,6 +849,28 @@ select {
 .section-disabled .section-content select {
   cursor: not-allowed;
 }
+
+/* Mask divider ("or generate from magnitude") */
+.mask-divider {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  margin: var(--space-sm) 0;
+  position: relative;
+}
+
+.mask-divider::before,
+.mask-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: calc(50% - 60px);
+  height: 1px;
+  background: var(--color-border);
+}
+
+.mask-divider::before { left: 0; }
+.mask-divider::after { right: 0; }
 
 /* Mask preview buttons */
 .mask-preview-buttons {

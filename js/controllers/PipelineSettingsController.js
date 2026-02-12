@@ -8,7 +8,16 @@
 export class PipelineSettingsController {
   constructor(modalElement) {
     this.modal = modalElement;
+    this.inputMode = 'raw'; // 'raw', 'totalField', or 'localField'
     this._setupEventListeners();
+  }
+
+  /**
+   * Set the current input mode - controls which pipeline sections are visible
+   * @param {string} mode - 'raw', 'totalField', or 'localField'
+   */
+  setInputMode(mode) {
+    this.inputMode = mode;
   }
 
   /**
@@ -16,8 +25,10 @@ export class PipelineSettingsController {
    * @param {Object} settings - Current pipeline settings
    * @param {Object} defaults - Voxel-based default values
    * @param {number} nEchoes - Number of echo files loaded
+   * @param {boolean} hasMagnitude - Whether magnitude data is available
    */
-  open(settings, defaults, nEchoes) {
+  open(settings, defaults, nEchoes, hasMagnitude = true) {
+    this.hasMagnitude = hasMagnitude;
     this._populateForm(settings, defaults);
     this.updateVisibility(nEchoes);
     this.modal.classList.add('active');
@@ -321,6 +332,11 @@ export class PipelineSettingsController {
    * @param {number} nEchoes - Number of echo files loaded
    */
   updateVisibility(nEchoes) {
+    const isRawMode = this.inputMode === 'raw';
+    const isTotalFieldMode = this.inputMode === 'totalField';
+    const isLocalFieldMode = this.inputMode === 'localField';
+    const isFieldMapMode = isTotalFieldMode || isLocalFieldMode;
+
     const combinedMethod = this._getEl('combinedMethod');
     const phaseOffsetMethod = this._getEl('phaseOffsetMethod') || 'mcpc3ds';
     const isTgv = combinedMethod === 'tgv';
@@ -329,42 +345,62 @@ export class PipelineSettingsController {
     const isMcpc3ds = phaseOffsetMethod === 'mcpc3ds';
     const isMultiEcho = nEchoes > 1;
 
-    // TGV settings - show only when TGV selected
+    // Combined method selector - available in all modes
+    const combinedMethodGroup = document.getElementById('combinedMethod')?.closest('.param-group');
+    if (combinedMethodGroup) combinedMethodGroup.style.display = '';
+
+    // TGV settings - show when TGV selected in any mode
     this._showEl('tgvSettings', isTgv);
 
-    // QSMART settings - show only when QSMART selected
+    // QSMART settings - show when QSMART selected in any mode
     this._showEl('qsmartSettings', isQsmart);
 
-    // Multi-echo section - always visible, but disabled when single-echo
-    this._disableSection('multiEchoSection', !isMultiEcho, 'Requires multi-echo data');
+    // Multi-echo section - only in raw mode
+    const multiEchoSectionEl = document.getElementById('multiEchoSection');
+    if (multiEchoSectionEl) {
+      multiEchoSectionEl.style.display = isRawMode ? '' : 'none';
+      if (isRawMode) {
+        this._disableSection('multiEchoSection', !isMultiEcho, 'Requires multi-echo data');
+      }
+    }
 
-    // MCPC-3D-S settings and unwrap locking
-    this._showEl('mcpc3dsSettings', isMcpc3ds);
-    this._disableEl('unwrapMethod', isMcpc3ds);
-    if (isMcpc3ds) this._setEl('unwrapMethod', 'romeo');
-    this._showEl('unwrapLockedHint', isMcpc3ds);
+    // MCPC-3D-S settings and unwrap locking (raw mode only)
+    this._showEl('mcpc3dsSettings', isMcpc3ds && isRawMode);
+    if (isRawMode) {
+      this._disableEl('unwrapMethod', isMcpc3ds);
+      if (isMcpc3ds) this._setEl('unwrapMethod', 'romeo');
+      this._showEl('unwrapLockedHint', isMcpc3ds);
+    }
 
-    // Unwrap settings visibility
+    // Unwrap settings visibility (raw mode only)
     const currentUnwrapMethod = this._getEl('unwrapMethod') || 'romeo';
-    this._showEl('romeoSettings', currentUnwrapMethod === 'romeo');
-    this._showEl('laplacianSettings', currentUnwrapMethod === 'laplacian');
+    this._showEl('romeoSettings', currentUnwrapMethod === 'romeo' && isRawMode);
+    this._showEl('laplacianSettings', currentUnwrapMethod === 'laplacian' && isRawMode);
 
-    // Field calculation settings visibility
+    // Field calculation settings visibility (raw mode only)
     const fieldCalcMethod = this._getEl('fieldCalculationMethod') || 'weighted_avg';
-    this._showEl('weightedAvgSettings', fieldCalcMethod === 'weighted_avg');
-    this._showEl('linearFitSettings', fieldCalcMethod === 'linear_fit');
+    this._showEl('weightedAvgSettings', fieldCalcMethod === 'weighted_avg' && isRawMode);
+    this._showEl('linearFitSettings', fieldCalcMethod === 'linear_fit' && isRawMode);
 
-    // Single-echo unwrap section - show only for single-echo + standard pipeline
-    this._showEl('singleEchoUnwrapSection', !isMultiEcho && !isCombined);
+    // Single-echo unwrap section - show only for single-echo + standard pipeline + raw mode
+    this._showEl('singleEchoUnwrapSection', !isMultiEcho && !isCombined && isRawMode);
 
-    // Background removal and dipole inversion - show only for standard pipeline
-    this._showEl('bgRemovalSection', !isCombined);
-    this._showEl('dipoleInversionSection', !isCombined);
+    // Background removal - show for:
+    // - Raw mode standard pipeline (not TGV/QSMART)
+    // - Total field standard pipeline
+    // - Total field + QSMART (QSMART uses SDF for total field)
+    // NOT shown for: TGV (handles BG removal internally), local field, raw+QSMART (handled internally)
+    const showBgRemoval = (!isCombined && isRawMode) || (isTotalFieldMode && !isTgv && !isQsmart);
+    this._showEl('bgRemovalSection', showBgRemoval);
+
+    // Dipole inversion - show for standard pipeline only (TGV/QSMART handle inversion internally)
+    const showDipoleInversion = (!isCombined && isRawMode) || (!isCombined && isFieldMapMode);
+    this._showEl('dipoleInversionSection', showDipoleInversion);
 
     // Check if MEDI with SMV is enabled - if so, disable background removal
     const dipoleMethod = this._getEl('dipoleMethod');
     const mediSmvEnabled = this._getChecked('mediSmv');
-    const bgDisabledByMediSmv = dipoleMethod === 'medi' && mediSmvEnabled && !isCombined;
+    const bgDisabledByMediSmv = dipoleMethod === 'medi' && mediSmvEnabled && showBgRemoval;
 
     this._showEl('bgRemovalDisabledHint', bgDisabledByMediSmv);
 
@@ -376,6 +412,54 @@ export class PipelineSettingsController {
         input.disabled = bgDisabledByMediSmv;
       });
       bgSection.style.opacity = bgDisabledByMediSmv ? '0.5' : '1';
+    }
+
+    // Disable magnitude-dependent features when no magnitude is available
+    const noMag = this.hasMagnitude === false;
+
+    // QSMART option in combined method dropdown
+    const combinedSelect = document.getElementById('combinedMethod');
+    if (combinedSelect) {
+      const qsmartOpt = combinedSelect.querySelector('option[value="qsmart"]');
+      if (qsmartOpt) qsmartOpt.disabled = noMag;
+      // Force away from QSMART if selected without magnitude
+      if (noMag && combinedSelect.value === 'qsmart') {
+        combinedSelect.value = 'none';
+        this._onCombinedMethodChange();
+      }
+    }
+
+    // MEDI option in dipole inversion dropdown
+    const dipoleSelect = document.getElementById('dipoleMethod');
+    if (dipoleSelect) {
+      const mediOpt = dipoleSelect.querySelector('option[value="medi"]');
+      if (mediOpt) mediOpt.disabled = noMag;
+      // Force away from MEDI if selected without magnitude
+      if (noMag && dipoleSelect.value === 'medi') {
+        dipoleSelect.value = 'rts';
+        this._showEl('mediSettings', false);
+        this._showEl('rtsSettings', true);
+      }
+    }
+
+    // ROMEO magnitude weight checkboxes (safety net - raw mode always has magnitude)
+    const romeoMagCoh = document.getElementById('romeoMagCoherence');
+    const romeoMagWt = document.getElementById('romeoMagWeight');
+    const singleRomeoMagCoh = document.getElementById('singleEchoRomeoMagCoherence');
+    const singleRomeoMagWt = document.getElementById('singleEchoRomeoMagWeight');
+    if (romeoMagCoh) romeoMagCoh.disabled = noMag;
+    if (romeoMagWt) romeoMagWt.disabled = noMag;
+    if (singleRomeoMagCoh) singleRomeoMagCoh.disabled = noMag;
+    if (singleRomeoMagWt) singleRomeoMagWt.disabled = noMag;
+
+    // B0 weight phase_snr option (uses magnitude SNR)
+    const b0WeightSelect = document.getElementById('b0WeightType');
+    if (b0WeightSelect) {
+      const phaseSNROpt = b0WeightSelect.querySelector('option[value="phase_snr"]');
+      if (phaseSNROpt) phaseSNROpt.disabled = noMag;
+      if (noMag && b0WeightSelect.value === 'phase_snr') {
+        b0WeightSelect.value = 'equal';
+      }
     }
   }
 
