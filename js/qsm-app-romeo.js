@@ -359,6 +359,9 @@ class QSMApp {
     // Preview buttons for field map modes
     document.getElementById('vis_totalField')?.addEventListener('click', () => this.visualizeFieldMap('totalField'));
     document.getElementById('vis_localField')?.addEventListener('click', () => this.visualizeFieldMap('localField'));
+    document.getElementById('vis_magnitudeTF')?.addEventListener('click', () => this.visualizeFieldMapMagnitude('magnitudeTF'));
+    document.getElementById('vis_magnitudeLF')?.addEventListener('click', () => this.visualizeFieldMapMagnitude('magnitudeLF'));
+    document.getElementById('vis_mask')?.addEventListener('click', () => this.visualizeMaskFile());
 
     // Processing buttons
     document.getElementById('openPipelineSettings').addEventListener('click', () => this.openPipelineSettingsModal());
@@ -554,6 +557,10 @@ class QSMApp {
 
     // Handle magnitude files in field map modes
     if (type === 'magnitudeTF' || type === 'magnitudeLF') {
+      const hasMag = this.fileIOController.hasFieldMapMagnitude();
+      const btnId = type === 'magnitudeTF' ? 'vis_magnitudeTF' : 'vis_magnitudeLF';
+      const btn = document.getElementById(btnId);
+      if (btn) btn.disabled = !hasMag;
       this.updateMagnitudePrepSection();
       this.updateMaskInputSourceOptions();
       this.updateMaskSectionState();
@@ -562,6 +569,9 @@ class QSMApp {
 
     // Handle centralized mask file
     if (type === 'mask') {
+      const hasMask = this.fileIOController.hasMask();
+      const btn = document.getElementById('vis_mask');
+      if (btn) btn.disabled = !hasMask;
       this.updateMaskSectionState();
       this.updateEchoInfo();
     }
@@ -635,9 +645,13 @@ class QSMApp {
     if (mode === 'totalField') {
       const hasFile = this.fileIOController.getTotalFieldFile() !== null;
       document.getElementById('vis_totalField').disabled = !hasFile;
+      const hasMag = this.fileIOController.hasFieldMapMagnitude();
+      document.getElementById('vis_magnitudeTF').disabled = !hasMag;
     } else if (mode === 'localField') {
       const hasFile = this.fileIOController.getLocalFieldFile() !== null;
       document.getElementById('vis_localField').disabled = !hasFile;
+      const hasMag = this.fileIOController.hasFieldMapMagnitude();
+      document.getElementById('vis_magnitudeLF').disabled = !hasMag;
     }
   }
 
@@ -759,6 +773,22 @@ class QSMApp {
 
     const label = type === 'totalField' ? 'Total Field Map' : 'Local Field Map';
     await this.loadAndVisualizeFile(file, label);
+    this.hideEchoNavigation();
+  }
+
+  async visualizeFieldMapMagnitude(type) {
+    const file = this.fileIOController.getFieldMapMagnitudeFile();
+    if (!file) return;
+
+    await this.loadAndVisualizeFile(file, 'Magnitude');
+    this.hideEchoNavigation();
+  }
+
+  async visualizeMaskFile() {
+    const file = this.fileIOController.getMaskFile();
+    if (!file) return;
+
+    await this.loadAndVisualizeFile(file, 'Mask');
     this.hideEchoNavigation();
   }
 

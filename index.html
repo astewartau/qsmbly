@@ -160,6 +160,12 @@
         <div class="file-upload-group">
           <div class="file-upload-header">
             <label class="file-upload-label">Magnitude <span class="optional-label">(optional)</span></label>
+            <button class="btn-icon btn-preview" id="vis_magnitudeTF" title="Preview magnitude" disabled>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
           </div>
           <div class="upload-group">
             <div class="file-upload-zone file-drop" id="magnitudeTFDrop">
@@ -204,6 +210,12 @@
         <div class="file-upload-group">
           <div class="file-upload-header">
             <label class="file-upload-label">Magnitude <span class="optional-label">(optional)</span></label>
+            <button class="btn-icon btn-preview" id="vis_magnitudeLF" title="Preview magnitude" disabled>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
           </div>
           <div class="upload-group">
             <div class="file-upload-zone file-drop" id="magnitudeLFDrop">
@@ -323,7 +335,15 @@
         <div class="section-content">
         <!-- Direct mask file upload -->
         <div class="param-group" id="maskUploadGroup">
-          <label class="param-label">Upload Mask <span class="optional-label">(optional)</span></label>
+          <div class="file-upload-header">
+            <label class="param-label">Upload Mask <span class="optional-label">(optional)</span></label>
+            <button class="btn-icon btn-preview" id="vis_mask" title="Preview mask" disabled>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
           <div class="upload-group compact">
             <div class="file-upload-zone file-drop compact" id="maskDrop">
               <input type="file" id="maskFiles" accept=".nii,.nii.gz">
