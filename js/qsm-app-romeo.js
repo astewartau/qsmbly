@@ -138,6 +138,7 @@ class QSMApp {
     await this.setupViewer();
     this.setupUIControls();
     this.setupEventListeners();
+    this.syncSidebarFromSettings();
     this.updateDownloadButtons();
 
     // Initialize file lists via controller
@@ -363,6 +364,9 @@ class QSMApp {
     document.getElementById('vis_magnitudeLF')?.addEventListener('click', () => this.visualizeFieldMapMagnitude('magnitudeLF'));
     document.getElementById('vis_mask')?.addEventListener('click', () => this.visualizeMaskFile());
 
+    // Sidebar pipeline dropdowns
+    this.setupSidebarDropdownListeners();
+
     // Processing buttons
     document.getElementById('openPipelineSettings').addEventListener('click', () => this.openPipelineSettingsModal());
     document.getElementById('cancelPipeline')?.addEventListener('click', () => this.cancelPipeline());
@@ -565,6 +569,7 @@ class QSMApp {
       this.updateMaskInputSourceOptions();
       this.updateMaskSectionState();
       this.updatePrepareButtonState();
+      this.updateSidebarDropdownVisibility();
     }
 
     // Handle centralized mask file
@@ -598,6 +603,7 @@ class QSMApp {
     this.updateMaskInputSourceOptions();
     this.updatePrepareButtonState();
     this.updateMaskSectionState();
+    this.updateSidebarDropdownVisibility();
 
     if (files.length > 0) {
       this.visualizeMagnitude();
@@ -606,6 +612,85 @@ class QSMApp {
 
   _onPhaseFilesChanged(files) {
     document.getElementById('vis_phase').disabled = files.length === 0;
+  }
+
+  // ==================== Sidebar Pipeline Dropdowns ====================
+
+  setupSidebarDropdownListeners() {
+    const mappings = [
+      { id: 'sidebarCombinedMethod', key: 'combinedMethod' },
+      { id: 'sidebarUnwrapMethod', key: 'unwrapMethod' },
+      { id: 'sidebarBgRemovalMethod', key: 'backgroundRemoval' },
+      { id: 'sidebarDipoleMethod', key: 'dipoleInversion' }
+    ];
+
+    for (const { id, key } of mappings) {
+      document.getElementById(id)?.addEventListener('change', (e) => {
+        this.pipelineSettings[key] = e.target.value;
+        this.updateSidebarDropdownVisibility();
+        this.updateInputParamsVisibility();
+        this.updateEchoInfo();
+      });
+    }
+  }
+
+  updateSidebarDropdownVisibility() {
+    const mode = this.fileIOController?.getInputMode() || 'raw';
+    const isRaw = mode === 'raw';
+    const isTotalField = mode === 'totalField';
+    const combined = this.pipelineSettings?.combinedMethod || 'none';
+    const isStandard = combined === 'none';
+
+    // Phase unwrapping: raw mode + standard pipeline only
+    const unwrapGroup = document.getElementById('sidebarUnwrapGroup');
+    if (unwrapGroup) unwrapGroup.style.display = (isRaw && isStandard) ? '' : 'none';
+
+    // Background removal: (raw + standard) or (totalField + standard)
+    const bgGroup = document.getElementById('sidebarBgRemovalGroup');
+    if (bgGroup) bgGroup.style.display = ((isRaw || isTotalField) && isStandard) ? '' : 'none';
+
+    // Dipole inversion: standard pipeline, any mode
+    const dipoleGroup = document.getElementById('sidebarDipoleGroup');
+    if (dipoleGroup) dipoleGroup.style.display = isStandard ? '' : 'none';
+
+    // Magnitude gating: disable QSMART and MEDI when no magnitude
+    const hasMagnitude = isRaw
+      ? (this.multiEchoFiles?.magnitude?.length > 0)
+      : (this.fileIOController?.hasFieldMapMagnitude() || this.preparedMagnitudeData !== null);
+    const noMag = !hasMagnitude;
+
+    const combinedSelect = document.getElementById('sidebarCombinedMethod');
+    if (combinedSelect) {
+      const qsmartOpt = combinedSelect.querySelector('option[value="qsmart"]');
+      if (qsmartOpt) qsmartOpt.disabled = noMag;
+      if (noMag && combinedSelect.value === 'qsmart') {
+        combinedSelect.value = 'none';
+        this.pipelineSettings.combinedMethod = 'none';
+      }
+    }
+
+    const dipoleSelect = document.getElementById('sidebarDipoleMethod');
+    if (dipoleSelect) {
+      const mediOpt = dipoleSelect.querySelector('option[value="medi"]');
+      if (mediOpt) mediOpt.disabled = noMag;
+      if (noMag && dipoleSelect.value === 'medi') {
+        dipoleSelect.value = 'rts';
+        this.pipelineSettings.dipoleInversion = 'rts';
+      }
+    }
+  }
+
+  syncSidebarFromSettings() {
+    const s = this.pipelineSettings;
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    };
+    set('sidebarCombinedMethod', s?.combinedMethod || 'none');
+    set('sidebarUnwrapMethod', s?.unwrapMethod || 'romeo');
+    set('sidebarBgRemovalMethod', s?.backgroundRemoval || 'vsharp');
+    set('sidebarDipoleMethod', s?.dipoleInversion || 'tv');
+    this.updateSidebarDropdownVisibility();
   }
 
   // ==================== Input Mode Switching ====================
@@ -634,6 +719,9 @@ class QSMApp {
     if (this.pipelineSettingsController) {
       this.pipelineSettingsController.setInputMode(mode);
     }
+
+    // Update sidebar pipeline dropdowns visibility
+    this.updateSidebarDropdownVisibility();
 
     // Update sidebar pipeline section labels
     this.updatePipelineSectionForMode(mode);
@@ -2058,7 +2146,8 @@ class QSMApp {
     const nEchoes = this.multiEchoFiles?.phase?.filter(f => f.file)?.length || 0;
     this.pipelineSettings = this.pipelineSettingsController.save(nEchoes);
     this.closePipelineSettingsModal();
-    // Combined method may affect which input params are visible and run button state
+    // Sync sidebar dropdowns and update visibility
+    this.syncSidebarFromSettings();
     this.updateInputParamsVisibility();
     this.updateEchoInfo();
   }

@@ -630,6 +630,11 @@ input[type="range"]:disabled::-moz-range-thumb {
   margin-bottom: 0;
 }
 
+/* Sidebar pipeline dropdowns */
+#sidebarPipelineDropdowns {
+  margin-bottom: var(--space-sm);
+}
+
 .param-label {
   display: block;
   font-size: 0.8rem;

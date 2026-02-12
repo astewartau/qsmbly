@@ -460,12 +460,54 @@
           QSM Pipeline
         </h2>
         <div class="section-content">
+          <div id="sidebarPipelineDropdowns">
+            <div class="param-group" id="sidebarMethodGroup">
+              <label class="param-label">Pipeline</label>
+              <select id="sidebarCombinedMethod">
+                <option value="none" selected>Standard</option>
+                <option value="tgv">TGV</option>
+                <option value="qsmart">QSMART</option>
+              </select>
+            </div>
+            <div class="param-group" id="sidebarUnwrapGroup">
+              <label class="param-label">Phase Unwrapping</label>
+              <select id="sidebarUnwrapMethod">
+                <option value="romeo" selected>ROMEO</option>
+                <option value="laplacian">Laplacian</option>
+              </select>
+            </div>
+            <div class="param-group" id="sidebarBgRemovalGroup">
+              <label class="param-label">Background Removal</label>
+              <select id="sidebarBgRemovalMethod">
+                <option value="vsharp" selected>V-SHARP</option>
+                <option value="sharp">SHARP</option>
+                <option value="smv">SMV</option>
+                <option value="ismv">iSMV</option>
+                <option value="pdf">PDF</option>
+                <option value="lbv">LBV</option>
+              </select>
+            </div>
+            <div class="param-group" id="sidebarDipoleGroup">
+              <label class="param-label">Dipole Inversion</label>
+              <select id="sidebarDipoleMethod">
+                <option value="tkd">TKD</option>
+                <option value="tsvd">TSVD</option>
+                <option value="tikhonov">Tikhonov</option>
+                <option value="tv" selected>TV-ADMM</option>
+                <option value="rts">RTS</option>
+                <option value="nltv">NLTV</option>
+                <option value="medi">MEDI</option>
+                <option value="ilsqr">iLSQR</option>
+              </select>
+            </div>
+          </div>
           <div style="display: flex; gap: 8px;">
             <button class="btn btn-secondary" id="openPipelineSettings" style="flex: 1;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="3"/>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
               </svg>
+              Advanced
             </button>
             <button class="btn btn-primary" id="runPipelineSidebar" style="flex: 3;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
