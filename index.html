@@ -292,7 +292,7 @@
       </section>
 
       <!-- Magnitude Preparation Section -->
-      <section class="sidebar-section section-disabled collapsed" id="magnitudePrepSection">
+      <section class="sidebar-section collapsed" id="magnitudePrepSection">
         <h2 class="section-title" onclick="toggleSection(this.parentElement)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
@@ -835,8 +835,8 @@
               <option value="romeo" selected>ROMEO (Rapid Opensource Minimum Spanning TreE AlgOrithm)</option>
               <option value="laplacian">Laplacian</option>
             </select>
-            <div id="unwrapLockedHint" class="param-hint" style="display: none; color: var(--color-text-muted); font-style: italic;">
-              Locked to ROMEO (required by MCPC-3D-S)
+            <div id="unwrapLockedHint" class="validation-message error inline-warning" style="display: none;">
+              <span>Requires ROMEO unwrapping</span>
             </div>
           </div>
 
@@ -943,8 +943,8 @@
         <!-- Background Removal -->
         <div class="settings-section" id="bgRemovalSection">
           <h4>Background Removal</h4>
-          <div id="bgRemovalDisabledHint" class="param-hint" style="display: none; margin-bottom: var(--space-sm); color: var(--color-text-muted); font-style: italic;">
-            Disabled — MEDI with SMV preprocessing handles background removal internally using differential form (avoids deconvolution artifacts).
+          <div id="bgRemovalDisabledHint" class="validation-message error inline-warning" style="display: none;">
+            <span>Overridden by MEDI with SMV</span>
           </div>
           <div class="param-group">
             <label class="param-label" for="bgRemovalMethod">Method</label>
@@ -1818,15 +1818,12 @@
       // Show/hide MCPC-3D-S settings
       mcpc3dsSettings.style.display = isMcpc3ds ? 'block' : 'none';
 
-      // Lock unwrap method to ROMEO when MCPC-3D-S is selected
+      // Auto-set unwrap to ROMEO when MCPC-3D-S is selected
       if (isMcpc3ds) {
         unwrapMethod.value = 'romeo';
-        unwrapMethod.disabled = true;
-        unwrapLockedHint.style.display = 'block';
-      } else {
-        unwrapMethod.disabled = false;
-        unwrapLockedHint.style.display = 'none';
       }
+      // Show error only when MCPC-3D-S + non-ROMEO
+      unwrapLockedHint.style.display = (isMcpc3ds && unwrapMethod.value !== 'romeo') ? 'flex' : 'none';
 
       updateUnwrapUI();
     }

@@ -843,17 +843,7 @@ select {
   flex: 0 0 auto;
 }
 
-/* Disabled section state */
-.section-disabled .section-content {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-.section-disabled .section-content .btn,
-.section-disabled .section-content input,
-.section-disabled .section-content select {
-  cursor: not-allowed;
-}
+/* Section-disabled is now inert — warnings are shown via JS instead of greying out */
 
 /* Mask divider ("or generate from magnitude") */
 .mask-divider {
@@ -1253,11 +1243,23 @@ select {
   color: var(--color-success);
 }
 
+.validation-message.info {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--color-primary);
+}
+
 .validation-message svg {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
   margin-top: 1px;
+}
+
+.validation-message.inline-warning {
+  margin-top: var(--space-xs);
+  margin-bottom: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 0.7rem;
 }
 
 /* Slice Type Buttons */

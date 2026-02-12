@@ -569,7 +569,7 @@ class QSMApp {
       this.updateMaskInputSourceOptions();
       this.updateMaskSectionState();
       this.updatePrepareButtonState();
-      this.updateSidebarDropdownVisibility();
+      this.updateSidebarDropdownVisibility(true);
     }
 
     // Handle centralized mask file
@@ -603,7 +603,7 @@ class QSMApp {
     this.updateMaskInputSourceOptions();
     this.updatePrepareButtonState();
     this.updateMaskSectionState();
-    this.updateSidebarDropdownVisibility();
+    this.updateSidebarDropdownVisibility(true);
 
     if (files.length > 0) {
       this.visualizeMagnitude();
@@ -634,7 +634,7 @@ class QSMApp {
     }
   }
 
-  updateSidebarDropdownVisibility() {
+  updateSidebarDropdownVisibility(autoCorrect = false) {
     const mode = this.fileIOController?.getInputMode() || 'raw';
     const isRaw = mode === 'raw';
     const isTotalField = mode === 'totalField';
@@ -653,30 +653,54 @@ class QSMApp {
     const dipoleGroup = document.getElementById('sidebarDipoleGroup');
     if (dipoleGroup) dipoleGroup.style.display = isStandard ? '' : 'none';
 
-    // Magnitude gating: disable QSMART and MEDI when no magnitude
+    // Magnitude gating
     const hasMagnitude = isRaw
       ? (this.multiEchoFiles?.magnitude?.length > 0)
       : (this.fileIOController?.hasFieldMapMagnitude() || this.preparedMagnitudeData !== null);
     const noMag = !hasMagnitude;
 
+    // Auto-correct to safe defaults when data changes
     const combinedSelect = document.getElementById('sidebarCombinedMethod');
     if (combinedSelect) {
-      const qsmartOpt = combinedSelect.querySelector('option[value="qsmart"]');
-      if (qsmartOpt) qsmartOpt.disabled = noMag;
-      if (noMag && combinedSelect.value === 'qsmart') {
+      if (autoCorrect && noMag && combinedSelect.value === 'qsmart') {
         combinedSelect.value = 'none';
         this.pipelineSettings.combinedMethod = 'none';
       }
+      this._showSidebarWarning('sidebarCombinedMethod', 'sidebarCombinedWarning',
+        noMag && combinedSelect.value === 'qsmart',
+        'Requires magnitude');
     }
 
     const dipoleSelect = document.getElementById('sidebarDipoleMethod');
     if (dipoleSelect) {
-      const mediOpt = dipoleSelect.querySelector('option[value="medi"]');
-      if (mediOpt) mediOpt.disabled = noMag;
-      if (noMag && dipoleSelect.value === 'medi') {
+      if (autoCorrect && noMag && dipoleSelect.value === 'medi') {
         dipoleSelect.value = 'rts';
         this.pipelineSettings.dipoleInversion = 'rts';
       }
+      this._showSidebarWarning('sidebarDipoleMethod', 'sidebarDipoleWarning',
+        noMag && dipoleSelect.value === 'medi',
+        'Requires magnitude');
+    }
+  }
+
+  _showSidebarWarning(anchorId, warningId, show, message) {
+    let warning = document.getElementById(warningId);
+    const anchor = document.getElementById(anchorId);
+
+    if (show) {
+      if (!warning && anchor) {
+        warning = document.createElement('div');
+        warning.id = warningId;
+        warning.className = 'validation-message error inline-warning';
+        warning.innerHTML = '<span></span>';
+        anchor.parentNode.insertBefore(warning, anchor.nextSibling);
+      }
+      if (warning) {
+        warning.querySelector('span').textContent = message;
+        warning.style.display = 'flex';
+      }
+    } else if (warning) {
+      warning.style.display = 'none';
     }
   }
 
@@ -720,8 +744,8 @@ class QSMApp {
       this.pipelineSettingsController.setInputMode(mode);
     }
 
-    // Update sidebar pipeline dropdowns visibility
-    this.updateSidebarDropdownVisibility();
+    // Update sidebar pipeline dropdowns visibility (auto-correct for new mode)
+    this.updateSidebarDropdownVisibility(true);
 
     // Update sidebar pipeline section labels
     this.updatePipelineSectionForMode(mode);
@@ -776,7 +800,25 @@ class QSMApp {
       hasMag = this.fileIOController.hasFieldMapMagnitude();
     }
 
-    section.classList.toggle('section-disabled', !hasMag);
+    // Show/hide inline warning instead of greying out
+    let warning = document.getElementById('magnitudePrepWarning');
+    if (!hasMag) {
+      if (!warning) {
+        warning = document.createElement('div');
+        warning.id = 'magnitudePrepWarning';
+        warning.className = 'validation-message error inline-warning';
+        warning.innerHTML = '<span>Requires magnitude</span>';
+        const content = section.querySelector('.section-content');
+        if (content) content.prepend(warning);
+      }
+      warning.style.display = 'flex';
+    } else if (warning) {
+      warning.style.display = 'none';
+    }
+
+    // Keep the Prepare button individually disabled when no magnitude (it's an action, not a setting)
+    const prepareBtn = document.getElementById('prepareMaskInput');
+    if (prepareBtn) prepareBtn.disabled = !hasMag;
   }
 
   updateMaskSectionState() {
@@ -786,16 +828,14 @@ class QSMApp {
     const hasMaskFile = this.fileIOController.hasMask();
     const hasPrepared = this.maskPrepSettings.prepared;
 
-    // Masking section is always enabled (user can always upload a mask file)
-    section.classList.remove('section-disabled');
-
     // Show/hide the "or generate from magnitude" divider
     const divider = document.getElementById('maskDivider');
     if (divider) {
       divider.style.display = hasPrepared ? '' : 'none';
     }
 
-    // When mask file uploaded: disable Threshold/BET generation controls
+    // When mask file uploaded: disable Threshold/BET generation controls + show info note
+    const maskFileNote = document.getElementById('maskFileUploadedNote');
     if (hasMaskFile) {
       const generateButtons = document.getElementById('maskGenerateButtons');
       if (generateButtons) generateButtons.style.opacity = '0.5';
@@ -804,12 +844,26 @@ class QSMApp {
       document.getElementById('maskThreshold')?.setAttribute('disabled', '');
       const maskOps = document.getElementById('maskOperations');
       if (maskOps) maskOps.style.display = 'none';
-    } else if (hasPrepared) {
-      // Magnitude prepared: enable generation controls
-      const generateButtons = document.getElementById('maskGenerateButtons');
-      if (generateButtons) generateButtons.style.opacity = '1';
-      document.getElementById('previewMask')?.removeAttribute('disabled');
-      document.getElementById('runBET')?.removeAttribute('disabled');
+      // Show info note
+      if (!maskFileNote) {
+        const note = document.createElement('div');
+        note.id = 'maskFileUploadedNote';
+        note.className = 'validation-message info inline-warning';
+        note.innerHTML = '<span>Using uploaded mask file. Remove it to use generated masks.</span>';
+        const generateBtns = document.getElementById('maskGenerateButtons');
+        if (generateBtns) generateBtns.parentNode.insertBefore(note, generateBtns.nextSibling);
+      } else {
+        maskFileNote.style.display = 'flex';
+      }
+    } else {
+      if (maskFileNote) maskFileNote.style.display = 'none';
+      if (hasPrepared) {
+        // Magnitude prepared: enable generation controls
+        const generateButtons = document.getElementById('maskGenerateButtons');
+        if (generateButtons) generateButtons.style.opacity = '1';
+        document.getElementById('previewMask')?.removeAttribute('disabled');
+        document.getElementById('runBET')?.removeAttribute('disabled');
+      }
     }
   }
 
@@ -829,6 +883,7 @@ class QSMApp {
     const combinedOption = select.querySelector('option[value="combined"]');
     if (combinedOption) {
       combinedOption.disabled = magCount <= 1;
+      combinedOption.title = magCount <= 1 ? 'Requires 2+ magnitude files for RSS combination' : '';
       // Force to first_echo if combined was selected but only 1 file
       if (magCount <= 1 && select.value === 'combined') {
         select.value = 'first_echo';

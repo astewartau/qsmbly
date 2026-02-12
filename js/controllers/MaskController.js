@@ -839,12 +839,6 @@ export class MaskController {
       this.updateOutput("Starting BET brain extraction...");
       this.setProgress(0.05, 'Initializing BET...');
 
-      // Enable pipeline section during BET
-      const pipelineSection = document.getElementById('pipelineSection');
-      if (pipelineSection) {
-        pipelineSection.classList.remove('section-disabled');
-      }
-
       // Initialize worker if needed (must await to ensure WASM is loaded)
       await this.initializeWorker();
 

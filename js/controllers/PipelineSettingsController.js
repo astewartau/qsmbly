@@ -77,10 +77,10 @@ export class PipelineSettingsController {
     this._setEl('mcpc3dsSigmaY', 10);
     this._setEl('mcpc3dsSigmaZ', 5);
 
-    // Unwrap method (locked to ROMEO when MCPC-3D-S)
+    // Unwrap method (auto-set to ROMEO when MCPC-3D-S — no error since they match)
     this._setEl('unwrapMethod', 'romeo');
-    this._disableEl('unwrapMethod', true);
-    this._showEl('unwrapLockedHint', true);
+    const resetHint = document.getElementById('unwrapLockedHint');
+    if (resetHint) resetHint.style.display = 'none';
     this._showEl('romeoSettings', true);
     this._showEl('laplacianSettings', false);
 
@@ -196,8 +196,10 @@ export class PipelineSettingsController {
     const isMultiEcho = nEchoes > 1;
 
     // Get unwrap method from appropriate dropdown based on echo count
+    // Auto-correct: MCPC-3D-S requires ROMEO regardless of dropdown value
+    const phaseOffset = this._getEl('phaseOffsetMethod') || 'mcpc3ds';
     const unwrapMethod = isMultiEcho
-      ? this._getEl('unwrapMethod')
+      ? (phaseOffset === 'mcpc3ds' ? 'romeo' : this._getEl('unwrapMethod'))
       : this._getEl('singleEchoUnwrapMethod');
 
     // Get ROMEO weight settings from checkboxes
@@ -355,21 +357,21 @@ export class PipelineSettingsController {
     // QSMART settings - show when QSMART selected in any mode
     this._showEl('qsmartSettings', isQsmart);
 
-    // Multi-echo section - only in raw mode
+    // Multi-echo section - only in raw mode with multi-echo data
+    // (single-echo has its own separate unwrap section, so hide this to avoid duplication)
     const multiEchoSectionEl = document.getElementById('multiEchoSection');
     if (multiEchoSectionEl) {
-      multiEchoSectionEl.style.display = isRawMode ? '' : 'none';
-      if (isRawMode) {
-        this._disableSection('multiEchoSection', !isMultiEcho, 'Requires multi-echo data');
-      }
+      multiEchoSectionEl.style.display = (isRawMode && isMultiEcho) ? '' : 'none';
     }
 
-    // MCPC-3D-S settings and unwrap locking (raw mode only)
+    // MCPC-3D-S settings and unwrap (raw mode only)
     this._showEl('mcpc3dsSettings', isMcpc3ds && isRawMode);
     if (isRawMode) {
-      this._disableEl('unwrapMethod', isMcpc3ds);
       if (isMcpc3ds) this._setEl('unwrapMethod', 'romeo');
-      this._showEl('unwrapLockedHint', isMcpc3ds);
+      // Show error only when MCPC-3D-S is active and unwrap is not ROMEO
+      const unwrapVal = this._getEl('unwrapMethod') || 'romeo';
+      const hint = document.getElementById('unwrapLockedHint');
+      if (hint) hint.style.display = (isMcpc3ds && unwrapVal !== 'romeo') ? 'flex' : 'none';
     }
 
     // Unwrap settings visibility (raw mode only)
@@ -397,69 +399,53 @@ export class PipelineSettingsController {
     const showDipoleInversion = (!isCombined && isRawMode) || (!isCombined && isFieldMapMode);
     this._showEl('dipoleInversionSection', showDipoleInversion);
 
-    // Check if MEDI with SMV is enabled - if so, disable background removal
+    // Check if MEDI with SMV is enabled - show error on background removal
     const dipoleMethod = this._getEl('dipoleMethod');
     const mediSmvEnabled = this._getChecked('mediSmv');
     const bgDisabledByMediSmv = dipoleMethod === 'medi' && mediSmvEnabled && showBgRemoval;
 
-    this._showEl('bgRemovalDisabledHint', bgDisabledByMediSmv);
+    const bgHint = document.getElementById('bgRemovalDisabledHint');
+    if (bgHint) bgHint.style.display = bgDisabledByMediSmv ? 'flex' : 'none';
 
-    // Disable/enable all inputs in background removal section
-    const bgSection = document.getElementById('bgRemovalSection');
-    if (bgSection) {
-      const inputs = bgSection.querySelectorAll('input, select');
-      inputs.forEach(input => {
-        input.disabled = bgDisabledByMediSmv;
-      });
-      bgSection.style.opacity = bgDisabledByMediSmv ? '0.5' : '1';
-    }
-
-    // Disable magnitude-dependent features when no magnitude is available
+    // Show errors for magnitude-dependent features when no magnitude is available
     const noMag = this.hasMagnitude === false;
 
     // QSMART option in combined method dropdown
     const combinedSelect = document.getElementById('combinedMethod');
     if (combinedSelect) {
-      const qsmartOpt = combinedSelect.querySelector('option[value="qsmart"]');
-      if (qsmartOpt) qsmartOpt.disabled = noMag;
-      // Force away from QSMART if selected without magnitude
-      if (noMag && combinedSelect.value === 'qsmart') {
-        combinedSelect.value = 'none';
-        this._onCombinedMethodChange();
-      }
+      this._showWarning('combinedMethod', 'combinedMethodWarning',
+        noMag && combinedSelect.value === 'qsmart',
+        'Requires magnitude', 'error');
     }
 
     // MEDI option in dipole inversion dropdown
     const dipoleSelect = document.getElementById('dipoleMethod');
     if (dipoleSelect) {
-      const mediOpt = dipoleSelect.querySelector('option[value="medi"]');
-      if (mediOpt) mediOpt.disabled = noMag;
-      // Force away from MEDI if selected without magnitude
-      if (noMag && dipoleSelect.value === 'medi') {
-        dipoleSelect.value = 'rts';
-        this._showEl('mediSettings', false);
-        this._showEl('rtsSettings', true);
-      }
+      this._showWarning('dipoleMethod', 'dipoleMethodWarning',
+        noMag && dipoleSelect.value === 'medi',
+        'Requires magnitude', 'error');
     }
 
-    // ROMEO magnitude weight checkboxes (safety net - raw mode always has magnitude)
+    // ROMEO magnitude weight checkboxes — multi-echo section
     const romeoMagCoh = document.getElementById('romeoMagCoherence');
     const romeoMagWt = document.getElementById('romeoMagWeight');
+    this._showWarning('romeoSettings', 'romeoMagWarning',
+      noMag && (romeoMagCoh?.checked || romeoMagWt?.checked),
+      'Requires magnitude', 'error');
+
+    // ROMEO magnitude weight checkboxes — single-echo section
     const singleRomeoMagCoh = document.getElementById('singleEchoRomeoMagCoherence');
     const singleRomeoMagWt = document.getElementById('singleEchoRomeoMagWeight');
-    if (romeoMagCoh) romeoMagCoh.disabled = noMag;
-    if (romeoMagWt) romeoMagWt.disabled = noMag;
-    if (singleRomeoMagCoh) singleRomeoMagCoh.disabled = noMag;
-    if (singleRomeoMagWt) singleRomeoMagWt.disabled = noMag;
+    this._showWarning('singleEchoRomeoSettings', 'singleEchoRomeoMagWarning',
+      noMag && (singleRomeoMagCoh?.checked || singleRomeoMagWt?.checked),
+      'Requires magnitude', 'error');
 
-    // B0 weight phase_snr option (uses magnitude SNR)
+    // B0 weight phase_snr option
     const b0WeightSelect = document.getElementById('b0WeightType');
     if (b0WeightSelect) {
-      const phaseSNROpt = b0WeightSelect.querySelector('option[value="phase_snr"]');
-      if (phaseSNROpt) phaseSNROpt.disabled = noMag;
-      if (noMag && b0WeightSelect.value === 'phase_snr') {
-        b0WeightSelect.value = 'equal';
-      }
+      this._showWarning('b0WeightType', 'b0WeightWarning',
+        noMag && b0WeightSelect.value === 'phase_snr',
+        'Requires magnitude', 'error');
     }
   }
 
@@ -490,10 +476,10 @@ export class PipelineSettingsController {
     this._setChecked('romeoMagCoherence', romeoSettings.magCoherence !== false);
     this._setChecked('romeoMagWeight', romeoSettings.magWeight !== false);
 
-    // Lock unwrap method when MCPC-3D-S is selected
+    // Show error only when MCPC-3D-S + non-ROMEO
     const isMcpc3ds = phaseOffsetMethod === 'mcpc3ds';
-    this._disableEl('unwrapMethod', isMcpc3ds);
-    this._showEl('unwrapLockedHint', isMcpc3ds);
+    const popHint = document.getElementById('unwrapLockedHint');
+    if (popHint) popHint.style.display = (isMcpc3ds && unwrapMethod !== 'romeo') ? 'flex' : 'none';
 
     // Single-echo unwrap method (sync with multi-echo settings)
     this._setEl('singleEchoUnwrapMethod', unwrapMethod);
@@ -614,6 +600,10 @@ export class PipelineSettingsController {
       const isRomeo = e.target.value === 'romeo';
       this._showEl('romeoSettings', isRomeo);
       this._showEl('laplacianSettings', !isRomeo);
+      // Show MCPC-3D-S incompatibility error if needed
+      const isMcpc3ds = this._getEl('phaseOffsetMethod') === 'mcpc3ds';
+      const hint = document.getElementById('unwrapLockedHint');
+      if (hint) hint.style.display = (isMcpc3ds && !isRomeo) ? 'flex' : 'none';
     });
 
     // Single-echo unwrap method dropdown
@@ -659,6 +649,11 @@ export class PipelineSettingsController {
     // Field calculation method dropdown
     this._on('fieldCalculationMethod', 'change', () => this._onCombinedMethodChange());
 
+    // ROMEO magnitude weight checkboxes - re-evaluate warnings on change
+    ['romeoMagCoherence', 'romeoMagWeight', 'singleEchoRomeoMagCoherence', 'singleEchoRomeoMagWeight'].forEach(id => {
+      this._on(id, 'change', () => this._onCombinedMethodChange());
+    });
+
     // BET fractional intensity slider value display
     this._on('betFractionalIntensity', 'input', (e) => {
       const valueEl = document.getElementById('betFractionalIntensityValue');
@@ -699,50 +694,66 @@ export class PipelineSettingsController {
     if (el) el.style.display = show ? 'block' : 'none';
   }
 
-  _disableEl(id, disabled) {
-    const el = document.getElementById(id);
-    if (el) el.disabled = disabled;
+  /**
+   * Show/hide an inline warning message near a control
+   * @param {string} anchorId - ID of the element to attach warning after
+   * @param {string} warningId - Unique ID for the warning element
+   * @param {boolean} show - Whether to show the warning
+   * @param {string} message - Warning text
+   * @param {string} [type='warning'] - 'warning' or 'info'
+   */
+  _showWarning(anchorId, warningId, show, message, type = 'warning') {
+    let warning = document.getElementById(warningId);
+    const anchor = document.getElementById(anchorId);
+
+    if (show) {
+      if (!warning && anchor) {
+        warning = document.createElement('div');
+        warning.id = warningId;
+        warning.className = `validation-message ${type} inline-warning`;
+        warning.innerHTML = '<span></span>';
+        anchor.parentNode.insertBefore(warning, anchor.nextSibling);
+      }
+      if (warning) {
+        warning.querySelector('span').textContent = message;
+        warning.style.display = 'flex';
+      }
+    } else if (warning) {
+      warning.style.display = 'none';
+    }
   }
 
   /**
-   * Disable/enable an entire section (greyed out with hint message)
+   * Show/hide a warning banner at the top of a section (replaces _disableSection)
+   * All inputs remain interactive.
    * @param {string} id - Section element ID
-   * @param {boolean} disabled - Whether to disable
-   * @param {string} [hintText] - Optional hint text shown when disabled
+   * @param {boolean} hasWarning - Whether to show the warning
+   * @param {string} [warningText] - Warning text
    */
-  _disableSection(id, disabled, hintText) {
+  _showSectionWarning(id, hasWarning, warningText) {
     const section = document.getElementById(id);
     if (!section) return;
 
-    // Disable/enable all inputs and selects
-    const inputs = section.querySelectorAll('input, select');
-    inputs.forEach(input => { input.disabled = disabled; });
+    const warningId = id + 'Warning';
+    let warning = document.getElementById(warningId);
 
-    // Visual feedback
-    section.style.opacity = disabled ? '0.5' : '1';
-    section.style.pointerEvents = disabled ? 'none' : '';
-
-    // Show/hide disabled hint
-    const hintId = id + 'DisabledHint';
-    let hint = document.getElementById(hintId);
-    if (disabled && hintText) {
-      if (!hint) {
-        hint = document.createElement('p');
-        hint.id = hintId;
-        hint.className = 'param-hint';
-        hint.style.cssText = 'color: var(--color-text-muted); font-style: italic; margin-bottom: var(--space-sm);';
-        // Insert after the h4 heading
+    if (hasWarning && warningText) {
+      if (!warning) {
+        warning = document.createElement('div');
+        warning.id = warningId;
+        warning.className = 'validation-message error inline-warning';
+        warning.innerHTML = '<span></span>';
         const heading = section.querySelector('h4');
         if (heading) {
-          heading.after(hint);
+          heading.after(warning);
         } else {
-          section.prepend(hint);
+          section.prepend(warning);
         }
       }
-      hint.textContent = hintText;
-      hint.style.display = 'block';
-    } else if (hint) {
-      hint.style.display = 'none';
+      warning.querySelector('span').textContent = warningText;
+      warning.style.display = 'flex';
+    } else if (warning) {
+      warning.style.display = 'none';
     }
   }
 
