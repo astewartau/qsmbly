@@ -14,6 +14,7 @@ import { ModalManager } from './modules/ui/ModalManager.js';
 import { ProgressManager } from './modules/ui/ProgressManager.js';
 import { EchoNavigator } from './modules/viewer/EchoNavigator.js';
 import { FileIOController, PipelineExecutor, PipelineSettingsController, MaskController, ViewerController } from './controllers/index.js';
+import { DicomController } from './controllers/DicomController.js';
 import * as QSMConfig from './app/config.js';
 
 // Make config available globally for backward compatibility
@@ -190,6 +191,12 @@ class QSMApp {
       updateDownloadVolumeButton: () => this.updateDownloadVolumeButton()
     });
 
+    // Initialize DICOM controller
+    this.dicomController = new DicomController({
+      updateOutput: (msg) => this.updateOutput(msg),
+      onConversionComplete: (classified) => this._onDicomConversionComplete(classified)
+    });
+
     // Initialize modal managers
     this.betModal = new ModalManager('betSettingsModal');
     this.citationsModal = new ModalManager('citationsModal');
@@ -356,6 +363,15 @@ class QSMApp {
     document.getElementById('maskFiles')?.addEventListener('change', (e) => {
       this.handleMultipleFiles(e, 'mask');
     });
+
+    // DICOM file input (folder picker)
+    document.getElementById('dicomFiles')?.addEventListener('change', (e) => {
+      this.handleDicomFiles(e);
+    });
+
+    // DICOM preview buttons
+    document.getElementById('vis_dicomMagnitude')?.addEventListener('click', () => this.visualizeMagnitude());
+    document.getElementById('vis_dicomPhase')?.addEventListener('click', () => this.visualizePhase());
 
     // Preview buttons for field map modes
     document.getElementById('vis_totalField')?.addEventListener('click', () => this.visualizeFieldMap('totalField'));
@@ -614,6 +630,123 @@ class QSMApp {
     document.getElementById('vis_phase').disabled = files.length === 0;
   }
 
+  // ==================== DICOM Handling ====================
+
+  /**
+   * Handle DICOM files from the folder file input.
+   */
+  async handleDicomFiles(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    this._showDicomStatus('Converting...');
+    await this.dicomController.convertFiles(files);
+    this._hideDicomStatus();
+  }
+
+  /**
+   * Handle DICOM files from drag-and-drop (directory traversal).
+   */
+  async handleDicomDrop(dataTransferItems) {
+    this._showDicomStatus('Converting...');
+    await this.dicomController.convertDropItems(dataTransferItems);
+    this._hideDicomStatus();
+  }
+
+  /**
+   * Callback when DICOM conversion and classification is complete.
+   */
+  _onDicomConversionComplete(classified) {
+    const magCount = classified.magnitude.length;
+    const phaseCount = classified.phase.length;
+
+    // Build file data arrays in the format FileIOController expects: [{file, name}]
+    const magnitudeFileData = classified.magnitude.map(e => ({ file: e.file, name: e.name }));
+    const phaseFileData = classified.phase.map(e => ({ file: e.file, name: e.name }));
+    const jsonFiles = classified.jsonFiles.map(f => f);
+
+    // Push to FileIOController (populates multiEchoFiles, triggers callbacks)
+    this.fileIOController.setFilesFromDicom(magnitudeFileData, phaseFileData, jsonFiles);
+
+    // Update DICOM results UI
+    this._updateDicomResults(classified);
+
+    // Update drop zone text for incremental uploads
+    const dropLabel = document.querySelector('#dicomDrop .file-drop-label span');
+    if (dropLabel) {
+      dropLabel.textContent = 'Drop more DICOM files';
+    }
+    const dropZone = document.getElementById('dicomDrop');
+    if (dropZone) {
+      dropZone.classList.add('has-files');
+    }
+  }
+
+  _updateDicomResults(classified) {
+    const resultsEl = document.getElementById('dicomResults');
+    if (!resultsEl) return;
+    resultsEl.style.display = '';
+
+    const magCount = classified.magnitude.length;
+    const phaseCount = classified.phase.length;
+
+    // Magnitude count
+    const magCountEl = document.getElementById('dicomMagCount');
+    if (magCountEl) {
+      if (magCount > 0) {
+        magCountEl.textContent = `${magCount} echo${magCount !== 1 ? 'es' : ''}`;
+        magCountEl.classList.remove('not-found');
+      } else {
+        magCountEl.textContent = 'not found';
+        magCountEl.classList.add('not-found');
+      }
+    }
+
+    // Phase count
+    const phaseCountEl = document.getElementById('dicomPhaseCount');
+    if (phaseCountEl) {
+      if (phaseCount > 0) {
+        phaseCountEl.textContent = `${phaseCount} echo${phaseCount !== 1 ? 'es' : ''}`;
+        phaseCountEl.classList.remove('not-found');
+      } else {
+        phaseCountEl.textContent = 'not found';
+        phaseCountEl.classList.add('not-found');
+      }
+    }
+
+    // Enable/disable eye buttons
+    const magBtn = document.getElementById('vis_dicomMagnitude');
+    const phaseBtn = document.getElementById('vis_dicomPhase');
+    if (magBtn) magBtn.disabled = magCount === 0;
+    if (phaseBtn) phaseBtn.disabled = phaseCount === 0;
+
+    // Metadata summary
+    const metaEl = document.getElementById('dicomMeta');
+    if (metaEl) {
+      const parts = [];
+      if (classified.echoTimes.length > 0) {
+        const teStr = classified.echoTimes.map(t => t.toFixed(2)).join(', ');
+        parts.push(`Echo times: ${teStr} ms`);
+      }
+      if (classified.fieldStrength != null) {
+        parts.push(`Field strength: ${classified.fieldStrength}T`);
+      }
+      metaEl.innerHTML = parts.join('<br>');
+    }
+  }
+
+  _showDicomStatus(text) {
+    const el = document.getElementById('dicomStatus');
+    const textEl = document.getElementById('dicomStatusText');
+    if (el) el.style.display = '';
+    if (textEl) textEl.textContent = text;
+  }
+
+  _hideDicomStatus() {
+    const el = document.getElementById('dicomStatus');
+    if (el) el.style.display = 'none';
+  }
+
   // ==================== Sidebar Pipeline Dropdowns ====================
 
   setupSidebarDropdownListeners() {
@@ -636,7 +769,7 @@ class QSMApp {
 
   updateSidebarDropdownVisibility(autoCorrect = false) {
     const mode = this.fileIOController?.getInputMode() || 'raw';
-    const isRaw = mode === 'raw';
+    const isRaw = mode === 'raw' || mode === 'dicom';
     const isTotalField = mode === 'totalField';
     const combined = this.pipelineSettings?.combinedMethod || 'none';
     const isStandard = combined === 'none';
@@ -769,7 +902,7 @@ class QSMApp {
 
   updateInputParamsVisibility() {
     const mode = this.fileIOController.getInputMode();
-    const isRaw = mode === 'raw';
+    const isRaw = mode === 'raw' || mode === 'dicom';
     const units = this.fileIOController.getFieldMapUnits();
     const combinedMethod = this.pipelineSettings?.combinedMethod || 'none';
     // Field strength needed for: raw mode, Hz/rad_s units, or TGV/QSMART (internal scaling)
@@ -794,7 +927,7 @@ class QSMApp {
     const mode = this.fileIOController.getInputMode();
     let hasMag = false;
 
-    if (mode === 'raw') {
+    if (mode === 'raw' || mode === 'dicom') {
       hasMag = this.multiEchoFiles.magnitude.length > 0;
     } else {
       hasMag = this.fileIOController.hasFieldMapMagnitude();
@@ -871,7 +1004,7 @@ class QSMApp {
     const mode = this.fileIOController.getInputMode();
     let magCount = 0;
 
-    if (mode === 'raw') {
+    if (mode === 'raw' || mode === 'dicom') {
       magCount = this.multiEchoFiles.magnitude.length;
     } else {
       magCount = this.fileIOController.getFieldMapMagnitudeCount();
@@ -943,6 +1076,7 @@ class QSMApp {
     let canRun = false;
 
     switch (mode) {
+      case 'dicom':
       case 'raw': {
         const hasEchoTimes = this.fileIOController?.hasEchoTimes() || false;
         const hasMask = this.currentMaskData !== null;
@@ -1035,7 +1169,7 @@ class QSMApp {
     const btn = document.getElementById('prepareMaskInput');
     const mode = this.fileIOController?.getInputMode() || 'raw';
     let hasMagnitude;
-    if (mode === 'raw') {
+    if (mode === 'raw' || mode === 'dicom') {
       hasMagnitude = this.multiEchoFiles.magnitude.length > 0;
     } else {
       hasMagnitude = this.fileIOController?.hasFieldMapMagnitude() || false;
@@ -1099,7 +1233,7 @@ class QSMApp {
     // Get magnitude files based on current input mode
     const mode = this.fileIOController.getInputMode();
     let magnitudeFiles;
-    if (mode === 'raw') {
+    if (mode === 'raw' || mode === 'dicom') {
       magnitudeFiles = this.multiEchoFiles.magnitude;
     } else {
       // Field map modes: use all magnitude files (may be multiple)
@@ -1380,7 +1514,7 @@ class QSMApp {
   async runRomeoQSM() {
     const mode = this.fileIOController.getInputMode();
 
-    if (mode === 'raw') {
+    if (mode === 'raw' || mode === 'dicom') {
       await this._runRawPipeline();
     } else if (mode === 'totalField') {
       await this._runTotalFieldPipeline();
@@ -2106,7 +2240,7 @@ class QSMApp {
     // Get magnitude files based on current input mode
     const mode = this.fileIOController.getInputMode();
     let magnitudeFilesForBET;
-    if (mode === 'raw') {
+    if (mode === 'raw' || mode === 'dicom') {
       magnitudeFilesForBET = this.multiEchoFiles.magnitude;
     } else {
       magnitudeFilesForBET = this.fileIOController.getFieldMapMagnitudeFiles();
@@ -2176,7 +2310,7 @@ class QSMApp {
     const defaults = this.getVoxelBasedDefaults();
     const nEchoes = this.multiEchoFiles?.phase?.filter(f => f.file)?.length || 0;
     const inputMode = this.fileIOController?.getInputMode() || 'raw';
-    const hasMagnitude = inputMode === 'raw'
+    const hasMagnitude = (inputMode === 'raw' || inputMode === 'dicom')
       ? this.multiEchoFiles.magnitude.length > 0
       : (this.fileIOController.hasFieldMapMagnitude() || this.preparedMagnitudeData !== null);
     this.pipelineSettingsController.setInputMode(inputMode);
@@ -2219,7 +2353,7 @@ class QSMApp {
   // BET Settings Modal
   openBetSettingsModal() {
     const mode = this.fileIOController.getInputMode();
-    const hasMag = mode === 'raw'
+    const hasMag = (mode === 'raw' || mode === 'dicom')
       ? this.multiEchoFiles.magnitude.length > 0
       : this.fileIOController.hasFieldMapMagnitude();
 

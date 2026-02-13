@@ -334,7 +334,7 @@ export class PipelineSettingsController {
    * @param {number} nEchoes - Number of echo files loaded
    */
   updateVisibility(nEchoes) {
-    const isRawMode = this.inputMode === 'raw';
+    const isRawMode = this.inputMode === 'raw' || this.inputMode === 'dicom';
     const isTotalFieldMode = this.inputMode === 'totalField';
     const isLocalFieldMode = this.inputMode === 'localField';
     const isFieldMapMode = isTotalFieldMode || isLocalFieldMode;

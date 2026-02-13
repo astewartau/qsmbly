@@ -76,6 +76,7 @@ export class FileIOController {
    */
   hasValidData() {
     switch (this.inputMode) {
+      case 'dicom':
       case 'raw': {
         const magCount = this.multiEchoFiles.magnitude.length;
         const phaseCount = this.multiEchoFiles.phase.length;
@@ -408,6 +409,29 @@ export class FileIOController {
       .map(tag => parseFloat(tag.value))
       .filter(n => !isNaN(n) && n > 0)
       .sort((a, b) => a - b);
+  }
+
+  // ==================== DICOM Integration ====================
+
+  /**
+   * Set files programmatically from DICOM conversion results.
+   * Populates multiEchoFiles and triggers the same callbacks as manual upload.
+   */
+  setFilesFromDicom(magnitudeFileData, phaseFileData, jsonFiles) {
+    this.multiEchoFiles.magnitude = magnitudeFileData;
+    this.multiEchoFiles.phase = phaseFileData;
+    this.multiEchoFiles.combinedMagnitude = null;
+    this.multiEchoFiles.combinedPhase = null;
+
+    this.updateFileList('magnitude', magnitudeFileData);
+    this.updateFileList('phase', phaseFileData);
+
+    this.onMagnitudeFilesChanged(magnitudeFileData);
+    this.onPhaseFilesChanged(phaseFileData);
+
+    if (jsonFiles && jsonFiles.length > 0) {
+      this.processJsonFiles(jsonFiles);
+    }
   }
 
   // ==================== Combined Data ====================

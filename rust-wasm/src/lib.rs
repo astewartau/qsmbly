@@ -1679,12 +1679,12 @@ pub fn mcpc3ds_single_coil_wasm(
     console_log!("WASM mcpc3ds_single_coil: {}x{}x{}, {} echoes, sigma=({:.1},{:.1},{:.1})",
                  nx, ny, nz, n_echoes, sigma_x, sigma_y, sigma_z);
 
-    // Split flat arrays into per-echo vectors
-    let phases: Vec<Vec<f64>> = (0..n_echoes)
-        .map(|e| phases_flat[e * n_total..(e + 1) * n_total].to_vec())
+    // Use slices into the flat input instead of cloning
+    let phases: Vec<&[f64]> = (0..n_echoes)
+        .map(|e| &phases_flat[e * n_total..(e + 1) * n_total])
         .collect();
-    let mags: Vec<Vec<f64>> = (0..n_echoes)
-        .map(|e| mags_flat[e * n_total..(e + 1) * n_total].to_vec())
+    let mags: Vec<&[f64]> = (0..n_echoes)
+        .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
         .collect();
 
     let (corrected_phases, phase_offset) = utils::multi_echo::mcpc3ds_single_coil(
@@ -1784,15 +1784,15 @@ pub fn mcpc3ds_b0_pipeline_wasm(
     let n_echoes = tes.len();
     let n_total = nx * ny * nz;
 
-    console_log!("WASM mcpc3ds_b0_pipeline: {}x{}x{}, {} echoes, weight_type={}",
-                 nx, ny, nz, n_echoes, weight_type);
+    console_log!("WASM mcpc3ds_b0_pipeline: {}x{}x{}, {} echoes, n_total={}, weight_type={}",
+                 nx, ny, nz, n_echoes, n_total, weight_type);
 
-    // Split flat arrays into per-echo vectors
-    let phases: Vec<Vec<f64>> = (0..n_echoes)
-        .map(|e| phases_flat[e * n_total..(e + 1) * n_total].to_vec())
+    // Use slices into the flat input instead of cloning (~990 MB savings for large data)
+    let phases: Vec<&[f64]> = (0..n_echoes)
+        .map(|e| &phases_flat[e * n_total..(e + 1) * n_total])
         .collect();
-    let mags: Vec<Vec<f64>> = (0..n_echoes)
-        .map(|e| mags_flat[e * n_total..(e + 1) * n_total].to_vec())
+    let mags: Vec<&[f64]> = (0..n_echoes)
+        .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
         .collect();
 
     let wt = utils::multi_echo::B0WeightType::from_str(weight_type);
@@ -1851,12 +1851,12 @@ pub fn multi_echo_linear_fit_wasm(
     console_log!("WASM multi_echo_linear_fit: {} echoes, {} voxels, offset={}, reliability={}%",
                  n_echoes, n_total, estimate_offset, reliability_percentile);
 
-    // Split flat arrays into per-echo vectors
-    let unwrapped_phases: Vec<Vec<f64>> = (0..n_echoes)
-        .map(|e| unwrapped_phases_flat[e * n_total..(e + 1) * n_total].to_vec())
+    // Use slices into the flat input instead of cloning
+    let unwrapped_phases: Vec<&[f64]> = (0..n_echoes)
+        .map(|e| &unwrapped_phases_flat[e * n_total..(e + 1) * n_total])
         .collect();
-    let mags: Vec<Vec<f64>> = (0..n_echoes)
-        .map(|e| mags_flat[e * n_total..(e + 1) * n_total].to_vec())
+    let mags: Vec<&[f64]> = (0..n_echoes)
+        .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
         .collect();
 
     let result = utils::multi_echo::multi_echo_linear_fit(

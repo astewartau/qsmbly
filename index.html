@@ -71,6 +71,7 @@
         <!-- Input Mode Tabs -->
         <div class="input-mode-tabs" id="inputModeTabs">
           <button class="input-mode-tab active" data-mode="raw">Raw Images</button>
+          <button class="input-mode-tab" data-mode="dicom">DICOM</button>
           <button class="input-mode-tab" data-mode="totalField">Total Field</button>
           <button class="input-mode-tab" data-mode="localField">Local Field</button>
         </div>
@@ -129,6 +130,54 @@
             </div>
             <div class="file-list" id="phaseList"></div>
           </div>
+        </div>
+        </div>
+
+        <!-- DICOM Mode -->
+        <div class="input-mode-content" id="inputModeDicom" data-mode="dicom">
+        <div class="file-upload-group">
+          <div class="upload-group">
+            <div class="file-upload-zone file-drop" id="dicomDrop">
+              <input type="file" id="dicomFiles" webkitdirectory multiple>
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <p class="upload-text file-drop-label"><span>Drop DICOM folder or click</span></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conversion status -->
+        <div class="dicom-status" id="dicomStatus" style="display: none;">
+          <div class="dicom-spinner"></div>
+          <span class="dicom-status-text" id="dicomStatusText">Converting...</span>
+        </div>
+
+        <!-- Classification results -->
+        <div class="dicom-results" id="dicomResults" style="display: none;">
+          <div class="dicom-result-row">
+            <span class="dicom-result-label">Magnitude</span>
+            <span class="dicom-result-count" id="dicomMagCount">&mdash;</span>
+            <button class="btn-icon btn-preview" id="vis_dicomMagnitude" title="Preview magnitude" disabled>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+          <div class="dicom-result-row">
+            <span class="dicom-result-label">Phase</span>
+            <span class="dicom-result-count" id="dicomPhaseCount">&mdash;</span>
+            <button class="btn-icon btn-preview" id="vis_dicomPhase" title="Preview phase" disabled>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+          <div class="dicom-result-meta" id="dicomMeta"></div>
         </div>
         </div>
 
@@ -1798,6 +1847,25 @@
         }
       });
     });
+
+    // DICOM drop zone — needs directory traversal instead of simple file transfer
+    const dicomDropZone = document.getElementById('dicomDrop');
+    if (dicomDropZone) {
+      dicomDropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dicomDropZone.classList.add('dragover');
+      });
+      dicomDropZone.addEventListener('dragleave', () => {
+        dicomDropZone.classList.remove('dragover');
+      });
+      dicomDropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dicomDropZone.classList.remove('dragover');
+        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+          window.app?.handleDicomDrop(e.dataTransfer.items);
+        }
+      });
+    }
 
     // =========================================================================
     // Phase Processing UI Controls
