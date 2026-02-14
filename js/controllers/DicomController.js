@@ -6,6 +6,7 @@
 export class DicomController {
   constructor(options = {}) {
     this.onConversionComplete = options.onConversionComplete || (() => {});
+    this.onFilesRetained = options.onFilesRetained || (() => {});
     this.updateOutput = options.updateOutput || console.log;
 
     this.dcm2niixModule = null; // Lazy-loaded module
@@ -44,6 +45,9 @@ export class DicomController {
     this.converting = true;
     this.updateOutput(`Converting ${files.length} DICOM files...`);
 
+    // Retain original files for dicompare validation
+    this.onFilesRetained(files);
+
     try {
       const dcm2niix = await this._createInstance();
       const result = await dcm2niix.input(files).run();
@@ -80,6 +84,9 @@ export class DicomController {
         this.converting = false;
         return;
       }
+
+      // Retain original files for dicompare validation
+      this.onFilesRetained(files);
 
       this.updateOutput(`Converting ${files.length} DICOM files...`);
       const dcm2niix = await this._createInstance();

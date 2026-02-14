@@ -15,6 +15,8 @@ import { ProgressManager } from './modules/ui/ProgressManager.js';
 import { EchoNavigator } from './modules/viewer/EchoNavigator.js';
 import { FileIOController, PipelineExecutor, PipelineSettingsController, MaskController, ViewerController } from './controllers/index.js';
 import { DicomController } from './controllers/DicomController.js';
+import { DicompareController } from './controllers/DicompareController.js';
+import { DicompareReportRenderer } from './modules/ui/DicompareReportRenderer.js';
 import * as QSMConfig from './app/config.js';
 
 // Make config available globally for backward compatibility
@@ -191,16 +193,24 @@ class QSMApp {
       updateDownloadVolumeButton: () => this.updateDownloadVolumeButton()
     });
 
+    // Initialize dicompare controller
+    this.dicompareController = new DicompareController({
+      updateOutput: (msg) => this.updateOutput(msg)
+    });
+    this.dicompareRenderer = new DicompareReportRenderer();
+
     // Initialize DICOM controller
     this.dicomController = new DicomController({
       updateOutput: (msg) => this.updateOutput(msg),
-      onConversionComplete: (classified) => this._onDicomConversionComplete(classified)
+      onConversionComplete: (classified) => this._onDicomConversionComplete(classified),
+      onFilesRetained: (files) => this._onDicomFilesRetained(files)
     });
 
     // Initialize modal managers
     this.betModal = new ModalManager('betSettingsModal');
     this.citationsModal = new ModalManager('citationsModal');
     this.privacyModal = new ModalManager('privacyModal');
+    this.dicompareModal = new ModalManager('dicompareModal');
 
     // Start loading WASM in the background immediately
     this.pipelineExecutor.initialize();
@@ -372,6 +382,12 @@ class QSMApp {
     // DICOM preview buttons
     document.getElementById('vis_dicomMagnitude')?.addEventListener('click', () => this.visualizeMagnitude());
     document.getElementById('vis_dicomPhase')?.addEventListener('click', () => this.visualizePhase());
+
+    // dicompare report
+    document.getElementById('dicompareReportBtn')?.addEventListener('click', () => this.runDicompareReport());
+    document.getElementById('closeDicompare')?.addEventListener('click', () => this.dicompareModal?.close());
+    document.getElementById('closeDicompare2')?.addEventListener('click', () => this.dicompareModal?.close());
+    document.getElementById('dicomparePrint')?.addEventListener('click', () => this.printDicompareReport());
 
     // Preview buttons for field map modes
     document.getElementById('vis_totalField')?.addEventListener('click', () => this.visualizeFieldMap('totalField'));
@@ -745,6 +761,96 @@ class QSMApp {
   _hideDicomStatus() {
     const el = document.getElementById('dicomStatus');
     if (el) el.style.display = 'none';
+  }
+
+  // ==================== dicompare Integration ====================
+
+  /**
+   * Callback when DICOM files are retained for validation.
+   */
+  async _onDicomFilesRetained(files) {
+    await this.dicompareController.retainDicomFiles(files);
+    const btn = document.getElementById('dicompareReportBtn');
+    if (btn) {
+      btn.disabled = files.length === 0;
+    }
+  }
+
+  /**
+   * Run dicompare validation and display results in modal.
+   */
+  async runDicompareReport() {
+    if (!this.dicompareController.hasFiles()) {
+      this.updateOutput('No DICOM files available for validation.');
+      return;
+    }
+
+    const body = document.getElementById('dicompareModalBody');
+    const footer = document.getElementById('dicompareModalFooter');
+
+    // If results are already cached, just re-display them
+    const cached = this.dicompareController.getCachedResults();
+    if (cached) {
+      this.dicompareModal.open();
+      this.dicompareRenderer.render(body, cached);
+      if (footer) footer.style.display = '';
+      return;
+    }
+
+    // Open modal with loading state
+    this.dicompareModal.open();
+    if (body) {
+      body.innerHTML = `
+        <div class="dicompare-loading">
+          <div class="dicompare-spinner"></div>
+          <p class="dicompare-loading-text" id="dicompareLoadingText">Initializing Python runtime...</p>
+          <div class="dicompare-progress-bar">
+            <div class="dicompare-progress-fill" id="dicompareProgressFill"></div>
+          </div>
+        </div>
+      `;
+    }
+    if (footer) footer.style.display = 'none';
+
+    try {
+      const result = await this.dicompareController.runValidation((progress) => {
+        const textEl = document.getElementById('dicompareLoadingText');
+        const fillEl = document.getElementById('dicompareProgressFill');
+        if (textEl) textEl.textContent = progress.currentOperation;
+        if (fillEl) fillEl.style.width = `${progress.percentage}%`;
+      });
+
+      // Render results
+      this.dicompareRenderer.render(body, result);
+      if (footer) footer.style.display = '';
+    } catch (error) {
+      if (body) {
+        body.innerHTML = `
+          <div class="dicompare-error">
+            <p>Validation failed: ${error.message}</p>
+          </div>
+        `;
+      }
+      console.error('dicompare validation error:', error);
+    }
+  }
+
+  /**
+   * Print the dicompare report in a new window.
+   */
+  printDicompareReport() {
+    if (!this.dicompareController.complianceResults) return;
+    const html = this.dicompareRenderer.generatePrintHtml({
+      acquisitions: this.dicompareController.acquisitions,
+      complianceResults: this.dicompareController.complianceResults,
+      schema: JSON.parse(this.dicompareController.schemaContent || '{}')
+    });
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+    }
   }
 
   // ==================== Sidebar Pipeline Dropdowns ====================

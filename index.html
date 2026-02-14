@@ -179,6 +179,14 @@
           </div>
           <div class="dicom-result-meta" id="dicomMeta"></div>
         </div>
+        <!-- dicompare validation button -->
+        <button class="btn btn-secondary btn-dicompare" id="dicompareReportBtn" disabled>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 11l3 3L22 4"/>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+          </svg>
+          dicompare Report
+        </button>
         </div>
 
         <!-- Total Field Map Mode -->
@@ -1599,6 +1607,30 @@
             <a href="https://github.com/korbinian90/QuantitativeSusceptibilityMappingTGV.jl" target="_blank" rel="noopener">QuantitativeSusceptibilityMappingTGV.jl</a> - TGV-QSM
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- dicompare Report Modal -->
+  <div class="modal-overlay" id="dicompareModal">
+    <div class="modal dicompare-modal">
+      <div class="modal-header">
+        <h3>dicompare Report</h3>
+        <button class="modal-close" id="closeDicompare">&times;</button>
+      </div>
+      <div class="modal-body" id="dicompareModalBody">
+        <!-- Content injected by DicompareReportRenderer -->
+      </div>
+      <div class="modal-footer" id="dicompareModalFooter" style="display: none;">
+        <button class="btn btn-secondary" id="dicomparePrint">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 6 2 18 2 18 9"/>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+            <rect x="6" y="14" width="12" height="8"/>
+          </svg>
+          Print Report
+        </button>
+        <button class="btn btn-primary" id="closeDicompare2">Close</button>
       </div>
     </div>
   </div>

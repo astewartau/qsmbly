@@ -1437,3 +1437,303 @@ select {
   cursor: pointer;
   accent-color: var(--color-primary);
 }
+
+/* ============================================
+   dicompare Report
+   ============================================ */
+
+/* Sidebar button */
+.btn-dicompare {
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  width: 100%;
+  margin-top: var(--space-sm);
+}
+
+/* Modal sizing */
+.dicompare-modal {
+  max-width: 800px;
+  max-height: 85vh;
+}
+
+.dicompare-modal .modal-body {
+  overflow-y: auto;
+  max-height: calc(85vh - 120px);
+}
+
+/* Loading state */
+.dicompare-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2xl) var(--space-lg);
+  gap: var(--space-md);
+}
+
+.dicompare-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: dicompare-spin 0.8s linear infinite;
+}
+
+@keyframes dicompare-spin {
+  to { transform: rotate(360deg); }
+}
+
+.dicompare-loading-text {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.dicompare-progress-bar {
+  width: 100%;
+  max-width: 300px;
+  height: 4px;
+  background: var(--color-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.dicompare-progress-fill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+/* Error state */
+.dicompare-error {
+  padding: var(--space-lg);
+  color: var(--color-error);
+  text-align: center;
+}
+
+/* Schema header */
+.dicompare-schema-header {
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dicompare-schema-header h4 {
+  font-size: 0.95rem;
+  color: var(--color-text);
+  margin: 0 0 var(--space-xs);
+}
+
+.dicompare-schema-version {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.dicompare-schema-header p {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin: var(--space-xs) 0 0;
+}
+
+.dicompare-schema-authors {
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+}
+
+/* Summary badges */
+.dicompare-summary {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.dicompare-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.dicompare-summary-badge.pass {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
+}
+
+.dicompare-summary-badge.fail {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  border: 1px solid var(--color-error);
+}
+
+.dicompare-summary-badge.warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning);
+}
+
+.dicompare-summary-badge.na {
+  background: rgba(100, 100, 100, 0.1);
+  color: var(--color-text-dim);
+  border: 1px solid var(--color-border);
+}
+
+/* Acquisition section */
+.dicompare-acquisition {
+  margin-bottom: var(--space-lg);
+}
+
+.dicompare-acquisition h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin: 0 0 var(--space-sm);
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dicompare-section-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin: var(--space-md) 0 var(--space-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Compliance table */
+.dicompare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin-bottom: var(--space-md);
+}
+
+.dicompare-table th {
+  text-align: left;
+  padding: var(--space-xs) var(--space-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-elevated);
+}
+
+.dicompare-table td {
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  vertical-align: top;
+}
+
+.dicompare-table tr:hover td {
+  background: var(--color-surface-elevated);
+}
+
+.dicompare-field-name {
+  font-weight: 500;
+}
+
+.dicompare-field-tag {
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--color-text-dim);
+}
+
+/* Status indicators */
+.dicompare-status {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.dicompare-status-pass {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.dicompare-status-fail {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+}
+
+.dicompare-status-warning {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+.dicompare-status-na,
+.dicompare-status-unknown {
+  color: var(--color-text-dim);
+  background: rgba(100, 100, 100, 0.1);
+}
+
+.dicompare-status-message {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.dicompare-rule-description {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.dicompare-empty {
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: var(--space-lg);
+  font-size: 0.85rem;
+}
+
+/* Unchecked fields (collapsible) */
+.dicompare-unchecked {
+  margin-top: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.dicompare-unchecked-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-surface-elevated);
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-align: left;
+}
+
+.dicompare-unchecked-toggle:hover {
+  background: var(--color-border);
+}
+
+.dicompare-chevron {
+  font-size: 0.6rem;
+  transition: transform 0.2s ease;
+}
+
+.dicompare-unchecked-content {
+  border-top: 1px solid var(--color-border);
+}
