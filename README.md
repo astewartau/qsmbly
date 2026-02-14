@@ -6,7 +6,7 @@
 
 A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs entirely in your web browser using WebAssembly. No installation, no backend servers, no data uploads - just pure client-side MRI processing.
 
-[ACCESS QSMbly HERE](https://astewartau.github.io/qsmbly/)
+[ACCESS QSMbly HERE](https://qsmbly.neurodesk.org/)
 
 ## Features
 
