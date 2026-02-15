@@ -8,7 +8,7 @@
 export class PipelineSettingsController {
   constructor(modalElement) {
     this.modal = modalElement;
-    this.inputMode = 'raw'; // 'raw', 'totalField', or 'localField'
+    this.inputMode = 'dicom'; // 'dicom', 'raw', 'totalField', or 'localField'
     this._setupEventListeners();
   }
 
@@ -108,7 +108,6 @@ export class PipelineSettingsController {
     this._setEl('bgRemovalMethod', 'vsharp');
     this._showEl('vsharpSettings', true);
     this._showEl('sharpSettings', false);
-    this._showEl('smvSettings', false);
     this._showEl('ismvSettings', false);
     this._showEl('pdfSettings', false);
     this._showEl('lbvSettings', false);
@@ -118,8 +117,6 @@ export class PipelineSettingsController {
     this._setEl('vsharpThreshold', 0.05);
     this._setEl('sharpRadius', 6);
     this._setEl('sharpThreshold', 0.05);
-    this._setEl('smvRadius', defaults.smvRadius);
-
     // iSMV defaults
     this._setEl('ismvRadius', defaults.ismvRadius);
     this._setEl('ismvTol', 0.001);
@@ -264,9 +261,6 @@ export class PipelineSettingsController {
       sharp: {
         radius: parseFloat(this._getEl('sharpRadius')),
         threshold: parseFloat(this._getEl('sharpThreshold'))
-      },
-      smv: {
-        radius: parseFloat(this._getEl('smvRadius'))
       },
       ismv: {
         radius: parseFloat(this._getEl('ismvRadius')),
@@ -510,7 +504,6 @@ export class PipelineSettingsController {
     this._setEl('bgRemovalMethod', bgMethod);
     this._showEl('vsharpSettings', bgMethod === 'vsharp');
     this._showEl('sharpSettings', bgMethod === 'sharp');
-    this._showEl('smvSettings', bgMethod === 'smv');
     this._showEl('ismvSettings', bgMethod === 'ismv');
     this._showEl('pdfSettings', bgMethod === 'pdf');
     this._showEl('lbvSettings', bgMethod === 'lbv');
@@ -519,9 +512,6 @@ export class PipelineSettingsController {
     this._setEl('vsharpMaxRadius', settings.vsharp.maxRadius ?? defaults.vsharpMaxRadius);
     this._setEl('vsharpMinRadius', settings.vsharp.minRadius ?? defaults.vsharpMinRadius);
     this._setEl('vsharpThreshold', settings.vsharp.threshold);
-
-    // SMV settings
-    this._setEl('smvRadius', settings.smv.radius ?? defaults.smvRadius);
 
     // iSMV settings
     this._setEl('ismvRadius', settings.ismv.radius ?? defaults.ismvRadius);
@@ -617,7 +607,6 @@ export class PipelineSettingsController {
       const method = e.target.value;
       this._showEl('vsharpSettings', method === 'vsharp');
       this._showEl('sharpSettings', method === 'sharp');
-      this._showEl('smvSettings', method === 'smv');
       this._showEl('ismvSettings', method === 'ismv');
       this._showEl('pdfSettings', method === 'pdf');
       this._showEl('lbvSettings', method === 'lbv');

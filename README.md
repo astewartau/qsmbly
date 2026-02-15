@@ -32,7 +32,6 @@ A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs enti
 |-----------|-----------|-------------|
 | **V-SHARP** | Variable-radius Sophisticated Harmonic Artifact Reduction for Phase data | Multi-scale kernel approach for robust background removal |
 | **SHARP** | Sophisticated Harmonic Artifact Reduction for Phase data | Deconvolution-based harmonic field removal |
-| **SMV** | Spherical Mean Value | Simple mean value subtraction method |
 | **iSMV** | iterative Spherical Mean Value | Iterative deconvolution-based SMV |
 | **PDF** | Projection onto Dipole Fields | Orthogonal projection approach to background removal |
 | **LBV** | Laplacian Boundary Value | Boundary value problem approach using the Laplacian |

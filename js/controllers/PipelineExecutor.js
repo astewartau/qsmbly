@@ -302,9 +302,7 @@ export class PipelineExecutor {
         current.lbv?.tolerance !== last.lbv?.tolerance) ||
       (current.backgroundRemoval === 'ismv' &&
         (current.ismv?.tolerance !== last.ismv?.tolerance ||
-          current.ismv?.iterations !== last.ismv?.iterations)) ||
-      (current.backgroundRemoval === 'smv' &&
-        current.smv?.radius !== last.smv?.radius);
+          current.ismv?.iterations !== last.ismv?.iterations));
 
     // If unwrap changed, can't skip anything
     if (unwrapChanged) {

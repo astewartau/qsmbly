@@ -12,8 +12,8 @@ export class FileIOController {
     this.onMagnitudeFilesChanged = options.onMagnitudeFilesChanged || (() => {});
     this.onPhaseFilesChanged = options.onPhaseFilesChanged || (() => {});
 
-    // Current input mode: 'raw', 'totalField', or 'localField'
-    this.inputMode = 'raw';
+    // Current input mode: 'dicom', 'raw', 'totalField', or 'localField'
+    this.inputMode = 'dicom';
 
     // File storage - raw mode
     this.multiEchoFiles = {

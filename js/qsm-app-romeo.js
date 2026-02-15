@@ -1015,7 +1015,8 @@ class QSMApp {
     const needsFieldStrength = isRaw || units !== 'ppm' || combinedMethod !== 'none';
 
     // Show/hide raw-mode-only parameters
-    document.getElementById('jsonMetadataGroup').style.display = isRaw ? '' : 'none';
+    const isNifti = mode === 'raw';
+    document.getElementById('jsonMetadataGroup').style.display = isNifti ? '' : 'none';
     document.getElementById('echoTimesGroup').style.display = isRaw ? '' : 'none';
 
     // Show/hide field map units (only for field map modes)

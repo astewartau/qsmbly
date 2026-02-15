@@ -217,12 +217,12 @@ async function runPipeline(data) {
     magCoherence: true,
     magWeight: true
   };
-  const backgroundMethod = pipelineSettings?.backgroundRemoval || 'smv';
+  const backgroundMethod = pipelineSettings?.backgroundRemoval || 'vsharp';
   const dipoleMethod = pipelineSettings?.dipoleInversion || 'rts';
 
   // Validate methods upfront - never silently fall back to a different algorithm
   const validUnwrapMethods = ['romeo', 'laplacian'];
-  const validBgMethods = ['vsharp', 'sharp', 'smv', 'ismv', 'pdf', 'lbv'];
+  const validBgMethods = ['vsharp', 'sharp', 'ismv', 'pdf', 'lbv'];
   const validInversionMethods = ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr'];
 
   if (!validUnwrapMethods.includes(unwrapMethod)) {
@@ -630,22 +630,6 @@ async function runPipeline(data) {
         ismvProgress
       );
       postProgress(0.63, 'iSMV: Extracting results...');
-      localField = new Float64Array(result.slice(0, voxelCount));
-      erodedMask = new Uint8Array(voxelCount);
-      for (let i = 0; i < voxelCount; i++) {
-        erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
-      }
-    } else if (backgroundMethod === 'smv') {
-      postProgress(0.42, `Preparing ${backgroundMethod.toUpperCase()} background removal...`);
-      postLog(`Removing background field using ${backgroundMethod.toUpperCase()}...`);
-      // Simple SMV (single radius, no deconvolution)
-      const smvSettings = pipelineSettings?.smv || { radius: 5 };
-      postProgress(0.45, `SMV: Processing radius ${smvSettings.radius}mm...`);
-      const result = wasmModule.smv_wasm(
-        b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-        smvSettings.radius
-      );
-      postProgress(0.60, 'SMV: Extracting results...');
       localField = new Float64Array(result.slice(0, voxelCount));
       erodedMask = new Uint8Array(voxelCount);
       for (let i = 0; i < voxelCount; i++) {
@@ -1908,7 +1892,7 @@ async function runTotalFieldPipeline(data) {
   const dipoleMethod = pipelineSettings?.dipoleInversion || 'rts';
 
   // Validate methods
-  const validBgMethods = ['vsharp', 'sharp', 'smv', 'ismv', 'pdf', 'lbv'];
+  const validBgMethods = ['vsharp', 'sharp', 'ismv', 'pdf', 'lbv'];
   const validInversionMethods = ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr'];
   if (!validBgMethods.includes(backgroundMethod)) {
     throw new Error(`Unknown background removal method: '${backgroundMethod}'`);
@@ -2592,19 +2576,6 @@ async function runBackgroundRemoval(
     const result = wasmModule.ismv_wasm_with_progress(
       b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
       ismvSettings.radius, ismvSettings.tol, ismvSettings.maxit, ismvProgress
-    );
-    localField = new Float64Array(result.slice(0, voxelCount));
-    erodedMask = new Uint8Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
-    }
-  } else if (backgroundMethod === 'smv') {
-    postProgress(0.42, 'Preparing SMV background removal...');
-    postLog(`Removing background field using SMV...`);
-    const smvSettings = pipelineSettings?.smv || { radius: 5 };
-    postProgress(0.45, `SMV: Processing radius ${smvSettings.radius}mm...`);
-    const result = wasmModule.smv_wasm(
-      b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz, smvSettings.radius
     );
     localField = new Float64Array(result.slice(0, voxelCount));
     erodedMask = new Uint8Array(voxelCount);

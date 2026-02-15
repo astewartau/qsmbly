@@ -45,7 +45,7 @@ export const FIELD_MAP_UNITS = {
 };
 
 export const INPUT_DEFAULTS = {
-  inputMode: 'raw',
+  inputMode: 'dicom',
   fieldMapUnits: 'hz'
 };
 
@@ -131,11 +131,6 @@ export const VSHARP_DEFAULTS = {
 // SHARP background removal defaults
 export const SHARP_DEFAULTS = {
   threshold: 0.05
-  // radius is calculated from voxel size
-};
-
-// SMV (Spherical Mean Value) defaults
-export const SMV_DEFAULTS = {
   // radius is calculated from voxel size
 };
 
@@ -240,7 +235,7 @@ export const PIPELINE_METHODS = {
   phaseOffset: ['mcpc3ds', 'none'],
   fieldCalculation: ['weighted_avg', 'linear_fit'],
   b0WeightType: ['phase_snr', 'phase_var', 'average', 'tes', 'mag'],
-  backgroundRemoval: ['vsharp', 'sharp', 'smv', 'ismv', 'pdf', 'lbv'],
+  backgroundRemoval: ['vsharp', 'sharp', 'ismv', 'pdf', 'lbv'],
   dipoleInversion: ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi']
 };
 
@@ -259,7 +254,6 @@ export const PIPELINE_DEFAULTS = {
   backgroundRemoval: 'vsharp',
   vsharp: { ...VSHARP_DEFAULTS, maxRadius: null, minRadius: null },
   sharp: { radius: 6, ...SHARP_DEFAULTS },
-  smv: { radius: null },
   ismv: { ...ISMV_DEFAULTS, radius: null },
   pdf: { ...PDF_DEFAULTS, maxit: null },
   lbv: { ...LBV_DEFAULTS },
@@ -294,8 +288,6 @@ export function getVoxelBasedDefaults(voxelSize = [1, 1, 1], maskDims = null) {
     vsharpMinRadius: Math.round(Math.max(1, 2 * minVsz)),
     // SHARP: radius = 18 * min(vsz) - matches QSM.jl sharp.jl line 22
     sharpRadius: Math.round(18 * minVsz),
-    // Simple SMV: radius = 5 * max(vsz) - smaller than SHARP since no deconvolution
-    smvRadius: Math.round(Math.max(4, 5 * maxVsz)),
     // iSMV: radius = 2 * max(vsz) - matches QSM.jl ismv.jl line 20
     ismvRadius: Math.round(Math.max(2, 2 * maxVsz)),
     // PDF: maxit = ceil(sqrt(numel(mask)))
@@ -336,7 +328,6 @@ const QSMConfig = {
   LINEAR_FIT_DEFAULTS,
   VSHARP_DEFAULTS,
   SHARP_DEFAULTS,
-  SMV_DEFAULTS,
   ISMV_DEFAULTS,
   PDF_DEFAULTS,
   LBV_DEFAULTS,

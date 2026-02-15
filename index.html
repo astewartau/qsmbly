@@ -70,14 +70,14 @@
         <div class="section-content">
         <!-- Input Mode Tabs -->
         <div class="input-mode-tabs" id="inputModeTabs">
-          <button class="input-mode-tab active" data-mode="raw">Raw Images</button>
-          <button class="input-mode-tab" data-mode="dicom">DICOM</button>
+          <button class="input-mode-tab active" data-mode="dicom">DICOMs</button>
+          <button class="input-mode-tab" data-mode="raw">NIfTI</button>
           <button class="input-mode-tab" data-mode="totalField">Total Field</button>
           <button class="input-mode-tab" data-mode="localField">Local Field</button>
         </div>
 
         <!-- Raw Images Mode -->
-        <div class="input-mode-content active" id="inputModeRaw" data-mode="raw">
+        <div class="input-mode-content" id="inputModeRaw" data-mode="raw">
         <!-- Magnitude Files -->
         <div class="file-upload-group">
           <div class="file-upload-header">
@@ -134,7 +134,7 @@
         </div>
 
         <!-- DICOM Mode -->
-        <div class="input-mode-content" id="inputModeDicom" data-mode="dicom">
+        <div class="input-mode-content active" id="inputModeDicom" data-mode="dicom">
         <div class="file-upload-group">
           <div class="upload-group">
             <div class="file-upload-zone file-drop" id="dicomDrop">
@@ -312,8 +312,8 @@
           </select>
         </div>
 
-        <!-- JSON Metadata Upload (raw mode only) -->
-        <div class="param-group input-param-raw" id="jsonMetadataGroup">
+        <!-- JSON Metadata Upload (NIfTI mode only) -->
+        <div class="param-group input-param-raw" id="jsonMetadataGroup" style="display: none;">
           <label class="param-label">
             JSON Metadata <span class="count" id="jsonCount"></span>
           </label>
@@ -538,7 +538,6 @@
               <select id="sidebarBgRemovalMethod">
                 <option value="vsharp" selected>V-SHARP</option>
                 <option value="sharp">SHARP</option>
-                <option value="smv">SMV</option>
                 <option value="ismv">iSMV</option>
                 <option value="pdf">PDF</option>
                 <option value="lbv">LBV</option>
@@ -1008,7 +1007,6 @@
             <select id="bgRemovalMethod">
               <option value="vsharp" selected>V-SHARP (Variable-radius SHARP)</option>
               <option value="sharp">SHARP (Sophisticated Harmonic Artifact Reduction for Phase data)</option>
-              <option value="smv">SMV (Spherical Mean Value)</option>
               <option value="ismv">iSMV (iterative Spherical Mean Value)</option>
               <option value="pdf">PDF (Projection onto Dipole Fields)</option>
               <option value="lbv">LBV (Laplacian Boundary Value)</option>
@@ -1048,18 +1046,6 @@
             <div class="param-group">
               <label class="param-label" for="sharpThreshold">Deconvolution threshold</label>
               <input type="number" id="sharpThreshold" value="0.05" min="0.01" max="0.2" step="0.01">
-            </div>
-          </div>
-
-          <!-- SMV Settings -->
-          <div id="smvSettings" class="method-settings">
-            <div class="method-links">
-              <a href="https://doi.org/10.1016/j.neuroimage.2010.10.070" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2010.10.070"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
-            </div>
-            <div class="param-group">
-              <label class="param-label" for="smvRadius">Kernel radius (mm)</label>
-              <input type="number" id="smvRadius" value="5" min="1" max="20" step="1">
             </div>
           </div>
 

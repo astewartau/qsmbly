@@ -127,12 +127,6 @@ describe('Config Module', () => {
       expect(defaults.sharpRadius).toBe(18);
     });
 
-    test('should calculate SMV radius', () => {
-      const defaults = getVoxelBasedDefaults([1, 1, 1]);
-      // radius = max(4, 5 * max(vsz)) = 5
-      expect(defaults.smvRadius).toBe(5);
-    });
-
     test('should calculate iSMV radius', () => {
       const defaults = getVoxelBasedDefaults([1, 1, 1]);
       // radius = max(2, 2 * max(vsz)) = 2
@@ -144,7 +138,6 @@ describe('Config Module', () => {
 
       // min = 0.5, max = 2
       expect(defaults.vsharpMaxRadius).toBe(Math.round(18 * 0.5));  // 9
-      expect(defaults.smvRadius).toBe(Math.round(5 * 2));  // 10
     });
 
     test('should calculate PDF maxit from mask dimensions', () => {
