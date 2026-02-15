@@ -1,6 +1,6 @@
 {
   "name": "qsm-wasm",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Quantitative Susceptibility Mapping in WebAssembly",
   "type": "module",
   "scripts": {

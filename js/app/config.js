@@ -13,7 +13,7 @@ const isWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof Wor
 const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined' && window.QSMConfig === undefined);
 
 // Application version (keep in sync with package.json, Cargo.toml, and git tags)
-export const VERSION = '0.7.0';
+export const VERSION = '0.7.1';
 
 // Physics constants
 export const PHYSICS = {
