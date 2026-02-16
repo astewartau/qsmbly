@@ -113,8 +113,6 @@ jobs:
           cp rust-wasm/pkg/qsm_wasm.d.ts deploy/wasm/
           cp rust-wasm/pkg/qsm_wasm_bg.wasm.d.ts deploy/wasm/
 
-          # Copy any existing WASM files that aren't rebuilt (e.g., romeo_wasm if separate)
-          cp wasm/romeo_wasm* deploy/wasm/ 2>/dev/null || true
           cp wasm/package.json deploy/wasm/ 2>/dev/null || true
 
       - name: Setup Pages
