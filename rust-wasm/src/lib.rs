@@ -1,35 +1,7 @@
-//! QSM-WASM: WebAssembly-accelerated Quantitative Susceptibility Mapping
+//! QSM-WASM: WebAssembly bindings for QSM processing
 //!
-//! This crate provides high-performance QSM algorithms compiled to WebAssembly
+//! This crate provides #[wasm_bindgen] wrappers around qsm-core algorithms
 //! for browser-based medical image processing.
-//!
-//! # Modules
-//! - `fft`: 3D FFT operations using rustfft
-//! - `kernels`: Dipole, SMV, and Laplacian kernels
-//! - `unwrap`: Phase unwrapping (ROMEO, Laplacian)
-//! - `bgremove`: Background field removal (SHARP, V-SHARP, PDF, iSMV)
-//! - `inversion`: Dipole inversion (TKD, Tikhonov, TV, RTS, MEDI)
-//! - `solvers`: Iterative solvers (CG, LSMR)
-//! - `utils`: Gradient operators, padding, etc.
-
-// Core modules
-pub mod fft;
-mod priority_queue;
-mod region_grow;
-
-// Algorithm modules
-pub mod kernels;
-pub mod unwrap;
-pub mod bgremove;
-pub mod inversion;
-pub mod solvers;
-pub mod utils;
-
-// I/O modules
-pub mod nifti_io;
-
-// Brain extraction
-pub mod bet;
 
 use wasm_bindgen::prelude::*;
 
@@ -81,7 +53,7 @@ pub fn grow_region_unwrap_wasm(
     console_log!("WASM grow_region_unwrap: {}x{}x{}, seed=({},{},{})",
                  nx, ny, nz, seed_i, seed_j, seed_k);
 
-    let processed = region_grow::grow_region_unwrap(
+    let processed = qsm_core::region_grow::grow_region_unwrap(
         phase, weights, mask, nx, ny, nz, seed_i, seed_j, seed_k
     );
 
@@ -110,7 +82,7 @@ pub fn laplacian_unwrap_wasm(
 ) -> Vec<f64> {
     console_log!("WASM laplacian_unwrap: {}x{}x{}", nx, ny, nz);
 
-    let unwrapped = unwrap::laplacian_unwrap(phase, mask, nx, ny, nz, vsx, vsy, vsz);
+    let unwrapped = qsm_core::unwrap::laplacian_unwrap(phase, mask, nx, ny, nz, vsx, vsy, vsz);
 
     console_log!("WASM laplacian_unwrap complete");
     unwrapped
@@ -142,7 +114,7 @@ pub fn calculate_weights_romeo_wasm(
 
     let phase2_opt = if phase2.is_empty() { None } else { Some(phase2) };
 
-    let weights = unwrap::romeo::calculate_weights_romeo(
+    let weights = qsm_core::unwrap::romeo::calculate_weights_romeo(
         phase, mag, phase2_opt, te1, te2, mask, nx, ny, nz
     );
 
@@ -183,7 +155,7 @@ pub fn calculate_weights_romeo_configurable_wasm(
 
     let phase2_opt = if phase2.is_empty() { None } else { Some(phase2) };
 
-    let weights = unwrap::romeo::calculate_weights_romeo_configurable(
+    let weights = qsm_core::unwrap::romeo::calculate_weights_romeo_configurable(
         phase, mag, phase2_opt, te1, te2, mask, nx, ny, nz,
         use_phase_gradient_coherence, use_mag_coherence, use_mag_weight
     );
@@ -220,7 +192,7 @@ pub fn tkd_wasm(
     console_log!("WASM TKD: {}x{}x{}, voxel=({:.2},{:.2},{:.2}), thr={:.3}",
                  nx, ny, nz, vsx, vsy, vsz, threshold);
 
-    let chi = inversion::tkd::tkd(
+    let chi = qsm_core::inversion::tkd::tkd(
         local_field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), threshold
     );
@@ -243,7 +215,7 @@ pub fn tsvd_wasm(
 ) -> Vec<f64> {
     console_log!("WASM TSVD: {}x{}x{}", nx, ny, nz);
 
-    let chi = inversion::tkd::tsvd(
+    let chi = qsm_core::inversion::tkd::tsvd(
         local_field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), threshold
     );
@@ -276,12 +248,12 @@ pub fn tikhonov_wasm(
                  nx, ny, nz, lambda, reg_type);
 
     let reg = match reg_type {
-        0 => inversion::tikhonov::Regularization::Identity,
-        1 => inversion::tikhonov::Regularization::Gradient,
-        _ => inversion::tikhonov::Regularization::Laplacian,
+        0 => qsm_core::inversion::tikhonov::Regularization::Identity,
+        1 => qsm_core::inversion::tikhonov::Regularization::Gradient,
+        _ => qsm_core::inversion::tikhonov::Regularization::Laplacian,
     };
 
-    let chi = inversion::tikhonov::tikhonov(
+    let chi = qsm_core::inversion::tikhonov::tikhonov(
         local_field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), lambda, reg
     );
@@ -318,7 +290,7 @@ pub fn sharp_wasm(
 ) -> Vec<f64> {
     console_log!("WASM SHARP: {}x{}x{}, radius={:.1}", nx, ny, nz, radius);
 
-    let (local_field, eroded_mask) = bgremove::sharp(
+    let (local_field, eroded_mask) = qsm_core::bgremove::sharp(
         field, mask, nx, ny, nz, vsx, vsy, vsz, radius, threshold
     );
 
@@ -352,7 +324,7 @@ pub fn smv_wasm(
 ) -> Vec<f64> {
     console_log!("WASM SMV: {}x{}x{}, radius={:.1}", nx, ny, nz, radius);
 
-    let (local_field, eroded_mask) = bgremove::smv(
+    let (local_field, eroded_mask) = qsm_core::bgremove::smv(
         field, mask, nx, ny, nz, vsx, vsy, vsz, radius
     );
 
@@ -388,7 +360,7 @@ pub fn vsharp_wasm(
 ) -> Vec<f64> {
     console_log!("WASM V-SHARP: {}x{}x{}, {} radii", nx, ny, nz, radii.len());
 
-    let (local_field, eroded_mask) = bgremove::vsharp(
+    let (local_field, eroded_mask) = qsm_core::bgremove::vsharp(
         field, mask, nx, ny, nz, vsx, vsy, vsz, radii, threshold
     );
 
@@ -414,7 +386,7 @@ pub fn vsharp_wasm_with_progress(
     console_log!("WASM V-SHARP with progress: {}x{}x{}, {} radii", nx, ny, nz, radii.len());
 
     let callback = progress_callback.clone();
-    let (local_field, eroded_mask) = bgremove::vsharp::vsharp_with_progress(
+    let (local_field, eroded_mask) = qsm_core::bgremove::vsharp::vsharp_with_progress(
         field, mask, nx, ny, nz, vsx, vsy, vsz, radii, threshold,
         |current, total| {
             let this = JsValue::null();
@@ -460,7 +432,7 @@ pub fn tv_admm_wasm(
     console_log!("WASM TV-ADMM: {}x{}x{}, lambda={:.4}, rho={:.4}, max_iter={}",
                  nx, ny, nz, lambda, rho, max_iter);
 
-    let chi = inversion::tv::tv_admm(
+    let chi = qsm_core::inversion::tv::tv_admm(
         local_field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), lambda, rho, tol, max_iter
     );
@@ -487,7 +459,7 @@ pub fn tv_admm_wasm_with_progress(
                  nx, ny, nz, lambda, max_iter);
 
     let callback = progress_callback.clone();
-    let chi = inversion::tv::tv_admm_with_progress(
+    let chi = qsm_core::inversion::tv::tv_admm_with_progress(
         local_field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), lambda, rho, tol, max_iter,
         |current, total| {
@@ -534,7 +506,7 @@ pub fn rts_wasm(
 ) -> Vec<f64> {
     console_log!("WASM RTS: {}x{}x{}, delta={:.2}, mu={:.0}", nx, ny, nz, delta, mu);
 
-    let chi = inversion::rts::rts(
+    let chi = qsm_core::inversion::rts::rts(
         local_field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), delta, mu, rho, tol, max_iter, lsmr_iter
     );
@@ -563,7 +535,7 @@ pub fn rts_wasm_with_progress(
                  nx, ny, nz, delta, max_iter);
 
     let callback = progress_callback.clone();
-    let chi = inversion::rts::rts_with_progress(
+    let chi = qsm_core::inversion::rts::rts_with_progress(
         local_field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), delta, mu, rho, tol, max_iter, lsmr_iter,
         |current, total| {
@@ -609,7 +581,7 @@ pub fn nltv_wasm(
     console_log!("WASM NLTV: {}x{}x{}, lambda={:.4}, mu={:.2}, max_iter={}, newton={}",
                  nx, ny, nz, lambda, mu, max_iter, newton_iter);
 
-    let chi = inversion::nltv::nltv(
+    let chi = qsm_core::inversion::nltv::nltv(
         local_field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), lambda, mu, tol, max_iter, newton_iter
     );
@@ -637,7 +609,7 @@ pub fn nltv_wasm_with_progress(
                  nx, ny, nz, lambda, max_iter);
 
     let callback = progress_callback.clone();
-    let chi = inversion::nltv::nltv_with_progress(
+    let chi = qsm_core::inversion::nltv::nltv_with_progress(
         local_field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), lambda, mu, tol, max_iter, newton_iter,
         |current, total| {
@@ -700,7 +672,7 @@ pub fn medi_l1_wasm(
     console_log!("WASM MEDI: {}x{}x{}, lambda={:.0}, max_iter={}, smv={}, merit={}",
                  nx, ny, nz, lambda, max_iter, smv, merit);
 
-    let chi = inversion::medi::medi_l1(
+    let chi = qsm_core::inversion::medi::medi_l1(
         local_field, n_std, magnitude, mask, nx, ny, nz, vsx, vsy, vsz,
         lambda, (bx, by, bz), merit, smv, smv_radius, data_weighting, percentage,
         cg_tol, cg_max_iter, max_iter, tol
@@ -737,7 +709,7 @@ pub fn medi_l1_wasm_with_progress(
                  nx, ny, nz, lambda, max_iter);
 
     let callback = progress_callback.clone();
-    let chi = inversion::medi::medi_l1_with_progress(
+    let chi = qsm_core::inversion::medi::medi_l1_with_progress(
         local_field, n_std, magnitude, mask, nx, ny, nz, vsx, vsy, vsz,
         lambda, (bx, by, bz), merit, smv, smv_radius, data_weighting, percentage,
         cg_tol, cg_max_iter, max_iter, tol,
@@ -788,7 +760,7 @@ pub fn ilsqr_wasm(
     console_log!("WASM iLSQR: {}x{}x{}, tol={:.4}, max_iter={}",
                  nx, ny, nz, tol, max_iter);
 
-    let chi = inversion::ilsqr::ilsqr_simple(
+    let chi = qsm_core::inversion::ilsqr::ilsqr_simple(
         local_field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), tol, max_iter
     );
@@ -813,7 +785,7 @@ pub fn ilsqr_wasm_with_progress(
                  nx, ny, nz, tol, max_iter);
 
     let callback = progress_callback.clone();
-    let chi = inversion::ilsqr::ilsqr_with_progress(
+    let chi = qsm_core::inversion::ilsqr::ilsqr_with_progress(
         local_field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), tol, max_iter,
         |current, total| {
@@ -850,7 +822,7 @@ pub fn ilsqr_full_wasm(
 ) -> Vec<f64> {
     console_log!("WASM iLSQR full: {}x{}x{}", nx, ny, nz);
 
-    let (chi, xsa, xfs, xlsqr) = inversion::ilsqr::ilsqr(
+    let (chi, xsa, xfs, xlsqr) = qsm_core::inversion::ilsqr::ilsqr(
         local_field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), tol, max_iter
     );
@@ -912,7 +884,7 @@ pub fn tgv_qsm_wasm(
     // Convert f64 to f32 for TGV algorithm
     let phase_f32: Vec<f32> = phase.iter().map(|&x| x as f32).collect();
 
-    let params = inversion::tgv::TgvParams {
+    let params = qsm_core::inversion::tgv::TgvParams {
         alpha0: alpha0 as f32,
         alpha1: alpha1 as f32,
         iterations,
@@ -923,7 +895,7 @@ pub fn tgv_qsm_wasm(
         tol: 1e-5,
     };
 
-    let chi = inversion::tgv::tgv_qsm(
+    let chi = qsm_core::inversion::tgv::tgv_qsm(
         &phase_f32, mask, nx, ny, nz,
         vsx as f32, vsy as f32, vsz as f32,
         &params, (bx as f32, by as f32, bz as f32)
@@ -957,7 +929,7 @@ pub fn tgv_qsm_wasm_with_progress(
 
     let phase_f32: Vec<f32> = phase.iter().map(|&x| x as f32).collect();
 
-    let params = inversion::tgv::TgvParams {
+    let params = qsm_core::inversion::tgv::TgvParams {
         alpha0: alpha0 as f32,
         alpha1: alpha1 as f32,
         iterations,
@@ -969,7 +941,7 @@ pub fn tgv_qsm_wasm_with_progress(
     };
 
     let callback = progress_callback.clone();
-    let chi = inversion::tgv::tgv_qsm_with_progress(
+    let chi = qsm_core::inversion::tgv::tgv_qsm_with_progress(
         &phase_f32, mask, nx, ny, nz,
         vsx as f32, vsy as f32, vsz as f32,
         &params, (bx as f32, by as f32, bz as f32),
@@ -989,7 +961,7 @@ pub fn tgv_qsm_wasm_with_progress(
 /// Returns [alpha0, alpha1]
 #[wasm_bindgen]
 pub fn tgv_get_default_alpha(regularization: u8) -> Vec<f64> {
-    let (alpha0, alpha1) = inversion::tgv::get_default_alpha(regularization);
+    let (alpha0, alpha1) = qsm_core::inversion::tgv::get_default_alpha(regularization);
     vec![alpha0 as f64, alpha1 as f64]
 }
 
@@ -1021,7 +993,7 @@ pub fn pdf_wasm(
 ) -> Vec<f64> {
     console_log!("WASM PDF: {}x{}x{}", nx, ny, nz);
 
-    let local_field = bgremove::pdf::pdf(
+    let local_field = qsm_core::bgremove::pdf::pdf(
         field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), tol, max_iter
     );
@@ -1045,7 +1017,7 @@ pub fn pdf_wasm_with_progress(
     console_log!("WASM PDF with progress: {}x{}x{}, max_iter={}", nx, ny, nz, max_iter);
 
     let callback = progress_callback.clone();
-    let local_field = bgremove::pdf::pdf_with_progress(
+    let local_field = qsm_core::bgremove::pdf::pdf_with_progress(
         field, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), tol, max_iter,
         |current, total| {
@@ -1088,7 +1060,7 @@ pub fn ismv_wasm(
 ) -> Vec<f64> {
     console_log!("WASM iSMV: {}x{}x{}, radius={:.1}", nx, ny, nz, radius);
 
-    let (local_field, eroded_mask) = bgremove::ismv::ismv(
+    let (local_field, eroded_mask) = qsm_core::bgremove::ismv::ismv(
         field, mask, nx, ny, nz, vsx, vsy, vsz, radius, tol, max_iter
     );
 
@@ -1116,7 +1088,7 @@ pub fn ismv_wasm_with_progress(
                  nx, ny, nz, radius, max_iter);
 
     let callback = progress_callback.clone();
-    let (local_field, eroded_mask) = bgremove::ismv::ismv_with_progress(
+    let (local_field, eroded_mask) = qsm_core::bgremove::ismv::ismv_with_progress(
         field, mask, nx, ny, nz, vsx, vsy, vsz, radius, tol, max_iter,
         |current, total| {
             let this = JsValue::null();
@@ -1159,7 +1131,7 @@ pub fn lbv_wasm(
 ) -> Vec<f64> {
     console_log!("WASM LBV: {}x{}x{}, tol={:.6}, max_iter={}", nx, ny, nz, tol, max_iter);
 
-    let (local_field, eroded_mask) = bgremove::lbv::lbv(
+    let (local_field, eroded_mask) = qsm_core::bgremove::lbv::lbv(
         field, mask, nx, ny, nz, vsx, vsy, vsz, tol, max_iter
     );
 
@@ -1185,7 +1157,7 @@ pub fn lbv_wasm_with_progress(
     console_log!("WASM LBV with progress: {}x{}x{}, tol={:.6}, max_iter={}", nx, ny, nz, tol, max_iter);
 
     let callback = progress_callback.clone();
-    let (local_field, eroded_mask) = bgremove::lbv::lbv_with_progress(
+    let (local_field, eroded_mask) = qsm_core::bgremove::lbv::lbv_with_progress(
         field, mask, nx, ny, nz, vsx, vsy, vsz, tol, max_iter,
         |current, total| {
             let this = JsValue::null();
@@ -1226,7 +1198,7 @@ pub fn get_dipole_kernel(
     vsx: f64, vsy: f64, vsz: f64,
     bx: f64, by: f64, bz: f64,
 ) -> Vec<f64> {
-    kernels::dipole::dipole_kernel(nx, ny, nz, vsx, vsy, vsz, (bx, by, bz))
+    qsm_core::kernels::dipole::dipole_kernel(nx, ny, nz, vsx, vsy, vsz, (bx, by, bz))
 }
 
 // ============================================================================
@@ -1238,7 +1210,7 @@ pub fn get_dipole_kernel(
 /// Returns a JS object with: data (Float64Array), dims (array), voxelSize (array), affine (array)
 #[wasm_bindgen]
 pub fn load_nifti_wasm(bytes: &[u8]) -> Result<js_sys::Object, JsValue> {
-    let nifti_data = nifti_io::load_nifti(bytes)
+    let nifti_data = qsm_core::nifti_io::load_nifti(bytes)
         .map_err(|e| JsValue::from_str(&e))?;
 
     let result = js_sys::Object::new();
@@ -1277,7 +1249,7 @@ pub fn load_nifti_wasm(bytes: &[u8]) -> Result<js_sys::Object, JsValue> {
 /// Returns a JS object with: data (Float64Array), dims (array of 4), voxelSize (array), affine (array)
 #[wasm_bindgen]
 pub fn load_nifti_4d_wasm(bytes: &[u8]) -> Result<js_sys::Object, JsValue> {
-    let (data, dims, voxel_size, affine) = nifti_io::load_nifti_4d(bytes)
+    let (data, dims, voxel_size, affine) = qsm_core::nifti_io::load_nifti_4d(bytes)
         .map_err(|e| JsValue::from_str(&e))?;
 
     let result = js_sys::Object::new();
@@ -1334,7 +1306,7 @@ pub fn save_nifti_wasm(
     let mut affine_arr = [0.0f64; 16];
     affine_arr.copy_from_slice(affine);
 
-    let bytes = nifti_io::save_nifti(data, (nx, ny, nz), (vsx, vsy, vsz), &affine_arr)
+    let bytes = qsm_core::nifti_io::save_nifti(data, (nx, ny, nz), (vsx, vsy, vsz), &affine_arr)
         .map_err(|e| JsValue::from_str(&e))?;
 
     console_log!("WASM save_nifti: {}x{}x{}, {} bytes", nx, ny, nz, bytes.len());
@@ -1357,7 +1329,7 @@ pub fn save_nifti_gz_wasm(
     let mut affine_arr = [0.0f64; 16];
     affine_arr.copy_from_slice(affine);
 
-    let bytes = nifti_io::save_nifti_gz(data, (nx, ny, nz), (vsx, vsy, vsz), &affine_arr)
+    let bytes = qsm_core::nifti_io::save_nifti_gz(data, (nx, ny, nz), (vsx, vsy, vsz), &affine_arr)
         .map_err(|e| JsValue::from_str(&e))?;
 
     console_log!("WASM save_nifti_gz: {}x{}x{}, {} bytes (compressed)", nx, ny, nz, bytes.len());
@@ -1397,7 +1369,7 @@ pub fn bet_wasm(
     console_log!("WASM BET: {}x{}x{}, fi={:.2}, smooth={:.2}, grad={:.2}, iter={}, subdiv={}",
                  nx, ny, nz, fractional_intensity, smoothness_factor, gradient_threshold, iterations, subdivisions);
 
-    let mask = bet::run_bet(
+    let mask = qsm_core::bet::run_bet(
         data, nx, ny, nz, vsx, vsy, vsz,
         fractional_intensity, smoothness_factor, gradient_threshold,
         iterations, subdivisions
@@ -1429,7 +1401,7 @@ pub fn bet_wasm_with_progress(
                  nx, ny, nz, fractional_intensity, smoothness_factor, gradient_threshold, iterations, subdivisions);
 
     let callback = progress_callback.clone();
-    let mask = bet::run_bet_with_progress(
+    let mask = qsm_core::bet::run_bet_with_progress(
         data, nx, ny, nz, vsx, vsy, vsz,
         fractional_intensity, smoothness_factor, gradient_threshold,
         iterations, subdivisions,
@@ -1458,23 +1430,9 @@ pub fn create_sphere_mask(
     console_log!("Creating sphere mask: {}x{}x{}, center=({:.1},{:.1},{:.1}), r={:.1}",
                  nx, ny, nz, center_x, center_y, center_z, radius);
 
-    let mut mask = vec![0u8; nx * ny * nz];
-    let r2 = radius * radius;
-
-    // Use Fortran order (x varies fastest) to match NIfTI convention
-    // index = x + y*nx + z*nx*ny
-    for k in 0..nz {
-        for j in 0..ny {
-            for i in 0..nx {
-                let dx = i as f64 - center_x;
-                let dy = j as f64 - center_y;
-                let dz = k as f64 - center_z;
-                if dx*dx + dy*dy + dz*dz <= r2 {
-                    mask[i + j * nx + k * nx * ny] = 1;
-                }
-            }
-        }
-    }
+    let mask = qsm_core::utils::mask::create_sphere_mask(
+        nx, ny, nz, center_x, center_y, center_z, radius
+    );
 
     let count: usize = mask.iter().map(|&m| m as usize).sum();
     console_log!("Sphere mask: {} voxels ({:.1}%)", count, 100.0 * count as f64 / mask.len() as f64);
@@ -1483,82 +1441,12 @@ pub fn create_sphere_mask(
 }
 
 /// Otsu's method for automatic thresholding
-///
-/// Computes the optimal threshold that minimizes intra-class variance
-/// (equivalently maximizes inter-class variance) for bimodal histograms.
-///
-/// # Arguments
-/// * `data` - 3D magnitude image (flattened)
-/// * `num_bins` - Number of histogram bins (typically 256)
-///
-/// # Returns
-/// Tuple of (threshold_value, binary_mask)
 #[wasm_bindgen]
 pub fn otsu_threshold_wasm(data: &[f64], num_bins: usize) -> Vec<u8> {
     console_log!("WASM Otsu: {} voxels, {} bins", data.len(), num_bins);
 
-    // Find min/max for histogram range
-    let mut min_val = f64::MAX;
-    let mut max_val = f64::MIN;
-    for &v in data.iter() {
-        if v < min_val { min_val = v; }
-        if v > max_val { max_val = v; }
-    }
-
-    if (max_val - min_val).abs() < 1e-10 {
-        console_log!("Otsu: constant image, returning all zeros");
-        return vec![0u8; data.len()];
-    }
-
-    // Build histogram
-    let mut histogram = vec![0usize; num_bins];
-    let bin_width = (max_val - min_val) / num_bins as f64;
-
-    for &v in data.iter() {
-        let bin = ((v - min_val) / bin_width).floor() as usize;
-        let bin = bin.min(num_bins - 1); // Clamp to valid range
-        histogram[bin] += 1;
-    }
-
-    // Compute Otsu threshold
-    let total_pixels = data.len() as f64;
-
-    // Compute cumulative sums and means
-    let mut sum_total = 0.0;
-    for (i, &count) in histogram.iter().enumerate() {
-        sum_total += i as f64 * count as f64;
-    }
-
-    let mut sum_background = 0.0;
-    let mut weight_background = 0.0;
-    let mut max_variance = 0.0;
-    let mut optimal_threshold_bin = 0usize;
-
-    for (t, &count) in histogram.iter().enumerate() {
-        weight_background += count as f64;
-        if weight_background == 0.0 { continue; }
-
-        let weight_foreground = total_pixels - weight_background;
-        if weight_foreground == 0.0 { break; }
-
-        sum_background += t as f64 * count as f64;
-
-        let mean_background = sum_background / weight_background;
-        let mean_foreground = (sum_total - sum_background) / weight_foreground;
-
-        // Inter-class variance
-        let variance = weight_background * weight_foreground
-            * (mean_background - mean_foreground).powi(2);
-
-        if variance > max_variance {
-            max_variance = variance;
-            optimal_threshold_bin = t;
-        }
-    }
-
-    // Convert bin index to actual threshold value
-    let threshold = min_val + (optimal_threshold_bin as f64 + 0.5) * bin_width;
-    console_log!("Otsu threshold: {:.4} (bin {} of {})", threshold, optimal_threshold_bin, num_bins);
+    let threshold = qsm_core::utils::threshold::otsu_threshold(data, num_bins);
+    console_log!("Otsu threshold: {:.4}", threshold);
 
     // Create binary mask
     let mut mask = vec![0u8; data.len()];
@@ -1603,7 +1491,7 @@ pub fn gaussian_smooth_3d_phase_wasm(
     console_log!("WASM gaussian_smooth_3d_phase: {}x{}x{}, sigma=({:.1},{:.1},{:.1})",
                  nx, ny, nz, sigma_x, sigma_y, sigma_z);
 
-    let result = utils::multi_echo::gaussian_smooth_3d_phase(
+    let result = qsm_core::utils::multi_echo::gaussian_smooth_3d_phase(
         phase, [sigma_x, sigma_y, sigma_z], mask, nx, ny, nz
     );
 
@@ -1632,7 +1520,7 @@ pub fn hermitian_inner_product_wasm(
 ) -> Vec<f64> {
     console_log!("WASM hermitian_inner_product: n={}", n);
 
-    let (hip_phase, hip_mag) = utils::multi_echo::hermitian_inner_product(
+    let (hip_phase, hip_mag) = qsm_core::utils::multi_echo::hermitian_inner_product(
         phase1, mag1, phase2, mag2, mask, n
     );
 
@@ -1646,7 +1534,7 @@ pub fn hermitian_inner_product_wasm(
 
 /// MCPC-3D-S phase offset estimation for single-coil multi-echo data
 ///
-/// Estimates and removes the phase offset (φ₀) from each echo using the
+/// Estimates and removes the phase offset from each echo using the
 /// MCPC-3D-S algorithm from MriResearchTools.jl
 ///
 /// # Arguments
@@ -1687,7 +1575,7 @@ pub fn mcpc3ds_single_coil_wasm(
         .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
         .collect();
 
-    let (corrected_phases, phase_offset) = utils::multi_echo::mcpc3ds_single_coil(
+    let (corrected_phases, phase_offset) = qsm_core::utils::multi_echo::mcpc3ds_single_coil(
         &phases, &mags, tes, mask,
         [sigma_x, sigma_y, sigma_z], [echo1, echo2],
         nx, ny, nz
@@ -1707,7 +1595,7 @@ pub fn mcpc3ds_single_coil_wasm(
 /// Calculate B0 field from unwrapped phase using weighted averaging
 ///
 /// Implements calculateB0_unwrapped from MriResearchTools.jl
-/// Formula: B0 = (1000 / 2π) * Σ(phase / TE * weight) / Σ(weight)
+/// Formula: B0 = (1000 / 2pi) * sum(phase / TE * weight) / sum(weight)
 ///
 /// # Arguments
 /// * `unwrapped_phases_flat` - Flattened unwrapped phases [echo0, echo1, ...]
@@ -1741,9 +1629,9 @@ pub fn calculate_b0_weighted_wasm(
         .map(|e| mags_flat[e * n_total..(e + 1) * n_total].to_vec())
         .collect();
 
-    let wt = utils::multi_echo::B0WeightType::from_str(weight_type);
+    let wt = qsm_core::utils::multi_echo::B0WeightType::from_str(weight_type);
 
-    let b0 = utils::multi_echo::calculate_b0_weighted(
+    let b0 = qsm_core::utils::multi_echo::calculate_b0_weighted(
         &unwrapped_phases, &mags, tes, mask, wt, n_total
     );
 
@@ -1795,9 +1683,9 @@ pub fn mcpc3ds_b0_pipeline_wasm(
         .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
         .collect();
 
-    let wt = utils::multi_echo::B0WeightType::from_str(weight_type);
+    let wt = qsm_core::utils::multi_echo::B0WeightType::from_str(weight_type);
 
-    let (b0, phase_offset, corrected_phases) = utils::multi_echo::mcpc3ds_b0_pipeline(
+    let (b0, phase_offset, corrected_phases) = qsm_core::utils::multi_echo::mcpc3ds_b0_pipeline(
         &phases, &mags, tes, mask,
         [sigma_x, sigma_y, sigma_z], wt,
         nx, ny, nz
@@ -1859,13 +1747,13 @@ pub fn multi_echo_linear_fit_wasm(
         .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
         .collect();
 
-    let result = utils::multi_echo::multi_echo_linear_fit(
+    let result = qsm_core::utils::multi_echo::multi_echo_linear_fit(
         &unwrapped_phases, &mags, tes, mask,
         estimate_offset, reliability_percentile
     );
 
     // Convert field to Hz
-    let field_hz = utils::multi_echo::field_to_hz(&result.field);
+    let field_hz = qsm_core::utils::multi_echo::field_to_hz(&result.field);
 
     // Flatten output
     let mut output = Vec::with_capacity(4 * n_total);
@@ -1916,7 +1804,7 @@ pub fn makehomogeneous_wasm(
         console_log!("WASM makehomogeneous: sigma clamped from {:.1} to {:.1}mm", sigma_mm, sigma_clamped);
     }
 
-    let result = utils::bias_correction::makehomogeneous(
+    let result = qsm_core::utils::bias_correction::makehomogeneous(
         mag, nx, ny, nz, vsx, vsy, vsz, sigma_clamped, nbox
     );
 
@@ -1943,7 +1831,7 @@ pub fn rss_combine_wasm(
 ) -> Vec<f64> {
     console_log!("WASM RSS combine: {} echoes, {} voxels each", n_echoes, n_total);
 
-    let result = utils::bias_correction::rss_combine(mags_flat, n_echoes, n_total);
+    let result = qsm_core::utils::bias_correction::rss_combine(mags_flat, n_echoes, n_total);
 
     console_log!("WASM RSS combine complete");
     result
@@ -1982,7 +1870,7 @@ pub fn frangi_filter_3d_wasm(
     console_log!("WASM Frangi: {}x{}x{}, scales=[{:.1},{:.1}], c={}",
                  nx, ny, nz, scale_min, scale_max, c);
 
-    let params = utils::frangi::FrangiParams {
+    let params = qsm_core::utils::frangi::FrangiParams {
         scale_range: [scale_min, scale_max],
         scale_ratio,
         alpha,
@@ -1991,7 +1879,7 @@ pub fn frangi_filter_3d_wasm(
         black_white,
     };
 
-    let result = utils::frangi::frangi_filter_3d(data, nx, ny, nz, &params);
+    let result = qsm_core::utils::frangi::frangi_filter_3d(data, nx, ny, nz, &params);
 
     console_log!("WASM Frangi complete");
     result.vesselness
@@ -2010,7 +1898,7 @@ pub fn frangi_filter_3d_wasm_with_progress(
 ) -> Vec<f64> {
     console_log!("WASM Frangi with progress: {}x{}x{}", nx, ny, nz);
 
-    let params = utils::frangi::FrangiParams {
+    let params = qsm_core::utils::frangi::FrangiParams {
         scale_range: [scale_min, scale_max],
         scale_ratio,
         alpha,
@@ -2020,7 +1908,7 @@ pub fn frangi_filter_3d_wasm_with_progress(
     };
 
     let callback = progress_callback.clone();
-    let result = utils::frangi::frangi_filter_3d_with_progress(
+    let result = qsm_core::utils::frangi::frangi_filter_3d_with_progress(
         data, nx, ny, nz, &params,
         |current, total| {
             let this = JsValue::null();
@@ -2062,14 +1950,14 @@ pub fn vasculature_mask_wasm(
     console_log!("WASM vasculature_mask: {}x{}x{}, sphere_r={}, frangi_c={}",
                  nx, ny, nz, sphere_radius, frangi_c);
 
-    let params = utils::vasculature::VasculatureParams {
+    let params = qsm_core::utils::vasculature::VasculatureParams {
         sphere_radius,
         frangi_scale_range: [frangi_scale_min, frangi_scale_max],
         frangi_scale_ratio,
         frangi_c,
     };
 
-    let result = utils::vasculature::generate_vasculature_mask(magnitude, mask, nx, ny, nz, &params);
+    let result = qsm_core::utils::vasculature::generate_vasculature_mask(magnitude, mask, nx, ny, nz, &params);
 
     console_log!("WASM vasculature_mask complete");
     result
@@ -2089,7 +1977,7 @@ pub fn vasculature_mask_wasm_with_progress(
 ) -> Vec<f64> {
     console_log!("WASM vasculature_mask with progress: {}x{}x{}", nx, ny, nz);
 
-    let params = utils::vasculature::VasculatureParams {
+    let params = qsm_core::utils::vasculature::VasculatureParams {
         sphere_radius,
         frangi_scale_range: [frangi_scale_min, frangi_scale_max],
         frangi_scale_ratio,
@@ -2097,7 +1985,7 @@ pub fn vasculature_mask_wasm_with_progress(
     };
 
     let callback = progress_callback.clone();
-    let result = utils::vasculature::generate_vasculature_mask_with_progress(
+    let result = qsm_core::utils::vasculature::generate_vasculature_mask_with_progress(
         magnitude, mask, nx, ny, nz, &params,
         |current, total| {
             let this = JsValue::null();
@@ -2142,7 +2030,7 @@ pub fn sdf_wasm(
     console_log!("WASM SDF: {}x{}x{}, sigma1={}, sigma2={}, curv={}",
                  nx, ny, nz, sigma1, sigma2, use_curvature);
 
-    let params = bgremove::sdf::SdfParams {
+    let params = qsm_core::bgremove::sdf::SdfParams {
         sigma1,
         sigma2,
         spatial_radius: 8,
@@ -2151,7 +2039,7 @@ pub fn sdf_wasm(
         use_curvature,
     };
 
-    let result = bgremove::sdf::sdf(tfs, mask, vasc_only, nx, ny, nz, &params);
+    let result = qsm_core::bgremove::sdf::sdf(tfs, mask, vasc_only, nx, ny, nz, &params);
 
     console_log!("WASM SDF complete");
     result
@@ -2173,7 +2061,7 @@ pub fn sdf_wasm_with_progress(
 ) -> Vec<f64> {
     console_log!("WASM SDF with progress: {}x{}x{}", nx, ny, nz);
 
-    let params = bgremove::sdf::SdfParams {
+    let params = qsm_core::bgremove::sdf::SdfParams {
         sigma1,
         sigma2,
         spatial_radius,
@@ -2183,7 +2071,7 @@ pub fn sdf_wasm_with_progress(
     };
 
     let callback = progress_callback.clone();
-    let result = bgremove::sdf::sdf_with_progress(
+    let result = qsm_core::bgremove::sdf::sdf_with_progress(
         tfs, mask, vasc_only, nx, ny, nz, &params,
         |current, total| {
             let this = JsValue::null();
@@ -2227,7 +2115,7 @@ pub fn qsmart_adjust_offset_wasm(
 ) -> Vec<f64> {
     console_log!("WASM QSMART offset adjustment: {}x{}x{}", nx, ny, nz);
 
-    let result = utils::qsmart::adjust_offset(
+    let result = qsm_core::utils::qsmart::adjust_offset(
         removed_voxels, lfs_sdf, chi_1, chi_2,
         nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), ppm
@@ -2254,7 +2142,7 @@ pub fn curvature_wasm(
 ) -> Vec<f64> {
     console_log!("WASM curvature: {}x{}x{}", nx, ny, nz);
 
-    let result = utils::curvature::calculate_gaussian_curvature(mask, nx, ny, nz);
+    let result = qsm_core::utils::curvature::calculate_gaussian_curvature(mask, nx, ny, nz);
 
     // Combine outputs
     let mut output = result.gaussian_curvature;

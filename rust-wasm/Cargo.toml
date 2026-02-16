@@ -3,36 +3,23 @@ name = "qsm_wasm"
 version = "0.7.1"
 edition = "2021"
 authors = ["QSM-WASM"]
-description = "WASM-accelerated QSM processing pipeline"
+description = "WASM bindings for QSM processing pipeline (powered by qsm-core)"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["console_error_panic_hook"]
-simd = ["wide"]  # Optional SIMD acceleration (requires modern browsers for WASM)
+simd = ["qsm-core/simd"]
 
 [dependencies]
+# Core QSM algorithms
+qsm-core = { git = "https://github.com/astewartau/QSM.rs", tag = "v0.2.0" }
+
+# WASM bindings
 wasm-bindgen = "0.2"
 js-sys = "0.3"
 console_error_panic_hook = { version = "0.1", optional = true }
-
-# FFT and complex number support
-rustfft = "6.2"
-num-complex = "0.4"
-num-traits = "0.2"
-
-# NIfTI file support (pure Rust, WASM-compatible)
-nifti = { version = "0.17", default-features = false, features = ["ndarray_volumes"] }
-ndarray = "0.16"
-flate2 = "1.1"
-bytemuck = "1.24"
-
-# SIMD acceleration (optional)
-wide = { version = "0.7", optional = true }
-
-# 2D Delaunay triangulation for curvature calculation
-delaunator = "1.0"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
