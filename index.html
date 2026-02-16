@@ -33,6 +33,14 @@
         <h1>QSMbly <span>Quantitative Susceptibility Mapping</span> <span class="version" id="appVersion"></span></h1>
       </div>
       <div class="header-links">
+        <button class="header-link" id="openAbout" title="About">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <span>About</span>
+        </button>
         <button class="header-link" id="openCitations" title="Citations">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
@@ -1337,6 +1345,39 @@
   </div>
 
   <!-- Privacy Modal -->
+  <!-- About Modal -->
+  <div class="modal-overlay" id="aboutModal">
+    <div class="modal about-modal">
+      <div class="modal-header">
+        <h3>About QSMbly</h3>
+        <button class="modal-close" id="closeAbout">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="about-highlight">
+          <img src="QSMbly.png" alt="QSMbly" width="48" height="48" class="about-logo">
+          <div>
+            <strong>QSMbly</strong>
+            <p>Quantitative Susceptibility Mapping in the browser</p>
+          </div>
+        </div>
+
+        <p>QSMbly is a browser-based application for Quantitative Susceptibility Mapping (QSM). It runs entirely in your web browser using WebAssembly, providing near-native performance without requiring any software installation or data upload.</p>
+
+        <h4>Version</h4>
+        <div class="about-version-table">
+          <div class="about-version-row">
+            <span class="about-version-label"><a href="https://github.com/astewartau/qsmbly" target="_blank" rel="noopener noreferrer">QSMbly</a> (web UI)</span>
+            <span class="about-version-value" id="aboutAppVersion"></span>
+          </div>
+          <div class="about-version-row">
+            <span class="about-version-label"><a href="https://github.com/astewartau/QSM.rs" target="_blank" rel="noopener noreferrer">QSM.rs</a> (core Rust library)</span>
+            <span class="about-version-value" id="aboutCoreVersion"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="privacyModal">
     <div class="modal privacy-modal">
       <div class="modal-header">
@@ -2564,6 +2605,98 @@
       line-height: 1.8;
       padding-left: var(--space-lg);
       margin: 0 0 var(--space-sm);
+    }
+
+    /* About modal */
+    .about-modal {
+      max-width: 480px;
+    }
+
+    .about-highlight {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      background: var(--color-surface-alt);
+      border: 1px solid var(--color-primary);
+      border-radius: var(--radius-md);
+      padding: var(--space-md);
+      margin-bottom: var(--space-lg);
+    }
+
+    .about-logo {
+      border-radius: var(--radius-sm);
+      flex-shrink: 0;
+    }
+
+    .about-highlight strong {
+      font-size: 1.1rem;
+      color: var(--color-primary);
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .about-highlight p {
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+      margin: 0;
+      line-height: 1.4;
+    }
+
+    .about-modal > .modal-body > p {
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+      line-height: 1.6;
+      margin: 0 0 var(--space-md);
+    }
+
+    .about-modal h4 {
+      font-size: 0.9rem;
+      margin: var(--space-md) 0 var(--space-sm);
+      color: var(--color-text);
+    }
+
+    .about-version-table {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+    }
+
+    .about-version-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: var(--space-xs) var(--space-sm);
+      background: var(--color-surface-alt);
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+    }
+
+    .about-version-label {
+      color: var(--color-text-muted);
+    }
+
+    .about-version-label a {
+      color: var(--color-primary);
+      text-decoration: none;
+    }
+
+    .about-version-label a:hover {
+      text-decoration: underline;
+    }
+
+    .about-version-value {
+      color: var(--color-text);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .about-version-value a {
+      color: var(--color-primary);
+      text-decoration: none;
+    }
+
+    .about-version-value a:hover {
+      text-decoration: underline;
     }
 
     /* Citations modal */

@@ -15,6 +15,9 @@ const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined
 // Application version (keep in sync with package.json, Cargo.toml, and git tags)
 export const VERSION = '0.7.1';
 
+// QSM.rs core library version (keep in sync with qsm-core dependency in rust-wasm/Cargo.toml)
+export const QSM_RS_VERSION = '0.2.0';
+
 // Physics constants
 export const PHYSICS = {
   GYROMAGNETIC_RATIO: 42.576e6  // Hz/T (gamma for protons)
@@ -312,6 +315,8 @@ export const BOX_FILTER_DEFAULTS = {
 
 // Make config available globally for non-module scripts and workers
 const QSMConfig = {
+  VERSION,
+  QSM_RS_VERSION,
   PHYSICS,
   INPUT_MODES,
   FIELD_MAP_UNITS,

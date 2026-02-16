@@ -87,6 +87,7 @@ class QSMApp {
 
     // Modal managers (initialized in init() after DOM ready)
     this.betModal = null;
+    this.aboutModal = null;
     this.citationsModal = null;
     this.privacyModal = null;
 
@@ -208,6 +209,7 @@ class QSMApp {
 
     // Initialize modal managers
     this.betModal = new ModalManager('betSettingsModal');
+    this.aboutModal = new ModalManager('aboutModal');
     this.citationsModal = new ModalManager('citationsModal');
     this.privacyModal = new ModalManager('privacyModal');
     this.dicompareModal = new ModalManager('dicompareModal');
@@ -484,6 +486,17 @@ class QSMApp {
     document.getElementById('closeBetSettings')?.addEventListener('click', () => this.betModal?.close());
     document.getElementById('resetBetSettings')?.addEventListener('click', () => this.resetBetSettings());
     document.getElementById('runBetWithSettings')?.addEventListener('click', () => this.runBetWithSettings());
+
+    // About modal
+    document.getElementById('openAbout')?.addEventListener('click', () => {
+      const cfg = window.QSMConfig;
+      const appVer = document.getElementById('aboutAppVersion');
+      if (appVer && cfg?.VERSION) appVer.textContent = `v${cfg.VERSION}`;
+      const coreVer = document.getElementById('aboutCoreVersion');
+      if (coreVer && cfg?.QSM_RS_VERSION) coreVer.textContent = `v${cfg.QSM_RS_VERSION}`;
+      this.aboutModal?.open();
+    });
+    document.getElementById('closeAbout')?.addEventListener('click', () => this.aboutModal?.close());
 
     // Citations modal
     document.getElementById('openCitations')?.addEventListener('click', () => this.citationsModal?.open());
