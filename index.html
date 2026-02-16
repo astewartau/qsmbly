@@ -70,10 +70,14 @@
         <div class="section-content">
         <!-- Input Mode Tabs -->
         <div class="input-mode-tabs" id="inputModeTabs">
-          <button class="input-mode-tab active" data-mode="dicom">DICOMs</button>
-          <button class="input-mode-tab" data-mode="raw">NIfTI</button>
-          <button class="input-mode-tab" data-mode="totalField">Total Field</button>
-          <button class="input-mode-tab" data-mode="localField">Local Field</button>
+          <button class="input-mode-tab active" data-mode="dicom">DICOM</button>
+          <button class="input-mode-tab" data-mode="nifti">NIfTI</button>
+        </div>
+        <!-- NIfTI Sub-type Tabs (only visible when NIfTI is selected) -->
+        <div class="input-subtype-tabs" id="inputSubtypeTabs" style="display: none;">
+          <button class="input-subtype-tab active" data-mode="raw">Mag+Phase</button>
+          <button class="input-subtype-tab" data-mode="totalField">Total Field</button>
+          <button class="input-subtype-tab" data-mode="localField">Local Field</button>
         </div>
 
         <!-- Raw Images Mode -->

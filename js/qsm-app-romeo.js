@@ -329,8 +329,22 @@ class QSMApp {
   }
 
   setupEventListeners() {
-    // Input mode tab switching
+    // Input mode tab switching (top-level: dicom vs nifti)
     document.querySelectorAll('.input-mode-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const topMode = tab.dataset.mode;
+        if (topMode === 'dicom') {
+          this.switchInputMode('dicom');
+        } else {
+          // NIfTI selected - use the active sub-type
+          const activeSub = document.querySelector('.input-subtype-tab.active');
+          this.switchInputMode(activeSub?.dataset.mode || 'raw');
+        }
+      });
+    });
+
+    // NIfTI sub-type tab switching
+    document.querySelectorAll('.input-subtype-tab').forEach(tab => {
       tab.addEventListener('click', () => this.switchInputMode(tab.dataset.mode));
     });
 
@@ -959,10 +973,25 @@ class QSMApp {
   // ==================== Input Mode Switching ====================
 
   switchInputMode(mode) {
-    // Update tab UI
+    const isDicom = mode === 'dicom';
+    const subtypeTabs = document.getElementById('inputSubtypeTabs');
+
+    // Update top-level tab UI (dicom vs nifti)
     document.querySelectorAll('.input-mode-tab').forEach(tab => {
-      tab.classList.toggle('active', tab.dataset.mode === mode);
+      tab.classList.toggle('active', isDicom ? tab.dataset.mode === 'dicom' : tab.dataset.mode === 'nifti');
     });
+
+    // Show/hide NIfTI sub-type tabs
+    subtypeTabs.style.display = isDicom ? 'none' : '';
+
+    // Update sub-type tab active state
+    if (!isDicom) {
+      document.querySelectorAll('.input-subtype-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.mode === mode);
+      });
+    }
+
+    // Update content panels
     document.querySelectorAll('.input-mode-content').forEach(content => {
       content.classList.toggle('active', content.dataset.mode === mode);
     });

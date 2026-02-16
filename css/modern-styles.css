@@ -442,6 +442,42 @@ input[type="range"]:disabled::-moz-range-thumb {
   font-weight: 600;
 }
 
+/* NIfTI Sub-type Tabs */
+.input-subtype-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: var(--space-sm);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  border: 1px solid var(--color-border);
+}
+
+.input-subtype-tab {
+  flex: 1;
+  padding: 4px 3px;
+  font-size: 0.6rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.input-subtype-tab:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.input-subtype-tab.active {
+  color: var(--color-text);
+  background: var(--color-primary);
+  font-weight: 600;
+}
+
 /* Input mode content visibility */
 .input-mode-content {
   display: none;
