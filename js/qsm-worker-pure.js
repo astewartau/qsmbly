@@ -239,7 +239,7 @@ async function runPipeline(data) {
     minRadius: pipelineSettings?.vsharp?.minRadius ?? 2,
     threshold: pipelineSettings?.vsharp?.threshold ?? 0.05
   };
-  const lbvSettings = pipelineSettings?.lbv || { tol: 0.001, maxit: 500 };
+  const lbvSettings = pipelineSettings?.lbv || { tol: 0.000001, maxit: 500 };
   const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 };
   const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
   const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
@@ -891,8 +891,15 @@ async function runTgvCore({
   const alpha0 = alphas[0];
   const alpha1 = alphas[1];
 
+  // Use adaptive iterations from WASM if available, otherwise fall back to settings
+  const stepSize = 3.0;
+  let iterations = tgvSettings.iterations;
+  if (wasmModule.tgv_get_default_iterations) {
+    iterations = wasmModule.tgv_get_default_iterations(vsx, vsy, vsz, stepSize);
+  }
+
   postProgress(progressStart, 'Starting TGV reconstruction...');
-  postLog(`TGV parameters: alpha0=${alpha0.toFixed(4)}, alpha1=${alpha1.toFixed(4)}, iterations=${tgvSettings.iterations}, erosions=${tgvSettings.erosions}`);
+  postLog(`TGV parameters: alpha0=${alpha0.toFixed(4)}, alpha1=${alpha1.toFixed(4)}, iterations=${iterations}, erosions=${tgvSettings.erosions}`);
   postLog(`Using TE=${(te * 1000).toFixed(2)}ms, B0=${fieldstrength}T`);
 
   const progressRange = progressEnd - progressStart;
@@ -905,7 +912,7 @@ async function runTgvCore({
     tgvInputPhase, mask, nx, ny, nz, vsx, vsy, vsz,
     0, 0, 1,  // B0 direction
     alpha0, alpha1,
-    tgvSettings.iterations, tgvSettings.erosions,
+    iterations, tgvSettings.erosions,
     te, fieldstrength,
     tgvProgress
   ));
@@ -1701,7 +1708,7 @@ async function runQsmartPipeline(data) {
       for (let i = 0; i < voxelCount; i++) {
         r0Float[i] = R_0[i];
       }
-      sendStageData('R0', r0Float, dims, voxelSize, affine, 'Reliability Map R_0');
+      sendStageData('R0', r0Float, dims, voxelSize, affine, 'Reliability Map R_0', false);
     }
 
     // =========================================================================
@@ -1907,7 +1914,7 @@ async function runTotalFieldPipeline(data) {
     minRadius: pipelineSettings?.vsharp?.minRadius ?? 2,
     threshold: pipelineSettings?.vsharp?.threshold ?? 0.05
   };
-  const lbvSettings = pipelineSettings?.lbv || { tol: 0.001, maxit: 500 };
+  const lbvSettings = pipelineSettings?.lbv || { tol: 0.000001, maxit: 500 };
   const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 };
   const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
   const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
@@ -2599,7 +2606,7 @@ async function runBackgroundRemoval(
   } else if (backgroundMethod === 'lbv') {
     postProgress(0.42, 'Preparing LBV background removal...');
     postLog(`Removing background field using LBV...`);
-    const lbvSettings = pipelineSettings?.lbv || { tol: 0.001, maxit: 500 };
+    const lbvSettings = pipelineSettings?.lbv || { tol: 0.000001, maxit: 500 };
     const lbvProgress = (current, total) => {
       postProgress(0.42 + (current / total) * 0.20, `LBV: Iteration ${current}/${total}`);
     };

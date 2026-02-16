@@ -88,7 +88,7 @@ export const TGV_DEFAULTS = {
 export const QSMART_DEFAULTS = {
   // SDF (Spatial Domain Filtering) parameters
   sdfSigma1Stage1: 10,
-  sdfSigma2Stage1: 0,
+  sdfSigma2Stage1: 10,
   sdfSigma1Stage2: 8,
   sdfSigma2Stage2: 2,
   sdfSpatialRadius: 8,
@@ -97,9 +97,9 @@ export const QSMART_DEFAULTS = {
 
   // Vasculature detection parameters (in mm - auto-scaled to voxels)
   vascSphereRadiusMm: 8.0,      // mm - morphological filter radius
-  frangiScaleMinMm: 1.0,        // mm - minimum vessel radius to detect (QSMART default: 1)
-  frangiScaleMaxMm: 10.0,       // mm - maximum vessel radius to detect (QSMART default: 10)
-  frangiScaleRatioMm: 2.0,      // mm - step between scales (QSMART default: 2)
+  frangiScaleMinMm: 0.5,        // mm - minimum vessel radius to detect (QSM.rs/MATLAB demo default)
+  frangiScaleMaxMm: 6.0,        // mm - maximum vessel radius to detect (QSM.rs/MATLAB demo default)
+  frangiScaleRatioMm: 0.5,      // mm - step between scales (QSM.rs/MATLAB demo default)
   frangiC: 500,                 // noise sensitivity threshold
 
   // iLSQR solver parameters
@@ -152,7 +152,7 @@ export const PDF_DEFAULTS = {
 
 // LBV (Laplacian Boundary Value) defaults
 export const LBV_DEFAULTS = {
-  tol: 0.001,
+  tol: 0.000001,
   maxit: 500
 };
 
@@ -285,6 +285,9 @@ export function getVoxelBasedDefaults(voxelSize = [1, 1, 1], maskDims = null) {
   // Calculate mask size for PDF maxit (if available)
   const maskSize = maskDims ? maskDims[0] * maskDims[1] * maskDims[2] : 100000;
 
+  // Max dimension for LBV adaptive maxit
+  const maxDim = maskDims ? Math.max(maskDims[0], maskDims[1], maskDims[2]) : 256;
+
   return {
     // V-SHARP: maxRadius = 18 * min(vsz), minRadius = 2 * max(vsz)
     vsharpMaxRadius: Math.round(18 * minVsz),
@@ -293,8 +296,10 @@ export function getVoxelBasedDefaults(voxelSize = [1, 1, 1], maskDims = null) {
     sharpRadius: Math.round(18 * minVsz),
     // iSMV: radius = 2 * max(vsz) - matches QSM.jl ismv.jl line 20
     ismvRadius: Math.round(Math.max(2, 2 * maxVsz)),
-    // PDF: maxit = ceil(sqrt(numel(mask)))
-    pdfMaxit: Math.ceil(Math.sqrt(maskSize))
+    // PDF: maxit = ceil(sqrt(numel(mask))) - matches QSM.jl pdf.jl
+    pdfMaxit: Math.ceil(Math.sqrt(maskSize)),
+    // LBV: maxit = max(dims) - matches QSM.jl lbv.jl
+    lbvMaxit: maxDim
   };
 }
 

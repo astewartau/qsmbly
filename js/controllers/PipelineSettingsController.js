@@ -115,7 +115,7 @@ export class PipelineSettingsController {
     this._setEl('vsharpMaxRadius', defaults.vsharpMaxRadius);
     this._setEl('vsharpMinRadius', defaults.vsharpMinRadius);
     this._setEl('vsharpThreshold', 0.05);
-    this._setEl('sharpRadius', 6);
+    this._setEl('sharpRadius', defaults.sharpRadius);
     this._setEl('sharpThreshold', 0.05);
     // iSMV defaults
     this._setEl('ismvRadius', defaults.ismvRadius);
@@ -127,8 +127,8 @@ export class PipelineSettingsController {
     this._setEl('pdfMaxit', defaults.pdfMaxit);
 
     // LBV defaults
-    this._setEl('lbvTol', 0.001);
-    this._setEl('lbvMaxit', 500);
+    this._setEl('lbvTol', 0.000001);
+    this._setEl('lbvMaxit', defaults.lbvMaxit);
 
     // Dipole inversion - default to RTS
     this._setEl('dipoleMethod', 'rts');
@@ -524,7 +524,7 @@ export class PipelineSettingsController {
 
     // LBV settings
     this._setEl('lbvTol', settings.lbv.tol);
-    this._setEl('lbvMaxit', settings.lbv.maxit);
+    this._setEl('lbvMaxit', settings.lbv.maxit ?? defaults.lbvMaxit);
 
     // Dipole inversion method
     const dipoleMethod = settings.dipoleInversion;

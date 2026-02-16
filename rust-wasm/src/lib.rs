@@ -965,6 +965,13 @@ pub fn tgv_get_default_alpha(regularization: u8) -> Vec<f64> {
     vec![alpha0 as f64, alpha1 as f64]
 }
 
+/// Get default TGV iteration count based on voxel size and step size.
+/// Matches Julia reference: max(1000, 3200 / prod(res)^0.42) / step_size^0.6
+#[wasm_bindgen]
+pub fn tgv_get_default_iterations(vsx: f32, vsy: f32, vsz: f32, step_size: f32) -> usize {
+    qsm_core::inversion::tgv::get_default_iterations((vsx, vsy, vsz), step_size)
+}
+
 // ============================================================================
 // WASM Exports: Background Field Removal (continued)
 // ============================================================================
