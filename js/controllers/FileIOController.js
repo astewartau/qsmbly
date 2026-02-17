@@ -15,8 +15,18 @@ export class FileIOController {
     // Current input mode: 'dicom', 'raw', 'totalField', or 'localField'
     this.inputMode = 'dicom';
 
-    // File storage - raw mode
+    // File storage - raw mode (NIfTI uploads)
     this.multiEchoFiles = {
+      magnitude: [],
+      phase: [],
+      json: [],
+      echoTimes: [],
+      combinedMagnitude: null,
+      combinedPhase: null
+    };
+
+    // File storage - DICOM conversion results (kept separate from NIfTI uploads)
+    this.dicomFiles = {
       magnitude: [],
       phase: [],
       json: [],
@@ -52,23 +62,29 @@ export class FileIOController {
 
   // ==================== State Accessors ====================
 
+  /**
+   * Returns the active file store based on input mode.
+   * DICOM mode uses dicomFiles; raw mode uses multiEchoFiles.
+   */
+  _getActiveEchoStore() {
+    return this.inputMode === 'dicom' ? this.dicomFiles : this.multiEchoFiles;
+  }
+
   getMagnitudeFiles() {
-    return this.multiEchoFiles.magnitude;
+    return this._getActiveEchoStore().magnitude;
   }
 
   getPhaseFiles() {
-    return this.multiEchoFiles.phase;
+    return this._getActiveEchoStore().phase;
   }
 
   getJsonFiles() {
-    return this.multiEchoFiles.json;
+    return this._getActiveEchoStore().json;
   }
 
   getEchoCount() {
-    return Math.max(
-      this.multiEchoFiles.magnitude.length,
-      this.multiEchoFiles.phase.length
-    );
+    const store = this._getActiveEchoStore();
+    return Math.max(store.magnitude.length, store.phase.length);
   }
 
   /**
@@ -78,8 +94,9 @@ export class FileIOController {
     switch (this.inputMode) {
       case 'dicom':
       case 'raw': {
-        const magCount = this.multiEchoFiles.magnitude.length;
-        const phaseCount = this.multiEchoFiles.phase.length;
+        const store = this._getActiveEchoStore();
+        const magCount = store.magnitude.length;
+        const phaseCount = store.phase.length;
         return magCount === phaseCount && magCount > 0;
       }
       case 'totalField':
@@ -96,7 +113,7 @@ export class FileIOController {
   }
 
   getMultiEchoFiles() {
-    return this.multiEchoFiles;
+    return this._getActiveEchoStore();
   }
 
   // Field map mode accessors
@@ -249,6 +266,14 @@ export class FileIOController {
     this.multiEchoFiles.combinedMagnitude = null;
     this.multiEchoFiles.combinedPhase = null;
 
+    // Clear DICOM conversion results
+    this.dicomFiles.magnitude = [];
+    this.dicomFiles.phase = [];
+    this.dicomFiles.json = [];
+    this.dicomFiles.echoTimes = [];
+    this.dicomFiles.combinedMagnitude = null;
+    this.dicomFiles.combinedPhase = null;
+
     // Clear field map files
     for (const key of Object.keys(this.fieldMapFiles)) {
       this.fieldMapFiles[key] = [];
@@ -348,7 +373,7 @@ export class FileIOController {
 
     // Sort by echo time
     echoTimes.sort((a, b) => a.echoTime - b.echoTime);
-    this.multiEchoFiles.echoTimes = echoTimes;
+    this._getActiveEchoStore().echoTimes = echoTimes;
 
     // Populate the editable inputs
     this.populateEchoTimeInputs(echoTimes.map(et => et.echoTime));
@@ -415,16 +440,13 @@ export class FileIOController {
 
   /**
    * Set files programmatically from DICOM conversion results.
-   * Populates multiEchoFiles and triggers the same callbacks as manual upload.
+   * Populates dicomFiles (separate from NIfTI multiEchoFiles) and triggers callbacks.
    */
   setFilesFromDicom(magnitudeFileData, phaseFileData, jsonFiles) {
-    this.multiEchoFiles.magnitude = magnitudeFileData;
-    this.multiEchoFiles.phase = phaseFileData;
-    this.multiEchoFiles.combinedMagnitude = null;
-    this.multiEchoFiles.combinedPhase = null;
-
-    this.updateFileList('magnitude', magnitudeFileData);
-    this.updateFileList('phase', phaseFileData);
+    this.dicomFiles.magnitude = magnitudeFileData;
+    this.dicomFiles.phase = phaseFileData;
+    this.dicomFiles.combinedMagnitude = null;
+    this.dicomFiles.combinedPhase = null;
 
     this.onMagnitudeFilesChanged(magnitudeFileData);
     this.onPhaseFilesChanged(phaseFileData);
@@ -437,18 +459,18 @@ export class FileIOController {
   // ==================== Combined Data ====================
 
   setCombinedMagnitude(data) {
-    this.multiEchoFiles.combinedMagnitude = data;
+    this._getActiveEchoStore().combinedMagnitude = data;
   }
 
   setCombinedPhase(data) {
-    this.multiEchoFiles.combinedPhase = data;
+    this._getActiveEchoStore().combinedPhase = data;
   }
 
   getCombinedMagnitude() {
-    return this.multiEchoFiles.combinedMagnitude;
+    return this._getActiveEchoStore().combinedMagnitude;
   }
 
   getCombinedPhase() {
-    return this.multiEchoFiles.combinedPhase;
+    return this._getActiveEchoStore().combinedPhase;
   }
 }
