@@ -36,8 +36,9 @@ jobs:
         id: version
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
-            # Extract version from tag (remove 'v' prefix)
-            VERSION="${GITHUB_REF_NAME#v}"
+            # Extract version from release tag (remove 'v' prefix)
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
           elif [ -n "${{ github.event.inputs.version }}" ]; then
             # Use manually provided version
             VERSION="${{ github.event.inputs.version }}"
@@ -45,12 +46,23 @@ jobs:
             # Fallback: read from config.js
             VERSION=$(grep -oP "^export const VERSION = '\K[^']+" js/app/config.js || echo "0.0.0")
           fi
+
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: Could not determine version"
+            exit 1
+          fi
+
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Deploying version: $VERSION"
 
       - name: Update version in source files
         run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
+          VERSION="${{ steps.version.outputs.VERSION }}"
+
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: VERSION is empty"
+            exit 1
+          fi
 
           # Update config.js
           sed -i "s/^export const VERSION = '[^']*'/export const VERSION = '$VERSION'/" js/app/config.js
