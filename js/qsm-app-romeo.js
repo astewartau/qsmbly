@@ -1623,6 +1623,7 @@ class QSMApp {
     this.originalMaskData = this.maskController.originalMaskData;
     this.maskDims = this.maskController.maskDims;
     this.voxelSize = this.maskController.voxelSize;
+    this.applyVoxelDefaults();
 
     // Enable threshold slider
     this.setThresholdSliderEnabled(true);
@@ -1949,6 +1950,14 @@ class QSMApp {
     try {
       const totalFieldBuffer = await totalFieldFile.arrayBuffer();
 
+      // Extract voxel size from NIfTI header for pipeline defaults
+      if (!isGzipped(new Uint8Array(totalFieldBuffer)) && totalFieldBuffer.byteLength >= 352) {
+        const headerInfo = parseNiftiHeader(totalFieldBuffer.slice(0, 352));
+        this.voxelSize = headerInfo.voxelSize;
+        this.maskDims = [headerInfo.nx, headerInfo.ny, headerInfo.nz];
+        this.applyVoxelDefaults();
+      }
+
       // Optional magnitude for masking/MEDI/QSMART vasculature
       const magFile = this.fileIOController.getFieldMapMagnitudeFile();
       const magnitudeBuffer = magFile ? await magFile.arrayBuffer() : null;
@@ -2022,6 +2031,14 @@ class QSMApp {
 
     try {
       const localFieldBuffer = await localFieldFile.arrayBuffer();
+
+      // Extract voxel size from NIfTI header for pipeline defaults
+      if (!isGzipped(new Uint8Array(localFieldBuffer)) && localFieldBuffer.byteLength >= 352) {
+        const headerInfo = parseNiftiHeader(localFieldBuffer.slice(0, 352));
+        this.voxelSize = headerInfo.voxelSize;
+        this.maskDims = [headerInfo.nx, headerInfo.ny, headerInfo.nz];
+        this.applyVoxelDefaults();
+      }
 
       // Optional magnitude for MEDI/QSMART vasculature
       const magFile = this.fileIOController.getFieldMapMagnitudeFile();
@@ -2600,6 +2617,18 @@ class QSMApp {
   // Calculate dynamic defaults based on voxel size (matches QSM.jl)
   getVoxelBasedDefaults() {
     return window.QSMConfig.getVoxelBasedDefaults(this.voxelSize || [1, 1, 1], this.maskDims);
+  }
+
+  // Apply voxel-based defaults to pipeline settings for any null values.
+  // Called when voxel size becomes available (file upload, mask preparation).
+  applyVoxelDefaults() {
+    if (!this.voxelSize) return;
+    const defaults = this.getVoxelBasedDefaults();
+    const s = this.pipelineSettings;
+    if (s.vsharp.maxRadius == null) s.vsharp.maxRadius = defaults.vsharpMaxRadius;
+    if (s.vsharp.minRadius == null) s.vsharp.minRadius = defaults.vsharpMinRadius;
+    if (s.ismv.radius == null) s.ismv.radius = defaults.ismvRadius;
+    if (s.pdf.maxit == null) s.pdf.maxit = defaults.pdfMaxit;
   }
 
   // Pipeline Settings Modal - delegates to PipelineSettingsController
