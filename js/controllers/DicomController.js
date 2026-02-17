@@ -16,6 +16,7 @@ export class DicomController {
     this.classifiedFiles = {
       magnitude: [],  // [{file, name, echoTime, echoNumber}, ...]
       phase: [],
+      extras: [],     // Files not clearly magnitude or phase
       jsonFiles: [],  // Raw JSON File objects
       fieldStrength: null,
       echoTimes: []   // Sorted ms values
@@ -174,6 +175,7 @@ export class DicomController {
 
     const newMagnitude = [];
     const newPhase = [];
+    const newExtras = [];
     const newJsonFiles = [];
     let fieldStrength = this.classifiedFiles.fieldStrength;
 
@@ -182,17 +184,27 @@ export class DicomController {
       const baseName = niftiFile.name.replace(/\.nii(\.gz)?$/, '');
       const jsonEntry = jsonMap.get(baseName + '.json');
 
-      let isPhase = false;
+      let category = 'magnitude'; // default
       let echoTime = null;
       let echoNumber = null;
 
       if (jsonEntry) {
         const json = jsonEntry.data;
 
-        // Classify by ImageType
+        // Classify by ImageType (three-way: magnitude / phase / extras)
         const imageType = json.ImageType;
         if (Array.isArray(imageType)) {
-          isPhase = imageType.some(t => t === 'P' || t === 'PHASE');
+          const hasPhase = imageType.some(t => t === 'P' || t === 'PHASE');
+          const hasMagnitude = imageType.some(t => t === 'M' || t === 'MAGNITUDE');
+
+          if (hasPhase) {
+            category = 'phase';
+          } else if (hasMagnitude) {
+            category = 'magnitude';
+          } else {
+            // ImageType present but not clearly mag or phase (e.g. SWI, localizer)
+            category = 'extras';
+          }
         }
 
         // Extract echo info
@@ -214,7 +226,9 @@ export class DicomController {
         newJsonFiles.push(jsonEntry.file);
       } else {
         // No JSON sidecar — fallback to filename convention
-        isPhase = niftiFile.name.includes('_ph');
+        if (niftiFile.name.includes('_ph')) {
+          category = 'phase';
+        }
       }
 
       const entry = {
@@ -224,8 +238,10 @@ export class DicomController {
         echoNumber
       };
 
-      if (isPhase) {
+      if (category === 'phase') {
         newPhase.push(entry);
+      } else if (category === 'extras') {
+        newExtras.push(entry);
       } else {
         newMagnitude.push(entry);
       }
@@ -245,6 +261,7 @@ export class DicomController {
     // Accumulate with previous batches
     this.classifiedFiles.magnitude.push(...newMagnitude);
     this.classifiedFiles.phase.push(...newPhase);
+    this.classifiedFiles.extras.push(...newExtras);
     this.classifiedFiles.jsonFiles.push(...newJsonFiles);
     this.classifiedFiles.fieldStrength = fieldStrength;
 
@@ -264,9 +281,12 @@ export class DicomController {
 
     const magCount = this.classifiedFiles.magnitude.length;
     const phaseCount = this.classifiedFiles.phase.length;
-    this.updateOutput(
-      `Found ${magCount} magnitude and ${phaseCount} phase image${magCount + phaseCount !== 1 ? 's' : ''}`
-    );
+    const extrasCount = this.classifiedFiles.extras.length;
+    let msg = `Found ${magCount} magnitude and ${phaseCount} phase image${magCount + phaseCount !== 1 ? 's' : ''}`;
+    if (extrasCount > 0) {
+      msg += ` (${extrasCount} other)`;
+    }
+    this.updateOutput(msg);
   }
 
   /**
@@ -283,6 +303,7 @@ export class DicomController {
     this.classifiedFiles = {
       magnitude: [],
       phase: [],
+      extras: [],
       jsonFiles: [],
       fieldStrength: null,
       echoTimes: []

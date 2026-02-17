@@ -166,18 +166,15 @@ input[type="range"]:disabled::-moz-range-thumb {
 }
 
 /* Scrollable sections area */
-.app-sidebar > section {
-  flex-shrink: 0;
-}
-
-.app-sidebar {
+.sidebar-scroll {
+  flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 
 /* Fixed status bar at bottom of sidebar */
 .sidebar-status {
   flex-shrink: 0;
-  margin-top: auto;
   padding: var(--space-sm) var(--space-md);
   background: var(--color-surface-elevated);
   border-top: 1px solid var(--color-border);
@@ -680,41 +677,146 @@ input[type="range"]:disabled::-moz-range-thumb {
   to { transform: rotate(360deg); }
 }
 
-.dicom-results {
+/* DICOM Triage / Reclassification UI */
+
+.dicom-triage {
   margin-top: var(--space-sm);
 }
 
-.dicom-result-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-xs) 0;
+.dicom-triage-bucket {
+  margin-bottom: var(--space-sm);
 }
 
-.dicom-result-label {
+.dicom-triage-bucket:last-child {
+  margin-bottom: 0;
+}
+
+.dicom-triage-bucket-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-xs);
+}
+
+.dicom-triage-bucket-label {
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-text);
-  flex: 1;
 }
 
-.dicom-result-count {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
-.dicom-result-count.not-found {
-  color: var(--color-text-dim);
-  font-style: italic;
-}
-
-.dicom-result-meta {
-  margin-top: var(--space-sm);
-  padding-top: var(--space-sm);
-  border-top: 1px solid var(--color-border);
+.dicom-triage-bucket-count {
   font-size: 0.7rem;
+  font-weight: 400;
   color: var(--color-text-muted);
-  line-height: 1.6;
+}
+
+.dicom-triage-bucket-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.dicom-triage-drop {
+  min-height: 28px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dicom-triage-drop.dragover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-glow);
+  border-style: solid;
+}
+
+.dicom-triage-drop.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dicom-triage-drop.empty::after {
+  content: 'Drag files here';
+  font-size: 0.65rem;
+  color: var(--color-text-dim);
+}
+
+.dicom-triage-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-surface-elevated);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-xs);
+  font-size: 0.7rem;
+  cursor: grab;
+  transition: background 0.15s ease, opacity 0.15s ease;
+  user-select: none;
+}
+
+.dicom-triage-card:last-child {
+  margin-bottom: 0;
+}
+
+.dicom-triage-card:hover {
+  background: var(--color-border);
+}
+
+.dicom-triage-card.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+.dicom-triage-card-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+
+.dicom-triage-card-te {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dicom-triage-card-preview {
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.dicom-triage-card-preview:hover {
+  color: var(--color-primary);
+}
+
+.dicom-triage-bucket.extras .dicom-triage-card {
+  opacity: 0.7;
+}
+
+.btn-clear-extras {
+  font-size: 0.65rem;
+  color: var(--color-text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.btn-clear-extras:hover {
+  color: var(--color-error);
+  background: var(--color-error-bg);
 }
 
 /* Parameters */

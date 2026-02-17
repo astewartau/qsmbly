@@ -395,10 +395,6 @@ class QSMApp {
       this.handleDicomFiles(e);
     });
 
-    // DICOM preview buttons
-    document.getElementById('vis_dicomMagnitude')?.addEventListener('click', () => this.visualizeMagnitude());
-    document.getElementById('vis_dicomPhase')?.addEventListener('click', () => this.visualizePhase());
-
     // dicompare report
     document.getElementById('dicompareReportBtn')?.addEventListener('click', () => this.runDicompareReport());
     document.getElementById('closeDicompare')?.addEventListener('click', () => this.dicompareModal?.close());
@@ -700,82 +696,235 @@ class QSMApp {
    * Callback when DICOM conversion and classification is complete.
    */
   _onDicomConversionComplete(classified) {
-    const magCount = classified.magnitude.length;
-    const phaseCount = classified.phase.length;
+    // Merge into triage state (supports incremental uploads)
+    if (!this._triageState) {
+      this._triageState = {
+        magnitude: [],
+        phase: [],
+        extras: [],
+        jsonFiles: [],
+        fieldStrength: null,
+        echoTimes: []
+      };
+    }
+    this._triageState.magnitude.push(...classified.magnitude);
+    this._triageState.phase.push(...classified.phase);
+    this._triageState.extras.push(...(classified.extras || []));
+    this._triageState.jsonFiles.push(...classified.jsonFiles);
+    if (classified.fieldStrength != null) {
+      this._triageState.fieldStrength = classified.fieldStrength;
+    }
+    // Collect unique echo times
+    const teSet = new Set(this._triageState.echoTimes);
+    for (const entry of [...classified.magnitude, ...classified.phase, ...(classified.extras || [])]) {
+      if (entry.echoTime != null) teSet.add(entry.echoTime);
+    }
+    this._triageState.echoTimes = [...teSet].sort((a, b) => a - b);
 
-    // Build file data arrays in the format FileIOController expects: [{file, name}]
-    const magnitudeFileData = classified.magnitude.map(e => ({ file: e.file, name: e.name }));
-    const phaseFileData = classified.phase.map(e => ({ file: e.file, name: e.name }));
-    const jsonFiles = classified.jsonFiles.map(f => f);
+    // Sort magnitude and phase by echo
+    const sortByEcho = (a, b) => {
+      if (a.echoTime != null && b.echoTime != null) return a.echoTime - b.echoTime;
+      if (a.echoNumber != null && b.echoNumber != null) return a.echoNumber - b.echoNumber;
+      return 0;
+    };
+    this._triageState.magnitude.sort(sortByEcho);
+    this._triageState.phase.sort(sortByEcho);
 
-    // Push to FileIOController (populates multiEchoFiles, triggers callbacks)
-    this.fileIOController.setFilesFromDicom(magnitudeFileData, phaseFileData, jsonFiles);
-
-    // Update DICOM results UI
-    this._updateDicomResults(classified);
+    // Push to FileIOController and render triage UI
+    this._syncTriageToFileIO();
+    this._renderDicomTriage();
 
     // Update drop zone text for incremental uploads
     const dropLabel = document.querySelector('#dicomDrop .file-drop-label span');
-    if (dropLabel) {
-      dropLabel.textContent = 'Drop more DICOM files';
-    }
+    if (dropLabel) dropLabel.textContent = 'Drop more DICOM files';
     const dropZone = document.getElementById('dicomDrop');
-    if (dropZone) {
-      dropZone.classList.add('has-files');
-    }
+    if (dropZone) dropZone.classList.add('has-files');
   }
 
-  _updateDicomResults(classified) {
-    const resultsEl = document.getElementById('dicomResults');
-    if (!resultsEl) return;
-    resultsEl.style.display = '';
+  /**
+   * Push current triage state (magnitude + phase) to FileIOController.
+   * Extras are excluded from the pipeline.
+   */
+  _syncTriageToFileIO() {
+    const ts = this._triageState;
+    const magnitudeFileData = ts.magnitude.map(e => ({ file: e.file, name: e.name }));
+    const phaseFileData = ts.phase.map(e => ({ file: e.file, name: e.name }));
 
-    const magCount = classified.magnitude.length;
-    const phaseCount = classified.phase.length;
+    // Only pass JSON sidecars for files still in magnitude/phase (not extras)
+    const activeBaseNames = new Set();
+    for (const e of [...ts.magnitude, ...ts.phase]) {
+      activeBaseNames.add(e.name.replace(/\.nii(\.gz)?$/, ''));
+    }
+    const jsonFiles = ts.jsonFiles.filter(f =>
+      activeBaseNames.has(f.name.replace(/\.json$/, ''))
+    );
 
-    // Magnitude count
-    const magCountEl = document.getElementById('dicomMagCount');
-    if (magCountEl) {
-      if (magCount > 0) {
-        magCountEl.textContent = `${magCount} echo${magCount !== 1 ? 'es' : ''}`;
-        magCountEl.classList.remove('not-found');
-      } else {
-        magCountEl.textContent = 'not found';
-        magCountEl.classList.add('not-found');
+    this.fileIOController.setFilesFromDicom(magnitudeFileData, phaseFileData, jsonFiles);
+  }
+
+  /**
+   * Render the interactive DICOM triage UI with draggable file cards.
+   */
+  _renderDicomTriage() {
+    const container = document.getElementById('dicomTriage');
+    if (!container) return;
+    container.style.display = '';
+
+    const ts = this._triageState;
+    const eyeSvg = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const buckets = [
+      { key: 'magnitude', label: 'Magnitude', items: ts.magnitude },
+      { key: 'phase', label: 'Phase', items: ts.phase },
+      { key: 'extras', label: 'Extras', items: ts.extras }
+    ];
+
+    let html = '<div class="dicom-triage">';
+
+    for (const bucket of buckets) {
+      const isExtras = bucket.key === 'extras';
+      const emptyClass = bucket.items.length === 0 ? ' empty' : '';
+
+      html += `<div class="dicom-triage-bucket ${bucket.key}">`;
+      html += `<div class="dicom-triage-bucket-header">`;
+      html += `<span class="dicom-triage-bucket-label">${bucket.label} <span class="dicom-triage-bucket-count">(${bucket.items.length})</span></span>`;
+      html += `<div class="dicom-triage-bucket-actions">`;
+
+      if (isExtras && bucket.items.length > 0) {
+        html += `<button class="btn-clear-extras" data-action="clearExtras" title="Remove all extras">Clear</button>`;
       }
+
+      if (!isExtras && bucket.items.length > 0) {
+        html += `<button class="btn-icon btn-preview dicom-triage-preview-btn" data-category="${bucket.key}" title="Preview ${bucket.label}">`;
+        html += `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+        html += `</button>`;
+      }
+
+      html += `</div></div>`; // close bucket-actions, bucket-header
+
+      html += `<div class="dicom-triage-drop${emptyClass}" data-bucket="${bucket.key}">`;
+
+      for (let i = 0; i < bucket.items.length; i++) {
+        const item = bucket.items[i];
+        const teLabel = item.echoTime != null ? `${item.echoTime.toFixed(1)} ms` : '';
+
+        html += `<div class="dicom-triage-card" draggable="true" data-category="${bucket.key}" data-index="${i}">`;
+        html += `<span class="dicom-triage-card-name" title="${item.name}">${item.name}</span>`;
+        if (teLabel) {
+          html += `<span class="dicom-triage-card-te">${teLabel}</span>`;
+        }
+        html += `<button class="dicom-triage-card-preview" data-category="${bucket.key}" data-index="${i}" title="Preview">${eyeSvg}</button>`;
+        html += `</div>`;
+      }
+
+      html += `</div>`; // close dicom-triage-drop
+      html += `</div>`; // close dicom-triage-bucket
     }
 
-    // Phase count
-    const phaseCountEl = document.getElementById('dicomPhaseCount');
-    if (phaseCountEl) {
-      if (phaseCount > 0) {
-        phaseCountEl.textContent = `${phaseCount} echo${phaseCount !== 1 ? 'es' : ''}`;
-        phaseCountEl.classList.remove('not-found');
-      } else {
-        phaseCountEl.textContent = 'not found';
-        phaseCountEl.classList.add('not-found');
-      }
-    }
+    html += '</div>';
+    container.innerHTML = html;
 
-    // Enable/disable eye buttons
-    const magBtn = document.getElementById('vis_dicomMagnitude');
-    const phaseBtn = document.getElementById('vis_dicomPhase');
-    if (magBtn) magBtn.disabled = magCount === 0;
-    if (phaseBtn) phaseBtn.disabled = phaseCount === 0;
+    this._setupTriageDragDrop(container);
+    this._setupTriageClickHandlers(container);
+  }
 
-    // Metadata summary
-    const metaEl = document.getElementById('dicomMeta');
-    if (metaEl) {
-      const parts = [];
-      if (classified.echoTimes.length > 0) {
-        const teStr = classified.echoTimes.map(t => t.toFixed(2)).join(', ');
-        parts.push(`Echo times: ${teStr} ms`);
-      }
-      if (classified.fieldStrength != null) {
-        parts.push(`Field strength: ${classified.fieldStrength}T`);
-      }
-      metaEl.innerHTML = parts.join('<br>');
-    }
+  /**
+   * Set up HTML5 drag-and-drop between triage buckets.
+   */
+  _setupTriageDragDrop(container) {
+    let dragData = null;
+
+    container.querySelectorAll('.dicom-triage-card').forEach(card => {
+      card.addEventListener('dragstart', (e) => {
+        dragData = {
+          category: card.dataset.category,
+          index: parseInt(card.dataset.index)
+        };
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', '');
+      });
+
+      card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+        dragData = null;
+        container.querySelectorAll('.dicom-triage-drop.dragover')
+          .forEach(el => el.classList.remove('dragover'));
+      });
+    });
+
+    container.querySelectorAll('.dicom-triage-drop').forEach(dropZone => {
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        dropZone.classList.add('dragover');
+      });
+
+      dropZone.addEventListener('dragleave', (e) => {
+        if (!dropZone.contains(e.relatedTarget)) {
+          dropZone.classList.remove('dragover');
+        }
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (!dragData) return;
+
+        const targetBucket = dropZone.dataset.bucket;
+        const sourceBucket = dragData.category;
+        if (targetBucket === sourceBucket) return;
+
+        // Move item between arrays
+        const ts = this._triageState;
+        const [item] = ts[sourceBucket].splice(dragData.index, 1);
+        ts[targetBucket].push(item);
+
+        // Re-sort magnitude and phase by echo
+        const sortByEcho = (a, b) => {
+          if (a.echoTime != null && b.echoTime != null) return a.echoTime - b.echoTime;
+          if (a.echoNumber != null && b.echoNumber != null) return a.echoNumber - b.echoNumber;
+          return 0;
+        };
+        ts.magnitude.sort(sortByEcho);
+        ts.phase.sort(sortByEcho);
+
+        this._syncTriageToFileIO();
+        this._renderDicomTriage();
+      });
+    });
+  }
+
+  /**
+   * Set up click handlers for triage card previews and clear button.
+   */
+  _setupTriageClickHandlers(container) {
+    // Individual card preview
+    container.querySelectorAll('.dicom-triage-card-preview').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const category = btn.dataset.category;
+        const index = parseInt(btn.dataset.index);
+        const item = this._triageState[category]?.[index];
+        if (item?.file) {
+          this.viewerController.loadAndVisualizeFile(item.file, item.name);
+        }
+      });
+    });
+
+    // Bucket-level preview (eye in header)
+    container.querySelectorAll('.dicom-triage-preview-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const category = btn.dataset.category;
+        if (category === 'magnitude') this.visualizeMagnitude();
+        else if (category === 'phase') this.visualizePhase();
+      });
+    });
+
+    // Clear extras
+    container.querySelector('[data-action="clearExtras"]')?.addEventListener('click', () => {
+      this._triageState.extras = [];
+      this._renderDicomTriage();
+    });
   }
 
   _showDicomStatus(text) {

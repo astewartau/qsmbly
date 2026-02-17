@@ -65,6 +65,7 @@
 
     <!-- Sidebar -->
     <aside class="app-sidebar" id="sidebar">
+      <div class="sidebar-scroll">
       <!-- File Upload Section -->
       <section class="sidebar-section" id="inputSection">
         <h2 class="section-title" onclick="toggleSection(this.parentElement)">
@@ -167,30 +168,8 @@
           <span class="dicom-status-text" id="dicomStatusText">Converting...</span>
         </div>
 
-        <!-- Classification results -->
-        <div class="dicom-results" id="dicomResults" style="display: none;">
-          <div class="dicom-result-row">
-            <span class="dicom-result-label">Magnitude</span>
-            <span class="dicom-result-count" id="dicomMagCount">&mdash;</span>
-            <button class="btn-icon btn-preview" id="vis_dicomMagnitude" title="Preview magnitude" disabled>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-          <div class="dicom-result-row">
-            <span class="dicom-result-label">Phase</span>
-            <span class="dicom-result-count" id="dicomPhaseCount">&mdash;</span>
-            <button class="btn-icon btn-preview" id="vis_dicomPhase" title="Preview phase" disabled>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-          <div class="dicom-result-meta" id="dicomMeta"></div>
-        </div>
+        <!-- Triage area: populated dynamically after DICOM conversion -->
+        <div id="dicomTriage" style="display: none;"></div>
         <!-- dicompare validation button -->
         <button class="btn btn-secondary btn-dicompare" id="dicompareReportBtn" disabled>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
@@ -608,6 +587,7 @@
         </button>
         </div>
       </section>
+      </div>
 
       <!-- Status Bar (fixed at bottom) -->
       <div class="sidebar-status" id="statusBar">
