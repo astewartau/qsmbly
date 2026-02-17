@@ -617,6 +617,11 @@ async function runPipeline(data) {
       postProgress(0.42, `Preparing ${backgroundMethod.toUpperCase()} background removal...`);
       postLog(`Removing background field using ${backgroundMethod.toUpperCase()}...`);
       const ismvSettings = pipelineSettings?.ismv || { radius: 5, tol: 0.001, maxit: 500 };
+      // Compute default radius from voxel size if not set (matches QSM.jl: 2 * max(vsz))
+      if (ismvSettings.radius == null || isNaN(ismvSettings.radius) || ismvSettings.radius <= 0) {
+        ismvSettings.radius = Math.round(Math.max(2, 2 * Math.max(vsx, vsy, vsz)));
+        postLog(`  iSMV: computed default radius=${ismvSettings.radius}mm from voxel size`);
+      }
 
       // Progress callback for iSMV iterations
       const ismvProgress = (current, total) => {
@@ -2577,6 +2582,12 @@ async function runBackgroundRemoval(
     postProgress(0.42, 'Preparing iSMV background removal...');
     postLog(`Removing background field using iSMV...`);
     const ismvSettings = pipelineSettings?.ismv || { radius: 5, tol: 0.001, maxit: 500 };
+    // Compute default radius from voxel size if not set (matches QSM.jl: 2 * max(vsz))
+    if (ismvSettings.radius == null || isNaN(ismvSettings.radius) || ismvSettings.radius <= 0) {
+      ismvSettings.radius = Math.round(Math.max(2, 2 * Math.max(vsx, vsy, vsz)));
+      postLog(`  iSMV: computed default radius=${ismvSettings.radius}mm from voxel size`);
+    }
+    postLog(`  iSMV params: radius=${ismvSettings.radius}, tol=${ismvSettings.tol}, maxit=${ismvSettings.maxit}`);
     const ismvProgress = (current, total) => {
       postProgress(0.42 + (current / total) * 0.20, `iSMV: Iteration ${current}/${total}`);
     };
