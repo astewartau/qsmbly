@@ -13,7 +13,7 @@ const isWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof Wor
 const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined' && window.QSMConfig === undefined);
 
 // Application version (keep in sync with package.json, Cargo.toml, and git tags)
-export const VERSION = '0.8.4';
+export const VERSION = '0.9.0';
 
 // QSM.rs core library version (keep in sync with qsm-core dependency in rust-wasm/Cargo.toml)
 export const QSM_RS_VERSION = '0.3.0';
