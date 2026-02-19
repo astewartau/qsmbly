@@ -2160,6 +2160,87 @@ pub fn curvature_wasm(
 }
 
 // ============================================================================
+// WASM Exports: Susceptibility Weighted Imaging (SWI)
+// ============================================================================
+
+/// Calculate SWI from unwrapped phase and magnitude
+///
+/// Pipeline: high-pass filter phase → create phase mask → multiply with magnitude.
+///
+/// # Arguments
+/// * `phase` - Unwrapped phase (nx * ny * nz)
+/// * `magnitude` - Magnitude image (nx * ny * nz)
+/// * `mask` - Binary mask (nx * ny * nz)
+/// * `nx`, `ny`, `nz` - Array dimensions
+/// * `vsx`, `vsy`, `vsz` - Voxel sizes in mm
+/// * `hp_sigma_x`, `hp_sigma_y`, `hp_sigma_z` - High-pass filter sigma in voxels
+/// * `scaling_type` - Phase scaling: 0=Tanh, 1=NegativeTanh, 2=Positive, 3=Negative, 4=Triangular
+/// * `strength` - Phase scaling strength
+///
+/// # Returns
+/// SWI image (magnitude × phase mask)
+#[wasm_bindgen]
+pub fn calculate_swi_wasm(
+    phase: &[f64],
+    magnitude: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    hp_sigma_x: f64, hp_sigma_y: f64, hp_sigma_z: f64,
+    scaling_type: u8,
+    strength: f64,
+) -> Vec<f64> {
+    console_log!("WASM SWI: {}x{}x{}, sigma=({},{},{}), scaling={}, strength={}",
+                 nx, ny, nz, hp_sigma_x, hp_sigma_y, hp_sigma_z, scaling_type, strength);
+
+    let scaling = match scaling_type {
+        0 => qsm_core::swi::PhaseScaling::Tanh,
+        1 => qsm_core::swi::PhaseScaling::NegativeTanh,
+        2 => qsm_core::swi::PhaseScaling::Positive,
+        3 => qsm_core::swi::PhaseScaling::Negative,
+        _ => qsm_core::swi::PhaseScaling::Triangular,
+    };
+
+    let result = qsm_core::swi::calculate_swi(
+        phase, magnitude, mask,
+        nx, ny, nz,
+        vsx, vsy, vsz,
+        [hp_sigma_x, hp_sigma_y, hp_sigma_z],
+        scaling,
+        strength,
+    );
+
+    console_log!("WASM SWI complete");
+    result
+}
+
+/// Minimum intensity projection along the z-axis
+///
+/// For each (x, y) position, takes the minimum value over a sliding window
+/// of `window` slices along z.
+///
+/// # Arguments
+/// * `data` - 3D volume (nx * ny * nz, Fortran order)
+/// * `nx`, `ny`, `nz` - Array dimensions
+/// * `window` - Number of slices in the projection window
+///
+/// # Returns
+/// MIP volume with dimensions nx × ny × (nz - window + 1)
+#[wasm_bindgen]
+pub fn create_mip_wasm(
+    data: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    window: usize,
+) -> Vec<f64> {
+    console_log!("WASM MIP: {}x{}x{}, window={}", nx, ny, nz, window);
+
+    let result = qsm_core::swi::create_mip(data, nx, ny, nz, window);
+
+    console_log!("WASM MIP complete: output nz={}", if window <= nz { nz - window + 1 } else { 0 });
+    result
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 

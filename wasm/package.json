@@ -4,8 +4,8 @@
   "collaborators": [
     "QSM-WASM"
   ],
-  "description": "WASM-accelerated QSM processing pipeline",
-  "version": "0.2.0",
+  "description": "WASM bindings for QSM processing pipeline (powered by qsm-core)",
+  "version": "0.8.4",
   "files": [
     "qsm_wasm_bg.wasm",
     "qsm_wasm.js",

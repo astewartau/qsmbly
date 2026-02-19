@@ -54,6 +54,14 @@ export class PipelineSettingsController {
     this._setEl('tgvIterations', 1000);
     this._setEl('tgvErosions', 3);
 
+    // SWI defaults
+    this._setEl('swiScaling', 'tanh');
+    this._setEl('swiStrength', 4);
+    this._setEl('swiHpSigmaX', 4);
+    this._setEl('swiHpSigmaY', 4);
+    this._setEl('swiHpSigmaZ', 0);
+    this._setEl('swiMipWindow', 7);
+
     // QSMART defaults
     this._setEl('qsmartSdfSigma1Stage1', 10);
     this._setEl('qsmartSdfSigma2Stage1', 0);
@@ -212,6 +220,16 @@ export class PipelineSettingsController {
 
     return {
       combinedMethod: this._getEl('combinedMethod'),
+      swi: {
+        hpSigma: [
+          parseFloat(this._getEl('swiHpSigmaX')),
+          parseFloat(this._getEl('swiHpSigmaY')),
+          parseFloat(this._getEl('swiHpSigmaZ'))
+        ],
+        scaling: this._getEl('swiScaling') || 'tanh',
+        strength: parseFloat(this._getEl('swiStrength')),
+        mipWindow: parseInt(this._getEl('swiMipWindow'))
+      },
       tgv: {
         regularization: parseInt(this._getEl('tgvRegularization')),
         iterations: parseInt(this._getEl('tgvIterations')),
@@ -448,6 +466,15 @@ export class PipelineSettingsController {
   _populateForm(settings, defaults) {
     // Combined method
     this._setEl('combinedMethod', settings.combinedMethod || 'none');
+
+    // SWI settings
+    const swiSettings = settings.swi || {};
+    this._setEl('swiScaling', swiSettings.scaling || 'tanh');
+    this._setEl('swiStrength', swiSettings.strength ?? 4);
+    this._setEl('swiHpSigmaX', swiSettings.hpSigma?.[0] ?? 4);
+    this._setEl('swiHpSigmaY', swiSettings.hpSigma?.[1] ?? 4);
+    this._setEl('swiHpSigmaZ', swiSettings.hpSigma?.[2] ?? 0);
+    this._setEl('swiMipWindow', swiSettings.mipWindow ?? 7);
 
     // TGV settings
     this._setEl('tgvRegularization', settings.tgv.regularization);

@@ -161,6 +161,39 @@ function computeWeightedEchoFit(allUnwrapped, magnitude4d, echoTimes, nx, ny, nz
   return { tfs, R_0 };
 }
 
+// Shared SWI computation - called from any pipeline after phase unwrapping
+function computeSWI(pipelineSettings, unwrappedPhase, magnitude, mask, dims, voxelSize, affine) {
+  const [nx, ny, nz] = dims;
+  const [vsx, vsy, vsz] = voxelSize;
+
+  postLog('Computing Susceptibility Weighted Image...');
+
+  const swiSettings = pipelineSettings?.swi || { hpSigma: [4, 4, 0], scaling: 'tanh', strength: 4, mipWindow: 7 };
+  const scalingMap = { 'tanh': 0, 'negative_tanh': 1, 'positive': 2, 'negative': 3, 'triangular': 4 };
+  const scalingType = scalingMap[swiSettings.scaling] || 0;
+
+  const swiResult = new Float64Array(wasmModule.calculate_swi_wasm(
+    unwrappedPhase, magnitude, mask,
+    nx, ny, nz, vsx, vsy, vsz,
+    swiSettings.hpSigma[0], swiSettings.hpSigma[1], swiSettings.hpSigma[2],
+    scalingType, swiSettings.strength
+  ));
+
+  sendStageData('swi', swiResult, dims, voxelSize, affine, 'SWI');
+  postLog('SWI complete');
+
+  // Minimum intensity projection
+  const mipWindow = swiSettings.mipWindow || 0;
+  if (mipWindow > 0 && mipWindow <= nz) {
+    const mipResult = new Float64Array(wasmModule.create_mip_wasm(
+      swiResult, nx, ny, nz, mipWindow
+    ));
+    const mipNz = nz - mipWindow + 1;
+    sendStageData('mip', mipResult, [nx, ny, mipNz], voxelSize, affine, 'SWI mIP');
+    postLog(`mIP complete (window=${mipWindow}, output nz=${mipNz})`);
+  }
+}
+
 async function runPipeline(data) {
   // Dispatch to the appropriate pipeline based on input mode
   const inputMode = data.inputMode || 'raw';
@@ -2778,6 +2811,80 @@ async function runDipoleInversion(
   return qsmResult;
 }
 
+// =========================================================================
+// SWI-only pipeline
+// =========================================================================
+async function runSWIPipeline(data) {
+  const {
+    magnitudeBuffers, phaseBuffers,
+    maskThreshold, customMaskBuffer, preparedMagnitude, pipelineSettings
+  } = data;
+
+  const thresholdFraction = (maskThreshold || 15) / 100;
+  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
+  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
+
+  try {
+    // Step 1: Load first echo NIfTI data
+    postProgress(0.05, 'Loading NIfTI data...');
+    postLog("SWI: Loading data...");
+
+    const magResult = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffers[0]));
+    const magnitude = new Float64Array(magResult.data);
+    const dims = Array.from(magResult.dims);
+    const voxelSize = Array.from(magResult.voxelSize);
+    const affine = Array.from(magResult.affine);
+
+    const phaseResult = wasmModule.load_nifti_wasm(new Uint8Array(phaseBuffers[0]));
+    let phase = scalePhase(new Float64Array(phaseResult.data));
+
+    const [nx, ny, nz] = dims;
+    const [vsx, vsy, vsz] = voxelSize;
+    const voxelCount = nx * ny * nz;
+
+    postLog(`Data: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm`);
+
+    // Step 2: Create or load mask
+    postProgress(0.15, 'Creating mask...');
+    let mask;
+
+    if (hasCustomMask) {
+      const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+      mask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
+      }
+    } else {
+      const maskMagnitude = hasPreparedMagnitude
+        ? new Float64Array(preparedMagnitude)
+        : magnitude;
+      mask = createThresholdMask(maskMagnitude, thresholdFraction);
+    }
+
+    const maskCount = mask.reduce((a, b) => a + b, 0);
+    postLog(`Mask: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
+
+    // Step 3: Laplacian phase unwrapping
+    postProgress(0.25, 'Unwrapping phase...');
+    postLog("Laplacian phase unwrapping...");
+    const unwrappedPhase = new Float64Array(wasmModule.laplacian_unwrap_wasm(
+      phase, mask, nx, ny, nz, vsx, vsy, vsz
+    ));
+
+    // Step 4: SWI computation
+    postProgress(0.50, 'Computing SWI...');
+    computeSWI(pipelineSettings, unwrappedPhase, magnitude, mask, dims, voxelSize, affine);
+
+    postProgress(1.0, 'SWI complete!');
+    postLog("SWI pipeline completed successfully!");
+    postComplete({ success: true });
+
+  } catch (error) {
+    postError(error.message);
+    throw error;
+  }
+}
+
 // Handle messages from main thread
 self.onmessage = async function (e) {
   const { type, data } = e.data;
@@ -2795,6 +2902,10 @@ self.onmessage = async function (e) {
 
       case 'runBET':
         await runBET(data);
+        break;
+
+      case 'runSWI':
+        await runSWIPipeline(data);
         break;
 
       case 'biasCorrection':

@@ -232,11 +232,13 @@ class QSMApp {
   _onPipelineComplete() {
     this.showStageButtons();
     document.getElementById('cancelPipeline').disabled = true;
+    document.getElementById('runSWI').disabled = false;
     this.updateEchoInfo();
   }
 
   _onPipelineError() {
     document.getElementById('cancelPipeline').disabled = true;
+    document.getElementById('runSWI').disabled = false;
     this.updateEchoInfo();
   }
 
@@ -477,6 +479,7 @@ class QSMApp {
     document.getElementById('resetPipelineSettings')?.addEventListener('click', () => this.resetPipelineSettings());
     document.getElementById('savePipelineSettings')?.addEventListener('click', () => this.savePipelineSettings());
     document.getElementById('runPipelineSidebar')?.addEventListener('click', () => this.runPipelineFromSidebar());
+    document.getElementById('runSWI')?.addEventListener('click', () => this.runSWI());
 
     // BET settings modal
     document.getElementById('closeBetSettings')?.addEventListener('click', () => this.betModal?.close());
@@ -772,6 +775,8 @@ class QSMApp {
 
     const ts = this._triageState;
     const eyeSvg = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const gripSvg = '<svg viewBox="0 0 12 24" width="6" height="12" fill="currentColor"><circle cx="3" cy="4" r="1.5"/><circle cx="9" cy="4" r="1.5"/><circle cx="3" cy="12" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="3" cy="20" r="1.5"/><circle cx="9" cy="20" r="1.5"/></svg>';
+    const deleteSvg = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
     const buckets = [
       { key: 'magnitude', label: 'Magnitude', items: ts.magnitude },
       { key: 'phase', label: 'Phase', items: ts.phase },
@@ -808,11 +813,13 @@ class QSMApp {
         const teLabel = item.echoTime != null ? `${item.echoTime.toFixed(1)} ms` : '';
 
         html += `<div class="dicom-triage-card" draggable="true" data-category="${bucket.key}" data-index="${i}">`;
+        html += `<span class="dicom-triage-card-grip" aria-hidden="true">${gripSvg}</span>`;
         html += `<span class="dicom-triage-card-name" title="${item.name}">${item.name}</span>`;
         if (teLabel) {
           html += `<span class="dicom-triage-card-te">${teLabel}</span>`;
         }
         html += `<button class="dicom-triage-card-preview" data-category="${bucket.key}" data-index="${i}" title="Preview">${eyeSvg}</button>`;
+        html += `<button class="dicom-triage-card-delete" data-category="${bucket.key}" data-index="${i}" title="Remove file">${deleteSvg}</button>`;
         html += `</div>`;
       }
 
@@ -923,7 +930,23 @@ class QSMApp {
     // Clear extras
     container.querySelector('[data-action="clearExtras"]')?.addEventListener('click', () => {
       this._triageState.extras = [];
+      this._syncTriageToFileIO();
       this._renderDicomTriage();
+    });
+
+    // Per-card delete
+    container.querySelectorAll('.dicom-triage-card-delete').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const category = btn.dataset.category;
+        const index = parseInt(btn.dataset.index);
+        const ts = this._triageState;
+        if (ts[category] && index >= 0 && index < ts[category].length) {
+          ts[category].splice(index, 1);
+          this._syncTriageToFileIO();
+          this._renderDicomTriage();
+        }
+      });
     });
   }
 
@@ -1047,6 +1070,7 @@ class QSMApp {
         this.updateEchoInfo();
       });
     }
+
   }
 
   updateSidebarDropdownVisibility(autoCorrect = false) {
@@ -2675,6 +2699,69 @@ class QSMApp {
       this.savePipelineSettings();
     }
     this.runRomeoQSM();
+  }
+
+  async runSWI() {
+    const mode = this.fileIOController.getInputMode();
+    if (mode !== 'raw' && mode !== 'dicom') {
+      this.updateOutput("SWI requires raw magnitude + phase data");
+      return;
+    }
+
+    const magCount = this.multiEchoFiles.magnitude.length;
+    const phaseCount = this.multiEchoFiles.phase.length;
+
+    if (magCount === 0 || phaseCount === 0) {
+      this.updateOutput("Please upload both magnitude and phase files");
+      return;
+    }
+
+    try {
+      const magnitudeBuffers = [];
+      const phaseBuffers = [];
+
+      // Only need first echo for SWI
+      const magFile = this.multiEchoFiles.magnitude[0]?.file;
+      const phaseFile = this.multiEchoFiles.phase[0]?.file;
+
+      if (magFile && phaseFile) {
+        magnitudeBuffers.push(await magFile.arrayBuffer());
+        phaseBuffers.push(await phaseFile.arrayBuffer());
+      }
+
+      let customMaskBuffer = null;
+      if (this.currentMaskData && this.magnitudeFileBytes) {
+        customMaskBuffer = this.createMaskNifti(this.currentMaskData);
+      }
+
+      const preparedMagnitude = this.preparedMagnitudeData
+        ? Array.from(this.preparedMagnitudeData)
+        : null;
+
+      await this.pipelineExecutor.initialize();
+      this.pipelineExecutor.pipelineRunning = true;
+      this.updateOutput("Starting SWI pipeline...");
+
+      this.pipelineExecutor.getWorker().postMessage({
+        type: 'runSWI',
+        data: {
+          magnitudeBuffers,
+          phaseBuffers,
+          maskThreshold: this.maskThreshold,
+          customMaskBuffer,
+          preparedMagnitude,
+          pipelineSettings: this.pipelineSettings
+        }
+      });
+
+      document.getElementById('cancelPipeline').disabled = false;
+      document.getElementById('runSWI').disabled = true;
+
+    } catch (error) {
+      this.updateOutput(`Error: ${error.message}`);
+      this.setProgress(0, 'Failed');
+      console.error(error);
+    }
   }
 
   // BET Settings Modal

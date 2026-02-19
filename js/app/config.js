@@ -16,7 +16,7 @@ const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined
 export const VERSION = '0.8.4';
 
 // QSM.rs core library version (keep in sync with qsm-core dependency in rust-wasm/Cargo.toml)
-export const QSM_RS_VERSION = '0.2.1';
+export const QSM_RS_VERSION = '0.3.0';
 
 // Physics constants
 export const PHYSICS = {
@@ -82,6 +82,14 @@ export const TGV_DEFAULTS = {
   regularization: 2,
   iterations: 1000,
   erosions: 3
+};
+
+// SWI (Susceptibility Weighted Imaging) defaults
+export const SWI_DEFAULTS = {
+  hpSigma: [4, 4, 0],    // High-pass filter sigma in voxels [x, y, z]
+  scaling: 'tanh',        // Phase scaling type
+  strength: 4,            // Phase scaling strength
+  mipWindow: 7            // Minimum intensity projection window (slices)
 };
 
 // QSMART pipeline defaults
@@ -228,7 +236,9 @@ export const STAGE_DISPLAY_NAMES = {
   'frangi': 'Frangi',
   'vascMask': 'Vasc Mask',
   'bottomHat': 'Bottom Hat',
-  'unwrapped': 'Unwrapped'
+  'unwrapped': 'Unwrapped',
+  'swi': 'SWI',
+  'mip': 'mIP'
 };
 
 // Pipeline method options
@@ -245,6 +255,7 @@ export const PIPELINE_METHODS = {
 // Default pipeline settings (assembled from individual defaults)
 export const PIPELINE_DEFAULTS = {
   combinedMethod: 'none',
+  swi: { ...SWI_DEFAULTS },
   tgv: { ...TGV_DEFAULTS },
   qsmart: { ...QSMART_DEFAULTS },
   unwrapMethod: 'romeo',
@@ -331,6 +342,7 @@ const QSMConfig = {
   BET_DEFAULTS,
   MASK_PREP_DEFAULTS,
   PROGRESS_CONFIG,
+  SWI_DEFAULTS,
   TGV_DEFAULTS,
   QSMART_DEFAULTS,
   ROMEO_DEFAULTS,
