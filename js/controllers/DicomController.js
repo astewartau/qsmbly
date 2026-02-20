@@ -1,6 +1,10 @@
 /**
  * DicomController - Handles DICOM to NIfTI conversion and classification.
  * Uses vendored @niivue/dcm2niix (WASM) for in-browser conversion.
+ *
+ * This controller is stateless with respect to classification results — each
+ * conversion produces a batch result that is passed to the onConversionComplete
+ * callback. Accumulation across batches is handled by the consumer (QSMApp._triageState).
  */
 
 export class DicomController {
@@ -11,16 +15,6 @@ export class DicomController {
 
     this.dcm2niixModule = null; // Lazy-loaded module
     this.converting = false;
-
-    // Accumulated classified results across batches
-    this.classifiedFiles = {
-      magnitude: [],  // [{file, name, echoTime, echoNumber}, ...]
-      phase: [],
-      extras: [],     // Files not clearly magnitude or phase
-      jsonFiles: [],  // Raw JSON File objects
-      fieldStrength: null,
-      echoTimes: []   // Sorted ms values
-    };
   }
 
   /**
@@ -52,7 +46,7 @@ export class DicomController {
     try {
       const dcm2niix = await this._createInstance();
       const result = await dcm2niix.input(files).run();
-      this._processResults(result);
+      await this._processResults(result);
     } catch (error) {
       console.error('DICOM conversion error:', error);
       this.updateOutput(`DICOM conversion failed: ${error.message}`);
@@ -72,12 +66,18 @@ export class DicomController {
     this.updateOutput('Reading dropped files...');
 
     try {
-      const files = [];
+      // Collect all entries synchronously BEFORE any async work.
+      // Chrome invalidates the DataTransferItemList after an async yield,
+      // so webkitGetAsEntry() must be called for all items immediately.
+      const entries = [];
       for (let i = 0; i < dataTransferItems.length; i++) {
         const entry = dataTransferItems[i].webkitGetAsEntry?.();
-        if (entry) {
-          await this._traverseFileTree(entry, '', files);
-        }
+        if (entry) entries.push(entry);
+      }
+
+      const files = [];
+      for (const entry of entries) {
+        await this._traverseFileTree(entry, '', files);
       }
 
       if (files.length === 0) {
@@ -92,7 +92,7 @@ export class DicomController {
       this.updateOutput(`Converting ${files.length} DICOM files...`);
       const dcm2niix = await this._createInstance();
       const result = await dcm2niix.input(files).run();
-      this._processResults(result);
+      await this._processResults(result);
     } catch (error) {
       console.error('DICOM conversion error:', error);
       this.updateOutput(`DICOM conversion failed: ${error.message}`);
@@ -148,19 +148,20 @@ export class DicomController {
       return;
     }
 
-    await this._classifyFiles(niftiFiles, jsonFiles);
-    this.onConversionComplete(this.classifiedFiles);
+    const batch = await this._classifyBatch(niftiFiles, jsonFiles);
+    this.onConversionComplete(batch);
   }
 
   /**
-   * Classify NIfTI files as magnitude or phase using JSON sidecar metadata.
+   * Classify a batch of NIfTI files as magnitude, phase, or extras.
+   * Returns only this batch's results (no internal accumulation).
    *
    * Strategy:
    * 1. Primary: Check ImageType array in JSON sidecar for "P"/"PHASE" (phase) or absence (magnitude)
    * 2. Fallback: Check filename for "_ph" suffix (dcm2niix convention)
    * 3. Default: Assume magnitude
    */
-  async _classifyFiles(niftiFiles, jsonFiles) {
+  async _classifyBatch(niftiFiles, jsonFiles) {
     // Parse all JSON sidecars first
     const jsonMap = new Map();
     for (const jsonFile of jsonFiles) {
@@ -173,11 +174,11 @@ export class DicomController {
       }
     }
 
-    const newMagnitude = [];
-    const newPhase = [];
-    const newExtras = [];
-    const newJsonFiles = [];
-    let fieldStrength = this.classifiedFiles.fieldStrength;
+    const magnitude = [];
+    const phase = [];
+    const extras = [];
+    const batchJsonFiles = [];
+    let fieldStrength = null;
 
     for (const niftiFile of niftiFiles) {
       // Find matching JSON sidecar by basename
@@ -223,7 +224,7 @@ export class DicomController {
             || null;
         }
 
-        newJsonFiles.push(jsonEntry.file);
+        batchJsonFiles.push(jsonEntry.file);
       } else {
         // No JSON sidecar — fallback to filename convention
         if (niftiFile.name.includes('_ph')) {
@@ -239,11 +240,11 @@ export class DicomController {
       };
 
       if (category === 'phase') {
-        newPhase.push(entry);
+        phase.push(entry);
       } else if (category === 'extras') {
-        newExtras.push(entry);
+        extras.push(entry);
       } else {
-        newMagnitude.push(entry);
+        magnitude.push(entry);
       }
     }
 
@@ -257,56 +258,32 @@ export class DicomController {
       }
       return 0;
     };
+    magnitude.sort(sortByEcho);
+    phase.sort(sortByEcho);
 
-    // Accumulate with previous batches
-    this.classifiedFiles.magnitude.push(...newMagnitude);
-    this.classifiedFiles.phase.push(...newPhase);
-    this.classifiedFiles.extras.push(...newExtras);
-    this.classifiedFiles.jsonFiles.push(...newJsonFiles);
-    this.classifiedFiles.fieldStrength = fieldStrength;
-
-    // Re-sort accumulated results
-    this.classifiedFiles.magnitude.sort(sortByEcho);
-    this.classifiedFiles.phase.sort(sortByEcho);
-
-    // Collect unique echo times from both groups
-    const allEntries = [...this.classifiedFiles.magnitude, ...this.classifiedFiles.phase];
+    // Collect echo times from this batch
     const echoTimeSet = new Set();
-    for (const entry of allEntries) {
-      if (entry.echoTime != null) {
-        echoTimeSet.add(entry.echoTime);
-      }
+    for (const entry of [...magnitude, ...phase]) {
+      if (entry.echoTime != null) echoTimeSet.add(entry.echoTime);
     }
-    this.classifiedFiles.echoTimes = [...echoTimeSet].sort((a, b) => a - b);
+    const echoTimes = [...echoTimeSet].sort((a, b) => a - b);
 
-    const magCount = this.classifiedFiles.magnitude.length;
-    const phaseCount = this.classifiedFiles.phase.length;
-    const extrasCount = this.classifiedFiles.extras.length;
+    const magCount = magnitude.length;
+    const phaseCount = phase.length;
+    const extrasCount = extras.length;
     let msg = `Found ${magCount} magnitude and ${phaseCount} phase image${magCount + phaseCount !== 1 ? 's' : ''}`;
     if (extrasCount > 0) {
       msg += ` (${extrasCount} other)`;
     }
     this.updateOutput(msg);
-  }
 
-  /**
-   * Get the current classified files.
-   */
-  getClassifiedFiles() {
-    return this.classifiedFiles;
-  }
-
-  /**
-   * Clear all accumulated results.
-   */
-  clearFiles() {
-    this.classifiedFiles = {
-      magnitude: [],
-      phase: [],
-      extras: [],
-      jsonFiles: [],
-      fieldStrength: null,
-      echoTimes: []
+    return {
+      magnitude,
+      phase,
+      extras,
+      jsonFiles: batchJsonFiles,
+      fieldStrength,
+      echoTimes
     };
   }
 }

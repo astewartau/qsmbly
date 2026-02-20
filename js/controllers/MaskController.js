@@ -680,17 +680,12 @@ export class MaskController {
       // Hide overlay control when in drawing mode (no overlay)
       this.showOverlayControl(false);
 
-      // Create drawing and load current mask into it
-      this.nv.createEmptyDrawing();
-
-      // Copy current mask to drawing bitmap
-      const totalVoxels = this.currentMaskData.length;
-      for (let i = 0; i < totalVoxels; i++) {
-        this.nv.drawBitmap[i] = this.currentMaskData[i] > 0 ? 1 : 0;
-      }
-
-      // Refresh the drawing display
-      this.nv.refreshDrawing(true);
+      // Load mask as drawing via NiiVue's pipeline (handles permRAS correctly)
+      const maskNifti = createMaskNifti(this.currentMaskData, this.magnitudeFileBytes);
+      const maskBlob = new Blob([maskNifti], { type: 'application/octet-stream' });
+      const maskUrl = URL.createObjectURL(maskBlob);
+      await this.nv.loadDrawingFromUrl(maskUrl, true);
+      URL.revokeObjectURL(maskUrl);
 
       // Enable drawing mode
       this.nv.setDrawingEnabled(true);
@@ -773,14 +768,62 @@ export class MaskController {
         return;
       }
 
-      // Copy drawing bitmap directly to mask
-      // The drawing IS the mask now, so just copy it back
+      // Copy drawing bitmap back to mask data, accounting for permRAS reorientation
       const totalVoxels = this.currentMaskData.length;
       let maskCount = 0;
 
-      for (let i = 0; i < Math.min(drawBitmap.length, totalVoxels); i++) {
-        this.currentMaskData[i] = drawBitmap[i] > 0 ? 1 : 0;
-        if (drawBitmap[i] > 0) maskCount++;
+      const perm = this.nv.volumes[0].permRAS;
+      if (perm[0] === 1 && perm[1] === 2 && perm[2] === 3) {
+        // Identity permutation — simple linear copy
+        for (let i = 0; i < Math.min(drawBitmap.length, totalVoxels); i++) {
+          this.currentMaskData[i] = drawBitmap[i] > 0 ? 1 : 0;
+          if (drawBitmap[i] > 0) maskCount++;
+        }
+      } else {
+        // Non-identity permutation — apply inverse transform (from NiiVue saveImage)
+        const dims = this.nv.volumes[0].hdr.dims;
+        const layout = [0, 0, 0];
+        for (let i = 0; i < 3; i++) {
+          for (let j = 0; j < 3; j++) {
+            if (Math.abs(perm[i]) - 1 !== j) continue;
+            layout[j] = i * Math.sign(perm[i]);
+          }
+        }
+        let stride = 1;
+        const instride = [1, 1, 1];
+        const inflip = [false, false, false];
+        for (let i = 0; i < layout.length; i++) {
+          for (let j = 0; j < layout.length; j++) {
+            const a = Math.abs(layout[j]);
+            if (a !== i) continue;
+            instride[j] = stride;
+            if (layout[j] < 0 || Object.is(layout[j], -0)) inflip[j] = true;
+            stride *= dims[j + 1];
+          }
+        }
+        // Build lookup tables for each axis
+        const buildLut = (size, flip, st) => {
+          const lut = flip
+            ? Array.from({ length: size }, (_, i) => size - 1 - i)
+            : Array.from({ length: size }, (_, i) => i);
+          for (let i = 0; i < size; i++) lut[i] *= st;
+          return lut;
+        };
+        const xlut = buildLut(dims[1], inflip[0], instride[0]);
+        const ylut = buildLut(dims[2], inflip[1], instride[1]);
+        const zlut = buildLut(dims[3], inflip[2], instride[2]);
+
+        let j = 0;
+        for (let z = 0; z < dims[3]; z++) {
+          for (let y = 0; y < dims[2]; y++) {
+            for (let x = 0; x < dims[1]; x++) {
+              const val = drawBitmap[xlut[x] + ylut[y] + zlut[z]] > 0 ? 1 : 0;
+              this.currentMaskData[j] = val;
+              if (val) maskCount++;
+              j++;
+            }
+          }
+        }
       }
 
       // Exit drawing mode and show the mask as overlay

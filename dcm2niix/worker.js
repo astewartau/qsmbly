@@ -123,7 +123,7 @@ const handleMessage = async (e) => {
 
     // copy the files to the emscripten filesystem
     await copyFilesToFS(fileList, inDir, outDir);
-   
+
     // then add the input directory at the end of the args array
     args.push(inDir);
     // call the main function of the WASM module with the args
@@ -131,15 +131,13 @@ const handleMessage = async (e) => {
 
     // read all files from outDir and return them
     const files = mod.FS.readdir(outDir);
-    // filter out any file from the files array that starts 
+    // filter out any file from the files array that starts
     // with a dot. FS.readdir returns '.' and '..' which is not useful.
     const filteredFiles = files.filter(file => !file.startsWith('.'));
-    
+
     const convertedFiles = [];
     for (let file of filteredFiles) {
       const filePath = outDir + '/' + file;
-      // const blob = new Blob([mod.FS.readFile(filePath)], { type: 'application/sla' });
-      // make a file Object from the return value of readFile
       const fileData = mod.FS.readFile(filePath);
       const f = new File([fileData], file, { type: typeFromExtension(file) });
       convertedFiles.push(f);

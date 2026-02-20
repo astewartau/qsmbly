@@ -131,8 +131,9 @@ export function fillHoles3D(mask, dims) {
   }
 
   // Flood fill from boundary
-  while (queue.length > 0) {
-    const idx = queue.shift();
+  let head = 0;
+  while (head < queue.length) {
+    const idx = queue[head++];
     const x = idx % nx;
     const y = Math.floor((idx % nxy) / nx);
     const z = Math.floor(idx / nxy);
