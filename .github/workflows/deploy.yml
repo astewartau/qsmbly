@@ -96,6 +96,16 @@ jobs:
         working-directory: rust-wasm
         run: wasm-pack build --target web --release
 
+      - name: Upload WASM to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            rust-wasm/pkg/qsm_wasm.js \
+            rust-wasm/pkg/qsm_wasm_bg.wasm \
+            --clobber
+
       - name: Prepare deployment directory
         run: |
           mkdir -p deploy/wasm
