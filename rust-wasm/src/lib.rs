@@ -23,6 +23,19 @@ pub fn init() {
     console_error_panic_hook::set_once();
 }
 
+/// Gyromagnetic ratio of hydrogen protons (Hz/T)
+const GYROMAGNETIC_RATIO: f64 = 42.576e6;
+
+/// Returns scale factor to convert Hz → ppm given field strength in Tesla.
+/// Returns 1.0 if field_strength <= 0 (no conversion).
+fn hz_to_ppm_scale(field_strength: f64) -> f64 {
+    if field_strength > 0.0 {
+        1e6 / (GYROMAGNETIC_RATIO * field_strength)
+    } else {
+        1.0
+    }
+}
+
 // ============================================================================
 // WASM Exports: Phase Unwrapping
 // ============================================================================
@@ -188,17 +201,20 @@ pub fn tkd_wasm(
     vsx: f64, vsy: f64, vsz: f64,
     bx: f64, by: f64, bz: f64,
     threshold: f64,
+    field_strength: f64,
 ) -> Vec<f64> {
-    console_log!("WASM TKD: {}x{}x{}, voxel=({:.2},{:.2},{:.2}), thr={:.3}",
-                 nx, ny, nz, vsx, vsy, vsz, threshold);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM TKD: {}x{}x{}, thr={:.3}, scale={:.4e}",
+                 nx, ny, nz, threshold, scale);
 
+    let field_norm: Vec<f64> = local_field.iter().map(|&v| v * scale).collect();
     let chi = qsm_core::inversion::tkd::tkd(
-        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), threshold
     );
 
     console_log!("WASM TKD complete");
-    chi
+    chi.iter().map(|&v| v / scale).collect()
 }
 
 /// TSVD (Truncated SVD) dipole inversion
@@ -212,16 +228,19 @@ pub fn tsvd_wasm(
     vsx: f64, vsy: f64, vsz: f64,
     bx: f64, by: f64, bz: f64,
     threshold: f64,
+    field_strength: f64,
 ) -> Vec<f64> {
-    console_log!("WASM TSVD: {}x{}x{}", nx, ny, nz);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM TSVD: {}x{}x{}, scale={:.4e}", nx, ny, nz, scale);
 
+    let field_norm: Vec<f64> = local_field.iter().map(|&v| v * scale).collect();
     let chi = qsm_core::inversion::tkd::tsvd(
-        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), threshold
     );
 
     console_log!("WASM TSVD complete");
-    chi
+    chi.iter().map(|&v| v / scale).collect()
 }
 
 /// Tikhonov regularized dipole inversion
@@ -243,9 +262,11 @@ pub fn tikhonov_wasm(
     bx: f64, by: f64, bz: f64,
     lambda: f64,
     reg_type: u8,
+    field_strength: f64,
 ) -> Vec<f64> {
-    console_log!("WASM Tikhonov: {}x{}x{}, lambda={:.4}, reg_type={}",
-                 nx, ny, nz, lambda, reg_type);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM Tikhonov: {}x{}x{}, lambda={:.4}, reg_type={}, scale={:.4e}",
+                 nx, ny, nz, lambda, reg_type, scale);
 
     let reg = match reg_type {
         0 => qsm_core::inversion::tikhonov::Regularization::Identity,
@@ -253,13 +274,14 @@ pub fn tikhonov_wasm(
         _ => qsm_core::inversion::tikhonov::Regularization::Laplacian,
     };
 
+    let field_norm: Vec<f64> = local_field.iter().map(|&v| v * scale).collect();
     let chi = qsm_core::inversion::tikhonov::tikhonov(
-        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), lambda, reg
     );
 
     console_log!("WASM Tikhonov complete");
-    chi
+    chi.iter().map(|&v| v / scale).collect()
 }
 
 // ============================================================================
@@ -287,15 +309,19 @@ pub fn sharp_wasm(
     vsx: f64, vsy: f64, vsz: f64,
     radius: f64,
     threshold: f64,
+    field_strength: f64,
 ) -> Vec<f64> {
-    console_log!("WASM SHARP: {}x{}x{}, radius={:.1}", nx, ny, nz, radius);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM SHARP: {}x{}x{}, radius={:.1}, field_strength={:.1}T, scale={:.4e}",
+                 nx, ny, nz, radius, field_strength, scale);
 
+    let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
     let (local_field, eroded_mask) = qsm_core::bgremove::sharp(
-        field, mask, nx, ny, nz, vsx, vsy, vsz, radius, threshold
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz, radius, threshold
     );
 
-    // Combine into single output: local_field followed by mask as f64
-    let mut result = local_field;
+    // Convert back and combine into single output
+    let mut result: Vec<f64> = local_field.iter().map(|&v| v / scale).collect();
     result.extend(eroded_mask.iter().map(|&m| m as f64));
 
     console_log!("WASM SHARP complete");
@@ -357,15 +383,17 @@ pub fn vsharp_wasm(
     vsx: f64, vsy: f64, vsz: f64,
     radii: &[f64],
     threshold: f64,
+    field_strength: f64,
 ) -> Vec<f64> {
-    console_log!("WASM V-SHARP: {}x{}x{}, {} radii", nx, ny, nz, radii.len());
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM V-SHARP: {}x{}x{}, {} radii, scale={:.4e}", nx, ny, nz, radii.len(), scale);
 
+    let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
     let (local_field, eroded_mask) = qsm_core::bgremove::vsharp(
-        field, mask, nx, ny, nz, vsx, vsy, vsz, radii, threshold
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz, radii, threshold
     );
 
-    // Combine into single output
-    let mut result = local_field;
+    let mut result: Vec<f64> = local_field.iter().map(|&v| v / scale).collect();
     result.extend(eroded_mask.iter().map(|&m| m as f64));
 
     console_log!("WASM V-SHARP complete");
@@ -381,13 +409,16 @@ pub fn vsharp_wasm_with_progress(
     vsx: f64, vsy: f64, vsz: f64,
     radii: &[f64],
     threshold: f64,
+    field_strength: f64,
     progress_callback: &js_sys::Function,
 ) -> Vec<f64> {
-    console_log!("WASM V-SHARP with progress: {}x{}x{}, {} radii", nx, ny, nz, radii.len());
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM V-SHARP with progress: {}x{}x{}, {} radii, scale={:.4e}", nx, ny, nz, radii.len(), scale);
 
+    let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
     let callback = progress_callback.clone();
     let (local_field, eroded_mask) = qsm_core::bgremove::vsharp::vsharp_with_progress(
-        field, mask, nx, ny, nz, vsx, vsy, vsz, radii, threshold,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz, radii, threshold,
         |current, total| {
             let this = JsValue::null();
             let _ = callback.call2(&this,
@@ -396,7 +427,7 @@ pub fn vsharp_wasm_with_progress(
         }
     );
 
-    let mut result = local_field;
+    let mut result: Vec<f64> = local_field.iter().map(|&v| v / scale).collect();
     result.extend(eroded_mask.iter().map(|&m| m as f64));
 
     console_log!("WASM V-SHARP complete");
@@ -428,17 +459,20 @@ pub fn tv_admm_wasm(
     rho: f64,
     tol: f64,
     max_iter: usize,
+    field_strength: f64,
 ) -> Vec<f64> {
-    console_log!("WASM TV-ADMM: {}x{}x{}, lambda={:.4}, rho={:.4}, max_iter={}",
-                 nx, ny, nz, lambda, rho, max_iter);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM TV-ADMM: {}x{}x{}, lambda={:.4}, rho={:.4}, max_iter={}, scale={:.4e}",
+                 nx, ny, nz, lambda, rho, max_iter, scale);
 
+    let field_norm: Vec<f64> = local_field.iter().map(|&v| v * scale).collect();
     let chi = qsm_core::inversion::tv::tv_admm(
-        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), lambda, rho, tol, max_iter
     );
 
     console_log!("WASM TV-ADMM complete");
-    chi
+    chi.iter().map(|&v| v / scale).collect()
 }
 
 /// TV-ADMM with progress callback
@@ -453,14 +487,17 @@ pub fn tv_admm_wasm_with_progress(
     rho: f64,
     tol: f64,
     max_iter: usize,
+    field_strength: f64,
     progress_callback: &js_sys::Function,
 ) -> Vec<f64> {
-    console_log!("WASM TV-ADMM with progress: {}x{}x{}, lambda={:.4}, max_iter={}",
-                 nx, ny, nz, lambda, max_iter);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM TV-ADMM with progress: {}x{}x{}, lambda={:.4}, max_iter={}, scale={:.4e}",
+                 nx, ny, nz, lambda, max_iter, scale);
 
+    let field_norm: Vec<f64> = local_field.iter().map(|&v| v * scale).collect();
     let callback = progress_callback.clone();
     let chi = qsm_core::inversion::tv::tv_admm_with_progress(
-        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), lambda, rho, tol, max_iter,
         |current, total| {
             let this = JsValue::null();
@@ -471,7 +508,7 @@ pub fn tv_admm_wasm_with_progress(
     );
 
     console_log!("WASM TV-ADMM complete");
-    chi
+    chi.iter().map(|&v| v / scale).collect()
 }
 
 /// RTS (Rapid Two-Step) dipole inversion
@@ -503,16 +540,19 @@ pub fn rts_wasm(
     tol: f64,
     max_iter: usize,
     lsmr_iter: usize,
+    field_strength: f64,
 ) -> Vec<f64> {
-    console_log!("WASM RTS: {}x{}x{}, delta={:.2}, mu={:.0}", nx, ny, nz, delta, mu);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM RTS: {}x{}x{}, delta={:.2}, mu={:.0}, scale={:.4e}", nx, ny, nz, delta, mu, scale);
 
+    let field_norm: Vec<f64> = local_field.iter().map(|&v| v * scale).collect();
     let chi = qsm_core::inversion::rts::rts(
-        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), delta, mu, rho, tol, max_iter, lsmr_iter
     );
 
     console_log!("WASM RTS complete");
-    chi
+    chi.iter().map(|&v| v / scale).collect()
 }
 
 /// RTS with progress callback
@@ -529,14 +569,17 @@ pub fn rts_wasm_with_progress(
     tol: f64,
     max_iter: usize,
     lsmr_iter: usize,
+    field_strength: f64,
     progress_callback: &js_sys::Function,
 ) -> Vec<f64> {
-    console_log!("WASM RTS with progress: {}x{}x{}, delta={:.2}, max_iter={}",
-                 nx, ny, nz, delta, max_iter);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM RTS with progress: {}x{}x{}, delta={:.2}, max_iter={}, scale={:.4e}",
+                 nx, ny, nz, delta, max_iter, scale);
 
+    let field_norm: Vec<f64> = local_field.iter().map(|&v| v * scale).collect();
     let callback = progress_callback.clone();
     let chi = qsm_core::inversion::rts::rts_with_progress(
-        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), delta, mu, rho, tol, max_iter, lsmr_iter,
         |current, total| {
             let this = JsValue::null();
@@ -547,7 +590,7 @@ pub fn rts_wasm_with_progress(
     );
 
     console_log!("WASM RTS complete");
-    chi
+    chi.iter().map(|&v| v / scale).collect()
 }
 
 /// NLTV (Nonlinear Total Variation) dipole inversion
@@ -577,17 +620,20 @@ pub fn nltv_wasm(
     tol: f64,
     max_iter: usize,
     newton_iter: usize,
+    field_strength: f64,
 ) -> Vec<f64> {
-    console_log!("WASM NLTV: {}x{}x{}, lambda={:.4}, mu={:.2}, max_iter={}, newton={}",
-                 nx, ny, nz, lambda, mu, max_iter, newton_iter);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM NLTV: {}x{}x{}, lambda={:.4}, mu={:.2}, max_iter={}, newton={}, scale={:.4e}",
+                 nx, ny, nz, lambda, mu, max_iter, newton_iter, scale);
 
+    let field_norm: Vec<f64> = local_field.iter().map(|&v| v * scale).collect();
     let chi = qsm_core::inversion::nltv::nltv(
-        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), lambda, mu, tol, max_iter, newton_iter
     );
 
     console_log!("WASM NLTV complete");
-    chi
+    chi.iter().map(|&v| v / scale).collect()
 }
 
 /// NLTV with progress callback
@@ -603,14 +649,17 @@ pub fn nltv_wasm_with_progress(
     tol: f64,
     max_iter: usize,
     newton_iter: usize,
+    field_strength: f64,
     progress_callback: &js_sys::Function,
 ) -> Vec<f64> {
-    console_log!("WASM NLTV with progress: {}x{}x{}, lambda={:.4}, max_iter={}",
-                 nx, ny, nz, lambda, max_iter);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM NLTV with progress: {}x{}x{}, lambda={:.4}, max_iter={}, scale={:.4e}",
+                 nx, ny, nz, lambda, max_iter, scale);
 
+    let field_norm: Vec<f64> = local_field.iter().map(|&v| v * scale).collect();
     let callback = progress_callback.clone();
     let chi = qsm_core::inversion::nltv::nltv_with_progress(
-        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), lambda, mu, tol, max_iter, newton_iter,
         |current, total| {
             let this = JsValue::null();
@@ -621,7 +670,7 @@ pub fn nltv_wasm_with_progress(
     );
 
     console_log!("WASM NLTV complete");
-    chi
+    chi.iter().map(|&v| v / scale).collect()
 }
 
 /// MEDI L1 dipole inversion
@@ -756,17 +805,20 @@ pub fn ilsqr_wasm(
     bx: f64, by: f64, bz: f64,
     tol: f64,
     max_iter: usize,
+    field_strength: f64,
 ) -> Vec<f64> {
-    console_log!("WASM iLSQR: {}x{}x{}, tol={:.4}, max_iter={}",
-                 nx, ny, nz, tol, max_iter);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM iLSQR: {}x{}x{}, tol={:.4}, max_iter={}, scale={:.4e}",
+                 nx, ny, nz, tol, max_iter, scale);
 
+    let field_norm: Vec<f64> = local_field.iter().map(|&v| v * scale).collect();
     let chi = qsm_core::inversion::ilsqr::ilsqr_simple(
-        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), tol, max_iter
     );
 
     console_log!("WASM iLSQR complete");
-    chi
+    chi.iter().map(|&v| v / scale).collect()
 }
 
 /// iLSQR with progress callback
@@ -779,14 +831,17 @@ pub fn ilsqr_wasm_with_progress(
     bx: f64, by: f64, bz: f64,
     tol: f64,
     max_iter: usize,
+    field_strength: f64,
     progress_callback: &js_sys::Function,
 ) -> Vec<f64> {
-    console_log!("WASM iLSQR with progress: {}x{}x{}, tol={:.4}, max_iter={}",
-                 nx, ny, nz, tol, max_iter);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM iLSQR with progress: {}x{}x{}, tol={:.4}, max_iter={}, scale={:.4e}",
+                 nx, ny, nz, tol, max_iter, scale);
 
+    let field_norm: Vec<f64> = local_field.iter().map(|&v| v * scale).collect();
     let callback = progress_callback.clone();
     let chi = qsm_core::inversion::ilsqr::ilsqr_with_progress(
-        local_field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), tol, max_iter,
         |current, total| {
             let this = JsValue::null();
@@ -797,7 +852,7 @@ pub fn ilsqr_wasm_with_progress(
     );
 
     console_log!("WASM iLSQR complete");
-    chi
+    chi.iter().map(|&v| v / scale).collect()
 }
 
 /// iLSQR with full output (susceptibility, artifacts, fastqsm, initial lsqr)
@@ -997,16 +1052,19 @@ pub fn pdf_wasm(
     bx: f64, by: f64, bz: f64,
     tol: f64,
     max_iter: usize,
+    field_strength: f64,
 ) -> Vec<f64> {
-    console_log!("WASM PDF: {}x{}x{}", nx, ny, nz);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM PDF: {}x{}x{}, scale={:.4e}", nx, ny, nz, scale);
 
+    let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
     let local_field = qsm_core::bgremove::pdf::pdf(
-        field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), tol, max_iter
     );
 
     console_log!("WASM PDF complete");
-    local_field
+    local_field.iter().map(|&v| v / scale).collect()
 }
 
 /// PDF with progress callback
@@ -1019,13 +1077,16 @@ pub fn pdf_wasm_with_progress(
     bx: f64, by: f64, bz: f64,
     tol: f64,
     max_iter: usize,
+    field_strength: f64,
     progress_callback: &js_sys::Function,
 ) -> Vec<f64> {
-    console_log!("WASM PDF with progress: {}x{}x{}, max_iter={}", nx, ny, nz, max_iter);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM PDF with progress: {}x{}x{}, max_iter={}, scale={:.4e}", nx, ny, nz, max_iter, scale);
 
+    let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
     let callback = progress_callback.clone();
     let local_field = qsm_core::bgremove::pdf::pdf_with_progress(
-        field, mask, nx, ny, nz, vsx, vsy, vsz,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz,
         (bx, by, bz), tol, max_iter,
         |current, total| {
             let this = JsValue::null();
@@ -1036,7 +1097,7 @@ pub fn pdf_wasm_with_progress(
     );
 
     console_log!("WASM PDF complete");
-    local_field
+    local_field.iter().map(|&v| v / scale).collect()
 }
 
 /// iSMV background field removal
@@ -1064,15 +1125,17 @@ pub fn ismv_wasm(
     radius: f64,
     tol: f64,
     max_iter: usize,
+    field_strength: f64,
 ) -> Vec<f64> {
-    console_log!("WASM iSMV: {}x{}x{}, radius={:.1}", nx, ny, nz, radius);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM iSMV: {}x{}x{}, radius={:.1}, scale={:.4e}", nx, ny, nz, radius, scale);
 
+    let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
     let (local_field, eroded_mask) = qsm_core::bgremove::ismv::ismv(
-        field, mask, nx, ny, nz, vsx, vsy, vsz, radius, tol, max_iter
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz, radius, tol, max_iter
     );
 
-    // Combine into single output
-    let mut result = local_field;
+    let mut result: Vec<f64> = local_field.iter().map(|&v| v / scale).collect();
     result.extend(eroded_mask.iter().map(|&m| m as f64));
 
     console_log!("WASM iSMV complete");
@@ -1089,14 +1152,17 @@ pub fn ismv_wasm_with_progress(
     radius: f64,
     tol: f64,
     max_iter: usize,
+    field_strength: f64,
     progress_callback: &js_sys::Function,
 ) -> Vec<f64> {
-    console_log!("WASM iSMV with progress: {}x{}x{}, radius={:.1}, max_iter={}",
-                 nx, ny, nz, radius, max_iter);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM iSMV with progress: {}x{}x{}, radius={:.1}, max_iter={}, scale={:.4e}",
+                 nx, ny, nz, radius, max_iter, scale);
 
+    let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
     let callback = progress_callback.clone();
     let (local_field, eroded_mask) = qsm_core::bgremove::ismv::ismv_with_progress(
-        field, mask, nx, ny, nz, vsx, vsy, vsz, radius, tol, max_iter,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz, radius, tol, max_iter,
         |current, total| {
             let this = JsValue::null();
             let _ = callback.call2(&this,
@@ -1105,7 +1171,7 @@ pub fn ismv_wasm_with_progress(
         }
     );
 
-    let mut result = local_field;
+    let mut result: Vec<f64> = local_field.iter().map(|&v| v / scale).collect();
     result.extend(eroded_mask.iter().map(|&m| m as f64));
 
     console_log!("WASM iSMV complete");
@@ -1135,15 +1201,17 @@ pub fn lbv_wasm(
     vsx: f64, vsy: f64, vsz: f64,
     tol: f64,
     max_iter: usize,
+    field_strength: f64,
 ) -> Vec<f64> {
-    console_log!("WASM LBV: {}x{}x{}, tol={:.6}, max_iter={}", nx, ny, nz, tol, max_iter);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM LBV: {}x{}x{}, tol={:.6}, max_iter={}, scale={:.4e}", nx, ny, nz, tol, max_iter, scale);
 
+    let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
     let (local_field, eroded_mask) = qsm_core::bgremove::lbv::lbv(
-        field, mask, nx, ny, nz, vsx, vsy, vsz, tol, max_iter
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz, tol, max_iter
     );
 
-    // Combine into single output
-    let mut result = local_field;
+    let mut result: Vec<f64> = local_field.iter().map(|&v| v / scale).collect();
     result.extend(eroded_mask.iter().map(|&m| m as f64));
 
     console_log!("WASM LBV complete");
@@ -1159,13 +1227,16 @@ pub fn lbv_wasm_with_progress(
     vsx: f64, vsy: f64, vsz: f64,
     tol: f64,
     max_iter: usize,
+    field_strength: f64,
     progress_callback: &js_sys::Function,
 ) -> Vec<f64> {
-    console_log!("WASM LBV with progress: {}x{}x{}, tol={:.6}, max_iter={}", nx, ny, nz, tol, max_iter);
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM LBV with progress: {}x{}x{}, tol={:.6}, max_iter={}, scale={:.4e}", nx, ny, nz, tol, max_iter, scale);
 
+    let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
     let callback = progress_callback.clone();
     let (local_field, eroded_mask) = qsm_core::bgremove::lbv::lbv_with_progress(
-        field, mask, nx, ny, nz, vsx, vsy, vsz, tol, max_iter,
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz, tol, max_iter,
         |current, total| {
             let this = JsValue::null();
             let _ = callback.call2(&this,
@@ -1174,7 +1245,7 @@ pub fn lbv_wasm_with_progress(
         }
     );
 
-    let mut result = local_field;
+    let mut result: Vec<f64> = local_field.iter().map(|&v| v / scale).collect();
     result.extend(eroded_mask.iter().map(|&m| m as f64));
 
     console_log!("WASM LBV complete");

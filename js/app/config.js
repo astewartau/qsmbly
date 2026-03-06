@@ -16,7 +16,7 @@ const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined
 export const VERSION = '0.9.4';
 
 // QSM.rs core library version (keep in sync with qsm-core dependency in rust-wasm/Cargo.toml)
-export const QSM_RS_VERSION = '0.3.2';
+export const QSM_RS_VERSION = '0.3.3';
 
 // Physics constants
 export const PHYSICS = {

@@ -277,7 +277,7 @@ async function runPipeline(data) {
   const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
   const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
   const tikhonovSettings = pipelineSettings?.tikhonov || { lambda: 0.01, reg: 'identity' };
-  const tvSettings = pipelineSettings?.tv || { lambda: 0.001, maxIter: 250, tol: 0.001 };
+  const tvSettings = pipelineSettings?.tv || { lambda: 0.0002, maxIter: 250, tol: 0.001 };
   const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, maxIter: 250, tol: 0.001, newtonMaxIter: 10 };
   const mediSettings = pipelineSettings?.medi || {
     lambda: 7.5e-5, percentage: 0.3, maxIter: 30, cgMaxIter: 10, cgTol: 0.01, tol: 0.1,
@@ -572,7 +572,7 @@ async function runPipeline(data) {
       if (!mask[i]) b0Fieldmap[i] = 0;
     }
 
-    // Calculate B0 range efficiently (avoid spread operator on large arrays)
+    // Calculate and log B0 range
     let b0Min = Infinity, b0Max = -Infinity;
     for (let i = 0; i < voxelCount; i++) {
       if (mask[i]) {
@@ -582,7 +582,6 @@ async function runPipeline(data) {
     }
     postLog(`B0 range: [${b0Min.toFixed(1)}, ${b0Max.toFixed(1)}] Hz`);
 
-    // Send B0 for display
     sendStageData('B0', b0Fieldmap, dims, voxelSize, affine, 'B0 Field Map (Hz)');
 
     // =========================================================================
@@ -620,6 +619,7 @@ async function runPipeline(data) {
       const result = wasmModule.vsharp_wasm_with_progress(
         b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
         new Float64Array(radii), vsharpSettings.threshold,
+        magField || 3.0,
         vsharpProgress
       );
 
@@ -643,6 +643,7 @@ async function runPipeline(data) {
       localField = new Float64Array(wasmModule.pdf_wasm_with_progress(
         b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
         0, 0, 1, pdfSettings.tol, pdfSettings.maxit,
+        magField || 3.0,
         pdfProgress
       ));
       erodedMask = mask;
@@ -665,6 +666,7 @@ async function runPipeline(data) {
       const result = wasmModule.ismv_wasm_with_progress(
         b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
         ismvSettings.radius, ismvSettings.tol, ismvSettings.maxit,
+        magField || 3.0,
         ismvProgress
       );
       postProgress(0.63, 'iSMV: Extracting results...');
@@ -681,7 +683,8 @@ async function runPipeline(data) {
       postProgress(0.45, `SHARP: Processing radius ${sharpSettings.radius}mm...`);
       const result = wasmModule.sharp_wasm(
         b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-        sharpSettings.radius, sharpSettings.threshold
+        sharpSettings.radius, sharpSettings.threshold,
+        magField || 3.0
       );
       postProgress(0.60, 'SHARP: Extracting results...');
       localField = new Float64Array(result.slice(0, voxelCount));
@@ -702,6 +705,7 @@ async function runPipeline(data) {
       const result = wasmModule.lbv_wasm_with_progress(
         b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
         lbvSettings.tol, lbvSettings.maxit,
+        magField || 3.0,
         lbvProgress
       );
       postProgress(0.63, 'LBV: Extracting results...');
@@ -736,7 +740,8 @@ async function runPipeline(data) {
       postProgress(0.70, 'TKD: Computing thresholded k-space division...');
       qsmResult = new Float64Array(wasmModule.tkd_wasm(
         localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-        0, 0, 1, tkdSettings.threshold
+        0, 0, 1, tkdSettings.threshold,
+        magField || 3.0
       ));
       postProgress(0.90, 'TKD: Complete');
     } else if (dipoleMethod === 'tsvd') {
@@ -744,7 +749,8 @@ async function runPipeline(data) {
       postProgress(0.70, 'TSVD: Computing truncated SVD inversion...');
       qsmResult = new Float64Array(wasmModule.tsvd_wasm(
         localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-        0, 0, 1, tsvdSettings.threshold
+        0, 0, 1, tsvdSettings.threshold,
+        magField || 3.0
       ));
       postProgress(0.90, 'TSVD: Complete');
     } else if (dipoleMethod === 'tikhonov') {
@@ -753,7 +759,8 @@ async function runPipeline(data) {
       postProgress(0.70, `Tikhonov: Solving (λ=${tikhonovSettings.lambda})...`);
       qsmResult = new Float64Array(wasmModule.tikhonov_wasm(
         localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-        0, 0, 1, tikhonovSettings.lambda, regType
+        0, 0, 1, tikhonovSettings.lambda, regType,
+        magField || 3.0
       ));
       postProgress(0.90, 'Tikhonov: Complete');
     } else if (dipoleMethod === 'tv') {
@@ -768,6 +775,7 @@ async function runPipeline(data) {
       qsmResult = new Float64Array(wasmModule.tv_admm_wasm_with_progress(
         localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
         0, 0, 1, tvSettings.lambda, rho, tvSettings.tol, tvSettings.maxIter,
+        magField || 3.0,
         tvProgress
       ));
     } else if (dipoleMethod === 'rts') {
@@ -783,6 +791,7 @@ async function runPipeline(data) {
         0, 0, 1,
         rtsSettings.delta, rtsSettings.mu, rtsSettings.rho,
         0.01, rtsSettings.maxIter, 4,
+        magField || 3.0,
         rtsProgress
       ));
     } else if (dipoleMethod === 'nltv') {
@@ -798,6 +807,7 @@ async function runPipeline(data) {
         0, 0, 1,
         nltvSettings.lambda, nltvSettings.mu,
         nltvSettings.tol, nltvSettings.maxIter, nltvSettings.newtonMaxIter,
+        magField || 3.0,
         nltvProgress
       ));
     } else if (dipoleMethod === 'medi') {
@@ -872,6 +882,7 @@ async function runPipeline(data) {
         localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
         0, 0, 1,  // B0 direction
         ilsqrSettings.tol, ilsqrSettings.maxIter,
+        magField || 3.0,
         ilsqrProgress
       ));
     } else {
@@ -1477,6 +1488,7 @@ async function runQsmartCore({
     lfsStage1, maskStage1, nx, ny, nz, vsx, vsy, vsz,
     0, 0, 1,
     ilsqrTol, ilsqrMaxIter,
+    magField || 3.0,
     ilsqrProgress1
   ));
 
@@ -1538,6 +1550,7 @@ async function runQsmartCore({
     lfsStage2, maskStage2, nx, ny, nz, vsx, vsy, vsz,
     0, 0, 1,
     ilsqrTol, ilsqrMaxIter,
+    magField || 3.0,
     ilsqrProgress2
   ));
 
@@ -1957,7 +1970,7 @@ async function runTotalFieldPipeline(data) {
   const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
   const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
   const tikhonovSettings = pipelineSettings?.tikhonov || { lambda: 0.01, reg: 'identity' };
-  const tvSettings = pipelineSettings?.tv || { lambda: 0.001, maxIter: 250, tol: 0.001 };
+  const tvSettings = pipelineSettings?.tv || { lambda: 0.0002, maxIter: 250, tol: 0.001 };
   const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, maxIter: 250, tol: 0.001, newtonMaxIter: 10 };
   const mediSettings = pipelineSettings?.medi || {
     lambda: 7.5e-5, percentage: 0.3, maxIter: 30, cgMaxIter: 10, cgTol: 0.01, tol: 0.1,
@@ -2076,7 +2089,7 @@ async function runTotalFieldPipeline(data) {
       // Run background removal (reuse same logic as standard pipeline)
       const bgResult = await runBackgroundRemoval(
         fieldData, mask, nx, ny, nz, vsx, vsy, vsz,
-        backgroundMethod, pipelineSettings
+        backgroundMethod, pipelineSettings, magField
       );
       localField = bgResult.localField;
       erodedMask = bgResult.erodedMask;
@@ -2096,7 +2109,7 @@ async function runTotalFieldPipeline(data) {
       dipoleMethod, pipelineSettings,
       magnitudeData,
       isPpm ? null : [20], // nominal TE (ms) for MEDI Hz->rad conversion (arbitrary, cancels out); null if ppm
-      isPpm
+      isPpm, magField
     );
 
     // Scale to ppm (skip if input was already in ppm)
@@ -2252,7 +2265,7 @@ async function runLocalFieldPipeline(data) {
       dipoleMethod, pipelineSettings,
       magnitudeData,
       isPpm ? null : [20], // dummy echo time for MEDI
-      isPpm
+      isPpm, magField
     );
 
     // Scale to ppm (skip if input was already in ppm)
@@ -2569,7 +2582,7 @@ async function runQsmartFieldMapPipeline(data) {
 // =========================================================================
 async function runBackgroundRemoval(
   b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-  backgroundMethod, pipelineSettings
+  backgroundMethod, pipelineSettings, magField
 ) {
   const voxelCount = nx * ny * nz;
   const vsharpSettings = {
@@ -2592,7 +2605,8 @@ async function runBackgroundRemoval(
     };
     const result = wasmModule.vsharp_wasm_with_progress(
       b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-      new Float64Array(radii), vsharpSettings.threshold, vsharpProgress
+      new Float64Array(radii), vsharpSettings.threshold,
+      magField || 3.0, vsharpProgress
     );
     localField = new Float64Array(result.slice(0, voxelCount));
     erodedMask = new Uint8Array(voxelCount);
@@ -2608,7 +2622,8 @@ async function runBackgroundRemoval(
     };
     localField = new Float64Array(wasmModule.pdf_wasm_with_progress(
       b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-      0, 0, 1, pdfSettings.tol, pdfSettings.maxit, pdfProgress
+      0, 0, 1, pdfSettings.tol, pdfSettings.maxit,
+      magField || 3.0, pdfProgress
     ));
     erodedMask = mask;
   } else if (backgroundMethod === 'ismv') {
@@ -2626,7 +2641,8 @@ async function runBackgroundRemoval(
     };
     const result = wasmModule.ismv_wasm_with_progress(
       b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-      ismvSettings.radius, ismvSettings.tol, ismvSettings.maxit, ismvProgress
+      ismvSettings.radius, ismvSettings.tol, ismvSettings.maxit,
+      magField || 3.0, ismvProgress
     );
     localField = new Float64Array(result.slice(0, voxelCount));
     erodedMask = new Uint8Array(voxelCount);
@@ -2640,7 +2656,8 @@ async function runBackgroundRemoval(
     postProgress(0.45, `SHARP: Processing radius ${sharpSettings.radius}mm...`);
     const result = wasmModule.sharp_wasm(
       b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-      sharpSettings.radius, sharpSettings.threshold
+      sharpSettings.radius, sharpSettings.threshold,
+      magField || 3.0
     );
     localField = new Float64Array(result.slice(0, voxelCount));
     erodedMask = new Uint8Array(voxelCount);
@@ -2656,7 +2673,8 @@ async function runBackgroundRemoval(
     };
     const result = wasmModule.lbv_wasm_with_progress(
       b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-      lbvSettings.tol, lbvSettings.maxit, lbvProgress
+      lbvSettings.tol, lbvSettings.maxit,
+      magField || 3.0, lbvProgress
     );
     localField = new Float64Array(result.slice(0, voxelCount));
     erodedMask = new Uint8Array(voxelCount);
@@ -2677,14 +2695,14 @@ async function runBackgroundRemoval(
 async function runDipoleInversion(
   localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
   dipoleMethod, pipelineSettings,
-  magnitudeData, echoTimes, skipHzConversion
+  magnitudeData, echoTimes, skipHzConversion, magField
 ) {
   const voxelCount = nx * ny * nz;
   const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 };
   const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
   const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
   const tikhonovSettings = pipelineSettings?.tikhonov || { lambda: 0.01, reg: 'identity' };
-  const tvSettings = pipelineSettings?.tv || { lambda: 0.001, maxIter: 250, tol: 0.001 };
+  const tvSettings = pipelineSettings?.tv || { lambda: 0.0002, maxIter: 250, tol: 0.001 };
   const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, maxIter: 250, tol: 0.001, newtonMaxIter: 10 };
   const mediSettings = pipelineSettings?.medi || {
     lambda: 7.5e-5, percentage: 0.3, maxIter: 30, cgMaxIter: 10, cgTol: 0.01, tol: 0.1,
@@ -2701,14 +2719,16 @@ async function runDipoleInversion(
     postProgress(0.70, 'TKD: Computing thresholded k-space division...');
     qsmResult = new Float64Array(wasmModule.tkd_wasm(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-      0, 0, 1, tkdSettings.threshold
+      0, 0, 1, tkdSettings.threshold,
+      magField || 3.0
     ));
     postProgress(0.90, 'TKD: Complete');
   } else if (dipoleMethod === 'tsvd') {
     postProgress(0.70, 'TSVD: Computing truncated SVD inversion...');
     qsmResult = new Float64Array(wasmModule.tsvd_wasm(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-      0, 0, 1, tsvdSettings.threshold
+      0, 0, 1, tsvdSettings.threshold,
+      magField || 3.0
     ));
     postProgress(0.90, 'TSVD: Complete');
   } else if (dipoleMethod === 'tikhonov') {
@@ -2716,7 +2736,8 @@ async function runDipoleInversion(
     postProgress(0.70, `Tikhonov: Solving...`);
     qsmResult = new Float64Array(wasmModule.tikhonov_wasm(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-      0, 0, 1, tikhonovSettings.lambda, regType
+      0, 0, 1, tikhonovSettings.lambda, regType,
+      magField || 3.0
     ));
     postProgress(0.90, 'Tikhonov: Complete');
   } else if (dipoleMethod === 'tv') {
@@ -2726,7 +2747,8 @@ async function runDipoleInversion(
     };
     qsmResult = new Float64Array(wasmModule.tv_admm_wasm_with_progress(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-      0, 0, 1, tvSettings.lambda, rho, tvSettings.tol, tvSettings.maxIter, tvProgress
+      0, 0, 1, tvSettings.lambda, rho, tvSettings.tol, tvSettings.maxIter,
+      magField || 3.0, tvProgress
     ));
   } else if (dipoleMethod === 'rts') {
     const rtsProgress = (current, total) => {
@@ -2736,7 +2758,8 @@ async function runDipoleInversion(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
       0, 0, 1,
       rtsSettings.delta, rtsSettings.mu, rtsSettings.rho,
-      0.01, rtsSettings.maxIter, 4, rtsProgress
+      0.01, rtsSettings.maxIter, 4,
+      magField || 3.0, rtsProgress
     ));
   } else if (dipoleMethod === 'nltv') {
     const nltvProgress = (current, total) => {
@@ -2746,7 +2769,8 @@ async function runDipoleInversion(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
       0, 0, 1,
       nltvSettings.lambda, nltvSettings.mu,
-      nltvSettings.tol, nltvSettings.maxIter, nltvSettings.newtonMaxIter, nltvProgress
+      nltvSettings.tol, nltvSettings.maxIter, nltvSettings.newtonMaxIter,
+      magField || 3.0, nltvProgress
     ));
   } else if (dipoleMethod === 'medi') {
     const mediProgress = (current, total) => {
@@ -2802,7 +2826,8 @@ async function runDipoleInversion(
     postProgress(0.70, 'iLSQR: Running...');
     qsmResult = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-      0, 0, 1, ilsqrSettings.tol, ilsqrSettings.maxIter, ilsqrProgress
+      0, 0, 1, ilsqrSettings.tol, ilsqrSettings.maxIter,
+      magField || 3.0, ilsqrProgress
     ));
   } else {
     throw new Error(`Unknown dipole inversion method: '${dipoleMethod}'`);
