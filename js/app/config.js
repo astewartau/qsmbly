@@ -16,7 +16,7 @@ const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined
 export const VERSION = '0.9.2';
 
 // QSM.rs core library version (keep in sync with qsm-core dependency in rust-wasm/Cargo.toml)
-export const QSM_RS_VERSION = '0.3.0';
+export const QSM_RS_VERSION = '0.3.1';
 
 // Physics constants
 export const PHYSICS = {
@@ -182,7 +182,7 @@ export const TIKHONOV_DEFAULTS = {
 
 // TV (Total Variation) regularization defaults
 export const TV_DEFAULTS = {
-  lambda: 0.001,
+  lambda: 0.0002,
   maxIter: 250,
   tol: 0.001
 };
