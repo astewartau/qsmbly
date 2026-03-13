@@ -1943,9 +1943,12 @@ async function runVoxelQuality(data) {
 
     console.log(`[Worker] Voxel quality: ${nx}x${ny}x${nz}`);
 
-    const phaseArray = new Float64Array(phase);
+    // Scale phase to [-π, +π] before quality map computation
+    const phaseArray = scalePhase(new Float64Array(phase));
     const magArray = new Float64Array(mag || []);
-    const phase2Array = new Float64Array(phase2 || []);
+    const phase2Array = phase2 && phase2.length > 0
+      ? scalePhase(new Float64Array(phase2))
+      : new Float64Array([]);
     const maskArray = new Uint8Array(mask);
 
     const result = wasmModule.voxel_quality_romeo_wasm(

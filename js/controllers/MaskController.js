@@ -129,6 +129,13 @@ export class MaskController {
         this.updateOutput("Combining magnitude echoes (RSS)...");
         magnitudeData = await this.combineMagnitudeRSS(magnitudeFiles);
         headerSourceFile = magnitudeFiles[0].file;
+      } else if (maskPrepSettings.source === 'last_echo') {
+        // Read last echo only (no display)
+        this.setProgress(0.15, 'Loading last echo...');
+        this.updateOutput("Loading last echo magnitude...");
+        const lastFile = magnitudeFiles[magnitudeFiles.length - 1].file;
+        magnitudeData = await this.readNiftiData(lastFile);
+        headerSourceFile = lastFile;
       } else {
         // Read first echo only (no display)
         this.setProgress(0.15, 'Loading first echo...');

@@ -94,14 +94,6 @@ class QSMApp {
     this.init();
   }
 
-  // Getter for backward compatibility - delegates to FileIOController
-  get multiEchoFiles() {
-    return this.fileIOController?.getMultiEchoFiles() || {
-      magnitude: [], phase: [], json: [], echoTimes: [],
-      combinedMagnitude: null, combinedPhase: null
-    };
-  }
-
   // Getters for backward compatibility - delegates to PipelineExecutor
   get pipelineRunning() {
     return this.pipelineExecutor?.isRunning() || false;
@@ -133,7 +125,7 @@ class QSMApp {
     // Initialize FileIOController first (other controllers depend on it)
     this.fileIOController = new FileIOController({
       updateOutput: (msg) => this.updateOutput(msg),
-      onFilesChanged: () => this.updateEchoInfo(),
+      onFilesChanged: () => this._onBucketsChanged(),
       onMagnitudeFilesChanged: (files) => this._onMagnitudeFilesChanged(files),
       onPhaseFilesChanged: (files) => this._onPhaseFilesChanged(files)
     });
@@ -145,10 +137,8 @@ class QSMApp {
     this.syncSidebarFromSettings();
     this.updateDownloadButtons();
 
-    // Initialize file lists via controller
-    this.fileIOController.updateFileList('magnitude', []);
-    this.fileIOController.updateFileList('phase', []);
-    this.fileIOController.updateFileList('json', []);
+    // Initialize mask file list via controller
+    this.fileIOController.updateFileList('mask', []);
 
     // Initialize masking controls state (disabled until Prepare is clicked)
     this.updateMaskingControlsState();
@@ -188,7 +178,7 @@ class QSMApp {
     // Initialize viewer controller
     this.viewerController = new ViewerController({
       nv: this.nv,
-      getMultiEchoFiles: () => this.multiEchoFiles,
+      getMultiEchoFiles: () => this.fileIOController?.getMultiEchoFiles() || { magnitude: [], phase: [], json: [], combinedMagnitude: null, combinedPhase: null },
       updateOutput: (msg) => this.updateOutput(msg),
       showOverlayControl: (show) => this.showOverlayControl(show),
       updateDownloadVolumeButton: () => this.updateDownloadVolumeButton()
@@ -333,24 +323,8 @@ class QSMApp {
   }
 
   setupEventListeners() {
-    // Input mode tab switching (top-level: dicom vs nifti)
-    document.querySelectorAll('.input-mode-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        const topMode = tab.dataset.mode;
-        if (topMode === 'dicom') {
-          this.switchInputMode('dicom');
-        } else {
-          // NIfTI selected - use the active sub-type
-          const activeSub = document.querySelector('.input-subtype-tab.active');
-          this.switchInputMode(activeSub?.dataset.mode || 'raw');
-        }
-      });
-    });
-
-    // NIfTI sub-type tab switching
-    document.querySelectorAll('.input-subtype-tab').forEach(tab => {
-      tab.addEventListener('click', () => this.switchInputMode(tab.dataset.mode));
-    });
+    // Unified file input
+    this._setupUnifiedDropZone();
 
     // Field map units dropdown
     document.getElementById('fieldMapUnits')?.addEventListener('change', () => {
@@ -358,43 +332,11 @@ class QSMApp {
       this.updateEchoInfo();
     });
 
-    // Multi-echo file inputs (raw mode)
-    document.getElementById('magnitudeFiles').addEventListener('change', (e) => {
-      this.handleMultipleFiles(e, 'magnitude');
-    });
-
-    document.getElementById('phaseFiles').addEventListener('change', (e) => {
-      this.handleMultipleFiles(e, 'phase');
-    });
-
-    document.getElementById('jsonFiles').addEventListener('change', (e) => {
-      this.handleMultipleFiles(e, 'json');
-    });
-
-    // Total field map mode file inputs
-    document.getElementById('totalFieldFiles')?.addEventListener('change', (e) => {
-      this.handleMultipleFiles(e, 'totalField');
-    });
-    document.getElementById('magnitudeTFFiles')?.addEventListener('change', (e) => {
-      this.handleMultipleFiles(e, 'magnitudeTF');
-    });
-
-    // Local field map mode file inputs
-    document.getElementById('localFieldFiles')?.addEventListener('change', (e) => {
-      this.handleMultipleFiles(e, 'localField');
-    });
-    document.getElementById('magnitudeLFFiles')?.addEventListener('change', (e) => {
-      this.handleMultipleFiles(e, 'magnitudeLF');
-    });
-
     // Centralized mask file input (in Masking section)
     document.getElementById('maskFiles')?.addEventListener('change', (e) => {
-      this.handleMultipleFiles(e, 'mask');
-    });
-
-    // DICOM file input (folder picker)
-    document.getElementById('dicomFiles')?.addEventListener('change', (e) => {
-      this.handleDicomFiles(e);
+      this.fileIOController.handleMaskInput(e);
+      this.updateMaskSectionState();
+      this.updateEchoInfo();
     });
 
     // dicompare report
@@ -403,11 +345,7 @@ class QSMApp {
     document.getElementById('closeDicompare2')?.addEventListener('click', () => this.dicompareModal?.close());
     document.getElementById('dicomparePrint')?.addEventListener('click', () => this.printDicompareReport());
 
-    // Preview buttons for field map modes
-    document.getElementById('vis_totalField')?.addEventListener('click', () => this.visualizeFieldMap('totalField'));
-    document.getElementById('vis_localField')?.addEventListener('click', () => this.visualizeFieldMap('localField'));
-    document.getElementById('vis_magnitudeTF')?.addEventListener('click', () => this.visualizeFieldMapMagnitude('magnitudeTF'));
-    document.getElementById('vis_magnitudeLF')?.addEventListener('click', () => this.visualizeFieldMapMagnitude('magnitudeLF'));
+    // Preview buttons (mask only - magnitude/phase/fieldmap previews now in triage)
     document.getElementById('vis_mask')?.addEventListener('click', () => this.visualizeMaskFile());
 
     // Sidebar pipeline dropdowns
@@ -416,8 +354,6 @@ class QSMApp {
     // Processing buttons
     document.getElementById('openPipelineSettings').addEventListener('click', () => this.openPipelineSettingsModal());
     document.getElementById('cancelPipeline')?.addEventListener('click', () => this.cancelPipeline());
-    document.getElementById('vis_magnitude').addEventListener('click', () => this.visualizeMagnitude());
-    document.getElementById('vis_phase').addEventListener('click', () => this.visualizePhase());
 
     // Echo navigation
     document.getElementById('echoPrev')?.addEventListener('click', () => this.navigateEcho(-1));
@@ -484,6 +420,7 @@ class QSMApp {
     document.getElementById('maskInputSource')?.addEventListener('change', (e) => {
       this.maskPrepSettings.source = e.target.value;
       this.maskPrepSettings.prepared = false;
+      this.updateMagnitudePrepSection();
       this.updatePrepareButtonState();
 
       // Hide bias correction for phase quality map (not applicable)
@@ -631,54 +568,357 @@ class QSMApp {
     });
   }
 
-  // Delegate file handling to FileIOController
-  async handleMultipleFiles(event, type) {
-    await this.fileIOController.handleFileInput(event, type);
-
-    // Handle field map mode file changes
-    const mode = this.fileIOController.getInputMode();
-    if (type === 'totalField' || type === 'localField') {
-      // Update preview button state
-      const btnId = type === 'totalField' ? 'vis_totalField' : 'vis_localField';
-      const file = type === 'totalField'
-        ? this.fileIOController.getTotalFieldFile()
-        : this.fileIOController.getLocalFieldFile();
-      const btn = document.getElementById(btnId);
-      if (btn) btn.disabled = !file;
-    }
-
-    // Handle magnitude files in field map modes
-    if (type === 'magnitudeTF' || type === 'magnitudeLF') {
-      const hasMag = this.fileIOController.hasFieldMapMagnitude();
-      const btnId = type === 'magnitudeTF' ? 'vis_magnitudeTF' : 'vis_magnitudeLF';
-      const btn = document.getElementById(btnId);
-      if (btn) btn.disabled = !hasMag;
-      this.updateMagnitudePrepSection();
-      this.updateMaskInputSourceOptions();
-      this.updateMaskSectionState();
-      this.updatePrepareButtonState();
-      this.updateSidebarDropdownVisibility(true);
-    }
-
-    // Handle centralized mask file
-    if (type === 'mask') {
-      const hasMask = this.fileIOController.hasMask();
-      const btn = document.getElementById('vis_mask');
-      if (btn) btn.disabled = !hasMask;
-      this.updateMaskSectionState();
-      this.updateEchoInfo();
-    }
-  }
-
   // Passthrough for backward compatibility (HTML onclick uses app.removeFile)
   removeFile(type, index) {
     this.fileIOController.removeFile(type, index);
   }
 
+  // ==================== Unified File Input ====================
+
+  /**
+   * Set up the unified drop zone for all file types (NIfTI, DICOM, JSON).
+   */
+  _setupUnifiedDropZone() {
+    const dropZone = document.getElementById('unifiedDrop');
+    const fileInput = document.getElementById('unifiedFiles');
+    if (!dropZone || !fileInput) return;
+
+    // File input change
+    fileInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length > 0) this._handleUnifiedFiles(files);
+      fileInput.value = '';
+    });
+
+    // Drag and drop
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', (e) => {
+      if (!dropZone.contains(e.relatedTarget)) {
+        dropZone.classList.remove('dragover');
+      }
+    });
+
+    dropZone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+
+      const items = e.dataTransfer.items;
+      const files = [];
+      let hasDirs = false;
+
+      // Check for directory entries (DICOM folders)
+      if (items) {
+        for (const item of items) {
+          const entry = item.webkitGetAsEntry?.();
+          if (entry?.isDirectory) {
+            hasDirs = true;
+            break;
+          }
+        }
+      }
+
+      if (hasDirs) {
+        // Directory drop → route to DICOM conversion
+        this._showDicomStatus('Converting...');
+        await this.dicomController.convertDropItems(items);
+        this._hideDicomStatus();
+        return;
+      }
+
+      // Regular files
+      for (const file of e.dataTransfer.files) {
+        files.push(file);
+      }
+      if (files.length > 0) this._handleUnifiedFiles(files);
+    });
+  }
+
+  /**
+   * Handle files from the unified drop zone.
+   * Routes DICOM files to DicomController, NIfTI/JSON to FileIOController.
+   */
+  async _handleUnifiedFiles(files) {
+    const dicomFiles = [];
+    const niftiJsonFiles = [];
+
+    for (const file of files) {
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.dcm') || (!name.includes('.') && file.size > 1000)) {
+        // .dcm or extensionless files (common for DICOM)
+        dicomFiles.push(file);
+      } else {
+        niftiJsonFiles.push(file);
+      }
+    }
+
+    // Route DICOM files to conversion pipeline
+    if (dicomFiles.length > 0) {
+      this._showDicomStatus('Converting...');
+      await this.dicomController.convertFiles(dicomFiles);
+      this._hideDicomStatus();
+    }
+
+    // Route NIfTI/JSON files to auto-categorized buckets
+    if (niftiJsonFiles.length > 0) {
+      this.fileIOController.addFiles(niftiJsonFiles);
+
+      // Process JSON sidecars
+      const jsonFiles = niftiJsonFiles.filter(f => f.name.toLowerCase().endsWith('.json'));
+      if (jsonFiles.length > 0) {
+        await this.fileIOController.processJsonFiles(jsonFiles);
+      }
+    }
+  }
+
+  /**
+   * Central state handler — called whenever bucket contents change.
+   * Replaces scattered switchInputMode/updateEchoInfo calls.
+   */
+  _onBucketsChanged() {
+    // Render file triage UI
+    this._renderFileTriage();
+
+    // Update input params visibility (echo times, field strength, units)
+    this.updateInputParamsVisibility();
+
+    // Update magnitude prep and masking sections
+    this.updateMagnitudePrepSection();
+    this.updateMaskInputSourceOptions();
+    this.updateMaskSectionState();
+
+    // Update pipeline settings visibility
+    const mode = this.fileIOController.getInputMode();
+    if (this.pipelineSettingsController) {
+      this.pipelineSettingsController.setInputMode(mode);
+    }
+    this.updateSidebarDropdownVisibility(true);
+    this.updatePipelineSectionForMode(mode);
+
+    // Update run button state
+    this.updateEchoInfo();
+
+    // Update drop zone label
+    const hasFiles = Object.values(this.fileIOController.buckets).some(b => b.length > 0);
+    const dropLabel = document.querySelector('#unifiedDrop .file-drop-label span');
+    if (dropLabel) {
+      dropLabel.textContent = hasFiles ? 'Drop more files' : 'Drop NIfTI, DICOM, or JSON files';
+    }
+    const dropZone = document.getElementById('unifiedDrop');
+    if (dropZone) dropZone.classList.toggle('has-files', hasFiles);
+
+    // Update validation messages
+    this._updateInputValidation();
+  }
+
+  /**
+   * Render the interactive file triage UI with draggable file cards.
+   * Generalizes the old _renderDicomTriage for all bucket types.
+   */
+  _renderFileTriage() {
+    const container = document.getElementById('fileTriage');
+    if (!container) return;
+
+    const buckets = this.fileIOController.buckets;
+    const hasAnyFiles = Object.values(buckets).some(b => b.length > 0);
+
+    if (!hasAnyFiles) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+
+    container.style.display = '';
+
+    const mode = this.fileIOController.getInputMode();
+    const eyeSvg = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const gripSvg = '<svg viewBox="0 0 12 24" width="6" height="12" fill="currentColor"><circle cx="3" cy="4" r="1.5"/><circle cx="9" cy="4" r="1.5"/><circle cx="3" cy="12" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="3" cy="20" r="1.5"/><circle cx="9" cy="20" r="1.5"/></svg>';
+    const deleteSvg = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+    // Bucket definitions
+    const allBucketDefs = {
+      magnitude: { label: 'Magnitude', canPreview: true },
+      phase:     { label: 'Phase', canPreview: true },
+      totalField:{ label: 'Total Field Map', canPreview: true },
+      localField:{ label: 'Local Field Map', canPreview: true },
+      json:      { label: 'JSON Sidecars', canPreview: false },
+      extra:     { label: 'Uncategorized', canPreview: false }
+    };
+
+    // The three exclusive primary inputs
+    const exclusiveKeys = ['phase', 'totalField', 'localField'];
+    const activeKey = exclusiveKeys.find(k => buckets[k].length > 0) || null;
+
+    let html = '<div class="file-triage">';
+
+    // --- Magnitude bucket (always shown) ---
+    html += this._renderBucket('magnitude', allBucketDefs.magnitude, buckets.magnitude, {
+      sublabel: buckets.magnitude.length > 0
+        ? `${buckets.magnitude.length} file${buckets.magnitude.length > 1 ? 's' : ''}`
+        : 'optional',
+      eyeSvg, gripSvg, deleteSvg
+    });
+
+    // --- Exclusive primary inputs group ---
+    html += '<div class="file-triage-exclusive-group">';
+    html += '<div class="file-triage-group-label">Primary input <span class="file-triage-group-hint">choose one</span></div>';
+
+    for (let i = 0; i < exclusiveKeys.length; i++) {
+      const key = exclusiveKeys[i];
+      const def = allBucketDefs[key];
+      const items = buckets[key];
+      const isActive = key === activeKey;
+      const isInactive = activeKey && !isActive;
+
+      let sublabel;
+      if (isActive) {
+        sublabel = 'active';
+      } else if (isInactive) {
+        sublabel = 'or use instead';
+      } else {
+        // No primary input yet
+        sublabel = key === 'phase' ? 'multi-echo' : 'single file';
+      }
+
+      html += this._renderBucket(key, def, items, {
+        sublabel,
+        inactive: isInactive,
+        eyeSvg, gripSvg, deleteSvg
+      });
+
+      // "or" divider between exclusive buckets
+      if (i < exclusiveKeys.length - 1) {
+        html += '<div class="file-triage-or-divider"><span>or</span></div>';
+      }
+    }
+
+    html += '</div>'; // close exclusive group
+
+    // --- JSON and Extra buckets (only if they have files) ---
+    if (buckets.json.length > 0) {
+      html += this._renderBucket('json', allBucketDefs.json, buckets.json, {
+        sublabel: 'echo times', eyeSvg, gripSvg, deleteSvg
+      });
+    }
+
+    if (buckets.extra.length > 0) {
+      html += this._renderBucket('extra', allBucketDefs.extra, buckets.extra, {
+        sublabel: 'drag to assign', isExtra: true, eyeSvg, gripSvg, deleteSvg
+      });
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+
+    this._setupTriageDragDrop(container);
+    this._setupTriageClickHandlers(container);
+  }
+
+  /**
+   * Render a single bucket's HTML (header + drop zone + cards).
+   */
+  _renderBucket(key, def, items, opts = {}) {
+    const { sublabel, inactive, isExtra, eyeSvg, gripSvg, deleteSvg } = opts;
+    const emptyClass = items.length === 0 ? ' empty' : '';
+    const inactiveClass = inactive ? ' inactive' : '';
+
+    let html = `<div class="file-triage-bucket ${key}${inactiveClass}">`;
+    html += `<div class="file-triage-bucket-header">`;
+    html += `<span class="file-triage-bucket-label">${def.label} <span class="file-triage-bucket-count">(${items.length})</span>`;
+    if (sublabel) {
+      html += ` <span class="file-triage-bucket-sublabel">${sublabel}</span>`;
+    }
+    html += `</span>`;
+    html += `<div class="file-triage-bucket-actions">`;
+
+    if (isExtra && items.length > 0) {
+      html += `<button class="btn-clear-extras" data-action="clearExtra" title="Remove all uncategorized">Clear</button>`;
+    }
+
+    if (def.canPreview && items.length > 0) {
+      html += `<button class="btn-icon btn-preview file-triage-preview-btn" data-category="${key}" title="Preview ${def.label}">`;
+      html += `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+      html += `</button>`;
+    }
+
+    html += `</div></div>`; // close bucket-actions, bucket-header
+
+    html += `<div class="file-triage-drop${emptyClass}" data-bucket="${key}">`;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const teLabel = item.echoTime != null ? `${item.echoTime.toFixed(1)} ms` : '';
+
+      html += `<div class="file-triage-card" draggable="true" data-category="${key}" data-index="${i}">`;
+      html += `<span class="file-triage-card-grip" aria-hidden="true">${gripSvg}</span>`;
+      html += `<span class="file-triage-card-name" title="${item.name}">${item.name}</span>`;
+      if (teLabel) {
+        html += `<span class="file-triage-card-te">${teLabel}</span>`;
+      }
+      if (def.canPreview) {
+        html += `<button class="file-triage-card-preview" data-category="${key}" data-index="${i}" title="Preview">${eyeSvg}</button>`;
+      }
+      html += `<button class="file-triage-card-delete" data-category="${key}" data-index="${i}" title="Remove file">${deleteSvg}</button>`;
+      html += `</div>`;
+    }
+
+    html += `</div>`; // close file-triage-drop
+    html += `</div>`; // close file-triage-bucket
+    return html;
+  }
+
+  /**
+   * Update validation messages below file triage.
+   */
+  _updateInputValidation() {
+    const container = document.getElementById('inputValidation');
+    if (!container) return;
+
+    const buckets = this.fileIOController.buckets;
+    const mode = this.fileIOController.getInputMode();
+    const messages = [];
+
+    if (mode === 'raw') {
+      const magCount = buckets.magnitude.length;
+      const phaseCount = buckets.phase.length;
+
+      if (phaseCount === 0) {
+        messages.push({ type: 'error', text: 'Phase data required — drop phase NIfTI files or DICOM folder' });
+      }
+      if (magCount > 0 && phaseCount > 0 && magCount !== phaseCount) {
+        messages.push({ type: 'error', text: `Echo count mismatch: ${magCount} magnitude, ${phaseCount} phase` });
+      }
+      if (magCount === 0 && phaseCount > 0) {
+        messages.push({ type: 'info', text: 'Magnitude is optional but recommended for masking and some algorithms' });
+      }
+    } else if (mode === 'totalField') {
+      if (buckets.magnitude.length === 0) {
+        messages.push({ type: 'info', text: 'Magnitude is optional but recommended for masking' });
+      }
+    } else if (mode === 'localField') {
+      if (buckets.magnitude.length === 0) {
+        messages.push({ type: 'info', text: 'Magnitude is optional but recommended for masking' });
+      }
+    }
+
+    if (messages.length === 0) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+
+    container.style.display = '';
+    container.innerHTML = messages
+      .map(m => `<div class="validation-msg ${m.type}">${m.text}</div>`)
+      .join('');
+  }
+
   // Callbacks from FileIOController
   _onMagnitudeFilesChanged(files) {
-    document.getElementById('vis_magnitude').disabled = files.length === 0;
-
     // Clear prepared state when magnitude files change
     this.maskPrepSettings.prepared = false;
     this.preparedMagnitudeData = null;
@@ -699,178 +939,62 @@ class QSMApp {
   }
 
   _onPhaseFilesChanged(files) {
-    document.getElementById('vis_phase').disabled = files.length === 0;
+    // Phase files changed — triage UI handles preview buttons
   }
 
   // ==================== DICOM Handling ====================
 
   /**
-   * Handle DICOM files from the folder file input.
-   */
-  async handleDicomFiles(event) {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    this._showDicomStatus('Converting...');
-    await this.dicomController.convertFiles(files);
-    this._hideDicomStatus();
-  }
-
-  /**
-   * Handle DICOM files from drag-and-drop (directory traversal).
-   */
-  async handleDicomDrop(dataTransferItems) {
-    this._showDicomStatus('Converting...');
-    await this.dicomController.convertDropItems(dataTransferItems);
-    this._hideDicomStatus();
-  }
-
-  /**
    * Callback when DICOM conversion and classification is complete.
+   * Routes results directly into FileIOController buckets.
    */
   _onDicomConversionComplete(classified) {
-    // Merge into triage state (supports incremental uploads)
-    if (!this._triageState) {
-      this._triageState = {
-        magnitude: [],
-        phase: [],
-        extras: [],
-        jsonFiles: [],
-        fieldStrength: null,
-        echoTimes: []
-      };
-    }
-    this._triageState.magnitude.push(...classified.magnitude);
-    this._triageState.phase.push(...classified.phase);
-    this._triageState.extras.push(...(classified.extras || []));
-    this._triageState.jsonFiles.push(...classified.jsonFiles);
-    if (classified.fieldStrength != null) {
-      this._triageState.fieldStrength = classified.fieldStrength;
-    }
-    // Collect unique echo times
-    const teSet = new Set(this._triageState.echoTimes);
-    for (const entry of [...classified.magnitude, ...classified.phase, ...(classified.extras || [])]) {
-      if (entry.echoTime != null) teSet.add(entry.echoTime);
-    }
-    this._triageState.echoTimes = [...teSet].sort((a, b) => a - b);
-
-    // Sort magnitude and phase by echo
+    // Sort by echo before adding to buckets
     const sortByEcho = (a, b) => {
       if (a.echoTime != null && b.echoTime != null) return a.echoTime - b.echoTime;
       if (a.echoNumber != null && b.echoNumber != null) return a.echoNumber - b.echoNumber;
       return 0;
     };
-    this._triageState.magnitude.sort(sortByEcho);
-    this._triageState.phase.sort(sortByEcho);
+    classified.magnitude.sort(sortByEcho);
+    classified.phase.sort(sortByEcho);
 
-    // Push to FileIOController and render triage UI
-    this._syncTriageToFileIO();
-    this._renderDicomTriage();
-
-    // Update drop zone text for incremental uploads
-    const dropLabel = document.querySelector('#dicomDrop .file-drop-label span');
-    if (dropLabel) dropLabel.textContent = 'Drop more DICOM files';
-    const dropZone = document.getElementById('dicomDrop');
-    if (dropZone) dropZone.classList.add('has-files');
-  }
-
-  /**
-   * Push current triage state (magnitude + phase) to FileIOController.
-   * Extras are excluded from the pipeline.
-   */
-  _syncTriageToFileIO() {
-    const ts = this._triageState;
-    const magnitudeFileData = ts.magnitude.map(e => ({ file: e.file, name: e.name }));
-    const phaseFileData = ts.phase.map(e => ({ file: e.file, name: e.name }));
-
-    // Only pass JSON sidecars for files still in magnitude/phase (not extras)
-    const activeBaseNames = new Set();
-    for (const e of [...ts.magnitude, ...ts.phase]) {
-      activeBaseNames.add(e.name.replace(/\.nii(\.gz)?$/, ''));
-    }
-    const jsonFiles = ts.jsonFiles.filter(f =>
-      activeBaseNames.has(f.name.replace(/\.json$/, ''))
-    );
+    // Push directly to FileIOController buckets
+    const magnitudeFileData = classified.magnitude.map(e => ({
+      file: e.file, name: e.name, echoTime: e.echoTime, echoNumber: e.echoNumber
+    }));
+    const phaseFileData = classified.phase.map(e => ({
+      file: e.file, name: e.name, echoTime: e.echoTime, echoNumber: e.echoNumber
+    }));
+    const jsonFiles = classified.jsonFiles || [];
 
     this.fileIOController.setFilesFromDicom(magnitudeFileData, phaseFileData, jsonFiles);
-  }
 
-  /**
-   * Render the interactive DICOM triage UI with draggable file cards.
-   */
-  _renderDicomTriage() {
-    const container = document.getElementById('dicomTriage');
-    if (!container) return;
-    container.style.display = '';
-
-    const ts = this._triageState;
-    const eyeSvg = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-    const gripSvg = '<svg viewBox="0 0 12 24" width="6" height="12" fill="currentColor"><circle cx="3" cy="4" r="1.5"/><circle cx="9" cy="4" r="1.5"/><circle cx="3" cy="12" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="3" cy="20" r="1.5"/><circle cx="9" cy="20" r="1.5"/></svg>';
-    const deleteSvg = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-    const buckets = [
-      { key: 'magnitude', label: 'Magnitude', items: ts.magnitude },
-      { key: 'phase', label: 'Phase', items: ts.phase },
-      { key: 'extras', label: 'Extras', items: ts.extras }
-    ];
-
-    let html = '<div class="dicom-triage">';
-
-    for (const bucket of buckets) {
-      const isExtras = bucket.key === 'extras';
-      const emptyClass = bucket.items.length === 0 ? ' empty' : '';
-
-      html += `<div class="dicom-triage-bucket ${bucket.key}">`;
-      html += `<div class="dicom-triage-bucket-header">`;
-      html += `<span class="dicom-triage-bucket-label">${bucket.label} <span class="dicom-triage-bucket-count">(${bucket.items.length})</span></span>`;
-      html += `<div class="dicom-triage-bucket-actions">`;
-
-      if (isExtras && bucket.items.length > 0) {
-        html += `<button class="btn-clear-extras" data-action="clearExtras" title="Remove all extras">Clear</button>`;
+    // Add extras to the extra bucket
+    if (classified.extras?.length > 0) {
+      for (const item of classified.extras) {
+        this.fileIOController.buckets.extra.push({
+          file: item.file, name: item.name, echoTime: item.echoTime, echoNumber: item.echoNumber
+        });
       }
-
-      if (!isExtras && bucket.items.length > 0) {
-        html += `<button class="btn-icon btn-preview dicom-triage-preview-btn" data-category="${bucket.key}" title="Preview ${bucket.label}">`;
-        html += `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
-        html += `</button>`;
-      }
-
-      html += `</div></div>`; // close bucket-actions, bucket-header
-
-      html += `<div class="dicom-triage-drop${emptyClass}" data-bucket="${bucket.key}">`;
-
-      for (let i = 0; i < bucket.items.length; i++) {
-        const item = bucket.items[i];
-        const teLabel = item.echoTime != null ? `${item.echoTime.toFixed(1)} ms` : '';
-
-        html += `<div class="dicom-triage-card" draggable="true" data-category="${bucket.key}" data-index="${i}">`;
-        html += `<span class="dicom-triage-card-grip" aria-hidden="true">${gripSvg}</span>`;
-        html += `<span class="dicom-triage-card-name" title="${item.name}">${item.name}</span>`;
-        if (teLabel) {
-          html += `<span class="dicom-triage-card-te">${teLabel}</span>`;
-        }
-        html += `<button class="dicom-triage-card-preview" data-category="${bucket.key}" data-index="${i}" title="Preview">${eyeSvg}</button>`;
-        html += `<button class="dicom-triage-card-delete" data-category="${bucket.key}" data-index="${i}" title="Remove file">${deleteSvg}</button>`;
-        html += `</div>`;
-      }
-
-      html += `</div>`; // close dicom-triage-drop
-      html += `</div>`; // close dicom-triage-bucket
     }
 
-    html += '</div>';
-    container.innerHTML = html;
+    // Populate field strength if available
+    if (classified.fieldStrength != null) {
+      const fieldInput = document.getElementById('magField');
+      if (fieldInput) fieldInput.value = classified.fieldStrength;
+    }
 
-    this._setupTriageDragDrop(container);
-    this._setupTriageClickHandlers(container);
+    // Trigger UI update
+    this._onBucketsChanged();
   }
 
   /**
-   * Set up HTML5 drag-and-drop between triage buckets.
+   * Set up HTML5 drag-and-drop for reordering within buckets and moving between buckets.
    */
   _setupTriageDragDrop(container) {
     let dragData = null;
 
-    container.querySelectorAll('.dicom-triage-card').forEach(card => {
+    container.querySelectorAll('.file-triage-card').forEach(card => {
       card.addEventListener('dragstart', (e) => {
         dragData = {
           category: card.dataset.category,
@@ -884,64 +1008,103 @@ class QSMApp {
       card.addEventListener('dragend', () => {
         card.classList.remove('dragging');
         dragData = null;
-        container.querySelectorAll('.dicom-triage-drop.dragover')
+        container.querySelectorAll('.file-triage-drop.dragover')
           .forEach(el => el.classList.remove('dragover'));
+        container.querySelectorAll('.file-triage-card.drag-above, .file-triage-card.drag-below')
+          .forEach(el => el.classList.remove('drag-above', 'drag-below'));
       });
     });
 
-    container.querySelectorAll('.dicom-triage-drop').forEach(dropZone => {
+    container.querySelectorAll('.file-triage-drop').forEach(dropZone => {
       dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         dropZone.classList.add('dragover');
+
+        // Show drop position indicator for within-bucket reordering
+        if (dragData && dropZone.dataset.bucket === dragData.category) {
+          const cards = [...dropZone.querySelectorAll('.file-triage-card:not(.dragging)')];
+          cards.forEach(c => c.classList.remove('drag-above', 'drag-below'));
+
+          const closestCard = this._getClosestCard(cards, e.clientY);
+          if (closestCard.element) {
+            closestCard.element.classList.add(closestCard.after ? 'drag-below' : 'drag-above');
+          }
+        }
       });
 
       dropZone.addEventListener('dragleave', (e) => {
         if (!dropZone.contains(e.relatedTarget)) {
           dropZone.classList.remove('dragover');
+          dropZone.querySelectorAll('.file-triage-card.drag-above, .file-triage-card.drag-below')
+            .forEach(el => el.classList.remove('drag-above', 'drag-below'));
         }
       });
 
       dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropZone.classList.remove('dragover');
+        dropZone.querySelectorAll('.file-triage-card.drag-above, .file-triage-card.drag-below')
+          .forEach(el => el.classList.remove('drag-above', 'drag-below'));
         if (!dragData) return;
 
         const targetBucket = dropZone.dataset.bucket;
         const sourceBucket = dragData.category;
-        if (targetBucket === sourceBucket) return;
 
-        // Move item between arrays
-        const ts = this._triageState;
-        const [item] = ts[sourceBucket].splice(dragData.index, 1);
-        ts[targetBucket].push(item);
-
-        // Re-sort magnitude and phase by echo
-        const sortByEcho = (a, b) => {
-          if (a.echoTime != null && b.echoTime != null) return a.echoTime - b.echoTime;
-          if (a.echoNumber != null && b.echoNumber != null) return a.echoNumber - b.echoNumber;
-          return 0;
-        };
-        ts.magnitude.sort(sortByEcho);
-        ts.phase.sort(sortByEcho);
-
-        this._syncTriageToFileIO();
-        this._renderDicomTriage();
+        if (targetBucket === sourceBucket) {
+          // Reorder within the same bucket
+          const cards = [...dropZone.querySelectorAll('.file-triage-card:not(.dragging)')];
+          const closestCard = this._getClosestCard(cards, e.clientY);
+          let toIndex;
+          if (!closestCard.element) {
+            toIndex = this.fileIOController.buckets[targetBucket].length - 1;
+          } else {
+            toIndex = parseInt(closestCard.element.dataset.index);
+            if (closestCard.after) toIndex++;
+            // Adjust if dragging from before the target
+            if (dragData.index < toIndex) toIndex--;
+          }
+          this.fileIOController.reorderFile(targetBucket, dragData.index, toIndex);
+        } else {
+          // Move between buckets (enforces constraints)
+          this.fileIOController.moveFile(sourceBucket, dragData.index, targetBucket);
+        }
+        this._onBucketsChanged();
       });
     });
   }
 
   /**
-   * Set up click handlers for triage card previews and clear button.
+   * Find the closest card to the cursor Y position for drop insertion.
+   * Returns { element, after } where after=true means insert after the element.
+   */
+  _getClosestCard(cards, y) {
+    let closest = { element: null, after: false, distance: Infinity };
+
+    for (const card of cards) {
+      const rect = card.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      const dist = Math.abs(y - midY);
+
+      if (dist < closest.distance) {
+        closest = { element: card, after: y > midY, distance: dist };
+      }
+    }
+
+    return closest;
+  }
+
+  /**
+   * Set up click handlers for triage card previews, deletes, and clear button.
    */
   _setupTriageClickHandlers(container) {
     // Individual card preview
-    container.querySelectorAll('.dicom-triage-card-preview').forEach(btn => {
+    container.querySelectorAll('.file-triage-card-preview').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const category = btn.dataset.category;
         const index = parseInt(btn.dataset.index);
-        const item = this._triageState[category]?.[index];
+        const item = this.fileIOController.buckets[category]?.[index];
         if (item?.file) {
           this.viewerController.loadAndVisualizeFile(item.file, item.name);
         }
@@ -949,33 +1112,30 @@ class QSMApp {
     });
 
     // Bucket-level preview (eye in header)
-    container.querySelectorAll('.dicom-triage-preview-btn').forEach(btn => {
+    container.querySelectorAll('.file-triage-preview-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const category = btn.dataset.category;
         if (category === 'magnitude') this.visualizeMagnitude();
         else if (category === 'phase') this.visualizePhase();
+        else if (category === 'totalField') this.visualizeFieldMap('totalField');
+        else if (category === 'localField') this.visualizeFieldMap('localField');
       });
     });
 
-    // Clear extras
-    container.querySelector('[data-action="clearExtras"]')?.addEventListener('click', () => {
-      this._triageState.extras = [];
-      this._syncTriageToFileIO();
-      this._renderDicomTriage();
+    // Clear extra/uncategorized
+    container.querySelector('[data-action="clearExtra"]')?.addEventListener('click', () => {
+      this.fileIOController.buckets.extra = [];
+      this._onBucketsChanged();
     });
 
     // Per-card delete
-    container.querySelectorAll('.dicom-triage-card-delete').forEach(btn => {
+    container.querySelectorAll('.file-triage-card-delete').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const category = btn.dataset.category;
         const index = parseInt(btn.dataset.index);
-        const ts = this._triageState;
-        if (ts[category] && index >= 0 && index < ts[category].length) {
-          ts[category].splice(index, 1);
-          this._syncTriageToFileIO();
-          this._renderDicomTriage();
-        }
+        this.fileIOController.removeFile(category, index);
+        this._onBucketsChanged();
       });
     });
   }
@@ -1105,7 +1265,7 @@ class QSMApp {
 
   updateSidebarDropdownVisibility(autoCorrect = false) {
     const mode = this.fileIOController?.getInputMode() || 'raw';
-    const isRaw = mode === 'raw' || mode === 'dicom';
+    const isRaw = mode === 'raw';
     const isTotalField = mode === 'totalField';
     const combined = this.pipelineSettings?.combinedMethod || 'none';
     const isStandard = combined === 'none';
@@ -1123,9 +1283,8 @@ class QSMApp {
     if (dipoleGroup) dipoleGroup.style.display = isStandard ? '' : 'none';
 
     // Magnitude gating
-    const hasMagnitude = isRaw
-      ? (this.multiEchoFiles?.magnitude?.length > 0)
-      : (this.fileIOController?.hasFieldMapMagnitude() || this.preparedMagnitudeData !== null);
+    const hasMagnitude = this.fileIOController?.buckets?.magnitude?.length > 0
+      || this.preparedMagnitudeData !== null;
     const noMag = !hasMagnitude;
 
     // Auto-correct to safe defaults when data changes
@@ -1186,124 +1345,60 @@ class QSMApp {
     this.updateSidebarDropdownVisibility();
   }
 
-  // ==================== Input Mode Switching ====================
-
-  switchInputMode(mode) {
-    const isDicom = mode === 'dicom';
-    const subtypeTabs = document.getElementById('inputSubtypeTabs');
-
-    // Update top-level tab UI (dicom vs nifti)
-    document.querySelectorAll('.input-mode-tab').forEach(tab => {
-      tab.classList.toggle('active', isDicom ? tab.dataset.mode === 'dicom' : tab.dataset.mode === 'nifti');
-    });
-
-    // Show/hide NIfTI sub-type tabs
-    subtypeTabs.style.display = isDicom ? 'none' : '';
-
-    // Update sub-type tab active state
-    if (!isDicom) {
-      document.querySelectorAll('.input-subtype-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.mode === mode);
-      });
-    }
-
-    // Update content panels
-    document.querySelectorAll('.input-mode-content').forEach(content => {
-      content.classList.toggle('active', content.dataset.mode === mode);
-    });
-
-    // Update controller
-    this.fileIOController.setInputMode(mode);
-
-    // Update input parameters visibility
-    this.updateInputParamsVisibility();
-
-    // Update magnitude prep and masking sections
-    this.updateMagnitudePrepSection();
-    this.updateMaskInputSourceOptions();
-    this.updateMaskSectionState();
-
-    // Update pipeline settings visibility
-    if (this.pipelineSettingsController) {
-      this.pipelineSettingsController.setInputMode(mode);
-    }
-
-    // Update sidebar pipeline dropdowns visibility (auto-correct for new mode)
-    this.updateSidebarDropdownVisibility(true);
-
-    // Update sidebar pipeline section labels
-    this.updatePipelineSectionForMode(mode);
-
-    // Update run button state
-    this.updateEchoInfo();
-
-    // Update preview button states for field map modes
-    if (mode === 'totalField') {
-      const hasFile = this.fileIOController.getTotalFieldFile() !== null;
-      document.getElementById('vis_totalField').disabled = !hasFile;
-      const hasMag = this.fileIOController.hasFieldMapMagnitude();
-      document.getElementById('vis_magnitudeTF').disabled = !hasMag;
-    } else if (mode === 'localField') {
-      const hasFile = this.fileIOController.getLocalFieldFile() !== null;
-      document.getElementById('vis_localField').disabled = !hasFile;
-      const hasMag = this.fileIOController.hasFieldMapMagnitude();
-      document.getElementById('vis_magnitudeLF').disabled = !hasMag;
-    }
-  }
+  // switchInputMode removed — input mode is now derived from bucket contents
 
   updateInputParamsVisibility() {
     const mode = this.fileIOController.getInputMode();
-    const isRaw = mode === 'raw' || mode === 'dicom';
+    const isRaw = mode === 'raw';
     const units = this.fileIOController.getFieldMapUnits();
     const combinedMethod = this.pipelineSettings?.combinedMethod || 'none';
     // Field strength needed for: raw mode, Hz/rad_s units, or TGV/QSMART (internal scaling)
     const needsFieldStrength = isRaw || units !== 'ppm' || combinedMethod !== 'none';
 
     // Show/hide raw-mode-only parameters
-    const isNifti = mode === 'raw';
-    document.getElementById('jsonMetadataGroup').style.display = isNifti ? '' : 'none';
-    document.getElementById('echoTimesGroup').style.display = isRaw ? '' : 'none';
+    const echoTimesGroup = document.getElementById('echoTimesGroup');
+    if (echoTimesGroup) echoTimesGroup.style.display = isRaw ? '' : 'none';
 
     // Show/hide field map units (only for field map modes)
-    document.getElementById('fieldMapUnitsGroup').style.display = isRaw ? 'none' : '';
+    const unitsGroup = document.getElementById('fieldMapUnitsGroup');
+    if (unitsGroup) unitsGroup.style.display = isRaw ? 'none' : '';
 
     // Show/hide field strength
-    document.getElementById('fieldStrengthGroup').style.display =
-      needsFieldStrength ? '' : 'none';
+    const fieldGroup = document.getElementById('fieldStrengthGroup');
+    if (fieldGroup) fieldGroup.style.display = needsFieldStrength ? '' : 'none';
   }
 
   updateMagnitudePrepSection() {
     const section = document.getElementById('magnitudePrepSection');
     if (!section) return;
 
-    const mode = this.fileIOController.getInputMode();
-    let hasMag = false;
-
-    if (mode === 'raw' || mode === 'dicom') {
-      hasMag = this.multiEchoFiles.magnitude.length > 0;
-    } else {
-      hasMag = this.fileIOController.hasFieldMapMagnitude();
-    }
+    const hasMag = this.fileIOController.buckets.magnitude.length > 0;
+    const hasPhase = this.fileIOController.buckets.phase.length > 0;
+    const source = this.maskPrepSettings.source;
+    const canPrepare = source === 'phase_quality' ? hasPhase : hasMag;
 
     // Show/hide inline warning instead of greying out
     let warning = document.getElementById('magnitudePrepWarning');
-    if (!hasMag) {
+    if (!canPrepare) {
+      const msg = source === 'phase_quality' ? 'Requires phase data' : 'Requires magnitude data';
       if (!warning) {
         warning = document.createElement('div');
         warning.id = 'magnitudePrepWarning';
         warning.className = 'validation-message error inline-warning';
-        warning.innerHTML = '<span>Requires magnitude</span>';
+        warning.innerHTML = `<span>${msg}</span>`;
         const content = section.querySelector('.section-content');
         if (content) content.prepend(warning);
+      } else {
+        warning.querySelector('span').textContent = msg;
       }
       warning.style.display = 'flex';
     } else if (warning) {
       warning.style.display = 'none';
     }
 
-    // Keep the Prepare button individually disabled when no magnitude (it's an action, not a setting)
+    // Enable/disable Prepare button based on data availability for the selected source
     const prepareBtn = document.getElementById('prepareMaskInput');
-    if (prepareBtn) prepareBtn.disabled = !hasMag;
+    if (prepareBtn) prepareBtn.disabled = !canPrepare;
   }
 
   updateMaskSectionState() {
@@ -1353,14 +1448,7 @@ class QSMApp {
   }
 
   updateMaskInputSourceOptions() {
-    const mode = this.fileIOController.getInputMode();
-    let magCount = 0;
-
-    if (mode === 'raw' || mode === 'dicom') {
-      magCount = this.multiEchoFiles.magnitude.length;
-    } else {
-      magCount = this.fileIOController.getFieldMapMagnitudeCount();
-    }
+    const magCount = this.fileIOController.buckets.magnitude.length;
 
     const select = document.getElementById('maskInputSource');
     if (!select) return;
@@ -1428,7 +1516,6 @@ class QSMApp {
     let canRun = false;
 
     switch (mode) {
-      case 'dicom':
       case 'raw': {
         const hasEchoTimes = this.fileIOController?.hasEchoTimes() || false;
         const hasMask = this.currentMaskData !== null;
@@ -1519,16 +1606,13 @@ class QSMApp {
    */
   updatePrepareButtonState() {
     const btn = document.getElementById('prepareMaskInput');
-    const mode = this.fileIOController?.getInputMode() || 'raw';
-    let hasMagnitude;
-    if (mode === 'raw' || mode === 'dicom') {
-      hasMagnitude = this.multiEchoFiles.magnitude.length > 0;
-    } else {
-      hasMagnitude = this.fileIOController?.hasFieldMapMagnitude() || false;
-    }
+    const source = this.maskPrepSettings.source;
+    const canPrepare = source === 'phase_quality'
+      ? this.fileIOController?.buckets?.phase?.length > 0
+      : this.fileIOController?.buckets?.magnitude?.length > 0;
 
     if (btn) {
-      btn.disabled = !hasMagnitude;
+      btn.disabled = !canPrepare;
     }
 
     // Enable/disable masking controls based on prepared state
@@ -1582,18 +1666,9 @@ class QSMApp {
    * Delegates to MaskController
    */
   async prepareMaskInput() {
-    // Get magnitude files based on current input mode
-    const mode = this.fileIOController.getInputMode();
-    let magnitudeFiles;
-    let phaseFiles;
-    if (mode === 'raw' || mode === 'dicom') {
-      magnitudeFiles = this.multiEchoFiles.magnitude;
-      phaseFiles = this.multiEchoFiles.phase;
-    } else {
-      // Field map modes: use all magnitude files (may be multiple)
-      magnitudeFiles = this.fileIOController.getFieldMapMagnitudeFiles();
-      phaseFiles = [];
-    }
+    // Get magnitude and phase files from unified buckets
+    const magnitudeFiles = this.fileIOController.buckets.magnitude;
+    const phaseFiles = this.fileIOController.buckets.phase;
 
     await this.maskController.prepareMaskInput({
       magnitudeFiles: magnitudeFiles,
@@ -1656,7 +1731,7 @@ class QSMApp {
    * Delegates to MaskController
    */
   async combineMagnitudeRSS() {
-    return this.maskController.combineMagnitudeRSS(this.multiEchoFiles.magnitude);
+    return this.maskController.combineMagnitudeRSS(this.fileIOController.buckets.magnitude);
   }
 
   /**
@@ -1873,7 +1948,7 @@ class QSMApp {
   async runRomeoQSM() {
     const mode = this.fileIOController.getInputMode();
 
-    if (mode === 'raw' || mode === 'dicom') {
+    if (mode === 'raw') {
       await this._runRawPipeline();
     } else if (mode === 'totalField') {
       await this._runTotalFieldPipeline();
@@ -1884,8 +1959,8 @@ class QSMApp {
 
   async _runRawPipeline() {
     // Validation
-    const magCount = this.multiEchoFiles.magnitude.length;
-    const phaseCount = this.multiEchoFiles.phase.length;
+    const magCount = this.fileIOController.buckets.magnitude.length;
+    const phaseCount = this.fileIOController.buckets.phase.length;
     const echoTimes = this.getEchoTimesFromInputs();
     const echoTimeCount = echoTimes.length;
 
@@ -1918,8 +1993,8 @@ class QSMApp {
       const phaseBuffers = [];
 
       for (let i = 0; i < magCount; i++) {
-        const magFile = this.multiEchoFiles.magnitude[i]?.file;
-        const phaseFile = this.multiEchoFiles.phase[i]?.file;
+        const magFile = this.fileIOController.buckets.magnitude[i]?.file;
+        const phaseFile = this.fileIOController.buckets.phase[i]?.file;
 
         if (magFile && phaseFile) {
           magnitudeBuffers.push(await magFile.arrayBuffer());
@@ -2614,14 +2689,8 @@ class QSMApp {
     this.maskController.preparedMagnitudeData = this.preparedMagnitudeData;
     this.maskController.maskDims = this.maskDims;
 
-    // Get magnitude files based on current input mode
-    const mode = this.fileIOController.getInputMode();
-    let magnitudeFilesForBET;
-    if (mode === 'raw' || mode === 'dicom') {
-      magnitudeFilesForBET = this.multiEchoFiles.magnitude;
-    } else {
-      magnitudeFilesForBET = this.fileIOController.getFieldMapMagnitudeFiles();
-    }
+    // Get magnitude files from unified buckets
+    const magnitudeFilesForBET = this.fileIOController.buckets.magnitude;
 
     await this.maskController.runBET({
       magnitudeFiles: magnitudeFilesForBET,
@@ -2708,11 +2777,10 @@ class QSMApp {
   openPipelineSettingsModal() {
     if (!this.pipelineSettingsController) return;
     const defaults = this.getVoxelBasedDefaults();
-    const nEchoes = this.multiEchoFiles?.phase?.filter(f => f.file)?.length || 0;
+    const nEchoes = this.fileIOController?.buckets?.phase?.filter(f => f.file)?.length || 0;
     const inputMode = this.fileIOController?.getInputMode() || 'raw';
-    const hasMagnitude = (inputMode === 'raw' || inputMode === 'dicom')
-      ? this.multiEchoFiles.magnitude.length > 0
-      : (this.fileIOController.hasFieldMapMagnitude() || this.preparedMagnitudeData !== null);
+    const hasMagnitude = this.fileIOController?.buckets?.magnitude?.length > 0
+      || this.preparedMagnitudeData !== null;
     this.pipelineSettingsController.setInputMode(inputMode);
     this.pipelineSettingsController.open(this.pipelineSettings, defaults, nEchoes, hasMagnitude);
     this.updateEchoInfo();
@@ -2732,7 +2800,7 @@ class QSMApp {
 
   savePipelineSettings() {
     if (!this.pipelineSettingsController) return;
-    const nEchoes = this.multiEchoFiles?.phase?.filter(f => f.file)?.length || 0;
+    const nEchoes = this.fileIOController?.buckets?.phase?.filter(f => f.file)?.length || 0;
     this.pipelineSettings = this.pipelineSettingsController.save(nEchoes);
     this.closePipelineSettingsModal();
     // Sync sidebar dropdowns and update visibility
@@ -2752,13 +2820,13 @@ class QSMApp {
 
   async runSWI() {
     const mode = this.fileIOController.getInputMode();
-    if (mode !== 'raw' && mode !== 'dicom') {
+    if (mode !== 'raw') {
       this.updateOutput("SWI requires raw magnitude + phase data");
       return;
     }
 
-    const magCount = this.multiEchoFiles.magnitude.length;
-    const phaseCount = this.multiEchoFiles.phase.length;
+    const magCount = this.fileIOController.buckets.magnitude.length;
+    const phaseCount = this.fileIOController.buckets.phase.length;
 
     if (magCount === 0 || phaseCount === 0) {
       this.updateOutput("Please upload both magnitude and phase files");
@@ -2770,8 +2838,8 @@ class QSMApp {
       const phaseBuffers = [];
 
       // Only need first echo for SWI
-      const magFile = this.multiEchoFiles.magnitude[0]?.file;
-      const phaseFile = this.multiEchoFiles.phase[0]?.file;
+      const magFile = this.fileIOController.buckets.magnitude[0]?.file;
+      const phaseFile = this.fileIOController.buckets.phase[0]?.file;
 
       if (magFile && phaseFile) {
         magnitudeBuffers.push(await magFile.arrayBuffer());
@@ -2815,10 +2883,7 @@ class QSMApp {
 
   // BET Settings Modal
   openBetSettingsModal() {
-    const mode = this.fileIOController.getInputMode();
-    const hasMag = (mode === 'raw' || mode === 'dicom')
-      ? this.multiEchoFiles.magnitude.length > 0
-      : this.fileIOController.hasFieldMapMagnitude();
+    const hasMag = this.fileIOController.buckets.magnitude.length > 0;
 
     if (!hasMag) {
       this.updateOutput("No magnitude files uploaded - please load magnitude data first");

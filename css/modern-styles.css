@@ -404,85 +404,7 @@ input[type="range"]:disabled::-moz-range-thumb {
 }
 
 /* Input Mode Tabs */
-.input-mode-tabs {
-  display: flex;
-  gap: 2px;
-  margin-bottom: var(--space-sm);
-  background: var(--color-surface);
-  border-radius: var(--radius-sm);
-  padding: 2px;
-  border: 1px solid var(--color-border);
-}
-
-.input-mode-tab {
-  flex: 1;
-  padding: 5px 4px;
-  font-size: 0.65rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  background: transparent;
-  border: none;
-  border-radius: calc(var(--radius-sm) - 2px);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.input-mode-tab:hover {
-  color: var(--color-text);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.input-mode-tab.active {
-  color: var(--color-text);
-  background: var(--color-primary);
-  font-weight: 600;
-}
-
-/* NIfTI Sub-type Tabs */
-.input-subtype-tabs {
-  display: flex;
-  gap: 2px;
-  margin-bottom: var(--space-sm);
-  background: var(--color-surface);
-  border-radius: var(--radius-sm);
-  padding: 2px;
-  border: 1px solid var(--color-border);
-}
-
-.input-subtype-tab {
-  flex: 1;
-  padding: 4px 3px;
-  font-size: 0.6rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  background: transparent;
-  border: none;
-  border-radius: calc(var(--radius-sm) - 2px);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.input-subtype-tab:hover {
-  color: var(--color-text);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.input-subtype-tab.active {
-  color: var(--color-text);
-  background: var(--color-primary);
-  font-weight: 600;
-}
-
-/* Input mode content visibility */
-.input-mode-content {
-  display: none;
-}
-
-.input-mode-content.active {
-  display: block;
-}
+/* (Old input mode tabs removed — replaced by unified file input) */
 
 /* Optional label styling */
 .optional-label {
@@ -679,44 +601,111 @@ input[type="range"]:disabled::-moz-range-thumb {
 
 /* DICOM Triage / Reclassification UI */
 
-.dicom-triage {
+/* File triage buckets (unified input system) */
+.file-triage {
   margin-top: var(--space-sm);
 }
 
-.dicom-triage-bucket {
+.file-triage-bucket {
   margin-bottom: var(--space-sm);
 }
 
-.dicom-triage-bucket:last-child {
+.file-triage-bucket:last-child {
   margin-bottom: 0;
 }
 
-.dicom-triage-bucket-header {
+.file-triage-bucket.inactive {
+  opacity: 0.5;
+}
+
+.file-triage-bucket.inactive:hover {
+  opacity: 0.8;
+}
+
+.file-triage-exclusive-group {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.file-triage-exclusive-group .file-triage-bucket {
+  margin-bottom: var(--space-xs);
+}
+
+.file-triage-exclusive-group .file-triage-bucket:last-child {
+  margin-bottom: 0;
+}
+
+.file-triage-group-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: var(--space-sm);
+}
+
+.file-triage-group-hint {
+  font-weight: 400;
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.file-triage-or-divider {
+  display: flex;
+  align-items: center;
+  margin: var(--space-xs) 0;
+}
+
+.file-triage-or-divider::before,
+.file-triage-or-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--color-border);
+}
+
+.file-triage-or-divider span {
+  padding: 0 var(--space-sm);
+  font-size: 0.6rem;
+  color: var(--color-text-dim);
+  font-style: italic;
+}
+
+.file-triage-bucket-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--space-xs);
 }
 
-.dicom-triage-bucket-label {
+.file-triage-bucket-label {
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-text);
 }
 
-.dicom-triage-bucket-count {
+.file-triage-bucket-sublabel {
+  font-size: 0.6rem;
+  font-weight: 400;
+  color: var(--color-text-dim);
+  font-style: italic;
+}
+
+.file-triage-bucket-count {
   font-size: 0.7rem;
   font-weight: 400;
   color: var(--color-text-muted);
 }
 
-.dicom-triage-bucket-actions {
+.file-triage-bucket-actions {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
 }
 
-.dicom-triage-drop {
+.file-triage-drop {
   min-height: 28px;
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-sm);
@@ -724,25 +713,25 @@ input[type="range"]:disabled::-moz-range-thumb {
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.dicom-triage-drop.dragover {
+.file-triage-drop.dragover {
   border-color: var(--color-primary);
   background: var(--color-primary-glow);
   border-style: solid;
 }
 
-.dicom-triage-drop.empty {
+.file-triage-drop.empty {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.dicom-triage-drop.empty::after {
+.file-triage-drop.empty::after {
   content: 'Drag files here';
   font-size: 0.65rem;
   color: var(--color-text-dim);
 }
 
-.dicom-triage-card {
+.file-triage-card {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -756,20 +745,30 @@ input[type="range"]:disabled::-moz-range-thumb {
   user-select: none;
 }
 
-.dicom-triage-card:last-child {
+.file-triage-card:last-child {
   margin-bottom: 0;
 }
 
-.dicom-triage-card:hover {
+.file-triage-card:hover {
   background: var(--color-border);
 }
 
-.dicom-triage-card.dragging {
+.file-triage-card.dragging {
   opacity: 0.4;
   cursor: grabbing;
 }
 
-.dicom-triage-card-name {
+.file-triage-card.drag-above {
+  border-top: 2px solid var(--color-primary);
+  margin-top: -1px;
+}
+
+.file-triage-card.drag-below {
+  border-bottom: 2px solid var(--color-primary);
+  margin-bottom: -1px;
+}
+
+.file-triage-card-name {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -777,14 +776,14 @@ input[type="range"]:disabled::-moz-range-thumb {
   color: var(--color-text);
 }
 
-.dicom-triage-card-te {
+.file-triage-card-te {
   font-size: 0.65rem;
   color: var(--color-text-muted);
   white-space: nowrap;
   flex-shrink: 0;
 }
 
-.dicom-triage-card-preview {
+.file-triage-card-preview {
   background: none;
   border: none;
   color: var(--color-text-dim);
@@ -795,11 +794,11 @@ input[type="range"]:disabled::-moz-range-thumb {
   flex-shrink: 0;
 }
 
-.dicom-triage-card-preview:hover {
+.file-triage-card-preview:hover {
   color: var(--color-primary);
 }
 
-.dicom-triage-card-grip {
+.file-triage-card-grip {
   display: flex;
   align-items: center;
   color: var(--color-text-dim);
@@ -807,7 +806,7 @@ input[type="range"]:disabled::-moz-range-thumb {
   pointer-events: none;
 }
 
-.dicom-triage-card-delete {
+.file-triage-card-delete {
   background: none;
   border: none;
   color: var(--color-text-dim);
@@ -818,11 +817,11 @@ input[type="range"]:disabled::-moz-range-thumb {
   flex-shrink: 0;
 }
 
-.dicom-triage-card-delete:hover {
+.file-triage-card-delete:hover {
   color: var(--color-error);
 }
 
-.dicom-triage-bucket.extras .dicom-triage-card {
+.file-triage-bucket.extra .file-triage-card {
   opacity: 0.7;
 }
 
@@ -840,6 +839,32 @@ input[type="range"]:disabled::-moz-range-thumb {
 .btn-clear-extras:hover {
   color: var(--color-error);
   background: var(--color-error-bg);
+}
+
+/* Validation messages */
+.validation-msg {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 0.7rem;
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-xs);
+}
+
+.validation-msg.error {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+}
+
+.validation-msg.warning {
+  color: var(--color-warning, #e0a030);
+  background: rgba(224, 160, 48, 0.1);
+}
+
+.validation-msg.info {
+  color: var(--color-text-muted);
+  background: var(--color-surface);
 }
 
 /* Parameters */

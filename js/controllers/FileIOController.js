@@ -1,8 +1,8 @@
 /**
  * FileIOController
  *
- * Handles file input management, echo time extraction, and file list UI updates.
- * Supports multiple input modes: raw (magnitude+phase), totalField, and localField.
+ * Handles file input management, echo time extraction, and auto-categorization.
+ * Uses unified bucket storage with auto-detection and drag-between-bucket support.
  */
 
 export class FileIOController {
@@ -12,97 +12,281 @@ export class FileIOController {
     this.onMagnitudeFilesChanged = options.onMagnitudeFilesChanged || (() => {});
     this.onPhaseFilesChanged = options.onPhaseFilesChanged || (() => {});
 
-    // Current input mode: 'dicom', 'raw', 'totalField', or 'localField'
-    this.inputMode = 'dicom';
-
-    // File storage - raw mode (NIfTI uploads)
-    this.multiEchoFiles = {
-      magnitude: [],
-      phase: [],
-      json: [],
-      echoTimes: [],
-      combinedMagnitude: null,
-      combinedPhase: null
+    // Unified bucket storage
+    // Each bucket: array of {file: File, name: string, echoTime?: number, echoNumber?: number}
+    this.buckets = {
+      magnitude: [],    // optional, multi-file (multi-echo)
+      phase: [],        // multi-file, mutually exclusive with totalField/localField
+      totalField: [],   // single-file, mutually exclusive with phase/localField
+      localField: [],   // single-file, mutually exclusive with phase/totalField
+      json: [],         // multi-file (BIDS sidecar JSONs)
+      extra: []         // uncategorized files
     };
 
-    // File storage - DICOM conversion results (kept separate from NIfTI uploads)
-    this.dicomFiles = {
-      magnitude: [],
-      phase: [],
-      json: [],
-      echoTimes: [],
-      combinedMagnitude: null,
-      combinedPhase: null
-    };
-
-    // File storage - field map modes
-    this.fieldMapFiles = {
-      totalField: [],     // single file as array for consistency
-      localField: [],     // single file as array for consistency
-      magnitudeTF: [],    // optional magnitude for total field mode (multi-file)
-      magnitudeLF: [],    // optional magnitude for local field mode (multi-file)
-    };
-
-    // Centralized mask file storage (used by all modes)
+    // Centralized mask file storage (used by all modes, managed in Masking section)
     this.maskFile = [];
+
+    // Combined data cache
+    this.combinedMagnitude = null;
+    this.combinedPhase = null;
 
     // Tagify instance for echo times
     this.echoTagify = null;
   }
 
-  // ==================== Input Mode ====================
+  // ==================== Input Mode (Derived) ====================
 
+  /**
+   * Derive input mode from bucket contents.
+   * Returns 'raw', 'totalField', or 'localField'.
+   */
   getInputMode() {
-    return this.inputMode;
+    if (this.buckets.localField.length > 0) return 'localField';
+    if (this.buckets.totalField.length > 0) return 'totalField';
+    return 'raw';
   }
 
-  setInputMode(mode) {
-    this.inputMode = mode;
+  // setInputMode is intentionally removed — mode is always derived from bucket contents
+
+  // ==================== Auto-Categorization ====================
+
+  /**
+   * Determine which bucket a file belongs to based on filename.
+   * @param {File} file
+   * @returns {string} bucket key
+   */
+  categorizeFile(file) {
+    const name = file.name.toLowerCase();
+
+    // JSON sidecar files
+    if (name.endsWith('.json')) return 'json';
+
+    // NIfTI files: apply filename heuristics
+    if (name.endsWith('.nii') || name.endsWith('.nii.gz')) {
+      if (/phase|_ph[\._]/.test(name)) return 'phase';
+      if (/total|b0|fieldmap|field_map/.test(name)) return 'totalField';
+      if (/local|chi/.test(name)) return 'localField';
+      if (/mag/.test(name)) return 'magnitude';
+      return 'extra';
+    }
+
+    // Everything else goes to extra
+    return 'extra';
+  }
+
+  // ==================== File Management ====================
+
+  /**
+   * Add files to buckets via auto-categorization.
+   * Enforces single-file and mutual exclusivity constraints.
+   * @param {File[]} files - Array of File objects
+   * @returns {Object} categorization results {added: [{entry, bucket}]}
+   */
+  addFiles(files) {
+    const results = { added: [] };
+
+    for (const file of files) {
+      const bucket = this.categorizeFile(file);
+      const entry = { file, name: file.name };
+
+      this._addToBucket(bucket, entry);
+      results.added.push({ entry, bucket });
+    }
+
+    // Sort all buckets alphabetically
+    this._sortAllBuckets();
+
+    // Fire callbacks
+    this._fireCallbacks();
+
+    return results;
+  }
+
+  /**
+   * Add a pre-categorized entry to a specific bucket.
+   * @param {string} bucket - Target bucket key
+   * @param {Object} entry - {file, name, echoTime?, echoNumber?}
+   */
+  _addToBucket(bucket, entry) {
+    // Enforce single-file for totalField/localField
+    if (bucket === 'totalField' || bucket === 'localField') {
+      if (this.buckets[bucket].length > 0) {
+        this.buckets.extra.push(...this.buckets[bucket]);
+        this.buckets[bucket] = [];
+      }
+    }
+
+    this.buckets[bucket].push(entry);
+
+    // Enforce mutual exclusivity among primary buckets
+    this._enforceExclusivity(bucket);
+  }
+
+  /**
+   * Sort a bucket's contents alphabetically by filename.
+   */
+  _sortBucket(bucket) {
+    if (!this.buckets[bucket] || this.buckets[bucket].length <= 1) return;
+    this.buckets[bucket].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  }
+
+  /**
+   * Sort all buckets alphabetically.
+   */
+  _sortAllBuckets() {
+    for (const key of Object.keys(this.buckets)) {
+      this._sortBucket(key);
+    }
+  }
+
+  /**
+   * Reorder a file within the same bucket (drag to new position).
+   * @param {string} bucket - Bucket key
+   * @param {number} fromIndex - Current index
+   * @param {number} toIndex - Target index
+   */
+  reorderFile(bucket, fromIndex, toIndex) {
+    const arr = this.buckets[bucket];
+    if (!arr || fromIndex < 0 || fromIndex >= arr.length) return;
+    toIndex = Math.max(0, Math.min(toIndex, arr.length - 1));
+    if (fromIndex === toIndex) return;
+
+    const [item] = arr.splice(fromIndex, 1);
+    arr.splice(toIndex, 0, item);
+
+    // Clear combined data cache
+    this.combinedMagnitude = null;
+    this.combinedPhase = null;
+
+    this._fireCallbacks();
+  }
+
+  /**
+   * Enforce mutual exclusivity: phase, totalField, localField are exclusive.
+   * When one receives files, the others are moved to extra.
+   */
+  _enforceExclusivity(justAddedTo) {
+    const exclusiveGroup = ['phase', 'totalField', 'localField'];
+    if (!exclusiveGroup.includes(justAddedTo)) return;
+
+    for (const bucket of exclusiveGroup) {
+      if (bucket !== justAddedTo && this.buckets[bucket].length > 0) {
+        this.buckets.extra.push(...this.buckets[bucket]);
+        this.buckets[bucket] = [];
+      }
+    }
+  }
+
+  /**
+   * Move a file from one bucket to another.
+   * Enforces constraints and fires callbacks.
+   */
+  moveFile(sourceBucket, index, targetBucket) {
+    if (!this.buckets[sourceBucket] || index < 0 || index >= this.buckets[sourceBucket].length) return;
+
+    const [item] = this.buckets[sourceBucket].splice(index, 1);
+
+    // Enforce single-file for totalField/localField
+    if (targetBucket === 'totalField' || targetBucket === 'localField') {
+      if (this.buckets[targetBucket].length > 0) {
+        this.buckets.extra.push(...this.buckets[targetBucket]);
+        this.buckets[targetBucket] = [];
+      }
+    }
+
+    this.buckets[targetBucket].push(item);
+
+    // Enforce mutual exclusivity
+    this._enforceExclusivity(targetBucket);
+
+    // Sort the target bucket alphabetically
+    this._sortBucket(targetBucket);
+
+    // Clear combined data cache (files changed)
+    this.combinedMagnitude = null;
+    this.combinedPhase = null;
+
+    // Fire callbacks
+    this._fireCallbacks();
+  }
+
+  /**
+   * Remove a file from a bucket by index.
+   */
+  removeFile(bucket, index) {
+    if (bucket === 'mask') {
+      this.maskFile.splice(index, 1);
+      this.updateFileList('mask', this.maskFile);
+      this.onFilesChanged('mask', []);
+      return;
+    }
+
+    if (!this.buckets[bucket] || index < 0 || index >= this.buckets[bucket].length) return;
+    this.buckets[bucket].splice(index, 1);
+
+    // Clear combined data cache
+    this.combinedMagnitude = null;
+    this.combinedPhase = null;
+
+    this._fireCallbacks();
+  }
+
+  /**
+   * Clear all files from all buckets.
+   */
+  clearAllFiles() {
+    for (const key of Object.keys(this.buckets)) {
+      this.buckets[key] = [];
+    }
+    this.combinedMagnitude = null;
+    this.combinedPhase = null;
+    this.maskFile = [];
+    this.updateFileList('mask', []);
+    this._fireCallbacks();
+  }
+
+  /**
+   * Fire all file-change callbacks.
+   */
+  _fireCallbacks() {
+    this.onMagnitudeFilesChanged(this.buckets.magnitude);
+    this.onPhaseFilesChanged(this.buckets.phase);
+    this.onFilesChanged('buckets', null);
   }
 
   // ==================== State Accessors ====================
 
-  /**
-   * Returns the active file store based on input mode.
-   * DICOM mode uses dicomFiles; raw mode uses multiEchoFiles.
-   */
-  _getActiveEchoStore() {
-    return this.inputMode === 'dicom' ? this.dicomFiles : this.multiEchoFiles;
-  }
-
   getMagnitudeFiles() {
-    return this._getActiveEchoStore().magnitude;
+    return this.buckets.magnitude;
   }
 
   getPhaseFiles() {
-    return this._getActiveEchoStore().phase;
+    return this.buckets.phase;
   }
 
   getJsonFiles() {
-    return this._getActiveEchoStore().json;
+    return this.buckets.json;
   }
 
   getEchoCount() {
-    const store = this._getActiveEchoStore();
-    return Math.max(store.magnitude.length, store.phase.length);
+    return Math.max(this.buckets.magnitude.length, this.buckets.phase.length);
   }
 
   /**
-   * Check if we have valid data for the current input mode.
+   * Check if we have valid data for the current (derived) input mode.
    */
   hasValidData() {
-    switch (this.inputMode) {
-      case 'dicom':
+    const mode = this.getInputMode();
+    switch (mode) {
       case 'raw': {
-        const store = this._getActiveEchoStore();
-        const magCount = store.magnitude.length;
-        const phaseCount = store.phase.length;
+        const magCount = this.buckets.magnitude.length;
+        const phaseCount = this.buckets.phase.length;
         return magCount === phaseCount && magCount > 0;
       }
       case 'totalField':
-        return this.fieldMapFiles.totalField.length > 0;
+        return this.buckets.totalField.length > 0;
       case 'localField':
-        return this.fieldMapFiles.localField.length > 0;
+        return this.buckets.localField.length > 0;
       default:
         return false;
     }
@@ -113,39 +297,42 @@ export class FileIOController {
   }
 
   getMultiEchoFiles() {
-    return this._getActiveEchoStore();
+    return {
+      magnitude: this.buckets.magnitude,
+      phase: this.buckets.phase,
+      json: this.buckets.json,
+      combinedMagnitude: this.combinedMagnitude,
+      combinedPhase: this.combinedPhase
+    };
   }
 
-  // Field map mode accessors
+  // Field map mode accessors (unified — magnitude bucket serves all modes)
 
   getTotalFieldFile() {
-    return this.fieldMapFiles.totalField[0]?.file || null;
+    return this.buckets.totalField[0]?.file || null;
   }
 
   getLocalFieldFile() {
-    return this.fieldMapFiles.localField[0]?.file || null;
+    return this.buckets.localField[0]?.file || null;
   }
 
   getFieldMapMagnitudeFile() {
-    return this.getFieldMapMagnitudeFiles()[0]?.file || null;
+    return this.buckets.magnitude[0]?.file || null;
   }
 
   getFieldMapMagnitudeFiles() {
-    if (this.inputMode === 'totalField') {
-      return this.fieldMapFiles.magnitudeTF;
-    } else if (this.inputMode === 'localField') {
-      return this.fieldMapFiles.magnitudeLF;
-    }
-    return [];
+    return this.buckets.magnitude;
   }
 
   getFieldMapMagnitudeCount() {
-    return this.getFieldMapMagnitudeFiles().length;
+    return this.buckets.magnitude.length;
   }
 
   hasFieldMapMagnitude() {
-    return this.getFieldMapMagnitudeFile() !== null;
+    return this.buckets.magnitude.length > 0;
   }
+
+  // Mask accessors (unchanged — mask is managed in Masking section)
 
   getMaskFile() {
     return this.maskFile[0]?.file || null;
@@ -160,141 +347,33 @@ export class FileIOController {
     return select ? select.value : 'hz';
   }
 
-  // ==================== File Handling ====================
+  getFieldStrength() {
+    const fieldInput = document.getElementById('magField');
+    return fieldInput ? parseFloat(fieldInput.value) : null;
+  }
 
-  async handleFileInput(event, type) {
+  // ==================== Mask File Handling ====================
+
+  /**
+   * Handle mask file input (kept separate from unified buckets).
+   */
+  async handleMaskInput(event) {
     const files = Array.from(event.target.files);
-
-    // Determine which storage to use
-    if (type in this.multiEchoFiles) {
-      // Raw mode file types
-      this.multiEchoFiles[type] = files.map(file => ({
-        file: file,
-        name: file.name
-      }));
-    } else if (type === 'mask') {
-      // Centralized mask file (single file)
-      this.maskFile = files.slice(0, 1).map(file => ({
-        file: file,
-        name: file.name
-      }));
-    } else if (type in this.fieldMapFiles) {
-      // Field map mode file types
-      // Single file for field maps, multi-file for magnitude
-      const isSingleFileType = (type === 'totalField' || type === 'localField');
-      const selectedFiles = isSingleFileType ? files.slice(0, 1) : files;
-      this.fieldMapFiles[type] = selectedFiles.map(file => ({
-        file: file,
-        name: file.name
-      }));
-    }
-
-    // Update UI
-    this.updateFileList(type, this._getFileList(type));
-
-    // Process JSON files immediately to extract echo times
-    if (type === 'json') {
-      await this.processJsonFiles(files);
-    }
-
-    // Notify listeners
-    if (type === 'magnitude') {
-      this.onMagnitudeFilesChanged(files);
-    } else if (type === 'phase') {
-      this.onPhaseFilesChanged(files);
-    }
-
-    this.onFilesChanged(type, files);
+    this.maskFile = files.slice(0, 1).map(file => ({
+      file: file,
+      name: file.name
+    }));
+    this.updateFileList('mask', this.maskFile);
+    this.onFilesChanged('mask', files);
   }
 
-  _getFileList(type) {
-    if (type in this.multiEchoFiles) {
-      return this.multiEchoFiles[type];
-    } else if (type === 'mask') {
-      return this.maskFile;
-    } else if (type in this.fieldMapFiles) {
-      return this.fieldMapFiles[type];
-    }
-    return [];
-  }
-
-  removeFile(type, index) {
-    if (type in this.multiEchoFiles) {
-      this.multiEchoFiles[type].splice(index, 1);
-    } else if (type === 'mask') {
-      this.maskFile.splice(index, 1);
-    } else if (type in this.fieldMapFiles) {
-      this.fieldMapFiles[type].splice(index, 1);
-    }
-    this.updateFileList(type, this._getFileList(type));
-
-    // Notify listeners
-    const files = this._getFileList(type).map(f => f.file);
-    if (type === 'magnitude') {
-      this.onMagnitudeFilesChanged(files);
-    } else if (type === 'phase') {
-      this.onPhaseFilesChanged(files);
-    }
-
-    this.onFilesChanged(type, files);
-  }
-
-  clearFiles(type) {
-    if (type in this.multiEchoFiles) {
-      this.multiEchoFiles[type] = [];
-    } else if (type === 'mask') {
-      this.maskFile = [];
-    } else if (type in this.fieldMapFiles) {
-      this.fieldMapFiles[type] = [];
-    }
-    this.updateFileList(type, []);
-
-    if (type === 'magnitude') {
-      this.onMagnitudeFilesChanged([]);
-    } else if (type === 'phase') {
-      this.onPhaseFilesChanged([]);
-    }
-
-    this.onFilesChanged(type, []);
-  }
-
-  clearAllFiles() {
-    this.clearFiles('magnitude');
-    this.clearFiles('phase');
-    this.clearFiles('json');
-    this.multiEchoFiles.echoTimes = [];
-    this.multiEchoFiles.combinedMagnitude = null;
-    this.multiEchoFiles.combinedPhase = null;
-
-    // Clear DICOM conversion results
-    this.dicomFiles.magnitude = [];
-    this.dicomFiles.phase = [];
-    this.dicomFiles.json = [];
-    this.dicomFiles.echoTimes = [];
-    this.dicomFiles.combinedMagnitude = null;
-    this.dicomFiles.combinedPhase = null;
-
-    // Clear field map files
-    for (const key of Object.keys(this.fieldMapFiles)) {
-      this.fieldMapFiles[key] = [];
-      this.updateFileList(key, []);
-    }
-
-    // Clear centralized mask
-    this.maskFile = [];
-    this.updateFileList('mask', []);
-  }
-
-  // ==================== File List UI ====================
+  // ==================== File List UI (mask only) ====================
 
   updateFileList(type, fileList) {
     const listElement = document.getElementById(`${type}List`);
     const fileDrop = listElement?.closest('.upload-group')?.querySelector('.file-drop');
 
-    if (!listElement) {
-      // Not an error - some list elements may not exist for all modes
-      return;
-    }
+    if (!listElement) return;
 
     listElement.innerHTML = '';
 
@@ -310,7 +389,6 @@ export class FileIOController {
         listElement.appendChild(fileItem);
       });
 
-      // Update drop label
       const label = fileDrop?.querySelector('.file-drop-label span');
       if (label) {
         label.textContent = `${fileList.length} file${fileList.length > 1 ? 's' : ''} selected`;
@@ -327,28 +405,26 @@ export class FileIOController {
   // ==================== JSON Processing ====================
 
   async processJsonFiles(files) {
-    console.log('Processing JSON files:', files);
     const echoTimes = [];
     let fieldStrength = null;
 
     for (const file of files) {
       try {
-        const text = await file.text();
+        const f = file instanceof File ? file : file.file || file;
+        const text = await f.text();
         const json = JSON.parse(text);
-
-        console.log(`JSON file ${file.name} contents:`, json);
 
         // Extract echo time (in seconds, convert to ms)
         let echoTime = null;
         if (json.EchoTime) {
-          echoTime = json.EchoTime * 1000; // Convert to ms
+          echoTime = json.EchoTime * 1000;
         } else if (json.echo_time) {
           echoTime = json.echo_time * 1000;
         } else if (json.TE) {
           echoTime = json.TE;
         }
 
-        // Extract field strength (in Tesla) - only need to find it once
+        // Extract field strength (in Tesla)
         if (fieldStrength === null) {
           if (json.MagneticFieldStrength) {
             fieldStrength = json.MagneticFieldStrength;
@@ -361,7 +437,7 @@ export class FileIOController {
 
         if (echoTime !== null) {
           echoTimes.push({
-            file: file.name,
+            file: f.name || file.name,
             echoTime: echoTime,
             json: json
           });
@@ -371,11 +447,8 @@ export class FileIOController {
       }
     }
 
-    // Sort by echo time
+    // Sort by echo time and populate inputs
     echoTimes.sort((a, b) => a.echoTime - b.echoTime);
-    this._getActiveEchoStore().echoTimes = echoTimes;
-
-    // Populate the editable inputs
     this.populateEchoTimeInputs(echoTimes.map(et => et.echoTime));
 
     // Populate field strength if found
@@ -386,11 +459,6 @@ export class FileIOController {
         this.updateOutput(`Field strength: ${fieldStrength}T`);
       }
     }
-  }
-
-  getFieldStrength() {
-    const fieldInput = document.getElementById('magField');
-    return fieldInput ? parseFloat(fieldInput.value) : null;
   }
 
   // ==================== Echo Time Management ====================
@@ -440,18 +508,33 @@ export class FileIOController {
 
   /**
    * Set files programmatically from DICOM conversion results.
-   * Populates dicomFiles (separate from NIfTI multiEchoFiles) and triggers callbacks.
+   * Adds to unified buckets and triggers callbacks.
    */
   setFilesFromDicom(magnitudeFileData, phaseFileData, jsonFiles) {
-    this.dicomFiles.magnitude = magnitudeFileData;
-    this.dicomFiles.phase = phaseFileData;
-    this.dicomFiles.combinedMagnitude = null;
-    this.dicomFiles.combinedPhase = null;
+    // Add DICOM results directly to buckets
+    this.buckets.magnitude.push(...magnitudeFileData);
+    this.buckets.phase.push(...phaseFileData);
 
-    this.onMagnitudeFilesChanged(magnitudeFileData);
-    this.onPhaseFilesChanged(phaseFileData);
+    // DICOM always produces phase data, enforce exclusivity
+    this._enforceExclusivity('phase');
+
+    // Sort buckets alphabetically
+    this._sortBucket('magnitude');
+    this._sortBucket('phase');
+
+    // Clear combined data cache
+    this.combinedMagnitude = null;
+    this.combinedPhase = null;
+
+    this.onMagnitudeFilesChanged(this.buckets.magnitude);
+    this.onPhaseFilesChanged(this.buckets.phase);
 
     if (jsonFiles && jsonFiles.length > 0) {
+      // Add JSON files to bucket
+      for (const f of jsonFiles) {
+        this.buckets.json.push({ file: f, name: f.name });
+      }
+      this._sortBucket('json');
       this.processJsonFiles(jsonFiles);
     }
   }
@@ -459,18 +542,18 @@ export class FileIOController {
   // ==================== Combined Data ====================
 
   setCombinedMagnitude(data) {
-    this._getActiveEchoStore().combinedMagnitude = data;
+    this.combinedMagnitude = data;
   }
 
   setCombinedPhase(data) {
-    this._getActiveEchoStore().combinedPhase = data;
+    this.combinedPhase = data;
   }
 
   getCombinedMagnitude() {
-    return this._getActiveEchoStore().combinedMagnitude;
+    return this.combinedMagnitude;
   }
 
   getCombinedPhase() {
-    return this._getActiveEchoStore().combinedPhase;
+    return this.combinedPhase;
   }
 }

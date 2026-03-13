@@ -77,99 +77,34 @@
           Input Files
         </h2>
         <div class="section-content">
-        <!-- Input Mode Tabs -->
-        <div class="input-mode-tabs" id="inputModeTabs">
-          <button class="input-mode-tab active" data-mode="dicom">DICOM</button>
-          <button class="input-mode-tab" data-mode="nifti">NIfTI</button>
-        </div>
-        <!-- NIfTI Sub-type Tabs (only visible when NIfTI is selected) -->
-        <div class="input-subtype-tabs" id="inputSubtypeTabs" style="display: none;">
-          <button class="input-subtype-tab active" data-mode="raw">Mag+Phase</button>
-          <button class="input-subtype-tab" data-mode="totalField">Total Field</button>
-          <button class="input-subtype-tab" data-mode="localField">Local Field</button>
-        </div>
 
-        <!-- Raw Images Mode -->
-        <div class="input-mode-content" id="inputModeRaw" data-mode="raw">
-        <!-- Magnitude Files -->
+        <!-- Single unified drop zone -->
         <div class="file-upload-group">
-          <div class="file-upload-header">
-            <label class="file-upload-label">
-              Magnitude <span class="count" id="magCount"></span>
-            </label>
-            <button class="btn-icon btn-preview" id="vis_magnitude" title="Preview magnitude" disabled>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
           <div class="upload-group">
-            <div class="file-upload-zone file-drop" id="magnitudeDrop">
-              <input type="file" id="magnitudeFiles" accept=".nii,.nii.gz" multiple>
+            <div class="file-upload-zone file-drop" id="unifiedDrop">
+              <input type="file" id="unifiedFiles" accept=".nii,.nii.gz,.json,.dcm" multiple>
               <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                 <polyline points="17 8 12 3 7 8"/>
                 <line x1="12" y1="3" x2="12" y2="15"/>
               </svg>
-              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
-            </div>
-            <div class="file-list" id="magnitudeList"></div>
-          </div>
-        </div>
-
-        <!-- Phase Files -->
-        <div class="file-upload-group">
-          <div class="file-upload-header">
-            <label class="file-upload-label">
-              Phase <span class="count" id="phaseCount"></span>
-            </label>
-            <button class="btn-icon btn-preview" id="vis_phase" title="Preview phase" disabled>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-          <div class="upload-group">
-            <div class="file-upload-zone file-drop" id="phaseDrop">
-              <input type="file" id="phaseFiles" accept=".nii,.nii.gz" multiple>
-              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
-            </div>
-            <div class="file-list" id="phaseList"></div>
-          </div>
-        </div>
-        </div>
-
-        <!-- DICOM Mode -->
-        <div class="input-mode-content active" id="inputModeDicom" data-mode="dicom">
-        <div class="file-upload-group">
-          <div class="upload-group">
-            <div class="file-upload-zone file-drop" id="dicomDrop">
-              <input type="file" id="dicomFiles" webkitdirectory multiple>
-              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <p class="upload-text file-drop-label"><span>Drop DICOM folder or click</span></p>
+              <p class="upload-text file-drop-label"><span>Drop NIfTI, DICOM, or JSON files</span></p>
             </div>
           </div>
         </div>
 
-        <!-- Conversion status -->
+        <!-- DICOM conversion status (hidden by default) -->
         <div class="dicom-status" id="dicomStatus" style="display: none;">
           <div class="dicom-spinner"></div>
           <span class="dicom-status-text" id="dicomStatusText">Converting...</span>
         </div>
 
-        <!-- Triage area: populated dynamically after DICOM conversion -->
-        <div id="dicomTriage" style="display: none;"></div>
+        <!-- File triage buckets (populated dynamically after files are added) -->
+        <div id="fileTriage" style="display: none;"></div>
+
+        <!-- Validation messages -->
+        <div id="inputValidation" style="display: none;"></div>
+
         <!-- dicompare validation button -->
         <button class="btn btn-secondary btn-dicompare" id="dicompareReportBtn" disabled>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
@@ -178,107 +113,6 @@
           </svg>
           dicompare Report
         </button>
-        </div>
-
-        <!-- Total Field Map Mode -->
-        <div class="input-mode-content" id="inputModeTotalField" data-mode="totalField">
-        <div class="file-upload-group">
-          <div class="file-upload-header">
-            <label class="file-upload-label">Total Field Map</label>
-            <button class="btn-icon btn-preview" id="vis_totalField" title="Preview total field map" disabled>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-          <div class="upload-group">
-            <div class="file-upload-zone file-drop" id="totalFieldDrop">
-              <input type="file" id="totalFieldFiles" accept=".nii,.nii.gz">
-              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
-            </div>
-            <div class="file-list" id="totalFieldList"></div>
-          </div>
-        </div>
-        <div class="file-upload-group">
-          <div class="file-upload-header">
-            <label class="file-upload-label">Magnitude <span class="optional-label">(optional)</span></label>
-            <button class="btn-icon btn-preview" id="vis_magnitudeTF" title="Preview magnitude" disabled>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-          <div class="upload-group">
-            <div class="file-upload-zone file-drop" id="magnitudeTFDrop">
-              <input type="file" id="magnitudeTFFiles" accept=".nii,.nii.gz" multiple>
-              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
-            </div>
-            <div class="file-list" id="magnitudeTFList"></div>
-          </div>
-        </div>
-        </div>
-
-        <!-- Local Field Map Mode -->
-        <div class="input-mode-content" id="inputModeLocalField" data-mode="localField">
-        <div class="file-upload-group">
-          <div class="file-upload-header">
-            <label class="file-upload-label">Local Field Map</label>
-            <button class="btn-icon btn-preview" id="vis_localField" title="Preview local field map" disabled>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-          <div class="upload-group">
-            <div class="file-upload-zone file-drop" id="localFieldDrop">
-              <input type="file" id="localFieldFiles" accept=".nii,.nii.gz">
-              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
-            </div>
-            <div class="file-list" id="localFieldList"></div>
-          </div>
-        </div>
-        <div class="file-upload-group">
-          <div class="file-upload-header">
-            <label class="file-upload-label">Magnitude <span class="optional-label">(optional)</span></label>
-            <button class="btn-icon btn-preview" id="vis_magnitudeLF" title="Preview magnitude" disabled>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-          <div class="upload-group">
-            <div class="file-upload-zone file-drop" id="magnitudeLFDrop">
-              <input type="file" id="magnitudeLFFiles" accept=".nii,.nii.gz" multiple>
-              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <p class="upload-text file-drop-label"><span>Drop or click</span></p>
-            </div>
-            <div class="file-list" id="magnitudeLFList"></div>
-          </div>
-        </div>
-        </div>
 
         </div>
       </section>
@@ -301,25 +135,6 @@
             <option value="rad_s">rad/s</option>
             <option value="ppm">ppm</option>
           </select>
-        </div>
-
-        <!-- JSON Metadata Upload (NIfTI mode only) -->
-        <div class="param-group input-param-raw" id="jsonMetadataGroup" style="display: none;">
-          <label class="param-label">
-            JSON Metadata <span class="count" id="jsonCount"></span>
-          </label>
-          <div class="upload-group compact">
-            <div class="file-upload-zone file-drop compact" id="jsonDrop">
-              <input type="file" id="jsonFiles" accept=".json" multiple>
-              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <p class="upload-text file-drop-label"><span>Drop files or click</span></p>
-            </div>
-            <div class="file-list" id="jsonList"></div>
-          </div>
         </div>
 
         <!-- Field Strength (hidden when units are ppm) -->
@@ -352,6 +167,7 @@
           <label class="param-label" for="maskInputSource">Masking Input</label>
           <select id="maskInputSource">
             <option value="first_echo">First-echo magnitude</option>
+            <option value="last_echo">Last-echo magnitude</option>
             <option value="combined">Combined magnitude (RSS)</option>
             <option value="phase_quality" selected>Phase quality map</option>
           </select>
@@ -1941,49 +1757,23 @@
       if (consoleOutput) consoleOutput.innerHTML = '';
     });
 
-    // Drag and drop enhancement
-    ['magnitudeDrop', 'phaseDrop', 'jsonDrop',
-     'totalFieldDrop', 'magnitudeTFDrop',
-     'localFieldDrop', 'magnitudeLFDrop',
-     'maskDrop'].forEach(id => {
-      const dropZone = document.getElementById(id);
-      if (!dropZone) return;
-
-      dropZone.addEventListener('dragover', (e) => {
+    // Drag and drop for mask drop zone (kept in Masking section)
+    const maskDropZone = document.getElementById('maskDrop');
+    if (maskDropZone) {
+      maskDropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
-        dropZone.classList.add('dragover');
+        maskDropZone.classList.add('dragover');
       });
-
-      dropZone.addEventListener('dragleave', () => {
-        dropZone.classList.remove('dragover');
+      maskDropZone.addEventListener('dragleave', () => {
+        maskDropZone.classList.remove('dragover');
       });
-
-      dropZone.addEventListener('drop', (e) => {
+      maskDropZone.addEventListener('drop', (e) => {
         e.preventDefault();
-        dropZone.classList.remove('dragover');
-        const input = dropZone.querySelector('input[type="file"]');
+        maskDropZone.classList.remove('dragover');
+        const input = maskDropZone.querySelector('input[type="file"]');
         if (input && e.dataTransfer.files.length) {
           input.files = e.dataTransfer.files;
           input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      });
-    });
-
-    // DICOM drop zone — needs directory traversal instead of simple file transfer
-    const dicomDropZone = document.getElementById('dicomDrop');
-    if (dicomDropZone) {
-      dicomDropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dicomDropZone.classList.add('dragover');
-      });
-      dicomDropZone.addEventListener('dragleave', () => {
-        dicomDropZone.classList.remove('dragover');
-      });
-      dicomDropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dicomDropZone.classList.remove('dragover');
-        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-          window.app?.handleDicomDrop(e.dataTransfer.items);
         }
       });
     }
