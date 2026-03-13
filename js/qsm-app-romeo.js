@@ -323,6 +323,9 @@ class QSMApp {
   }
 
   setupEventListeners() {
+    // Info tooltips
+    this._setupInfoTooltips();
+
     // Unified file input
     this._setupUnifiedDropZone();
 
@@ -574,6 +577,35 @@ class QSMApp {
   }
 
   // ==================== Unified File Input ====================
+
+  /**
+   * Set up hover-positioned info tooltips for all .info-icon elements.
+   */
+  _setupInfoTooltips() {
+    document.querySelectorAll('.info-icon').forEach(icon => {
+      const tooltip = icon.querySelector('.info-tooltip');
+      if (!tooltip) return;
+
+      icon.addEventListener('mouseenter', () => {
+        tooltip.style.display = 'block';
+        const iconRect = icon.getBoundingClientRect();
+        const tipRect = tooltip.getBoundingClientRect();
+
+        let top = iconRect.top - tipRect.height - 6;
+        let left = iconRect.left + iconRect.width / 2 - tipRect.width / 2;
+
+        if (top < 4) top = iconRect.bottom + 6;
+        left = Math.max(4, Math.min(left, window.innerWidth - tipRect.width - 4));
+
+        tooltip.style.top = `${top}px`;
+        tooltip.style.left = `${left}px`;
+      });
+
+      icon.addEventListener('mouseleave', () => {
+        tooltip.style.display = 'none';
+      });
+    });
+  }
 
   /**
    * Set up the unified drop zone for all file types (NIfTI, DICOM, JSON).

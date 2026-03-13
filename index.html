@@ -129,7 +129,7 @@
         <div class="section-content">
         <!-- Field Map Units (shown for totalField and localField modes) -->
         <div class="param-group input-param-fieldmap" id="fieldMapUnitsGroup" style="display: none;">
-          <label class="param-label" for="fieldMapUnits">Field Map Units</label>
+          <label class="param-label" for="fieldMapUnits">Field Map Units <span class="info-icon">i<span class="info-tooltip">Units of the uploaded field map. Must match the data for correct susceptibility scaling.</span></span></label>
           <select id="fieldMapUnits">
             <option value="hz">Hz</option>
             <option value="rad_s">rad/s</option>
@@ -139,7 +139,7 @@
 
         <!-- Field Strength (hidden when units are ppm) -->
         <div class="param-group" id="fieldStrengthGroup">
-          <label class="param-label" for="magField">Field Strength</label>
+          <label class="param-label" for="magField">Field Strength <span class="info-icon">i<span class="info-tooltip">Main magnetic field strength of the MRI scanner. Used to normalize field values to ppm for susceptibility calculation.</span></span></label>
           <div class="param-inline">
             <input type="number" id="magField" value="3.0" step="0.1" min="0.1">
             <span class="unit">Tesla</span>
@@ -148,7 +148,7 @@
 
         <!-- Echo Times (raw mode only) -->
         <div class="param-group input-param-raw" id="echoTimesGroup">
-          <label class="param-label">Echo Times <span class="unit-inline">(ms)</span></label>
+          <label class="param-label">Echo Times <span class="unit-inline">(ms)</span> <span class="info-icon">i<span class="info-tooltip">Echo times for each echo in milliseconds. Auto-populated from JSON sidecars if provided, or enter manually.</span></span></label>
           <input type="text" id="echoTimesTagify" placeholder="Type values...">
         </div>
         </div>
@@ -164,7 +164,7 @@
         </h2>
         <div class="section-content">
         <div class="param-group">
-          <label class="param-label" for="maskInputSource">Masking Input</label>
+          <label class="param-label" for="maskInputSource">Masking Input <span class="info-icon">i<span class="info-tooltip">Data source used to generate the brain mask. Phase quality maps (ROMEO voxel quality) often produce more reliable masks than magnitude-based approaches.</span></span></label>
           <select id="maskInputSource">
             <option value="first_echo">First-echo magnitude</option>
             <option value="last_echo">Last-echo magnitude</option>
@@ -355,7 +355,7 @@
         <div class="section-content">
           <div id="sidebarPipelineDropdowns">
             <div class="param-group" id="sidebarMethodGroup">
-              <label class="param-label">Pipeline</label>
+              <label class="param-label">Pipeline <span class="info-icon">i<span class="info-tooltip">Overall QSM reconstruction strategy. Each pipeline combines different processing steps to produce a susceptibility map.</span></span></label>
               <select id="sidebarCombinedMethod">
                 <option value="none" selected>Standard</option>
                 <option value="tgv">TGV</option>
@@ -363,14 +363,14 @@
               </select>
             </div>
             <div class="param-group" id="sidebarUnwrapGroup">
-              <label class="param-label">Phase Unwrapping</label>
+              <label class="param-label">Phase Unwrapping <span class="info-icon">i<span class="info-tooltip">Removes 2-pi wraps from MRI phase data to recover continuous phase values.</span></span></label>
               <select id="sidebarUnwrapMethod">
                 <option value="romeo" selected>ROMEO</option>
                 <option value="laplacian">Laplacian</option>
               </select>
             </div>
             <div class="param-group" id="sidebarBgRemovalGroup">
-              <label class="param-label">Background Removal</label>
+              <label class="param-label">Background Removal <span class="info-icon">i<span class="info-tooltip">Removes background field contributions from sources outside the brain to isolate the local tissue field.</span></span></label>
               <select id="sidebarBgRemovalMethod">
                 <option value="vsharp" selected>V-SHARP</option>
                 <option value="sharp">SHARP</option>
@@ -380,7 +380,7 @@
               </select>
             </div>
             <div class="param-group" id="sidebarDipoleGroup">
-              <label class="param-label">Dipole Inversion</label>
+              <label class="param-label">Dipole Inversion <span class="info-icon">i<span class="info-tooltip">Recovers the susceptibility map from the local tissue field by solving an ill-posed inverse problem.</span></span></label>
               <select id="sidebarDipoleMethod">
                 <option value="tkd">TKD</option>
                 <option value="tsvd">TSVD</option>

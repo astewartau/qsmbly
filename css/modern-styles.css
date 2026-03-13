@@ -882,10 +882,48 @@ input[type="range"]:disabled::-moz-range-thumb {
 }
 
 .param-label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 0.8rem;
   font-weight: 500;
   margin-bottom: 2px;
+}
+
+/* Info tooltip icons */
+.info-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--color-text-dim);
+  color: var(--color-text-dim);
+  font-size: 9px;
+  font-weight: 700;
+  font-style: normal;
+  cursor: help;
+  flex-shrink: 0;
+}
+
+.info-icon .info-tooltip {
+  display: none;
+  position: fixed;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text);
+  white-space: normal;
+  width: 200px;
+  line-height: 1.4;
+  z-index: 10000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
 }
 
 .threshold-header {
