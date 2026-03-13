@@ -63,12 +63,13 @@ export const MASK_CONFIG = {
 export const BET_DEFAULTS = {
   fractionalIntensity: 0.5,
   iterations: 1000,
-  subdivisions: 4
+  subdivisions: 4,
+  erosions: 2
 };
 
 // Mask preparation settings
 export const MASK_PREP_DEFAULTS = {
-  source: 'combined',           // 'first_echo' or 'combined'
+  source: 'phase_quality',      // 'first_echo', 'combined', or 'phase_quality'
   biasCorrection: true
 };
 

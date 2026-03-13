@@ -444,11 +444,35 @@ class QSMApp {
       });
     }
 
-    // Preview mask button
+    // Preview mask button - shows Robust/Manual sub-buttons
     const previewMaskBtn = document.getElementById('previewMask');
     if (previewMaskBtn) {
-      previewMaskBtn.addEventListener('click', () => this.previewMask());
+      previewMaskBtn.addEventListener('click', () => {
+        document.getElementById('thresholdModeButtons').style.display = '';
+      });
     }
+
+    // Threshold Robust button - Otsu + auto-refinement
+    document.getElementById('thresholdRobust')?.addEventListener('click', async () => {
+      document.getElementById('thresholdModeButtons').style.display = 'none';
+      await this.previewMask();
+      this.updateOutput("Applying robust refinement (dilate, fill holes, erode x2)...");
+      this.dilateMask3D();
+      this.fillHoles3D();
+      this.erodeMask3D();
+      this.erodeMask3D();
+      await this.displayCurrentMask();
+      this.updateOutput("Robust mask complete");
+    });
+
+    // Threshold Manual button - Otsu + slider
+    document.getElementById('thresholdManual')?.addEventListener('click', async () => {
+      document.getElementById('thresholdModeButtons').style.display = 'none';
+      await this.previewMask();
+      const sliderGroup = document.getElementById('thresholdSliderGroup');
+      if (sliderGroup) sliderGroup.style.display = '';
+      this.setThresholdSliderEnabled(true);
+    });
 
     // BET brain extraction button - opens settings modal
     document.getElementById('runBET')?.addEventListener('click', () => this.openBetSettingsModal());
@@ -1590,7 +1614,7 @@ class QSMApp {
         this.updateMaskSectionState();
         this.hideEchoNavigation();
         this.showStageButtons();
-        this.addStageButton('preparedMagnitude', 'Prepared Magnitude');
+        this.addStageButton('preparedMagnitude', 'Masking input');
         this.autoDetectThreshold();
       }
     });
@@ -1659,9 +1683,6 @@ class QSMApp {
     this.maskDims = this.maskController.maskDims;
     this.voxelSize = this.maskController.voxelSize;
     this.applyVoxelDefaults();
-
-    // Enable threshold slider
-    this.setThresholdSliderEnabled(true);
 
     // Show morphological operations panel
     const opsPanel = document.getElementById('maskOperations');
@@ -1791,6 +1812,10 @@ class QSMApp {
     // Sync state
     this.currentMaskData = null;
     this.originalMaskData = null;
+
+    // Hide threshold slider
+    const sliderGroup = document.getElementById('thresholdSliderGroup');
+    if (sliderGroup) sliderGroup.style.display = 'none';
 
     // Update run button state (mask no longer available)
     this.updateEchoInfo();
@@ -2226,9 +2251,11 @@ class QSMApp {
     this.currentMaskData = null;
     this.originalMaskData = null;
 
-    // Hide morphological operations panel
+    // Hide morphological operations panel and threshold slider
     const opsPanel = document.getElementById('maskOperations');
     if (opsPanel) opsPanel.style.display = 'none';
+    const sliderGroup = document.getElementById('thresholdSliderGroup');
+    if (sliderGroup) sliderGroup.style.display = 'none';
 
     // Hide Results section
     const resultsSection = document.getElementById('stage-buttons');
@@ -2267,9 +2294,9 @@ class QSMApp {
         if (this.preparedMagnitudeData) {
           await this.displayPreparedMagnitude();
           this.updateDataUnits(null);
-          this.updateOutput("Displaying: Prepared Magnitude");
+          this.updateOutput("Displaying: Masking input");
         } else {
-          this.updateOutput("Prepared magnitude not available - click Prepare first");
+          this.updateOutput("Masking input not available - click Prepare first");
         }
         return;
       }
@@ -2600,7 +2627,7 @@ class QSMApp {
       magnitudeFiles: magnitudeFilesForBET,
       betSettings: this.betSettings,
       createNiftiHeaderFromVolume: (vol) => this.createNiftiHeaderFromVolume(vol),
-      onComplete: () => {
+      onComplete: async () => {
         // Sync state from controller
         this.currentMaskData = this.maskController.currentMaskData;
         this.originalMaskData = this.maskController.originalMaskData;
@@ -2609,6 +2636,17 @@ class QSMApp {
         this.magnitudeData = this.maskController.magnitudeData;
         this.magnitudeMax = this.maskController.magnitudeMax;
         this.magnitudeFileBytes = this.maskController.magnitudeFileBytes;
+
+        // Apply post-BET erosions
+        const erosions = this.betSettings.erosions || 0;
+        if (erosions > 0) {
+          this.updateOutput(`Applying ${erosions} erosion step(s)...`);
+          for (let i = 0; i < erosions; i++) {
+            this.erodeMask3D();
+          }
+          await this.displayCurrentMask();
+          this.updateOutput(`BET mask complete with ${erosions} erosion(s)`);
+        }
 
         // Show morphological operations panel
         const opsPanel = document.getElementById('maskOperations');
@@ -2792,6 +2830,7 @@ class QSMApp {
     document.getElementById('betFractionalIntensityValue').textContent = this.betSettings.fractionalIntensity;
     document.getElementById('betIterations').value = this.betSettings.iterations;
     document.getElementById('betSubdivisions').value = this.betSettings.subdivisions;
+    document.getElementById('betErosions').value = this.betSettings.erosions ?? 2;
 
     this.betModal?.open();
   }
@@ -2802,6 +2841,7 @@ class QSMApp {
     document.getElementById('betFractionalIntensityValue').textContent = '0.5';
     document.getElementById('betIterations').value = 1000;
     document.getElementById('betSubdivisions').value = 4;
+    document.getElementById('betErosions').value = 2;
   }
 
   runBetWithSettings() {
@@ -2809,7 +2849,8 @@ class QSMApp {
     this.betSettings = {
       fractionalIntensity: parseFloat(document.getElementById('betFractionalIntensity').value),
       iterations: parseInt(document.getElementById('betIterations').value),
-      subdivisions: parseInt(document.getElementById('betSubdivisions').value)
+      subdivisions: parseInt(document.getElementById('betSubdivisions').value),
+      erosions: parseInt(document.getElementById('betErosions').value) || 0
     };
 
     this.betModal?.close();

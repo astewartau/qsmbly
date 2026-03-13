@@ -352,12 +352,12 @@
           <label class="param-label" for="maskInputSource">Masking Input</label>
           <select id="maskInputSource">
             <option value="first_echo">First-echo magnitude</option>
-            <option value="combined" selected>Combined magnitude (RSS)</option>
-            <option value="phase_quality">Phase quality map</option>
+            <option value="combined">Combined magnitude (RSS)</option>
+            <option value="phase_quality" selected>Phase quality map</option>
           </select>
         </div>
 
-        <div class="param-group" id="biasCorrectionGroup">
+        <div class="param-group" id="biasCorrectionGroup" style="display: none;">
           <label class="checkbox-label">
             <input type="checkbox" id="applyBiasCorrection" checked>
             <span>Apply bias correction</span>
@@ -429,8 +429,17 @@
           </button>
         </div>
 
+        <div class="mask-preview-buttons" id="thresholdModeButtons" style="display: none;">
+          <button class="btn btn-secondary btn-sm" id="thresholdRobust" title="Otsu threshold + automatic refinement (dilate, fill holes, erode x2)">
+            Robust
+          </button>
+          <button class="btn btn-secondary btn-sm" id="thresholdManual" title="Otsu threshold with manual slider adjustment">
+            Manual
+          </button>
+        </div>
+
         <!-- Threshold Slider (enabled only after Threshold button is pressed) -->
-        <div class="param-group" id="thresholdSliderGroup" style="margin-top: var(--space-sm);">
+        <div class="param-group" id="thresholdSliderGroup" style="margin-top: var(--space-sm); display: none;">
           <div class="threshold-header">
             <label class="param-label" for="maskThreshold" id="thresholdLabel">Threshold</label>
             <button class="btn-icon" id="autoThreshold" title="Reset to Otsu threshold" disabled>
@@ -1378,6 +1387,11 @@
             <label class="param-label" for="betSubdivisions">Mesh Subdivisions</label>
             <div class="param-hint">3 = 642 vertices, 4 = 2562 vertices, 5 = 10242 vertices</div>
             <input type="number" id="betSubdivisions" value="4" min="2" max="5" step="1">
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="betErosions">Number of Erosions</label>
+            <div class="param-hint">Erosion steps to apply after mask generation (0 = none)</div>
+            <input type="number" id="betErosions" value="2" min="0" max="10" step="1">
           </div>
         </div>
       </div>
