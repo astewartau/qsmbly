@@ -73,6 +73,13 @@ jobs:
           # Update Cargo.toml
           sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" rust-wasm/Cargo.toml
 
+          # Extract QSM.rs version from Cargo.toml dependency tag and update config.js
+          QSM_RS_VERSION=$(grep -oP 'tag = "v\K[^"]+' rust-wasm/Cargo.toml || echo "")
+          if [ -n "$QSM_RS_VERSION" ]; then
+            sed -i "s/^export const QSM_RS_VERSION = '[^']*'/export const QSM_RS_VERSION = '$QSM_RS_VERSION'/" js/app/config.js
+            echo "Updated QSM.rs version to $QSM_RS_VERSION"
+          fi
+
           echo "Updated version to $VERSION in all files"
 
       - name: Commit version update
