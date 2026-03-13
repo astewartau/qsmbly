@@ -461,6 +461,12 @@ class QSMApp {
       this.maskPrepSettings.source = e.target.value;
       this.maskPrepSettings.prepared = false;
       this.updatePrepareButtonState();
+
+      // Hide bias correction for phase quality map (not applicable)
+      const biasCorrectionGroup = document.getElementById('biasCorrectionGroup');
+      if (biasCorrectionGroup) {
+        biasCorrectionGroup.style.display = e.target.value === 'phase_quality' ? 'none' : '';
+      }
     });
 
     document.getElementById('applyBiasCorrection')?.addEventListener('change', (e) => {
@@ -1555,15 +1561,20 @@ class QSMApp {
     // Get magnitude files based on current input mode
     const mode = this.fileIOController.getInputMode();
     let magnitudeFiles;
+    let phaseFiles;
     if (mode === 'raw' || mode === 'dicom') {
       magnitudeFiles = this.multiEchoFiles.magnitude;
+      phaseFiles = this.multiEchoFiles.phase;
     } else {
       // Field map modes: use all magnitude files (may be multiple)
       magnitudeFiles = this.fileIOController.getFieldMapMagnitudeFiles();
+      phaseFiles = [];
     }
 
     await this.maskController.prepareMaskInput({
       magnitudeFiles: magnitudeFiles,
+      phaseFiles: phaseFiles,
+      echoTimes: this.getEchoTimesFromInputs(),
       maskPrepSettings: this.maskPrepSettings,
       onComplete: () => {
         // Sync state from controller to app

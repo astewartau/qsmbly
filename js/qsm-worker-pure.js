@@ -1929,6 +1929,47 @@ async function runBiasCorrection(data) {
   }
 }
 
+/**
+ * Compute ROMEO voxel quality map for phase-based masking
+ * @param {Object} data - Contains phase, mag, phase2, te1, te2, mask, nx, ny, nz
+ */
+async function runVoxelQuality(data) {
+  const { phase, mag, phase2, te1, te2, mask, nx, ny, nz } = data;
+
+  try {
+    if (!wasmModule) {
+      await initializeWasm();
+    }
+
+    console.log(`[Worker] Voxel quality: ${nx}x${ny}x${nz}`);
+
+    const phaseArray = new Float64Array(phase);
+    const magArray = new Float64Array(mag || []);
+    const phase2Array = new Float64Array(phase2 || []);
+    const maskArray = new Uint8Array(mask);
+
+    const result = wasmModule.voxel_quality_romeo_wasm(
+      phaseArray, magArray, phase2Array,
+      te1 || 1.0, te2 || 1.0,
+      maskArray, nx, ny, nz
+    );
+
+    console.log(`[Worker] Voxel quality map complete, length: ${result.length}`);
+
+    self.postMessage({
+      type: 'voxelQuality',
+      result: Array.from(result)
+    });
+
+  } catch (error) {
+    console.error('[Worker] Voxel quality error:', error);
+    self.postMessage({
+      type: 'voxelQuality',
+      error: error.message
+    });
+  }
+}
+
 // =========================================================================
 // Total Field Map Pipeline
 // Skips phase unwrapping/combination, starts from B0 field map
@@ -2937,6 +2978,9 @@ self.onmessage = async function (e) {
         await runBiasCorrection(data);
         break;
 
+      case 'voxelQuality':
+        await runVoxelQuality(data);
+        break;
 
       default:
         postError(`Unknown message type: ${type}`);

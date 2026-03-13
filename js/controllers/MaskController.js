@@ -88,9 +88,14 @@ export class MaskController {
    * @param {Function} options.onComplete - Callback when preparation is complete
    */
   async prepareMaskInput(options) {
-    const { magnitudeFiles, maskPrepSettings, onComplete } = options;
+    const { magnitudeFiles, phaseFiles, echoTimes, maskPrepSettings, onComplete } = options;
 
-    if (magnitudeFiles.length === 0) {
+    if (maskPrepSettings.source === 'phase_quality') {
+      if (!phaseFiles || phaseFiles.length === 0 || !phaseFiles[0]?.file) {
+        this.updateOutput("No phase files uploaded - required for phase quality map");
+        return;
+      }
+    } else if (magnitudeFiles.length === 0) {
       this.updateOutput("No magnitude files uploaded");
       return;
     }
@@ -109,27 +114,36 @@ export class MaskController {
       this.setProgress(0.05, 'Preparing...');
       this.updateOutput(`Preparing: source=${maskPrepSettings.source}, biasCorrection=${maskPrepSettings.biasCorrection}`);
 
-      const firstFile = magnitudeFiles[0].file;
       let magnitudeData;
+      let headerSourceFile;
 
-      if (maskPrepSettings.source === 'combined') {
+      if (maskPrepSettings.source === 'phase_quality') {
+        // Compute ROMEO voxel quality map from phase data
+        this.setProgress(0.15, 'Computing phase quality map...');
+        this.updateOutput("Computing ROMEO voxel quality map...");
+        magnitudeData = await this.computeVoxelQualityMap(phaseFiles, magnitudeFiles, echoTimes);
+        headerSourceFile = phaseFiles[0].file;
+      } else if (maskPrepSettings.source === 'combined') {
         // Combine all echoes with RSS (reads files directly, no display)
         this.setProgress(0.15, 'Combining echoes...');
         this.updateOutput("Combining magnitude echoes (RSS)...");
         magnitudeData = await this.combineMagnitudeRSS(magnitudeFiles);
+        headerSourceFile = magnitudeFiles[0].file;
       } else {
         // Read first echo only (no display)
         this.setProgress(0.15, 'Loading first echo...');
         this.updateOutput("Loading first echo magnitude...");
+        const firstFile = magnitudeFiles[0].file;
         magnitudeData = await this.readNiftiData(firstFile);
+        headerSourceFile = firstFile;
       }
 
-      // Get header from first file (no display)
+      // Get header from source file (no display)
       this.setProgress(0.35, 'Reading header...');
-      this.magnitudeFileBytes = await this.readNiftiHeader(firstFile);
+      this.magnitudeFileBytes = await this.readNiftiHeader(headerSourceFile);
 
-      // Apply bias correction if enabled
-      if (maskPrepSettings.biasCorrection) {
+      // Apply bias correction if enabled (not applicable for phase quality)
+      if (maskPrepSettings.biasCorrection && maskPrepSettings.source !== 'phase_quality') {
         this.setProgress(0.45, 'Bias correction...');
         this.updateOutput("Applying bias correction...");
         const beforeSum = magnitudeData.reduce((a, b) => a + b, 0);
@@ -439,6 +453,78 @@ export class MaskController {
           vx, vy, vz,
           sigma_mm: 7.0,
           nbox: 15
+        }
+      });
+    });
+  }
+
+  /**
+   * Compute ROMEO voxel quality map from phase data
+   * @param {Array} phaseFiles - Phase file objects with .file property
+   * @param {Array} magnitudeFiles - Magnitude file objects (optional, for weighting)
+   * @param {Array} echoTimes - Echo times in ms
+   * @returns {Float64Array} Quality map with values in [0, 100]
+   */
+  async computeVoxelQualityMap(phaseFiles, magnitudeFiles, echoTimes) {
+    await this.initializeWorker();
+
+    const worker = this.getWorker();
+
+    // Read first echo phase
+    const phase1 = await this.readNiftiData(phaseFiles[0].file);
+
+    // Read second echo phase if available (for gradient coherence)
+    let phase2 = null;
+    if (phaseFiles.length > 1 && phaseFiles[1]?.file) {
+      phase2 = await this.readNiftiData(phaseFiles[1].file);
+    }
+
+    // Read first echo magnitude if available (for magnitude weighting)
+    let mag = null;
+    if (magnitudeFiles && magnitudeFiles.length > 0 && magnitudeFiles[0]?.file) {
+      mag = await this.readNiftiData(magnitudeFiles[0].file);
+    }
+
+    // Get dimensions from phase header
+    const headerBytes = await this.readNiftiHeader(phaseFiles[0].file);
+    const srcView = new DataView(headerBytes);
+    const nx = srcView.getInt16(42, true);
+    const ny = srcView.getInt16(44, true);
+    const nz = srcView.getInt16(46, true);
+    const nVoxels = nx * ny * nz;
+
+    // Create all-ones mask (process entire volume)
+    const mask = new Uint8Array(nVoxels);
+    mask.fill(1);
+
+    // Get echo times
+    const te1 = (echoTimes && echoTimes.length > 0) ? echoTimes[0] : 1.0;
+    const te2 = (echoTimes && echoTimes.length > 1) ? echoTimes[1] : 1.0;
+
+    this.setProgress(0.25, 'Computing quality map...');
+
+    return new Promise((resolve, reject) => {
+      const messageHandler = (event) => {
+        if (event.data.type === 'voxelQuality') {
+          worker.removeEventListener('message', messageHandler);
+          if (event.data.error) {
+            reject(new Error(event.data.error));
+          } else {
+            resolve(new Float64Array(event.data.result));
+          }
+        }
+      };
+
+      worker.addEventListener('message', messageHandler);
+      worker.postMessage({
+        type: 'voxelQuality',
+        data: {
+          phase: phase1,
+          mag: mag,
+          phase2: phase2,
+          te1, te2,
+          mask: mask,
+          nx, ny, nz
         }
       });
     });

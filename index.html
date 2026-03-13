@@ -345,18 +345,19 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
           </svg>
-          Magnitude Preparation
+          Masking Input Preparation
         </h2>
         <div class="section-content">
         <div class="param-group">
-          <label class="param-label" for="maskInputSource">Magnitude Source</label>
+          <label class="param-label" for="maskInputSource">Masking Input</label>
           <select id="maskInputSource">
             <option value="first_echo">First-echo magnitude</option>
             <option value="combined" selected>Combined magnitude (RSS)</option>
+            <option value="phase_quality">Phase quality map</option>
           </select>
         </div>
 
-        <div class="param-group">
+        <div class="param-group" id="biasCorrectionGroup">
           <label class="checkbox-label">
             <input type="checkbox" id="applyBiasCorrection" checked>
             <span>Apply bias correction</span>

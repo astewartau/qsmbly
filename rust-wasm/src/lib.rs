@@ -177,6 +177,43 @@ pub fn calculate_weights_romeo_configurable_wasm(
     weights
 }
 
+/// Calculate ROMEO voxel quality map for phase-based masking
+///
+/// Computes per-voxel quality by averaging ROMEO edge weights across all
+/// 6 neighboring directions. Values range from 0 to 100.
+///
+/// # Arguments
+/// * `phase` - Phase data (nx * ny * nz)
+/// * `mag` - Magnitude data (nx * ny * nz), can be empty
+/// * `phase2` - Second echo phase for gradient coherence (nx * ny * nz), can be empty
+/// * `te1`, `te2` - Echo times for gradient coherence scaling
+/// * `mask` - Binary mask (nx * ny * nz)
+/// * `nx`, `ny`, `nz` - Array dimensions
+///
+/// # Returns
+/// Quality map (nx * ny * nz) with values in range [0, 100]
+#[wasm_bindgen]
+pub fn voxel_quality_romeo_wasm(
+    phase: &[f64],
+    mag: &[f64],
+    phase2: &[f64],
+    te1: f64,
+    te2: f64,
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+) -> Vec<f64> {
+    console_log!("WASM voxel_quality_romeo: {}x{}x{}", nx, ny, nz);
+
+    let phase2_opt = if phase2.is_empty() { None } else { Some(phase2) };
+
+    let quality = qsm_core::unwrap::romeo::voxel_quality_romeo(
+        phase, mag, phase2_opt, te1, te2, mask, nx, ny, nz
+    );
+
+    console_log!("WASM voxel quality map complete");
+    quality
+}
+
 // ============================================================================
 // WASM Exports: Dipole Inversion
 // ============================================================================
