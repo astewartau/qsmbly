@@ -2437,6 +2437,54 @@ pub fn get_swi_defaults() -> String {
     )
 }
 
+/// Get default SHARP parameters as JSON string
+#[wasm_bindgen]
+pub fn get_sharp_defaults() -> String {
+    let p = qsm_core::bgremove::SharpParams::default();
+    format!(r#"{{"threshold":{}}}"#, p.threshold)
+}
+
+/// Get default Tikhonov parameters as JSON string
+#[wasm_bindgen]
+pub fn get_tikhonov_defaults() -> String {
+    let p = qsm_core::inversion::TikhonovParams::default();
+    format!(r#"{{"lambda":{},"reg":"identity"}}"#, p.lambda)
+}
+
+/// Get default NLTV parameters as JSON string
+#[wasm_bindgen]
+pub fn get_nltv_defaults() -> String {
+    let p = qsm_core::inversion::NltvParams::default();
+    format!(
+        r#"{{"lambda":{},"mu":{},"tol":{},"max_iter":{},"newton_iter":{}}}"#,
+        p.lambda, p.mu, p.tol, p.max_iter, p.newton_iter
+    )
+}
+
+/// Get default MEDI parameters as JSON string
+#[wasm_bindgen]
+pub fn get_medi_defaults() -> String {
+    let p = qsm_core::inversion::MediParams::default();
+    format!(
+        r#"{{"lambda":{},"merit":{},"smv":{},"smv_radius":{},"data_weighting":{},"percentage":{},"cg_tol":{},"cg_max_iter":{},"max_iter":{},"tol":{}}}"#,
+        p.lambda, p.merit, p.smv, p.smv_radius, p.data_weighting, p.percentage,
+        p.cg_tol, p.cg_max_iter, p.max_iter, p.tol
+    )
+}
+
+/// Get default QSMART parameters as JSON string
+#[wasm_bindgen]
+pub fn get_qsmart_defaults() -> String {
+    let p = qsm_core::utils::QsmartParams::default();
+    format!(
+        r#"{{"sdf_sigma1_stage1":{},"sdf_sigma2_stage1":{},"sdf_sigma1_stage2":{},"sdf_sigma2_stage2":{},"sdf_spatial_radius":{},"sdf_lower_lim":{},"sdf_curv_constant":{},"vasc_sphere_radius":{},"frangi_scale_range":[{},{}],"frangi_scale_ratio":{},"frangi_c":{},"ilsqr_tol":{},"ilsqr_max_iter":{}}}"#,
+        p.sdf_sigma1_stage1, p.sdf_sigma2_stage1, p.sdf_sigma1_stage2, p.sdf_sigma2_stage2,
+        p.sdf_spatial_radius, p.sdf_lower_lim, p.sdf_curv_constant,
+        p.vasc_sphere_radius, p.frangi_scale_range[0], p.frangi_scale_range[1],
+        p.frangi_scale_ratio, p.frangi_c, p.ilsqr_tol, p.ilsqr_max_iter
+    )
+}
+
 // ============================================================================
 // Tests
 // ============================================================================

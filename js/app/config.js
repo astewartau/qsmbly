@@ -16,7 +16,7 @@ const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined
 export const VERSION = '0.10.1';
 
 // QSM.rs core library version (keep in sync with qsm-core dependency in rust-wasm/Cargo.toml)
-export const QSM_RS_VERSION = '0.4.0';
+export const QSM_RS_VERSION = '0.7.0';
 
 // Physics constants
 export const PHYSICS = {
@@ -52,19 +52,96 @@ export const INPUT_DEFAULTS = {
   fieldMapUnits: 'hz'
 };
 
+// Algorithm defaults — sourced from QSM.rs via auto-generated qsm-defaults.js
+// These re-exports adapt the QSM.rs field names to the JS conventions used throughout qsmbly.
+import {
+  RTS_DEFAULTS as _RTS,
+  TV_DEFAULTS as _TV,
+  TKD_DEFAULTS as _TKD,
+  TGV_DEFAULTS as _TGV,
+  BET_DEFAULTS as _BET,
+  VSHARP_DEFAULTS as _VSHARP,
+  PDF_DEFAULTS as _PDF,
+  LBV_DEFAULTS as _LBV,
+  ISMV_DEFAULTS as _ISMV,
+  SWI_DEFAULTS as _SWI,
+  SHARP_DEFAULTS as _SHARP,
+  TIKHONOV_DEFAULTS as _TIKHONOV,
+  NLTV_DEFAULTS as _NLTV,
+  MEDI_DEFAULTS as _MEDI,
+  QSMART_DEFAULTS as _QSMART,
+} from './qsm-defaults.js';
+
+// Re-export with JS-convention field names (camelCase, matching existing usage)
+export const RTS_DEFAULTS = {
+  delta: _RTS.delta,
+  mu: _RTS.mu,
+  rho: _RTS.rho,
+  tol: _RTS.tol,
+  maxIter: _RTS.max_iter,
+  lsmrIter: _RTS.lsmr_iter,
+};
+
+export const TV_DEFAULTS = {
+  lambda: _TV.lambda,
+  rho: _TV.rho,
+  tol: _TV.tol,
+  maxIter: _TV.max_iter,
+};
+
+export const TKD_DEFAULTS = {
+  threshold: _TKD.threshold,
+};
+
+export const VSHARP_DEFAULTS = {
+  threshold: _VSHARP.threshold,
+};
+
+export const PDF_DEFAULTS = {
+  tol: _PDF.tol,
+};
+
+export const LBV_DEFAULTS = {
+  tol: _LBV.tol,
+};
+
+export const ISMV_DEFAULTS = {
+  tol: _ISMV.tol,
+  maxit: _ISMV.max_iter,
+};
+
+// Adapted re-exports (field name mapping from snake_case to camelCase)
+export const BET_DEFAULTS = {
+  fractionalIntensity: _BET.fractional_intensity,
+  smoothness: _BET.smoothness,
+  gradientThreshold: _BET.gradient_threshold,
+  iterations: _BET.iterations,
+  subdivisions: _BET.subdivisions,
+  erosions: 2  // mask erosion count (qsmbly-specific, not a BET param)
+};
+
+export const TGV_DEFAULTS = {
+  regularization: 2,  // UI preset level (qsmbly-specific)
+  alpha0: _TGV.alpha0,
+  alpha1: _TGV.alpha1,
+  iterations: _TGV.iterations,
+  erosions: _TGV.erosions,
+  stepSize: _TGV.step_size,
+  tol: _TGV.tol,
+};
+
+export const SWI_DEFAULTS = {
+  hpSigma: _SWI.hp_sigma,
+  scaling: 'tanh',  // PhaseScaling enum (JS-side choice)
+  strength: _SWI.strength,
+  mipWindow: _SWI.mip_window,
+};
+
 // Mask configuration defaults
 export const MASK_CONFIG = {
   defaultThreshold: 15,         // Percentage of max magnitude
   drawingOpacity: 0.5,
   defaultBrushSize: 2
-};
-
-// BET (Brain Extraction Tool) defaults
-export const BET_DEFAULTS = {
-  fractionalIntensity: 0.5,
-  iterations: 1000,
-  subdivisions: 4,
-  erosions: 2
 };
 
 // Mask preparation settings
@@ -78,42 +155,24 @@ export const PROGRESS_CONFIG = {
   animationSpeed: 0.5           // 50% per second - catches up quickly
 };
 
-// TGV (Total Generalized Variation) pipeline defaults
-export const TGV_DEFAULTS = {
-  regularization: 2,
-  iterations: 1000,
-  erosions: 3
-};
+// (TGV_DEFAULTS and SWI_DEFAULTS are now sourced from QSM.rs — see imports above)
 
-// SWI (Susceptibility Weighted Imaging) defaults
-export const SWI_DEFAULTS = {
-  hpSigma: [4, 4, 0],    // High-pass filter sigma in voxels [x, y, z]
-  scaling: 'tanh',        // Phase scaling type
-  strength: 4,            // Phase scaling strength
-  mipWindow: 7            // Minimum intensity projection window (slices)
-};
-
-// QSMART pipeline defaults
+// QSMART pipeline defaults (from QSM.rs QsmartParams)
 export const QSMART_DEFAULTS = {
-  // SDF (Spatial Domain Filtering) parameters
-  sdfSigma1Stage1: 10,
-  sdfSigma2Stage1: 10,
-  sdfSigma1Stage2: 8,
-  sdfSigma2Stage2: 2,
-  sdfSpatialRadius: 8,
-  sdfLowerLim: 0.6,
-  sdfCurvConstant: 500,
-
-  // Vasculature detection parameters (in mm - auto-scaled to voxels)
-  vascSphereRadiusMm: 8.0,      // mm - morphological filter radius
-  frangiScaleMinMm: 0.5,        // mm - minimum vessel radius to detect (QSM.rs/MATLAB demo default)
-  frangiScaleMaxMm: 6.0,        // mm - maximum vessel radius to detect (QSM.rs/MATLAB demo default)
-  frangiScaleRatioMm: 0.5,      // mm - step between scales (QSM.rs/MATLAB demo default)
-  frangiC: 500,                 // noise sensitivity threshold
-
-  // iLSQR solver parameters
-  ilsqrTol: 0.01,
-  ilsqrMaxIter: 50
+  sdfSigma1Stage1: _QSMART.sdf_sigma1_stage1,
+  sdfSigma2Stage1: _QSMART.sdf_sigma2_stage1,
+  sdfSigma1Stage2: _QSMART.sdf_sigma1_stage2,
+  sdfSigma2Stage2: _QSMART.sdf_sigma2_stage2,
+  sdfSpatialRadius: _QSMART.sdf_spatial_radius,
+  sdfLowerLim: _QSMART.sdf_lower_lim,
+  sdfCurvConstant: _QSMART.sdf_curv_constant,
+  vascSphereRadiusMm: _QSMART.vasc_sphere_radius,
+  frangiScaleMinMm: _QSMART.frangi_scale_range[0],
+  frangiScaleMaxMm: _QSMART.frangi_scale_range[1],
+  frangiScaleRatioMm: _QSMART.frangi_scale_ratio,
+  frangiC: _QSMART.frangi_c,
+  ilsqrTol: _QSMART.ilsqr_tol,
+  ilsqrMaxIter: _QSMART.ilsqr_max_iter,
 };
 
 // ROMEO unwrapping defaults
@@ -134,89 +193,46 @@ export const LINEAR_FIT_DEFAULTS = {
   estimateOffset: true
 };
 
-// V-SHARP background removal defaults
-export const VSHARP_DEFAULTS = {
-  threshold: 0.05
-  // maxRadius and minRadius are calculated from voxel size
-};
-
-// SHARP background removal defaults
 export const SHARP_DEFAULTS = {
-  threshold: 0.05
-  // radius is calculated from voxel size
+  threshold: _SHARP.threshold,
 };
 
-// iSMV (iterative SMV) defaults
-export const ISMV_DEFAULTS = {
-  tol: 0.001,
-  maxit: 500
-  // radius is calculated from voxel size
-};
-
-// PDF (Projection onto Dipole Fields) defaults
-export const PDF_DEFAULTS = {
-  tol: 0.00001
-  // maxit is calculated from mask size
-};
-
-// LBV (Laplacian Boundary Value) defaults
-export const LBV_DEFAULTS = {
-  tol: 0.000001,
-  maxit: 500
-};
-
-// TKD (Thresholded K-space Division) defaults
-export const TKD_DEFAULTS = {
-  threshold: 0.15
-};
-
-// TSVD (Truncated SVD) defaults
+// TSVD (Truncated SVD) defaults (shares TKD threshold)
 export const TSVD_DEFAULTS = {
-  threshold: 0.15
+  threshold: _TKD.threshold,
 };
+
+// (VSHARP_DEFAULTS, ISMV_DEFAULTS, PDF_DEFAULTS, LBV_DEFAULTS,
+//  TKD_DEFAULTS, RTS_DEFAULTS, TV_DEFAULTS are now sourced from QSM.rs
+//  — see imports above)
 
 // Tikhonov regularization defaults
 export const TIKHONOV_DEFAULTS = {
-  lambda: 0.01,
-  reg: 'identity'
+  lambda: _TIKHONOV.lambda,
+  reg: _TIKHONOV.reg,
 };
 
-// TV (Total Variation) regularization defaults
-export const TV_DEFAULTS = {
-  lambda: 0.0002,
-  maxIter: 250,
-  tol: 0.001
-};
+// (TV_DEFAULTS, RTS_DEFAULTS sourced from QSM.rs — see imports above)
 
-// RTS (Rapid Two-Step) defaults
-export const RTS_DEFAULTS = {
-  delta: 0.15,
-  mu: 100000,
-  rho: 10,
-  maxIter: 20
-};
-
-// NLTV (Nonlinear Total Variation) defaults
 export const NLTV_DEFAULTS = {
-  lambda: 0.001,
-  mu: 1,
-  maxIter: 250,
-  tol: 0.001,
-  newtonMaxIter: 10
+  lambda: _NLTV.lambda,
+  mu: _NLTV.mu,
+  maxIter: _NLTV.max_iter,
+  tol: _NLTV.tol,
+  newtonMaxIter: _NLTV.newton_iter,
 };
 
-// MEDI (Morphology Enabled Dipole Inversion) defaults
 export const MEDI_DEFAULTS = {
-  lambda: 7.5e-5,
-  percentage: 0.3,
-  maxIter: 30,
-  cgMaxIter: 10,
-  cgTol: 0.01,
-  tol: 0.1,
-  smv: false,
-  smvRadius: 5,
-  merit: false,
-  dataWeighting: 1
+  lambda: _MEDI.lambda,
+  percentage: _MEDI.percentage,
+  maxIter: _MEDI.max_iter,
+  cgMaxIter: _MEDI.cg_max_iter,
+  cgTol: _MEDI.cg_tol,
+  tol: _MEDI.tol,
+  smv: _MEDI.smv,
+  smvRadius: _MEDI.smv_radius,
+  merit: _MEDI.merit,
+  dataWeighting: _MEDI.data_weighting,
 };
 
 // Stage display names for UI

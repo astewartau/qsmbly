@@ -99,9 +99,17 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Build WASM
         working-directory: rust-wasm
         run: wasm-pack build --target web --release
+
+      - name: Generate algorithm defaults from QSM.rs
+        run: node scripts/generate-defaults.mjs
 
       - name: Upload WASM to release
         if: github.event_name == 'release'

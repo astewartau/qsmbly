@@ -38,7 +38,7 @@ if ! command -v cargo &> /dev/null; then
 fi
 
 # Build WASM
-echo "[1/3] Building WASM with wasm-pack..."
+echo "[1/4] Building WASM with wasm-pack..."
 if [[ -n "$SIMD_FLAG" ]]; then
     echo "      SIMD acceleration enabled (requires Chrome 91+, Firefox 89+, Safari 16.4+)"
 fi
@@ -46,7 +46,12 @@ cd "$RUST_DIR"
 wasm-pack build --target web --release $SIMD_FLAG
 
 echo ""
-echo "[2/3] Copying WASM files to serve directory..."
+echo "[2/4] Generating algorithm defaults from QSM.rs..."
+cd "$SCRIPT_DIR"
+node scripts/generate-defaults.mjs
+
+echo ""
+echo "[3/4] Copying WASM files to serve directory..."
 cp "$RUST_DIR/pkg/qsm_wasm.js" "$WASM_DIR/"
 cp "$RUST_DIR/pkg/qsm_wasm_bg.wasm" "$WASM_DIR/"
 cp "$RUST_DIR/pkg/qsm_wasm.d.ts" "$WASM_DIR/" 2>/dev/null || true
@@ -61,7 +66,7 @@ if [ -f "$RUST_DIR/pkg/romeo_wasm.js" ]; then
 fi
 
 echo ""
-echo "[3/3] Build complete!"
+echo "[4/4] Build complete!"
 echo ""
 echo "WASM files in $WASM_DIR:"
 ls -lh "$WASM_DIR"/*.wasm "$WASM_DIR"/*.js 2>/dev/null | awk '{print "  " $9 " (" $5 ")"}'
