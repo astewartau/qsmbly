@@ -2349,6 +2349,33 @@ pub fn create_mip_wasm(
 }
 
 // ============================================================================
+// R2* / T2* Mapping
+// ============================================================================
+
+/// R2* mapping using ARLO algorithm
+///
+/// # Arguments
+/// * `magnitude` - Interleaved multi-echo magnitude data (n_voxels × n_echoes)
+/// * `mask` - Binary mask (n_voxels)
+/// * `echo_times` - Echo times in seconds
+/// * `nx`, `ny`, `nz` - Array dimensions
+///
+/// # Returns
+/// R2* map (n_voxels). Returns empty vec on error.
+#[wasm_bindgen]
+pub fn r2star_arlo_wasm(
+    magnitude: &[f64],
+    mask: &[u8],
+    echo_times: &[f64],
+    nx: usize, ny: usize, nz: usize,
+) -> Vec<f64> {
+    console_log!("WASM R2* ARLO: {}x{}x{}, {} echoes", nx, ny, nz, echo_times.len());
+    let (r2star, _s0) = qsm_core::utils::r2star_arlo(magnitude, mask, echo_times, nx, ny, nz);
+    console_log!("WASM R2* complete");
+    r2star
+}
+
+// ============================================================================
 // Algorithm Default Parameters
 // ============================================================================
 

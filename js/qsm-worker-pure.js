@@ -353,6 +353,46 @@ async function runPipeline(data) {
     postLog(`Mask coverage: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
 
     // =========================================================================
+    // Supplementary: R2*/T2* mapping (if 3+ echoes with magnitude)
+    // =========================================================================
+    const doR2star = pipelineSettings?.doR2star && nEchoes >= 3 && magnitude4d.length >= 3;
+    const doT2star = pipelineSettings?.doT2star && nEchoes >= 3 && magnitude4d.length >= 3;
+
+    if (doR2star || doT2star) {
+      postLog(`Computing R2* map from ${nEchoes} echoes...`);
+      postProgress(0.13, 'Computing R2* map...');
+
+      // Interleave magnitude: [vox0_echo0, vox0_echo1, ..., vox1_echo0, ...]
+      const interleaved = new Float64Array(voxelCount * nEchoes);
+      for (let e = 0; e < nEchoes; e++) {
+        for (let v = 0; v < voxelCount; v++) {
+          interleaved[v * nEchoes + e] = magnitude4d[e][v];
+        }
+      }
+
+      // Echo times in seconds
+      const echoTimesSec = new Float64Array(echoTimes.map(t => t / 1000));
+
+      const r2starMap = new Float64Array(wasmModule.r2star_arlo_wasm(
+        interleaved, mask, echoTimesSec, nx, ny, nz
+      ));
+
+      if (doR2star) {
+        sendStageData('r2star', r2starMap, dims, voxelSize, affine, 'R2* Map (1/s)');
+        postLog('R2* map computed');
+      }
+
+      if (doT2star) {
+        const t2starMap = new Float64Array(voxelCount);
+        for (let i = 0; i < voxelCount; i++) {
+          t2starMap[i] = (mask[i] && r2starMap[i] > 0) ? (1.0 / r2starMap[i]) : 0;
+        }
+        sendStageData('t2star', t2starMap, dims, voxelSize, affine, 'T2* Map (s)');
+        postLog('T2* map computed');
+      }
+    }
+
+    // =========================================================================
     // Step 3: Phase unwrapping (15% - 40%)
     // =========================================================================
     let unwrappedPhase;

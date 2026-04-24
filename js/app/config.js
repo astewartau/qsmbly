@@ -255,7 +255,9 @@ export const STAGE_DISPLAY_NAMES = {
   'bottomHat': 'Bottom Hat',
   'unwrapped': 'Unwrapped',
   'swi': 'SWI',
-  'mip': 'mIP'
+  'mip': 'mIP',
+  'r2star': 'R2*',
+  't2star': 'T2*'
 };
 
 // Pipeline method options
