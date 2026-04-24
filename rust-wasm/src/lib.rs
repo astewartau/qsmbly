@@ -2349,6 +2349,95 @@ pub fn create_mip_wasm(
 }
 
 // ============================================================================
+// Algorithm Default Parameters
+// ============================================================================
+
+/// Get default RTS parameters as JSON string
+#[wasm_bindgen]
+pub fn get_rts_defaults() -> String {
+    let p = qsm_core::inversion::rts::RtsParams::default();
+    format!(
+        r#"{{"delta":{},"mu":{},"rho":{},"tol":{},"max_iter":{},"lsmr_iter":{}}}"#,
+        p.delta, p.mu, p.rho, p.tol, p.max_iter, p.lsmr_iter
+    )
+}
+
+/// Get default TV-ADMM parameters as JSON string
+#[wasm_bindgen]
+pub fn get_tv_defaults() -> String {
+    let p = qsm_core::inversion::tv::TvParams::default();
+    format!(
+        r#"{{"lambda":{},"rho":{},"tol":{},"max_iter":{}}}"#,
+        p.lambda, p.rho, p.tol, p.max_iter
+    )
+}
+
+/// Get default TKD parameters as JSON string
+#[wasm_bindgen]
+pub fn get_tkd_defaults() -> String {
+    let p = qsm_core::inversion::tkd::TkdParams::default();
+    format!(r#"{{"threshold":{}}}"#, p.threshold)
+}
+
+/// Get default TGV parameters as JSON string
+#[wasm_bindgen]
+pub fn get_tgv_defaults() -> String {
+    let p = qsm_core::inversion::tgv::TgvParams::default();
+    format!(
+        r#"{{"alpha0":{},"alpha1":{},"iterations":{},"erosions":{},"step_size":{},"tol":{}}}"#,
+        p.alpha0, p.alpha1, p.iterations, p.erosions, p.step_size, p.tol
+    )
+}
+
+/// Get default BET parameters as JSON string
+#[wasm_bindgen]
+pub fn get_bet_defaults() -> String {
+    let p = qsm_core::bet::BetParams::default();
+    format!(
+        r#"{{"fractional_intensity":{},"smoothness":{},"gradient_threshold":{},"iterations":{},"subdivisions":{}}}"#,
+        p.fractional_intensity, p.smoothness, p.gradient_threshold, p.iterations, p.subdivisions
+    )
+}
+
+/// Get default V-SHARP parameters as JSON string
+#[wasm_bindgen]
+pub fn get_vsharp_defaults() -> String {
+    let p = qsm_core::bgremove::VsharpParams::default();
+    format!(r#"{{"threshold":{}}}"#, p.threshold)
+}
+
+/// Get default PDF parameters as JSON string
+#[wasm_bindgen]
+pub fn get_pdf_defaults() -> String {
+    let p = qsm_core::bgremove::PdfParams::default();
+    format!(r#"{{"tol":{}}}"#, p.tol)
+}
+
+/// Get default LBV parameters as JSON string
+#[wasm_bindgen]
+pub fn get_lbv_defaults() -> String {
+    let p = qsm_core::bgremove::LbvParams::default();
+    format!(r#"{{"tol":{}}}"#, p.tol)
+}
+
+/// Get default iSMV parameters as JSON string
+#[wasm_bindgen]
+pub fn get_ismv_defaults() -> String {
+    let p = qsm_core::bgremove::IsmvParams::default();
+    format!(r#"{{"tol":{},"max_iter":{}}}"#, p.tol, p.max_iter)
+}
+
+/// Get default SWI parameters as JSON string
+#[wasm_bindgen]
+pub fn get_swi_defaults() -> String {
+    let p = qsm_core::swi::SwiParams::default();
+    format!(
+        r#"{{"hp_sigma":[{},{},{}],"strength":{},"mip_window":{}}}"#,
+        p.hp_sigma[0], p.hp_sigma[1], p.hp_sigma[2], p.strength, p.mip_window
+    )
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
