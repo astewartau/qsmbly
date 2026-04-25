@@ -223,12 +223,14 @@ class QSMApp {
     this.showStageButtons();
     document.getElementById('cancelPipeline').disabled = true;
     document.getElementById('runSWI').disabled = false;
+    document.getElementById('runT2starR2star').disabled = false;
     this.updateEchoInfo();
   }
 
   _onPipelineError() {
     document.getElementById('cancelPipeline').disabled = true;
     document.getElementById('runSWI').disabled = false;
+    document.getElementById('runT2starR2star').disabled = false;
     this.updateEchoInfo();
   }
 
@@ -450,6 +452,7 @@ class QSMApp {
     document.getElementById('savePipelineSettings')?.addEventListener('click', () => this.savePipelineSettings());
     document.getElementById('runPipelineSidebar')?.addEventListener('click', () => this.runPipelineFromSidebar());
     document.getElementById('runSWI')?.addEventListener('click', () => this.runSWI());
+    document.getElementById('runT2starR2star')?.addEventListener('click', () => this.runT2starR2star());
 
     // BET settings modal
     document.getElementById('closeBetSettings')?.addEventListener('click', () => this.betModal?.close());
@@ -1440,12 +1443,6 @@ class QSMApp {
     const hasMaskFile = this.fileIOController.hasMask();
     const hasPrepared = this.maskPrepSettings.prepared;
 
-    // Show/hide the "or generate from magnitude" divider
-    const divider = document.getElementById('maskDivider');
-    if (divider) {
-      divider.style.display = hasPrepared ? '' : 'none';
-    }
-
     // When mask file uploaded: disable Threshold/BET generation controls + show info note
     const maskFileNote = document.getElementById('maskFileUploadedNote');
     if (hasMaskFile) {
@@ -2425,6 +2422,14 @@ class QSMApp {
         const description = this.results[stage].description || stage;
         this.updateOutput(`Displaying ${description}...`);
         await this.loadAndVisualizeFile(this.results[stage].file, description);
+        // Re-apply saved display range
+        const displayRange = this.results[stage].displayRange;
+        if (displayRange && this.nv.volumes?.length > 0) {
+          const vol = this.nv.volumes[0];
+          vol.cal_min = displayRange[0];
+          vol.cal_max = displayRange[1];
+          this.nv.updateGLVolume();
+        }
         return;
       }
 
@@ -2439,7 +2444,7 @@ class QSMApp {
   // Display stage data as it arrives during pipeline processing
   async displayLiveStageData(data) {
     try {
-      const { stage, data: stageBytes, description } = data;
+      const { stage, data: stageBytes, description, displayRange } = data;
 
       // Show the stage buttons section as soon as first result arrives
       this.showStageButtons();
@@ -2457,8 +2462,16 @@ class QSMApp {
       // Load in viewer
       await this.loadAndVisualizeFile(file, description);
 
-      // Cache the result with description
-      this.results[stage] = { file: file, path: `${stage}.nii`, description: description };
+      // Apply custom display range if provided (e.g. robust percentile range for T2*/R2*)
+      if (displayRange && this.nv.volumes?.length > 0) {
+        const vol = this.nv.volumes[0];
+        vol.cal_min = displayRange[0];
+        vol.cal_max = displayRange[1];
+        this.nv.updateGLVolume();
+      }
+
+      // Cache the result with description and display range
+      this.results[stage] = { file: file, path: `${stage}.nii`, description: description, displayRange: displayRange };
 
       this.updateOutput(`Displaying: ${description}`);
     } catch (error) {
@@ -2905,6 +2918,67 @@ class QSMApp {
 
       document.getElementById('cancelPipeline').disabled = false;
       document.getElementById('runSWI').disabled = true;
+
+    } catch (error) {
+      this.updateOutput(`Error: ${error.message}`);
+      this.setProgress(0, 'Failed');
+      console.error(error);
+    }
+  }
+
+  async runT2starR2star() {
+    const mode = this.fileIOController.getInputMode();
+    if (mode !== 'raw') {
+      this.updateOutput("T2*/R2* requires raw magnitude data (current mode: " + mode + ")");
+      return;
+    }
+
+    const magCount = this.fileIOController.buckets.magnitude.length;
+    if (magCount < 3) {
+      this.updateOutput(`T2*/R2* mapping requires 3+ echo magnitudes (found ${magCount})`);
+      return;
+    }
+
+    try {
+      const magnitudeBuffers = [];
+      for (const entry of this.fileIOController.buckets.magnitude) {
+        if (entry?.file) {
+          magnitudeBuffers.push(await entry.file.arrayBuffer());
+        }
+      }
+
+      const echoTimes = this.getEchoTimesFromInputs();
+      if (echoTimes.length < 3) {
+        this.updateOutput(`T2*/R2* mapping requires echo times for 3+ echoes (found ${echoTimes.length}). Check that JSON sidecars with EchoTime are loaded.`);
+        return;
+      }
+
+      let customMaskBuffer = null;
+      if (this.currentMaskData && this.magnitudeFileBytes) {
+        customMaskBuffer = this.createMaskNifti(this.currentMaskData);
+      }
+
+      const preparedMagnitude = this.preparedMagnitudeData
+        ? Array.from(this.preparedMagnitudeData)
+        : null;
+
+      await this.pipelineExecutor.initialize();
+      this.pipelineExecutor.pipelineRunning = true;
+      this.updateOutput("Starting T2*/R2* mapping...");
+
+      this.pipelineExecutor.getWorker().postMessage({
+        type: 'runT2starR2star',
+        data: {
+          magnitudeBuffers,
+          maskThreshold: this.maskThreshold,
+          customMaskBuffer,
+          preparedMagnitude,
+          echoTimes
+        }
+      });
+
+      document.getElementById('cancelPipeline').disabled = false;
+      document.getElementById('runT2starR2star').disabled = true;
 
     } catch (error) {
       this.updateOutput(`Error: ${error.message}`);

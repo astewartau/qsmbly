@@ -35,7 +35,7 @@ function postComplete(results) {
 
 // Send intermediate stage data for live display
 // Set displayNow=false to cache without displaying (e.g., for auxiliary outputs)
-function sendStageData(stage, data, dims, voxelSize, affine, description, displayNow = true) {
+function sendStageData(stage, data, dims, voxelSize, affine, description, displayNow = true, displayRange = null) {
   // Save as NIfTI and send to main thread
   const niftiBytes = wasmModule.save_nifti_wasm(
     data,
@@ -43,7 +43,22 @@ function sendStageData(stage, data, dims, voxelSize, affine, description, displa
     voxelSize[0], voxelSize[1], voxelSize[2],
     affine
   );
-  self.postMessage({ type: 'stageData', stage, data: niftiBytes, description, displayNow });
+  self.postMessage({ type: 'stageData', stage, data: niftiBytes, description, displayNow, displayRange });
+}
+
+/// Compute a robust display range for non-negative data using percentiles.
+function computeRobustRange(data, mask, lowPct = 2, highPct = 98) {
+  const values = [];
+  for (let i = 0; i < data.length; i++) {
+    if ((!mask || mask[i]) && data[i] !== 0 && isFinite(data[i])) {
+      values.push(data[i]);
+    }
+  }
+  if (values.length === 0) return null;
+  values.sort((a, b) => a - b);
+  const lo = values[Math.floor(values.length * lowPct / 100)];
+  const hi = values[Math.floor(values.length * highPct / 100)];
+  return [lo, hi];
 }
 
 async function initializeWasm() {
@@ -351,46 +366,6 @@ async function runPipeline(data) {
 
     const maskCount = mask.reduce((a, b) => a + b, 0);
     postLog(`Mask coverage: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
-
-    // =========================================================================
-    // Supplementary: R2*/T2* mapping (if 3+ echoes with magnitude)
-    // =========================================================================
-    const doR2star = pipelineSettings?.doR2star && nEchoes >= 3 && magnitude4d.length >= 3;
-    const doT2star = pipelineSettings?.doT2star && nEchoes >= 3 && magnitude4d.length >= 3;
-
-    if (doR2star || doT2star) {
-      postLog(`Computing R2* map from ${nEchoes} echoes...`);
-      postProgress(0.13, 'Computing R2* map...');
-
-      // Interleave magnitude: [vox0_echo0, vox0_echo1, ..., vox1_echo0, ...]
-      const interleaved = new Float64Array(voxelCount * nEchoes);
-      for (let e = 0; e < nEchoes; e++) {
-        for (let v = 0; v < voxelCount; v++) {
-          interleaved[v * nEchoes + e] = magnitude4d[e][v];
-        }
-      }
-
-      // Echo times in seconds
-      const echoTimesSec = new Float64Array(echoTimes.map(t => t / 1000));
-
-      const r2starMap = new Float64Array(wasmModule.r2star_arlo_wasm(
-        interleaved, mask, echoTimesSec, nx, ny, nz
-      ));
-
-      if (doR2star) {
-        sendStageData('r2star', r2starMap, dims, voxelSize, affine, 'R2* Map (1/s)');
-        postLog('R2* map computed');
-      }
-
-      if (doT2star) {
-        const t2starMap = new Float64Array(voxelCount);
-        for (let i = 0; i < voxelCount; i++) {
-          t2starMap[i] = (mask[i] && r2starMap[i] > 0) ? (1.0 / r2starMap[i]) : 0;
-        }
-        sendStageData('t2star', t2starMap, dims, voxelSize, affine, 'T2* Map (s)');
-        postLog('T2* map computed');
-      }
-    }
 
     // =========================================================================
     // Step 3: Phase unwrapping (15% - 40%)
@@ -2923,6 +2898,98 @@ async function runDipoleInversion(
 // =========================================================================
 // SWI-only pipeline
 // =========================================================================
+async function runT2starR2starPipeline(data) {
+  const {
+    magnitudeBuffers, maskThreshold, customMaskBuffer, preparedMagnitude, echoTimes
+  } = data;
+
+  try {
+    const nEchoes = magnitudeBuffers.length;
+    if (nEchoes < 3) {
+      throw new Error(`T2*/R2* mapping requires 3+ echoes, got ${nEchoes}`);
+    }
+
+    // Step 1: Load magnitude data
+    postProgress(0.05, 'Loading magnitude data...');
+    postLog(`T2*/R2*: Loading ${nEchoes} echo magnitudes...`);
+
+    const magnitude4d = [];
+    let dims, voxelSize, affine;
+    for (let i = 0; i < nEchoes; i++) {
+      const result = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffers[i]));
+      magnitude4d.push(new Float64Array(result.data));
+      if (i === 0) {
+        dims = Array.from(result.dims);
+        voxelSize = Array.from(result.voxelSize);
+        affine = Array.from(result.affine);
+      }
+    }
+
+    const [nx, ny, nz] = dims;
+    const voxelCount = nx * ny * nz;
+    postLog(`Data: ${nx}x${ny}x${nz}, ${nEchoes} echoes`);
+
+    // Step 2: Create mask
+    postProgress(0.15, 'Creating mask...');
+    const thresholdFraction = (maskThreshold || 15) / 100;
+    const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
+    const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
+
+    let mask;
+    if (hasCustomMask) {
+      const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+      mask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
+      }
+    } else {
+      const maskMagnitude = hasPreparedMagnitude
+        ? new Float64Array(preparedMagnitude)
+        : magnitude4d[0];
+      mask = createThresholdMask(maskMagnitude, thresholdFraction);
+    }
+
+    // Step 3: Compute R2* via ARLO
+    postProgress(0.30, 'Computing R2* map...');
+    postLog(`Computing R2* map (ARLO, ${nEchoes} echoes)...`);
+
+    const interleaved = new Float64Array(voxelCount * nEchoes);
+    for (let e = 0; e < nEchoes; e++) {
+      for (let v = 0; v < voxelCount; v++) {
+        interleaved[v * nEchoes + e] = magnitude4d[e][v];
+      }
+    }
+
+    const echoTimesSec = new Float64Array(echoTimes.map(t => t / 1000));
+
+    const r2starMap = new Float64Array(wasmModule.r2star_arlo_wasm(
+      interleaved, mask, echoTimesSec, nx, ny, nz
+    ));
+
+    const r2range = computeRobustRange(r2starMap, mask, 2, 98);
+    sendStageData('r2star', r2starMap, dims, voxelSize, affine, 'R2* Map (1/s)', true, r2range ? [0, r2range[1]] : null);
+    postLog('R2* map computed');
+
+    // Step 4: Compute T2* = 1/R2*
+    postProgress(0.80, 'Computing T2* map...');
+    const t2starMap = new Float64Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      t2starMap[i] = (mask[i] && r2starMap[i] > 0) ? (1.0 / r2starMap[i]) : 0;
+    }
+    const t2range = computeRobustRange(t2starMap, mask, 2, 90);
+    sendStageData('t2star', t2starMap, dims, voxelSize, affine, 'T2* Map (s)', true, t2range ? [0, t2range[1]] : null);
+    postLog('T2* map computed');
+
+    postProgress(1.0, 'T2*/R2* complete!');
+    postLog('T2*/R2* mapping completed successfully!');
+    postComplete({ success: true });
+
+  } catch (error) {
+    postError(error.message);
+    throw error;
+  }
+}
+
 async function runSWIPipeline(data) {
   const {
     magnitudeBuffers, phaseBuffers,
@@ -3015,6 +3082,10 @@ self.onmessage = async function (e) {
 
       case 'runSWI':
         await runSWIPipeline(data);
+        break;
+
+      case 'runT2starR2star':
+        await runT2starR2starPipeline(data);
         break;
 
       case 'biasCorrection':

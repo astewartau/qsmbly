@@ -194,7 +194,7 @@ export class ViewerController {
   updateDataUnits(description) {
     const el = document.getElementById('dataUnits');
     if (!el) return;
-    const knownUnits = ['Hz', 'ppm', 'rad', 'rad/s', 'arb', 'T', 'ms'];
+    const knownUnits = ['Hz', 'ppm', 'rad', 'rad/s', 'arb', 'T', 'ms', 's', '1/s'];
     const match = description && description.match(/\(([^)]+)\)\s*$/);
     if (match && knownUnits.includes(match[1])) {
       el.textContent = `Units: ${match[1]}`;

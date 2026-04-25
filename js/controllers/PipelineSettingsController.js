@@ -220,8 +220,6 @@ export class PipelineSettingsController {
 
     return {
       combinedMethod: this._getEl('combinedMethod'),
-      doR2star: this._getChecked('doR2star') ?? false,
-      doT2star: this._getChecked('doT2star') ?? false,
       swi: {
         hpSigma: [
           parseFloat(this._getEl('swiHpSigmaX')),
