@@ -471,10 +471,14 @@ class QSMApp {
       const scaling = document.getElementById('sidebarSwiScaling')?.value || 'tanh';
       const strength = parseFloat(document.getElementById('sidebarSwiStrength')?.value) || 4;
       const mipWindow = parseInt(document.getElementById('sidebarSwiMipWindow')?.value) || 7;
+      const hpSigmaX = parseFloat(document.getElementById('sidebarSwiHpSigmaX')?.value) || 4;
+      const hpSigmaY = parseFloat(document.getElementById('sidebarSwiHpSigmaY')?.value) || 4;
+      const hpSigmaZ = parseFloat(document.getElementById('sidebarSwiHpSigmaZ')?.value) || 0;
       if (this.pipelineSettings.swi) {
         this.pipelineSettings.swi.scaling = scaling;
         this.pipelineSettings.swi.strength = strength;
         this.pipelineSettings.swi.mipWindow = mipWindow;
+        this.pipelineSettings.swi.hpSigma = [hpSigmaX, hpSigmaY, hpSigmaZ];
       }
       this.runSWI();
     });
