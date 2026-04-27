@@ -40,6 +40,10 @@ const defaults = {
   NLTV_DEFAULTS: JSON.parse(wasmModule.get_nltv_defaults()),
   MEDI_DEFAULTS: JSON.parse(wasmModule.get_medi_defaults()),
   QSMART_DEFAULTS: JSON.parse(wasmModule.get_qsmart_defaults()),
+  ROMEO_DEFAULTS: JSON.parse(wasmModule.get_romeo_defaults()),
+  MCPC3DS_DEFAULTS: JSON.parse(wasmModule.get_mcpc3ds_defaults()),
+  LINEAR_FIT_DEFAULTS: JSON.parse(wasmModule.get_linear_fit_defaults()),
+  HOMOGENEITY_DEFAULTS: JSON.parse(wasmModule.get_homogeneity_defaults()),
 };
 
 // Generate JS file

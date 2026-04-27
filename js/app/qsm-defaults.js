@@ -42,7 +42,9 @@ export const BET_DEFAULTS = {
 };
 
 export const VSHARP_DEFAULTS = {
-  "threshold": 0.001
+  "threshold": 0.001,
+  "max_radius_factor": 18,
+  "min_radius_factor": 2
 };
 
 export const PDF_DEFAULTS = {
@@ -55,7 +57,8 @@ export const LBV_DEFAULTS = {
 
 export const ISMV_DEFAULTS = {
   "tol": 0.001,
-  "max_iter": 500
+  "max_iter": 500,
+  "radius_factor": 2
 };
 
 export const SWI_DEFAULTS = {
@@ -64,12 +67,14 @@ export const SWI_DEFAULTS = {
     4,
     0
   ],
+  "scaling": "tanh",
   "strength": 4,
   "mip_window": 7
 };
 
 export const SHARP_DEFAULTS = {
-  "threshold": 0.05
+  "threshold": 0.05,
+  "radius_factor": 18
 };
 
 export const TIKHONOV_DEFAULTS = {
@@ -88,7 +93,7 @@ export const NLTV_DEFAULTS = {
 export const MEDI_DEFAULTS = {
   "lambda": 0.000075,
   "merit": false,
-  "smv": false,
+  "smv": true,
   "smv_radius": 5,
   "data_weighting": 1,
   "percentage": 0.3,
@@ -115,4 +120,28 @@ export const QSMART_DEFAULTS = {
   "frangi_c": 500,
   "ilsqr_tol": 0.01,
   "ilsqr_max_iter": 50
+};
+
+export const ROMEO_DEFAULTS = {
+  "phase_gradient_coherence": true,
+  "mag_coherence": true,
+  "mag_weight": true
+};
+
+export const MCPC3DS_DEFAULTS = {
+  "sigma": [
+    4,
+    4,
+    4
+  ]
+};
+
+export const LINEAR_FIT_DEFAULTS = {
+  "estimate_offset": true,
+  "reliability_threshold_percentile": 90
+};
+
+export const HOMOGENEITY_DEFAULTS = {
+  "sigma_mm": 7,
+  "nbox": 3
 };

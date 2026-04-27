@@ -47,6 +47,25 @@ function sendStageData(stage, data, dims, voxelSize, affine, description, displa
 }
 
 /// Compute a robust display range for non-negative data using percentiles.
+/// Apply QSM mean referencing: subtract mean of masked voxels, zero outside mask.
+function applyMeanReference(data, mask) {
+  let sum = 0;
+  let count = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (mask[i]) {
+      sum += data[i];
+      count++;
+    }
+  }
+  if (count === 0) return data;
+  const mean = sum / count;
+  const result = new Float64Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    result[i] = mask[i] ? (data[i] - mean) : 0;
+  }
+  return result;
+}
+
 function computeRobustRange(data, mask, lowPct = 2, highPct = 98) {
   const values = [];
   for (let i = 0; i < data.length; i++) {
@@ -925,6 +944,12 @@ async function runPipeline(data) {
     }
     postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
 
+    // Apply QSM referencing if enabled
+    if (pipelineSettings?.referenceMean !== false) {
+      postLog('Applying mean referencing...');
+      qsmResult = applyMeanReference(qsmResult, erodedMask);
+    }
+
     // Send QSM result for display
     postProgress(0.95, 'Sending QSM result...');
     sendStageData('final', qsmResult, dims, voxelSize, affine, 'QSM Result (ppm)');
@@ -945,7 +970,8 @@ async function runPipeline(data) {
 async function runTgvCore({
   tgvInputPhase, mask, dims, voxelSize, affine,
   te, fieldstrength, tgvSettings,
-  progressStart = 0.40, progressEnd = 0.95, label = 'QSM Result (ppm) - TGV'
+  progressStart = 0.40, progressEnd = 0.95, label = 'QSM Result (ppm) - TGV',
+  referenceMean = true,
 }) {
   const [nx, ny, nz] = dims;
   const [vsx, vsy, vsz] = voxelSize;
@@ -989,6 +1015,12 @@ async function runTgvCore({
     }
   }
   postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
+
+  // Apply QSM referencing if enabled
+  if (referenceMean) {
+    postLog('Applying mean referencing...');
+    qsmResult = applyMeanReference(qsmResult, mask);
+  }
 
   postProgress(progressEnd, 'Sending QSM result...');
   sendStageData('final', qsmResult, dims, voxelSize, affine, label);
@@ -1313,7 +1345,8 @@ async function runTgvPipeline(data) {
     await runTgvCore({
       tgvInputPhase, mask, dims, voxelSize, affine,
       te, fieldstrength, tgvSettings,
-      progressStart: 0.40, progressEnd: 0.95
+      progressStart: 0.40, progressEnd: 0.95,
+      referenceMean: pipelineSettings?.referenceMean !== false,
     });
 
     postProgress(1.0, 'TGV pipeline complete!');
@@ -1617,6 +1650,12 @@ async function runQsmartCore({
     }
   }
   postLog(`QSMART QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
+
+  // Apply QSM referencing if enabled
+  if (pipelineSettings?.referenceMean !== false) {
+    postLog('Applying mean referencing...');
+    qsmResult = applyMeanReference(qsmResult, mask);
+  }
 
   postProgress(0.95, 'Sending QSMART result...');
   sendStageData('final', qsmResult, dims, voxelSize, affine, 'QSMART QSM (ppm)');
@@ -2196,6 +2235,12 @@ async function runTotalFieldPipeline(data) {
     }
     postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
 
+    // Apply QSM referencing if enabled
+    if (pipelineSettings?.referenceMean !== false) {
+      postLog('Applying mean referencing...');
+      qsmResult = applyMeanReference(qsmResult, erodedMask);
+    }
+
     postProgress(0.95, 'Sending QSM result...');
     sendStageData('final', qsmResult, dims, voxelSize, affine, 'QSM Result (ppm)');
 
@@ -2352,6 +2397,12 @@ async function runLocalFieldPipeline(data) {
     }
     postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
 
+    // Apply QSM referencing if enabled
+    if (pipelineSettings?.referenceMean !== false) {
+      postLog('Applying mean referencing...');
+      qsmResult = applyMeanReference(qsmResult, mask);
+    }
+
     postProgress(0.95, 'Sending QSM result...');
     sendStageData('final', qsmResult, dims, voxelSize, affine, 'QSM Result (ppm)');
 
@@ -2490,7 +2541,8 @@ async function runTgvFieldMapPipeline(data) {
       tgvInputPhase, mask, dims, voxelSize, affine,
       te, fieldstrength, tgvSettings,
       progressStart: 0.15, progressEnd: 0.95,
-      label: `QSM Result (ppm) - TGV (from ${fieldLabel} field)`
+      label: `QSM Result (ppm) - TGV (from ${fieldLabel} field)`,
+      referenceMean: pipelineSettings?.referenceMean !== false,
     });
 
     postProgress(1.0, 'TGV pipeline complete!');

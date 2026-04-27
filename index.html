@@ -333,12 +333,33 @@
           Supplementary Images
         </h2>
         <div class="section-content">
-          <button class="btn btn-primary" id="runSWI" style="width: 100%; margin-bottom: var(--space-xs);">
+          <h5 style="margin: 0 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">SWI</h5>
+          <div class="param-group">
+            <label class="param-label" for="sidebarSwiScaling">Phase Scaling</label>
+            <select id="sidebarSwiScaling">
+              <option value="tanh" selected>Tanh (default)</option>
+              <option value="negative_tanh">Negative Tanh</option>
+              <option value="positive">Positive</option>
+              <option value="negative">Negative</option>
+              <option value="triangular">Triangular</option>
+            </select>
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="sidebarSwiStrength">Strength</label>
+            <input type="number" id="sidebarSwiStrength" value="4" min="1" max="20" step="1" style="width: 100%;">
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="sidebarSwiMipWindow">MIP Window (slices)</label>
+            <input type="number" id="sidebarSwiMipWindow" value="7" min="1" max="30" step="1" style="width: 100%;">
+          </div>
+          <button class="btn btn-primary" id="runSWI" style="width: 100%;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
             <span>Compute SWI</span>
           </button>
+          <hr style="border: none; border-top: 1px solid var(--color-border); margin: var(--space-sm) 0;">
+          <h5 style="margin: 0 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">T2* / R2*</h5>
           <button class="btn btn-primary" id="runT2starR2star" style="width: 100%;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"/>
@@ -437,6 +458,17 @@
         </button>
         </div>
       </section>
+      </div>
+
+      <!-- Command Preview -->
+      <div style="padding: var(--space-xs) var(--space-sm);">
+        <button class="btn btn-secondary btn-sm" id="previewCommand" style="width: 100%;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+          </svg>
+          Preview qsmxt.rs Command
+        </button>
       </div>
 
       <!-- Status Bar (fixed at bottom) -->
@@ -547,7 +579,7 @@
 
       <!-- Viewer Info Bar -->
       <div class="viewer-info">
-        <span id="intensity">Upload an image to begin</span>
+        <span id="intensity"></span>
       </div>
 
       <!-- Console -->
@@ -1175,6 +1207,20 @@
             </div>
           </div>
         </div>
+
+        <!-- ============================================================ -->
+        <!-- Referencing Section -->
+        <!-- ============================================================ -->
+        <div class="settings-section">
+          <h4>QSM Referencing</h4>
+          <div class="param-group">
+            <label class="param-label">
+              <input type="checkbox" id="qsmReferenceMean" checked> Subtract mean within mask
+            </label>
+            <div class="param-hint">Zero-centers susceptibility values by subtracting the mean of all masked voxels. Recommended for most applications.</div>
+          </div>
+        </div>
+
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="resetPipelineSettings">Reset Defaults</button>
@@ -1225,6 +1271,32 @@
 
   <!-- Privacy Modal -->
   <!-- About Modal -->
+  <!-- Command Preview Modal -->
+  <div class="modal-overlay" id="commandPreviewModal">
+    <div class="modal command-modal">
+      <div class="modal-header">
+        <h3>qsmxt.rs Command</h3>
+        <button class="modal-close" id="closeCommandPreview">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="command-modal-description">
+          Run this command with <a href="https://github.com/astewartau/qsmxt.rs" target="_blank" rel="noopener">qsmxt.rs</a> to process a full BIDS dataset with your current settings:
+        </p>
+        <pre id="commandPreviewText" class="command-modal-code"></pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="closeCommandPreviewBtn">Close</button>
+        <button class="btn btn-primary" id="copyCommand">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          Copy to Clipboard
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="aboutModal">
     <div class="modal about-modal">
       <div class="modal-header">
@@ -2550,6 +2622,44 @@
 
     .about-version-value a:hover {
       text-decoration: underline;
+    }
+
+    /* Command modal */
+    .command-modal {
+      max-width: 600px;
+    }
+
+    .command-modal-description {
+      color: var(--color-text-muted);
+      font-size: 0.85rem;
+      margin-bottom: var(--space-sm);
+      line-height: 1.5;
+    }
+
+    .command-modal-description a {
+      color: var(--color-primary);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .command-modal-description a:hover {
+      text-decoration: underline;
+      color: var(--color-primary-hover);
+    }
+
+    .command-modal-code {
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      padding: var(--space-md);
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--color-accent-green, #4ade80);
+      max-height: 300px;
+      overflow-y: auto;
+      line-height: 1.6;
+      margin: 0;
     }
 
     /* Citations modal */

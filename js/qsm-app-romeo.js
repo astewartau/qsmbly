@@ -18,6 +18,7 @@ import { DicomController } from './controllers/DicomController.js';
 import { DicompareController } from './controllers/DicompareController.js';
 import { DicompareReportRenderer } from './modules/ui/DicompareReportRenderer.js';
 import * as QSMConfig from './app/config.js';
+import { generateQsmxtCommand } from './modules/CommandGenerator.js';
 
 // Make config available globally for backward compatibility
 window.QSMConfig = QSMConfig;
@@ -67,6 +68,9 @@ class QSMApp {
 
     // Pipeline settings from config
     this.pipelineSettings = JSON.parse(JSON.stringify(cfg.PIPELINE_DEFAULTS));
+
+    // Mask operations history for command generation
+    this.maskOpsHistory = [];
 
     // BET settings from config
     this.betSettings = { ...cfg.BET_DEFAULTS };
@@ -199,6 +203,7 @@ class QSMApp {
 
     // Initialize modal managers
     this.betModal = new ModalManager('betSettingsModal');
+    this.commandPreviewModal = new ModalManager('commandPreviewModal');
     this.aboutModal = new ModalManager('aboutModal');
     this.citationsModal = new ModalManager('citationsModal');
     this.privacyModal = new ModalManager('privacyModal');
@@ -397,11 +402,16 @@ class QSMApp {
     document.getElementById('thresholdRobust')?.addEventListener('click', async () => {
       document.getElementById('thresholdModeButtons').style.display = 'none';
       await this.previewMask();
+      this.maskOpsHistory = ['threshold:otsu'];
       this.updateOutput("Applying robust refinement (dilate, fill holes, erode x2)...");
       this.dilateMask3D();
+      this.maskOpsHistory.push('dilate:1');
       this.fillHoles3D();
+      this.maskOpsHistory.push('fill-holes:0');
       this.erodeMask3D();
+      this.maskOpsHistory.push('erode:1');
       this.erodeMask3D();
+      this.maskOpsHistory.push('erode:1');
       await this.displayCurrentMask();
       this.updateOutput("Robust mask complete");
     });
@@ -410,6 +420,7 @@ class QSMApp {
     document.getElementById('thresholdManual')?.addEventListener('click', async () => {
       document.getElementById('thresholdModeButtons').style.display = 'none';
       await this.previewMask();
+      this.maskOpsHistory = ['threshold:otsu'];
       const sliderGroup = document.getElementById('thresholdSliderGroup');
       if (sliderGroup) sliderGroup.style.display = '';
       this.setThresholdSliderEnabled(true);
@@ -451,7 +462,22 @@ class QSMApp {
     document.getElementById('resetPipelineSettings')?.addEventListener('click', () => this.resetPipelineSettings());
     document.getElementById('savePipelineSettings')?.addEventListener('click', () => this.savePipelineSettings());
     document.getElementById('runPipelineSidebar')?.addEventListener('click', () => this.runPipelineFromSidebar());
-    document.getElementById('runSWI')?.addEventListener('click', () => this.runSWI());
+    document.getElementById('previewCommand')?.addEventListener('click', () => this.showCommandPreview());
+    document.getElementById('closeCommandPreview')?.addEventListener('click', () => this.commandPreviewModal?.close());
+    document.getElementById('closeCommandPreviewBtn')?.addEventListener('click', () => this.commandPreviewModal?.close());
+    document.getElementById('copyCommand')?.addEventListener('click', () => this.copyCommandToClipboard());
+    document.getElementById('runSWI')?.addEventListener('click', () => {
+      // Sync sidebar SWI settings to pipeline settings before running
+      const scaling = document.getElementById('sidebarSwiScaling')?.value || 'tanh';
+      const strength = parseFloat(document.getElementById('sidebarSwiStrength')?.value) || 4;
+      const mipWindow = parseInt(document.getElementById('sidebarSwiMipWindow')?.value) || 7;
+      if (this.pipelineSettings.swi) {
+        this.pipelineSettings.swi.scaling = scaling;
+        this.pipelineSettings.swi.strength = strength;
+        this.pipelineSettings.swi.mipWindow = mipWindow;
+      }
+      this.runSWI();
+    });
     document.getElementById('runT2starR2star')?.addEventListener('click', () => this.runT2starR2star());
 
     // BET settings modal
@@ -519,6 +545,7 @@ class QSMApp {
     document.getElementById('fillHoles')?.addEventListener('click', async () => {
       this.updateOutput("Filling holes in mask...");
       this.fillHoles3D();
+      this.maskOpsHistory.push('fill-holes:0');
       await this.displayCurrentMask();
       this.updateOutput("Holes filled");
     });
@@ -526,6 +553,7 @@ class QSMApp {
     document.getElementById('erodeMask')?.addEventListener('click', async () => {
       this.updateOutput("Eroding mask...");
       this.erodeMask3D();
+      this.maskOpsHistory.push('erode:1');
       await this.displayCurrentMask();
       this.updateOutput("Mask eroded");
     });
@@ -533,12 +561,14 @@ class QSMApp {
     document.getElementById('dilateMask')?.addEventListener('click', async () => {
       this.updateOutput("Dilating mask...");
       this.dilateMask3D();
+      this.maskOpsHistory.push('dilate:1');
       await this.displayCurrentMask();
       this.updateOutput("Mask dilated");
     });
 
     document.getElementById('resetMask')?.addEventListener('click', async () => {
       this.updateOutput("Clearing mask...");
+      this.maskOpsHistory = [];
       await this.clearMask();
       this.updateOutput("Mask cleared. Choose Threshold or BET to create a new mask.");
     });
@@ -2723,6 +2753,10 @@ class QSMApp {
    * Delegates to MaskController
    */
   async runBET() {
+    // Track BET as mask generator
+    const fi = this.betSettings?.fractionalIntensity ?? 0.5;
+    this.maskOpsHistory = [`bet:${fi}`];
+
     // Disable threshold slider since user chose BET-based masking
     this.setThresholdSliderEnabled(false);
 
@@ -3026,6 +3060,36 @@ class QSMApp {
 
     this.betModal?.close();
     this.runBET();
+  }
+
+  // --- Command Preview ---
+
+  showCommandPreview() {
+    const command = generateQsmxtCommand(
+      this.pipelineSettings,
+      this.maskOpsHistory,
+      {
+        doSwi: !!this.results?.swi?.file,
+        doT2star: !!this.results?.t2star?.file,
+        doR2star: !!this.results?.r2star?.file,
+      }
+    );
+    const el = document.getElementById('commandPreviewText');
+    if (el) el.textContent = command;
+    this.commandPreviewModal?.open();
+  }
+
+  copyCommandToClipboard() {
+    const el = document.getElementById('commandPreviewText');
+    if (!el) return;
+    navigator.clipboard.writeText(el.textContent).then(() => {
+      const btn = document.getElementById('copyCommand');
+      if (btn) {
+        const original = btn.innerHTML;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.innerHTML = original; }, 1500);
+      }
+    });
   }
 }
 

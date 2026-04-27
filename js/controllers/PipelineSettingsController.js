@@ -220,6 +220,7 @@ export class PipelineSettingsController {
 
     return {
       combinedMethod: this._getEl('combinedMethod'),
+      referenceMean: this._getChecked('qsmReferenceMean') ?? true,
       swi: {
         hpSigma: [
           parseFloat(this._getEl('swiHpSigmaX')),

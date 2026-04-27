@@ -16,7 +16,7 @@ const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined
 export const VERSION = '0.10.1';
 
 // QSM.rs core library version (keep in sync with qsm-core dependency in rust-wasm/Cargo.toml)
-export const QSM_RS_VERSION = '0.7.0';
+export const QSM_RS_VERSION = '0.9.0';
 
 // Physics constants
 export const PHYSICS = {
@@ -70,6 +70,10 @@ import {
   NLTV_DEFAULTS as _NLTV,
   MEDI_DEFAULTS as _MEDI,
   QSMART_DEFAULTS as _QSMART,
+  ROMEO_DEFAULTS as _ROMEO,
+  MCPC3DS_DEFAULTS as _MCPC3DS,
+  LINEAR_FIT_DEFAULTS as _LINEAR_FIT,
+  HOMOGENEITY_DEFAULTS as _HOMOGENEITY,
 } from './qsm-defaults.js';
 
 // Re-export with JS-convention field names (camelCase, matching existing usage)
@@ -95,6 +99,8 @@ export const TKD_DEFAULTS = {
 
 export const VSHARP_DEFAULTS = {
   threshold: _VSHARP.threshold,
+  maxRadiusFactor: _VSHARP.max_radius_factor,
+  minRadiusFactor: _VSHARP.min_radius_factor,
 };
 
 export const PDF_DEFAULTS = {
@@ -108,6 +114,7 @@ export const LBV_DEFAULTS = {
 export const ISMV_DEFAULTS = {
   tol: _ISMV.tol,
   maxit: _ISMV.max_iter,
+  radiusFactor: _ISMV.radius_factor,
 };
 
 // Adapted re-exports (field name mapping from snake_case to camelCase)
@@ -132,7 +139,7 @@ export const TGV_DEFAULTS = {
 
 export const SWI_DEFAULTS = {
   hpSigma: _SWI.hp_sigma,
-  scaling: 'tanh',  // PhaseScaling enum (JS-side choice)
+  scaling: _SWI.scaling,
   strength: _SWI.strength,
   mipWindow: _SWI.mip_window,
 };
@@ -178,23 +185,30 @@ export const QSMART_DEFAULTS = {
 // ROMEO unwrapping defaults
 export const ROMEO_DEFAULTS = {
   weighting: 'phase_snr',
-  phaseGradientCoherence: true,
-  magCoherence: true,
-  magWeight: true
+  phaseGradientCoherence: _ROMEO.phase_gradient_coherence,
+  magCoherence: _ROMEO.mag_coherence,
+  magWeight: _ROMEO.mag_weight,
 };
 
 // MCPC-3D-S phase offset correction defaults
 export const MCPC3DS_DEFAULTS = {
-  sigma: [10, 10, 5]
+  sigma: _MCPC3DS.sigma,
 };
 
 // Linear fit B0 calculation defaults
 export const LINEAR_FIT_DEFAULTS = {
-  estimateOffset: true
+  estimateOffset: _LINEAR_FIT.estimate_offset,
+};
+
+// Homogeneity correction defaults
+export const HOMOGENEITY_DEFAULTS = {
+  sigmaMm: _HOMOGENEITY.sigma_mm,
+  nbox: _HOMOGENEITY.nbox,
 };
 
 export const SHARP_DEFAULTS = {
   threshold: _SHARP.threshold,
+  radiusFactor: _SHARP.radius_factor,
 };
 
 // TSVD (Truncated SVD) defaults (shares TKD threshold)

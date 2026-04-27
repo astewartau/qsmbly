@@ -2430,7 +2430,7 @@ pub fn get_bet_defaults() -> String {
 #[wasm_bindgen]
 pub fn get_vsharp_defaults() -> String {
     let p = qsm_core::bgremove::VsharpParams::default();
-    format!(r#"{{"threshold":{}}}"#, p.threshold)
+    format!(r#"{{"threshold":{},"max_radius_factor":{},"min_radius_factor":{}}}"#, p.threshold, p.max_radius_factor, p.min_radius_factor)
 }
 
 /// Get default PDF parameters as JSON string
@@ -2451,16 +2451,23 @@ pub fn get_lbv_defaults() -> String {
 #[wasm_bindgen]
 pub fn get_ismv_defaults() -> String {
     let p = qsm_core::bgremove::IsmvParams::default();
-    format!(r#"{{"tol":{},"max_iter":{}}}"#, p.tol, p.max_iter)
+    format!(r#"{{"tol":{},"max_iter":{},"radius_factor":{}}}"#, p.tol, p.max_iter, p.radius_factor)
 }
 
 /// Get default SWI parameters as JSON string
 #[wasm_bindgen]
 pub fn get_swi_defaults() -> String {
     let p = qsm_core::swi::SwiParams::default();
+    let scaling = match p.scaling {
+        qsm_core::swi::PhaseScaling::Tanh => "tanh",
+        qsm_core::swi::PhaseScaling::NegativeTanh => "negative_tanh",
+        qsm_core::swi::PhaseScaling::Positive => "positive",
+        qsm_core::swi::PhaseScaling::Negative => "negative",
+        qsm_core::swi::PhaseScaling::Triangular => "triangular",
+    };
     format!(
-        r#"{{"hp_sigma":[{},{},{}],"strength":{},"mip_window":{}}}"#,
-        p.hp_sigma[0], p.hp_sigma[1], p.hp_sigma[2], p.strength, p.mip_window
+        r#"{{"hp_sigma":[{},{},{}],"scaling":"{}","strength":{},"mip_window":{}}}"#,
+        p.hp_sigma[0], p.hp_sigma[1], p.hp_sigma[2], scaling, p.strength, p.mip_window
     )
 }
 
@@ -2468,7 +2475,7 @@ pub fn get_swi_defaults() -> String {
 #[wasm_bindgen]
 pub fn get_sharp_defaults() -> String {
     let p = qsm_core::bgremove::SharpParams::default();
-    format!(r#"{{"threshold":{}}}"#, p.threshold)
+    format!(r#"{{"threshold":{},"radius_factor":{}}}"#, p.threshold, p.radius_factor)
 }
 
 /// Get default Tikhonov parameters as JSON string
@@ -2510,6 +2517,36 @@ pub fn get_qsmart_defaults() -> String {
         p.vasc_sphere_radius, p.frangi_scale_range[0], p.frangi_scale_range[1],
         p.frangi_scale_ratio, p.frangi_c, p.ilsqr_tol, p.ilsqr_max_iter
     )
+}
+
+/// Get default ROMEO parameters as JSON string
+#[wasm_bindgen]
+pub fn get_romeo_defaults() -> String {
+    let p = qsm_core::unwrap::RomeoParams::default();
+    format!(r#"{{"phase_gradient_coherence":{},"mag_coherence":{},"mag_weight":{}}}"#,
+        p.phase_gradient_coherence, p.mag_coherence, p.mag_weight)
+}
+
+/// Get default MCPC-3D-S parameters as JSON string
+#[wasm_bindgen]
+pub fn get_mcpc3ds_defaults() -> String {
+    let p = qsm_core::utils::Mcpc3dsParams::default();
+    format!(r#"{{"sigma":[{},{},{}]}}"#, p.sigma[0], p.sigma[1], p.sigma[2])
+}
+
+/// Get default linear fit parameters as JSON string
+#[wasm_bindgen]
+pub fn get_linear_fit_defaults() -> String {
+    let p = qsm_core::utils::LinearFitParams::default();
+    format!(r#"{{"estimate_offset":{},"reliability_threshold_percentile":{}}}"#,
+        p.estimate_offset, p.reliability_threshold_percentile)
+}
+
+/// Get default homogeneity correction parameters as JSON string
+#[wasm_bindgen]
+pub fn get_homogeneity_defaults() -> String {
+    let p = qsm_core::utils::HomogeneityParams::default();
+    format!(r#"{{"sigma_mm":{},"nbox":{}}}"#, p.sigma_mm, p.nbox)
 }
 
 // ============================================================================
