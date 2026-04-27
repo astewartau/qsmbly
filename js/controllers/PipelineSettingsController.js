@@ -5,6 +5,15 @@
  * reset to defaults, and reading form values.
  */
 
+import {
+  PIPELINE_DEFAULTS as D,
+  TGV_DEFAULTS, SWI_DEFAULTS, QSMART_DEFAULTS, MCPC3DS_DEFAULTS,
+  ROMEO_DEFAULTS, LINEAR_FIT_DEFAULTS,
+  VSHARP_DEFAULTS, SHARP_DEFAULTS, ISMV_DEFAULTS, PDF_DEFAULTS, LBV_DEFAULTS,
+  TKD_DEFAULTS, TSVD_DEFAULTS, TIKHONOV_DEFAULTS,
+  TV_DEFAULTS, RTS_DEFAULTS, NLTV_DEFAULTS, MEDI_DEFAULTS,
+} from '../app/config.js';
+
 export class PipelineSettingsController {
   constructor(modalElement) {
     this.modal = modalElement;
@@ -46,74 +55,74 @@ export class PipelineSettingsController {
    * @param {Object} defaults - Voxel-based default values
    */
   reset(defaults) {
-    // Combined method - reset to standard pipeline
-    this._setEl('combinedMethod', 'none');
+    // Combined method
+    this._setEl('combinedMethod', D.combinedMethod);
 
     // TGV defaults
-    this._setEl('tgvRegularization', 2);
-    this._setEl('tgvIterations', 1000);
-    this._setEl('tgvErosions', 3);
+    this._setEl('tgvRegularization', 2); // UI preset level (qsmbly-specific)
+    this._setEl('tgvIterations', TGV_DEFAULTS.iterations);
+    this._setEl('tgvErosions', TGV_DEFAULTS.erosions);
 
     // SWI defaults
-    this._setEl('swiScaling', 'tanh');
-    this._setEl('swiStrength', 4);
-    this._setEl('swiHpSigmaX', 4);
-    this._setEl('swiHpSigmaY', 4);
-    this._setEl('swiHpSigmaZ', 0);
-    this._setEl('swiMipWindow', 7);
+    this._setEl('swiScaling', SWI_DEFAULTS.scaling);
+    this._setEl('swiStrength', SWI_DEFAULTS.strength);
+    this._setEl('swiHpSigmaX', SWI_DEFAULTS.hpSigma[0]);
+    this._setEl('swiHpSigmaY', SWI_DEFAULTS.hpSigma[1]);
+    this._setEl('swiHpSigmaZ', SWI_DEFAULTS.hpSigma[2]);
+    this._setEl('swiMipWindow', SWI_DEFAULTS.mipWindow);
 
     // QSMART defaults
-    this._setEl('qsmartSdfSigma1Stage1', 10);
-    this._setEl('qsmartSdfSigma2Stage1', 0);
-    this._setEl('qsmartSdfSigma1Stage2', 8);
-    this._setEl('qsmartSdfSigma2Stage2', 2);
-    this._setEl('qsmartSdfSpatialRadius', 8);
-    this._setEl('qsmartSdfLowerLim', 0.6);
-    this._setEl('qsmartSdfCurvConstant', 500);
-    this._setEl('qsmartVascSphereRadius', 8);
-    this._setEl('qsmartFrangiScaleMin', 1.0);
-    this._setEl('qsmartFrangiScaleMax', 10.0);
-    this._setEl('qsmartFrangiScaleRatio', 2.0);
-    this._setEl('qsmartFrangiC', 500);
-    this._setEl('qsmartIlsqrTol', 0.01);
-    this._setEl('qsmartIlsqrMaxIter', 50);
+    this._setEl('qsmartSdfSigma1Stage1', QSMART_DEFAULTS.sdfSigma1Stage1);
+    this._setEl('qsmartSdfSigma2Stage1', QSMART_DEFAULTS.sdfSigma2Stage1);
+    this._setEl('qsmartSdfSigma1Stage2', QSMART_DEFAULTS.sdfSigma1Stage2);
+    this._setEl('qsmartSdfSigma2Stage2', QSMART_DEFAULTS.sdfSigma2Stage2);
+    this._setEl('qsmartSdfSpatialRadius', QSMART_DEFAULTS.sdfSpatialRadius);
+    this._setEl('qsmartSdfLowerLim', QSMART_DEFAULTS.sdfLowerLim);
+    this._setEl('qsmartSdfCurvConstant', QSMART_DEFAULTS.sdfCurvConstant);
+    this._setEl('qsmartVascSphereRadius', QSMART_DEFAULTS.vascSphereRadiusMm);
+    this._setEl('qsmartFrangiScaleMin', QSMART_DEFAULTS.frangiScaleMinMm);
+    this._setEl('qsmartFrangiScaleMax', QSMART_DEFAULTS.frangiScaleMaxMm);
+    this._setEl('qsmartFrangiScaleRatio', QSMART_DEFAULTS.frangiScaleRatioMm);
+    this._setEl('qsmartFrangiC', QSMART_DEFAULTS.frangiC);
+    this._setEl('qsmartIlsqrTol', QSMART_DEFAULTS.ilsqrTol);
+    this._setEl('qsmartIlsqrMaxIter', QSMART_DEFAULTS.ilsqrMaxIter);
 
-    // Phase offset method - default to MCPC-3D-S
-    this._setEl('phaseOffsetMethod', 'mcpc3ds');
+    // Phase offset method
+    this._setEl('phaseOffsetMethod', D.phaseOffsetMethod);
     this._showEl('mcpc3dsSettings', true);
-    this._setEl('mcpc3dsSigmaX', 10);
-    this._setEl('mcpc3dsSigmaY', 10);
-    this._setEl('mcpc3dsSigmaZ', 5);
+    this._setEl('mcpc3dsSigmaX', MCPC3DS_DEFAULTS.sigma[0]);
+    this._setEl('mcpc3dsSigmaY', MCPC3DS_DEFAULTS.sigma[1]);
+    this._setEl('mcpc3dsSigmaZ', MCPC3DS_DEFAULTS.sigma[2]);
 
-    // Unwrap method (auto-set to ROMEO when MCPC-3D-S — no error since they match)
-    this._setEl('unwrapMethod', 'romeo');
+    // Unwrap method
+    this._setEl('unwrapMethod', D.unwrapMethod);
     const resetHint = document.getElementById('unwrapLockedHint');
     if (resetHint) resetHint.style.display = 'none';
     this._showEl('romeoSettings', true);
     this._showEl('laplacianSettings', false);
 
-    // ROMEO weight checkboxes - all enabled by default
-    this._setChecked('romeoPhaseGradientCoherence', true);
-    this._setChecked('romeoMagCoherence', true);
-    this._setChecked('romeoMagWeight', true);
+    // ROMEO weight checkboxes
+    this._setChecked('romeoPhaseGradientCoherence', ROMEO_DEFAULTS.phaseGradientCoherence);
+    this._setChecked('romeoMagCoherence', ROMEO_DEFAULTS.magCoherence);
+    this._setChecked('romeoMagWeight', ROMEO_DEFAULTS.magWeight);
 
-    // Field calculation method - default to weighted averaging
-    this._setEl('fieldCalculationMethod', 'weighted_avg');
+    // Field calculation method
+    this._setEl('fieldCalculationMethod', D.fieldCalculationMethod);
     this._showEl('weightedAvgSettings', true);
     this._showEl('linearFitSettings', false);
-    this._setEl('b0WeightType', 'phase_snr');
+    this._setEl('b0WeightType', D.b0WeightType);
 
     // Linear fit defaults
-    this._setChecked('linearFitEstimateOffset', true);
+    this._setChecked('linearFitEstimateOffset', LINEAR_FIT_DEFAULTS.estimateOffset);
 
     // Single-echo unwrap (sync with multi-echo)
-    this._setEl('singleEchoUnwrapMethod', 'romeo');
+    this._setEl('singleEchoUnwrapMethod', D.unwrapMethod);
     this._showEl('singleEchoRomeoSettings', true);
-    this._setChecked('singleEchoRomeoMagCoherence', true);
-    this._setChecked('singleEchoRomeoMagWeight', true);
+    this._setChecked('singleEchoRomeoMagCoherence', ROMEO_DEFAULTS.magCoherence);
+    this._setChecked('singleEchoRomeoMagWeight', ROMEO_DEFAULTS.magWeight);
 
-    // Background removal - default to V-SHARP
-    this._setEl('bgRemovalMethod', 'vsharp');
+    // Background removal
+    this._setEl('bgRemovalMethod', D.backgroundRemoval);
     this._showEl('vsharpSettings', true);
     this._showEl('sharpSettings', false);
     this._showEl('ismvSettings', false);
@@ -122,24 +131,19 @@ export class PipelineSettingsController {
 
     this._setEl('vsharpMaxRadius', defaults.vsharpMaxRadius);
     this._setEl('vsharpMinRadius', defaults.vsharpMinRadius);
-    this._setEl('vsharpThreshold', 0.05);
+    this._setEl('vsharpThreshold', VSHARP_DEFAULTS.threshold);
     this._setEl('sharpRadius', defaults.sharpRadius);
-    this._setEl('sharpThreshold', 0.05);
-    // iSMV defaults
+    this._setEl('sharpThreshold', SHARP_DEFAULTS.threshold);
     this._setEl('ismvRadius', defaults.ismvRadius);
-    this._setEl('ismvTol', 0.001);
-    this._setEl('ismvMaxit', 500);
-
-    // PDF defaults
-    this._setEl('pdfTol', 0.00001);
+    this._setEl('ismvTol', ISMV_DEFAULTS.tol);
+    this._setEl('ismvMaxit', ISMV_DEFAULTS.maxit);
+    this._setEl('pdfTol', PDF_DEFAULTS.tol);
     this._setEl('pdfMaxit', defaults.pdfMaxit);
-
-    // LBV defaults
-    this._setEl('lbvTol', 0.000001);
+    this._setEl('lbvTol', LBV_DEFAULTS.tol);
     this._setEl('lbvMaxit', defaults.lbvMaxit);
 
-    // Dipole inversion - default to RTS
-    this._setEl('dipoleMethod', 'rts');
+    // Dipole inversion
+    this._setEl('dipoleMethod', D.dipoleInversion);
     this._showEl('tkdSettings', false);
     this._showEl('tsvdSettings', false);
     this._showEl('tikhonovSettings', false);
@@ -149,47 +153,37 @@ export class PipelineSettingsController {
     this._showEl('mediSettings', false);
     this._showEl('ilsqrSettings', false);
 
-    // TKD
-    this._setEl('tkdThreshold', 0.15);
-
-    // TSVD
-    this._setEl('tsvdThreshold', 0.15);
-
-    // Tikhonov
-    this._setEl('tikhLambda', 0.01);
+    this._setEl('tkdThreshold', TKD_DEFAULTS.threshold);
+    this._setEl('tsvdThreshold', TSVD_DEFAULTS.threshold);
+    this._setEl('tikhLambda', TIKHONOV_DEFAULTS.lambda);
     this._setEl('tikhReg', 'identity');
 
-    // TV-ADMM
-    this._setEl('tvLambda', 0.001);
-    this._setEl('tvMaxIter', 250);
-    this._setEl('tvTol', 0.001);
+    this._setEl('tvLambda', TV_DEFAULTS.lambda);
+    this._setEl('tvMaxIter', TV_DEFAULTS.maxIter);
+    this._setEl('tvTol', TV_DEFAULTS.tol);
 
-    // RTS
-    this._setEl('rtsDelta', 0.15);
-    this._setEl('rtsMu', 100000);
-    this._setEl('rtsRho', 10);
-    this._setEl('rtsMaxIter', 20);
+    this._setEl('rtsDelta', RTS_DEFAULTS.delta);
+    this._setEl('rtsMu', RTS_DEFAULTS.mu);
+    this._setEl('rtsRho', RTS_DEFAULTS.rho);
+    this._setEl('rtsMaxIter', RTS_DEFAULTS.maxIter);
 
-    // NLTV
-    this._setEl('nltvLambda', 0.001);
-    this._setEl('nltvMu', 1);
-    this._setEl('nltvMaxIter', 250);
-    this._setEl('nltvTol', 0.001);
-    this._setEl('nltvNewtonMaxIter', 10);
+    this._setEl('nltvLambda', NLTV_DEFAULTS.lambda);
+    this._setEl('nltvMu', NLTV_DEFAULTS.mu);
+    this._setEl('nltvMaxIter', NLTV_DEFAULTS.maxIter);
+    this._setEl('nltvTol', NLTV_DEFAULTS.tol);
+    this._setEl('nltvNewtonMaxIter', NLTV_DEFAULTS.newtonMaxIter);
 
-    // MEDI
-    this._setEl('mediLambda', 1000);
-    this._setEl('mediPercentage', 0.9);
-    this._setEl('mediMaxIter', 10);
-    this._setEl('mediCgMaxIter', 100);
-    this._setChecked('mediSmv', false);
-    this._setEl('mediSmvRadius', 5);
-    this._showEl('mediSmvRadiusGroup', false);
-    this._setChecked('mediMerit', false);
+    this._setEl('mediLambda', MEDI_DEFAULTS.lambda);
+    this._setEl('mediPercentage', MEDI_DEFAULTS.percentage);
+    this._setEl('mediMaxIter', MEDI_DEFAULTS.maxIter);
+    this._setEl('mediCgMaxIter', MEDI_DEFAULTS.cgMaxIter);
+    this._setChecked('mediSmv', MEDI_DEFAULTS.smv);
+    this._setEl('mediSmvRadius', MEDI_DEFAULTS.smvRadius);
+    this._showEl('mediSmvRadiusGroup', MEDI_DEFAULTS.smv);
+    this._setChecked('mediMerit', MEDI_DEFAULTS.merit);
 
-    // iLSQR
-    this._setEl('ilsqrTol', 0.01);
-    this._setEl('ilsqrMaxIter', 50);
+    this._setEl('ilsqrTol', QSMART_DEFAULTS.ilsqrTol);
+    this._setEl('ilsqrMaxIter', QSMART_DEFAULTS.ilsqrMaxIter);
   }
 
   /**
