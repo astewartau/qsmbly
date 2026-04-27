@@ -3069,6 +3069,17 @@ class QSMApp {
   // --- Command Preview ---
 
   showCommandPreview() {
+    // Sync sidebar SWI settings to pipeline settings before generating command
+    if (this.pipelineSettings.swi) {
+      this.pipelineSettings.swi.scaling = document.getElementById('sidebarSwiScaling')?.value || 'tanh';
+      this.pipelineSettings.swi.strength = parseFloat(document.getElementById('sidebarSwiStrength')?.value) || 4;
+      this.pipelineSettings.swi.mipWindow = parseInt(document.getElementById('sidebarSwiMipWindow')?.value) || 7;
+      this.pipelineSettings.swi.hpSigma = [
+        parseFloat(document.getElementById('sidebarSwiHpSigmaX')?.value) || 4,
+        parseFloat(document.getElementById('sidebarSwiHpSigmaY')?.value) || 4,
+        parseFloat(document.getElementById('sidebarSwiHpSigmaZ')?.value) || 0,
+      ];
+    }
     const command = generateQsmxtCommand(
       this.pipelineSettings,
       this.maskOpsHistory,
