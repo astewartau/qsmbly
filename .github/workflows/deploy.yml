@@ -82,14 +82,18 @@ jobs:
 
           echo "Updated version to $VERSION in all files"
 
-      - name: Commit version update
+      - name: Commit version update and move tag
         if: github.event_name == 'release'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add js/app/config.js package.json rust-wasm/Cargo.toml
-          git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
-          git push || echo "Nothing to push"
+          git diff --staged --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
+          git push
+          TAG="v${{ steps.version.outputs.VERSION }}"
+          git tag -f "$TAG"
+          git push origin "$TAG" --force
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
