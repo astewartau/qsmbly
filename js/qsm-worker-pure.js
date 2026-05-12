@@ -289,7 +289,7 @@ async function runPipeline(data) {
 
   // Validate methods upfront - never silently fall back to a different algorithm
   const validUnwrapMethods = ['romeo', 'laplacian'];
-  const validBgMethods = ['vsharp', 'sharp', 'ismv', 'pdf', 'lbv'];
+  const validBgMethods = ['vsharp', 'sharp', 'resharp', 'ismv', 'pdf', 'lbv', 'harperella', 'iharperella'];
   const validInversionMethods = ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr'];
 
   if (!validUnwrapMethods.includes(unwrapMethod)) {
@@ -306,7 +306,13 @@ async function runPipeline(data) {
     minRadius: pipelineSettings?.vsharp?.minRadius ?? 2,
     threshold: pipelineSettings?.vsharp?.threshold ?? 0.05
   };
-  const lbvSettings = pipelineSettings?.lbv || { tol: 0.000001, maxit: 500 };
+  const lbvSettings = {
+    tol: pipelineSettings?.lbv?.tol ?? 0.000001,
+    maxit: pipelineSettings?.lbv?.maxit ?? 500
+  };
+  const resharpSettings = pipelineSettings?.resharp || { radius: 6, tikReg: 1e-4, tol: 1e-6, maxIter: 30 };
+  const harperellaSettings = pipelineSettings?.harperella || { radius: 10, maxIter: 40, tol: 1e-6 };
+  const iharperellaSettings = pipelineSettings?.iharperella || { radius: 10, maxIter: 40, tol: 1e-6 };
   const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 };
   const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
   const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
@@ -748,8 +754,65 @@ async function runPipeline(data) {
       for (let i = 0; i < voxelCount; i++) {
         erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
       }
+    } else if (backgroundMethod === 'resharp') {
+      postProgress(0.42, 'Preparing RESHARP background removal...');
+      postLog('Removing background field using RESHARP...');
+      postLog(`  radius=${resharpSettings.radius}mm, tikReg=${resharpSettings.tikReg}, maxIter=${resharpSettings.maxIter}`);
+
+      const resharpProgress = (current, total) => {
+        const progress = 0.42 + (current / total) * 0.20;
+        postProgress(progress, `RESHARP: Iteration ${current}/${total}`);
+      };
+
+      const result = wasmModule.resharp_wasm_with_progress(
+        b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
+        resharpSettings.radius, resharpSettings.tikReg, resharpSettings.tol, resharpSettings.maxIter,
+        magField || 3.0,
+        resharpProgress
+      );
+      postProgress(0.63, 'RESHARP: Extracting results...');
+      localField = new Float64Array(result.slice(0, voxelCount));
+      erodedMask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
+      }
+    } else if (backgroundMethod === 'harperella' || backgroundMethod === 'iharperella') {
+      // HARPERELLA/iHARPERELLA: combined unwrap + BFR from wrapped phase
+      const label = backgroundMethod === 'iharperella' ? 'iHARPERELLA' : 'HARPERELLA';
+      const settings = backgroundMethod === 'iharperella' ? iharperellaSettings : harperellaSettings;
+      postProgress(0.42, `Preparing ${label}...`);
+      postLog(`Running ${label} (combined unwrap + background removal)...`);
+      postLog(`  radius=${settings.radius}mm, maxIter=${settings.maxIter}`);
+
+      const harpProgress = (current, total) => {
+        const progress = 0.42 + (current / total) * 0.20;
+        postProgress(progress, `${label}: Iteration ${current}/${total}`);
+      };
+
+      // Use first echo wrapped phase (radians) — these methods do their own unwrapping
+      const wrappedPhase = new Float64Array(phase4d[0]);
+      const wasm_fn = backgroundMethod === 'iharperella'
+        ? wasmModule.iharperella_wasm_with_progress
+        : wasmModule.harperella_wasm_with_progress;
+      const result = wasm_fn(
+        wrappedPhase, mask, nx, ny, nz, vsx, vsy, vsz,
+        settings.radius, settings.maxIter, settings.tol,
+        harpProgress
+      );
+
+      // Output is tissue phase (radians) — convert to Hz using first echo TE
+      const te1Sec = echoTimes[0] / 1000;  // ms → s
+      postProgress(0.63, `${label}: Converting tissue phase to Hz...`);
+      localField = new Float64Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        localField[i] = result[i] / (2 * Math.PI * te1Sec);
+      }
+      erodedMask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
+      }
     } else {
-      throw new Error(`Unknown background removal method: '${backgroundMethod}'. Valid options are: vsharp, sharp, smv, ismv, pdf, lbv`);
+      throw new Error(`Unknown background removal method: '${backgroundMethod}'.`);
     }
 
     const erodedCount = erodedMask.reduce((a, b) => a + b, 0);
@@ -2048,7 +2111,7 @@ async function runTotalFieldPipeline(data) {
   const dipoleMethod = pipelineSettings?.dipoleInversion || 'rts';
 
   // Validate methods
-  const validBgMethods = ['vsharp', 'sharp', 'ismv', 'pdf', 'lbv'];
+  const validBgMethods = ['vsharp', 'sharp', 'resharp', 'ismv', 'pdf', 'lbv', 'harperella', 'iharperella'];
   const validInversionMethods = ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr'];
   if (!validBgMethods.includes(backgroundMethod)) {
     throw new Error(`Unknown background removal method: '${backgroundMethod}'`);
@@ -2063,7 +2126,13 @@ async function runTotalFieldPipeline(data) {
     minRadius: pipelineSettings?.vsharp?.minRadius ?? 2,
     threshold: pipelineSettings?.vsharp?.threshold ?? 0.05
   };
-  const lbvSettings = pipelineSettings?.lbv || { tol: 0.000001, maxit: 500 };
+  const lbvSettings = {
+    tol: pipelineSettings?.lbv?.tol ?? 0.000001,
+    maxit: pipelineSettings?.lbv?.maxit ?? 500
+  };
+  const resharpSettings = pipelineSettings?.resharp || { radius: 6, tikReg: 1e-4, tol: 1e-6, maxIter: 30 };
+  const harperellaSettings = pipelineSettings?.harperella || { radius: 10, maxIter: 40, tol: 1e-6 };
+  const iharperellaSettings = pipelineSettings?.iharperella || { radius: 10, maxIter: 40, tol: 1e-6 };
   const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 };
   const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
   const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
@@ -2778,7 +2847,10 @@ async function runBackgroundRemoval(
   } else if (backgroundMethod === 'lbv') {
     postProgress(0.42, 'Preparing LBV background removal...');
     postLog(`Removing background field using LBV...`);
-    const lbvSettings = pipelineSettings?.lbv || { tol: 0.000001, maxit: 500 };
+    const lbvSettings = {
+    tol: pipelineSettings?.lbv?.tol ?? 0.000001,
+    maxit: pipelineSettings?.lbv?.maxit ?? 500
+  };
     const lbvProgress = (current, total) => {
       postProgress(0.42 + (current / total) * 0.20, `LBV: Iteration ${current}/${total}`);
     };
@@ -2792,6 +2864,26 @@ async function runBackgroundRemoval(
     for (let i = 0; i < voxelCount; i++) {
       erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
     }
+  } else if (backgroundMethod === 'resharp') {
+    postProgress(0.42, 'Preparing RESHARP background removal...');
+    postLog('Removing background field using RESHARP...');
+    const resharpSettings = pipelineSettings?.resharp || { radius: 6, tikReg: 1e-4, tol: 1e-6, maxIter: 30 };
+    postLog(`  radius=${resharpSettings.radius}mm, tikReg=${resharpSettings.tikReg}, maxIter=${resharpSettings.maxIter}`);
+    const resharpProgress = (current, total) => {
+      postProgress(0.42 + (current / total) * 0.20, `RESHARP: Iteration ${current}/${total}`);
+    };
+    const result = wasmModule.resharp_wasm_with_progress(
+      b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
+      resharpSettings.radius, resharpSettings.tikReg, resharpSettings.tol, resharpSettings.maxIter,
+      magField || 3.0, resharpProgress
+    );
+    localField = new Float64Array(result.slice(0, voxelCount));
+    erodedMask = new Uint8Array(voxelCount);
+    for (let i = 0; i < voxelCount; i++) {
+      erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
+    }
+  } else if (backgroundMethod === 'harperella' || backgroundMethod === 'iharperella') {
+    throw new Error(`${backgroundMethod} requires raw phase data and cannot be used with pre-computed field maps. Please use a different background removal method.`);
   } else {
     throw new Error(`Unknown background removal method: '${backgroundMethod}'`);
   }

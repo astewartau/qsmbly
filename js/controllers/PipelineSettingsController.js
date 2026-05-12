@@ -9,7 +9,8 @@ import {
   PIPELINE_DEFAULTS as D,
   TGV_DEFAULTS, SWI_DEFAULTS, QSMART_DEFAULTS, MCPC3DS_DEFAULTS,
   ROMEO_DEFAULTS, LINEAR_FIT_DEFAULTS,
-  VSHARP_DEFAULTS, SHARP_DEFAULTS, ISMV_DEFAULTS, PDF_DEFAULTS, LBV_DEFAULTS,
+  VSHARP_DEFAULTS, SHARP_DEFAULTS, RESHARP_DEFAULTS, HARPERELLA_DEFAULTS,
+  ISMV_DEFAULTS, PDF_DEFAULTS, LBV_DEFAULTS,
   TKD_DEFAULTS, TSVD_DEFAULTS, TIKHONOV_DEFAULTS,
   TV_DEFAULTS, RTS_DEFAULTS, NLTV_DEFAULTS, MEDI_DEFAULTS,
 } from '../app/config.js';
@@ -125,9 +126,12 @@ export class PipelineSettingsController {
     this._setEl('bgRemovalMethod', D.backgroundRemoval);
     this._showEl('vsharpSettings', true);
     this._showEl('sharpSettings', false);
+    this._showEl('resharpSettings', false);
     this._showEl('ismvSettings', false);
     this._showEl('pdfSettings', false);
     this._showEl('lbvSettings', false);
+    this._showEl('harperellaSettings', false);
+    this._showEl('iharperellaSettings', false);
 
     this._setEl('vsharpMaxRadius', defaults.vsharpMaxRadius);
     this._setEl('vsharpMinRadius', defaults.vsharpMinRadius);
@@ -141,6 +145,14 @@ export class PipelineSettingsController {
     this._setEl('pdfMaxit', defaults.pdfMaxit);
     this._setEl('lbvTol', LBV_DEFAULTS.tol);
     this._setEl('lbvMaxit', defaults.lbvMaxit);
+    this._setEl('resharpRadius', RESHARP_DEFAULTS.radius);
+    this._setEl('resharpTikReg', RESHARP_DEFAULTS.tikReg);
+    this._setEl('resharpTol', RESHARP_DEFAULTS.tol);
+    this._setEl('resharpMaxIter', RESHARP_DEFAULTS.maxIter);
+    this._setEl('harperellaRadius', HARPERELLA_DEFAULTS.radius);
+    this._setEl('harperellaMaxIter', HARPERELLA_DEFAULTS.maxIter);
+    this._setEl('iharperellaRadius', HARPERELLA_DEFAULTS.radius);
+    this._setEl('iharperellaMaxIter', HARPERELLA_DEFAULTS.maxIter);
 
     // Dipole inversion
     this._setEl('dipoleMethod', D.dipoleInversion);
@@ -283,6 +295,22 @@ export class PipelineSettingsController {
       pdf: {
         tol: parseFloat(this._getEl('pdfTol')),
         maxit: parseInt(this._getEl('pdfMaxit'))
+      },
+      resharp: {
+        radius: parseFloat(this._getEl('resharpRadius')),
+        tikReg: parseFloat(this._getEl('resharpTikReg')),
+        tol: parseFloat(this._getEl('resharpTol')),
+        maxIter: parseInt(this._getEl('resharpMaxIter'))
+      },
+      harperella: {
+        radius: parseFloat(this._getEl('harperellaRadius')),
+        maxIter: parseInt(this._getEl('harperellaMaxIter')),
+        tol: 1e-6
+      },
+      iharperella: {
+        radius: parseFloat(this._getEl('iharperellaRadius')),
+        maxIter: parseInt(this._getEl('iharperellaMaxIter')),
+        tol: 1e-6
       },
       lbv: {
         tol: parseFloat(this._getEl('lbvTol')),
@@ -526,14 +554,37 @@ export class PipelineSettingsController {
     this._setEl('bgRemovalMethod', bgMethod);
     this._showEl('vsharpSettings', bgMethod === 'vsharp');
     this._showEl('sharpSettings', bgMethod === 'sharp');
+    this._showEl('resharpSettings', bgMethod === 'resharp');
     this._showEl('ismvSettings', bgMethod === 'ismv');
     this._showEl('pdfSettings', bgMethod === 'pdf');
     this._showEl('lbvSettings', bgMethod === 'lbv');
+    this._showEl('harperellaSettings', bgMethod === 'harperella');
+    this._showEl('iharperellaSettings', bgMethod === 'iharperella');
 
     // V-SHARP settings
     this._setEl('vsharpMaxRadius', settings.vsharp.maxRadius ?? defaults.vsharpMaxRadius);
     this._setEl('vsharpMinRadius', settings.vsharp.minRadius ?? defaults.vsharpMinRadius);
     this._setEl('vsharpThreshold', settings.vsharp.threshold);
+
+    // RESHARP settings
+    if (settings.resharp) {
+      this._setEl('resharpRadius', settings.resharp.radius);
+      this._setEl('resharpTikReg', settings.resharp.tikReg);
+      this._setEl('resharpTol', settings.resharp.tol);
+      this._setEl('resharpMaxIter', settings.resharp.maxIter);
+    }
+
+    // HARPERELLA settings
+    if (settings.harperella) {
+      this._setEl('harperellaRadius', settings.harperella.radius);
+      this._setEl('harperellaMaxIter', settings.harperella.maxIter);
+    }
+
+    // iHARPERELLA settings
+    if (settings.iharperella) {
+      this._setEl('iharperellaRadius', settings.iharperella.radius);
+      this._setEl('iharperellaMaxIter', settings.iharperella.maxIter);
+    }
 
     // iSMV settings
     this._setEl('ismvRadius', settings.ismv.radius ?? defaults.ismvRadius);
@@ -629,9 +680,12 @@ export class PipelineSettingsController {
       const method = e.target.value;
       this._showEl('vsharpSettings', method === 'vsharp');
       this._showEl('sharpSettings', method === 'sharp');
+      this._showEl('resharpSettings', method === 'resharp');
       this._showEl('ismvSettings', method === 'ismv');
       this._showEl('pdfSettings', method === 'pdf');
       this._showEl('lbvSettings', method === 'lbv');
+      this._showEl('harperellaSettings', method === 'harperella');
+      this._showEl('iharperellaSettings', method === 'iharperella');
     });
 
     // MEDI SMV checkbox toggle

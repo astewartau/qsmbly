@@ -25,8 +25,8 @@ export const TKD_DEFAULTS = {
 };
 
 export const TGV_DEFAULTS = {
-  "alpha0": 0.002,
-  "alpha1": 0.003,
+  "alpha0": 0.001,
+  "alpha1": 0.001,
   "iterations": 1000,
   "erosions": 3,
   "step_size": 3,
@@ -75,6 +75,19 @@ export const SWI_DEFAULTS = {
 export const SHARP_DEFAULTS = {
   "threshold": 0.05,
   "radius_factor": 18
+};
+
+export const RESHARP_DEFAULTS = {
+  "radius": 6,
+  "tik_reg": 0.0001,
+  "tol": 0.000001,
+  "max_iter": 30
+};
+
+export const HARPERELLA_DEFAULTS = {
+  "radius": 10,
+  "max_iter": 40,
+  "tol": 0.000001
 };
 
 export const TIKHONOV_DEFAULTS = {

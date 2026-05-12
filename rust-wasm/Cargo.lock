@@ -353,7 +353,6 @@ dependencies = [
 [[package]]
 name = "qsm-core"
 version = "0.0.0"
-source = "git+https://github.com/astewartau/QSM.rs?tag=v0.10.0#352195da228171ea38a83fcd4a5d1922c607083f"
 dependencies = [
  "bytemuck",
  "delaunator",
@@ -368,7 +367,7 @@ dependencies = [
 
 [[package]]
 name = "qsm_wasm"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",

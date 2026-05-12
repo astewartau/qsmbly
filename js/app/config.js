@@ -16,7 +16,7 @@ const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined
 export const VERSION = '0.11.1';
 
 // QSM.rs core library version (keep in sync with qsm-core dependency in rust-wasm/Cargo.toml)
-export const QSM_RS_VERSION = '0.10.0';
+export const QSM_RS_VERSION = '0.11.1';
 
 // Physics constants
 export const PHYSICS = {
@@ -66,6 +66,8 @@ import {
   ISMV_DEFAULTS as _ISMV,
   SWI_DEFAULTS as _SWI,
   SHARP_DEFAULTS as _SHARP,
+  RESHARP_DEFAULTS as _RESHARP,
+  HARPERELLA_DEFAULTS as _HARPERELLA,
   TIKHONOV_DEFAULTS as _TIKHONOV,
   NLTV_DEFAULTS as _NLTV,
   MEDI_DEFAULTS as _MEDI,
@@ -211,6 +213,19 @@ export const SHARP_DEFAULTS = {
   radiusFactor: _SHARP.radius_factor,
 };
 
+export const RESHARP_DEFAULTS = {
+  radius: _RESHARP.radius,
+  tikReg: _RESHARP.tik_reg,
+  tol: _RESHARP.tol,
+  maxIter: _RESHARP.max_iter,
+};
+
+export const HARPERELLA_DEFAULTS = {
+  radius: _HARPERELLA.radius,
+  maxIter: _HARPERELLA.max_iter,
+  tol: _HARPERELLA.tol,
+};
+
 // TSVD (Truncated SVD) defaults (shares TKD threshold)
 export const TSVD_DEFAULTS = {
   threshold: _TKD.threshold,
@@ -281,7 +296,7 @@ export const PIPELINE_METHODS = {
   phaseOffset: ['mcpc3ds', 'none'],
   fieldCalculation: ['weighted_avg', 'linear_fit'],
   b0WeightType: ['phase_snr', 'phase_var', 'average', 'tes', 'mag'],
-  backgroundRemoval: ['vsharp', 'sharp', 'ismv', 'pdf', 'lbv'],
+  backgroundRemoval: ['vsharp', 'sharp', 'resharp', 'ismv', 'pdf', 'lbv', 'harperella', 'iharperella'],
   dipoleInversion: ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi']
 };
 
@@ -301,9 +316,12 @@ export const PIPELINE_DEFAULTS = {
   backgroundRemoval: 'vsharp',
   vsharp: { ...VSHARP_DEFAULTS, maxRadius: null, minRadius: null },
   sharp: { radius: 6, ...SHARP_DEFAULTS },
+  resharp: { ...RESHARP_DEFAULTS },
   ismv: { ...ISMV_DEFAULTS, radius: null },
   pdf: { ...PDF_DEFAULTS, maxit: null },
   lbv: { ...LBV_DEFAULTS },
+  harperella: { ...HARPERELLA_DEFAULTS },
+  iharperella: { ...HARPERELLA_DEFAULTS },
   dipoleInversion: 'rts',
   tkd: { ...TKD_DEFAULTS },
   tsvd: { ...TSVD_DEFAULTS },
@@ -383,6 +401,8 @@ const QSMConfig = {
   LINEAR_FIT_DEFAULTS,
   VSHARP_DEFAULTS,
   SHARP_DEFAULTS,
+  RESHARP_DEFAULTS,
+  HARPERELLA_DEFAULTS,
   ISMV_DEFAULTS,
   PDF_DEFAULTS,
   LBV_DEFAULTS,

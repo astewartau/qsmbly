@@ -408,9 +408,12 @@
               <select id="sidebarBgRemovalMethod">
                 <option value="vsharp" selected>V-SHARP</option>
                 <option value="sharp">SHARP</option>
+                <option value="resharp">RESHARP</option>
                 <option value="ismv">iSMV</option>
                 <option value="pdf">PDF</option>
                 <option value="lbv">LBV</option>
+                <option value="harperella">HARPERELLA</option>
+                <option value="iharperella">iHARPERELLA</option>
               </select>
             </div>
             <div class="param-group" id="sidebarDipoleGroup">
@@ -889,9 +892,12 @@
             <select id="bgRemovalMethod">
               <option value="vsharp" selected>V-SHARP (Variable-radius SHARP)</option>
               <option value="sharp">SHARP (Sophisticated Harmonic Artifact Reduction for Phase data)</option>
+              <option value="resharp">RESHARP (Regularized SHARP)</option>
               <option value="ismv">iSMV (iterative Spherical Mean Value)</option>
               <option value="pdf">PDF (Projection onto Dipole Fields)</option>
               <option value="lbv">LBV (Laplacian Boundary Value)</option>
+              <option value="harperella">HARPERELLA (Integrated Unwrap + BFR)</option>
+              <option value="iharperella">iHARPERELLA (Improved Integrated Unwrap + BFR)</option>
             </select>
           </div>
 
@@ -928,6 +934,29 @@
             <div class="param-group">
               <label class="param-label" for="sharpThreshold">Deconvolution threshold</label>
               <input type="number" id="sharpThreshold" value="0.05" min="0.01" max="0.2" step="0.01">
+            </div>
+          </div>
+
+          <!-- RESHARP Settings -->
+          <div id="resharpSettings" class="method-settings" style="display: none;">
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/mrm.24765" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.24765"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="resharpRadius">SMV kernel radius (mm)</label>
+              <input type="number" id="resharpRadius" value="6" min="1" max="20" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="resharpTikReg">Tikhonov regularization</label>
+              <input type="number" id="resharpTikReg" value="0.0001" min="0.000001" max="0.01" step="0.0001">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="resharpTol">Convergence tolerance</label>
+              <input type="number" id="resharpTol" value="0.000001" min="0.0000001" max="0.001" step="0.0000001">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="resharpMaxIter">Max CG iterations</label>
+              <input type="number" id="resharpMaxIter" value="30" min="5" max="200" step="5">
             </div>
           </div>
 
@@ -980,6 +1009,42 @@
             <div class="param-group">
               <label class="param-label" for="lbvMaxit">Max solver iterations</label>
               <input type="number" id="lbvMaxit" value="500" min="50" max="2000" step="50">
+            </div>
+          </div>
+
+          <!-- HARPERELLA Settings -->
+          <div id="harperellaSettings" class="method-settings" style="display: none;">
+            <div class="method-links">
+              <a href="https://doi.org/10.1002/nbm.3056" target="_blank" rel="noopener" title="DOI: 10.1002/nbm.3056"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+            </div>
+            <div class="validation-message info inline-warning">
+              <span>Combines phase unwrapping and background removal in one step (unwrapping settings above will be ignored)</span>
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="harperellaRadius">SMV kernel radius (mm)</label>
+              <input type="number" id="harperellaRadius" value="10" min="2" max="20" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="harperellaMaxIter">Max iterations</label>
+              <input type="number" id="harperellaMaxIter" value="40" min="5" max="200" step="5">
+            </div>
+          </div>
+
+          <!-- iHARPERELLA Settings -->
+          <div id="iharperellaSettings" class="method-settings" style="display: none;">
+            <div class="method-links">
+              <a href="https://cds.ismrm.org/protected/15MPresentations/abstracts/3313.html" target="_blank" rel="noopener" title="ISMRM 2015 Abstract 3313"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+            </div>
+            <div class="validation-message info inline-warning">
+              <span>Combines phase unwrapping and background removal in one step (unwrapping settings above will be ignored)</span>
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="iharperellaRadius">SMV kernel radius (mm)</label>
+              <input type="number" id="iharperellaRadius" value="10" min="2" max="20" step="1">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="iharperellaMaxIter">Max iterations</label>
+              <input type="number" id="iharperellaMaxIter" value="40" min="5" max="200" step="5">
             </div>
           </div>
         </div>
@@ -1407,6 +1472,11 @@
             <a href="https://doi.org/10.1016/j.neuroimage.2010.10.070" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2010.10.070</a>
           </div>
           <div class="citation-item">
+            <strong>RESHARP (Regularized SHARP)</strong>
+            <p>Sun, H. and Wilman, A.H. (2013). "Background field removal using spherical mean value filtering and Tikhonov regularization." <em>Magnetic Resonance in Medicine</em>, 71(3):1151-1157.</p>
+            <a href="https://doi.org/10.1002/mrm.24765" target="_blank" rel="noopener">DOI: 10.1002/mrm.24765</a>
+          </div>
+          <div class="citation-item">
             <strong>iSMV (iterative Spherical Mean Value)</strong>
             <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
             <p>Wen, Y., Zhou, D., Liu, T., Spincemaille, P., Wang, Y. (2014). "An iterative spherical mean value method for background field removal in MRI." <em>Magnetic Resonance in Medicine</em>, 72(4):1065-1071.</p>
@@ -1423,6 +1493,15 @@
             <span class="citation-ref">Code: <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener">QSM.jl</a></span>
             <p>Zhou, D., Liu, T., Spincemaille, P., Wang, Y. (2014). "Background field removal by solving the Laplacian boundary value problem." <em>NMR in Biomedicine</em>, 27(3):312-319.</p>
             <a href="https://doi.org/10.1002/nbm.3064" target="_blank" rel="noopener">DOI: 10.1002/nbm.3064</a>
+          </div>
+          <div class="citation-item">
+            <strong>HARPERELLA (Integrated Laplacian-based Phase Unwrapping and Background Removal)</strong>
+            <p>Li, W., Wu, B., Liu, C. (2014). "Integrated Laplacian-based phase unwrapping and background phase removal for quantitative susceptibility mapping." <em>NMR in Biomedicine</em>, 27(2):219-227.</p>
+            <a href="https://doi.org/10.1002/nbm.3056" target="_blank" rel="noopener">DOI: 10.1002/nbm.3056</a>
+          </div>
+          <div class="citation-item">
+            <strong>iHARPERELLA (Improved HARPERELLA)</strong>
+            <p>Li, W., Wu, B., Liu, C. (2015). "iHARPERELLA: an improved method for integrated 3D phase unwrapping and background phase removal." <em>Proc. ISMRM</em> 23, p.3313.</p>
           </div>
           <div class="citation-item">
             <strong>SDF (Spatial Domain Filtering; for QSMART)</strong>

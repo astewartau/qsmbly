@@ -36,6 +36,8 @@ const defaults = {
   ISMV_DEFAULTS: JSON.parse(wasmModule.get_ismv_defaults()),
   SWI_DEFAULTS: JSON.parse(wasmModule.get_swi_defaults()),
   SHARP_DEFAULTS: JSON.parse(wasmModule.get_sharp_defaults()),
+  RESHARP_DEFAULTS: JSON.parse(wasmModule.get_resharp_defaults()),
+  HARPERELLA_DEFAULTS: JSON.parse(wasmModule.get_harperella_defaults()),
   TIKHONOV_DEFAULTS: JSON.parse(wasmModule.get_tikhonov_defaults()),
   NLTV_DEFAULTS: JSON.parse(wasmModule.get_nltv_defaults()),
   MEDI_DEFAULTS: JSON.parse(wasmModule.get_medi_defaults()),

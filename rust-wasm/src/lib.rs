@@ -1289,6 +1289,144 @@ pub fn lbv_wasm_with_progress(
     result
 }
 
+/// RESHARP background field removal
+#[wasm_bindgen]
+pub fn resharp_wasm(
+    field: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    radius: f64,
+    tik_reg: f64,
+    tol: f64,
+    max_iter: usize,
+    field_strength: f64,
+) -> Vec<f64> {
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM RESHARP: {}x{}x{}, radius={:.1}, tik_reg={:.1e}, scale={:.4e}",
+                 nx, ny, nz, radius, tik_reg, scale);
+
+    let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
+    let (local_field, eroded_mask) = qsm_core::bgremove::resharp(
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz, radius, tik_reg, tol, max_iter
+    );
+
+    let mut result: Vec<f64> = local_field.iter().map(|&v| v / scale).collect();
+    result.extend(eroded_mask.iter().map(|&m| m as f64));
+
+    console_log!("WASM RESHARP complete");
+    result
+}
+
+/// RESHARP with progress callback
+#[wasm_bindgen]
+pub fn resharp_wasm_with_progress(
+    field: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    radius: f64,
+    tik_reg: f64,
+    tol: f64,
+    max_iter: usize,
+    field_strength: f64,
+    progress_callback: &js_sys::Function,
+) -> Vec<f64> {
+    let scale = hz_to_ppm_scale(field_strength);
+    console_log!("WASM RESHARP with progress: {}x{}x{}, radius={:.1}, tik_reg={:.1e}, scale={:.4e}",
+                 nx, ny, nz, radius, tik_reg, scale);
+
+    let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
+    let callback = progress_callback.clone();
+    let (local_field, eroded_mask) = qsm_core::bgremove::resharp_with_progress(
+        &field_norm, mask, nx, ny, nz, vsx, vsy, vsz, radius, tik_reg, tol, max_iter,
+        |current, total| {
+            let this = JsValue::null();
+            let _ = callback.call2(&this,
+                &JsValue::from(current as u32),
+                &JsValue::from(total as u32));
+        }
+    );
+
+    let mut result: Vec<f64> = local_field.iter().map(|&v| v / scale).collect();
+    result.extend(eroded_mask.iter().map(|&m| m as f64));
+
+    console_log!("WASM RESHARP complete");
+    result
+}
+
+/// HARPERELLA — integrated phase unwrapping and background removal
+///
+/// Takes wrapped phase (radians) and returns tissue phase + mask.
+/// No Hz→ppm conversion needed (operates in phase domain).
+#[wasm_bindgen]
+pub fn harperella_wasm_with_progress(
+    phase: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    radius: f64,
+    max_iter: usize,
+    tol: f64,
+    progress_callback: &js_sys::Function,
+) -> Vec<f64> {
+    console_log!("WASM HARPERELLA: {}x{}x{}, radius={:.1}, max_iter={}", nx, ny, nz, radius, max_iter);
+
+    let callback = progress_callback.clone();
+    let (tissue_phase, out_mask) = qsm_core::pipeline::harperella_with_progress(
+        phase, mask, nx, ny, nz, vsx, vsy, vsz,
+        radius, max_iter, tol,
+        |current, total| {
+            let this = JsValue::null();
+            let _ = callback.call2(&this,
+                &JsValue::from(current as u32),
+                &JsValue::from(total as u32));
+        }
+    );
+
+    let mut result = tissue_phase;
+    result.extend(out_mask.iter().map(|&m| m as f64));
+
+    console_log!("WASM HARPERELLA complete");
+    result
+}
+
+/// iHARPERELLA — improved integrated phase unwrapping and background removal
+///
+/// Takes wrapped phase (radians) and returns tissue phase + mask.
+/// No Hz→ppm conversion needed (operates in phase domain).
+#[wasm_bindgen]
+pub fn iharperella_wasm_with_progress(
+    phase: &[f64],
+    mask: &[u8],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    radius: f64,
+    max_iter: usize,
+    tol: f64,
+    progress_callback: &js_sys::Function,
+) -> Vec<f64> {
+    console_log!("WASM iHARPERELLA: {}x{}x{}, radius={:.1}, max_iter={}", nx, ny, nz, radius, max_iter);
+
+    let callback = progress_callback.clone();
+    let (tissue_phase, out_mask) = qsm_core::pipeline::iharperella_with_progress(
+        phase, mask, nx, ny, nz, vsx, vsy, vsz,
+        radius, max_iter, tol,
+        |current, total| {
+            let this = JsValue::null();
+            let _ = callback.call2(&this,
+                &JsValue::from(current as u32),
+                &JsValue::from(total as u32));
+        }
+    );
+
+    let mut result = tissue_phase;
+    result.extend(out_mask.iter().map(|&m| m as f64));
+
+    console_log!("WASM iHARPERELLA complete");
+    result
+}
+
 // ============================================================================
 // WASM Exports: Utilities
 // ============================================================================
@@ -2476,6 +2614,21 @@ pub fn get_swi_defaults() -> String {
 pub fn get_sharp_defaults() -> String {
     let p = qsm_core::bgremove::SharpParams::default();
     format!(r#"{{"threshold":{},"radius_factor":{}}}"#, p.threshold, p.radius_factor)
+}
+
+/// Get default RESHARP parameters as JSON string
+#[wasm_bindgen]
+pub fn get_resharp_defaults() -> String {
+    let p = qsm_core::bgremove::ResharpParams::default();
+    format!(r#"{{"radius":{},"tik_reg":{},"tol":{},"max_iter":{}}}"#,
+        p.radius, p.tik_reg, p.tol, p.max_iter)
+}
+
+/// Get default HARPERELLA/iHARPERELLA parameters as JSON string
+#[wasm_bindgen]
+pub fn get_harperella_defaults() -> String {
+    let p = qsm_core::pipeline::HarperellaParams::default();
+    format!(r#"{{"radius":{},"max_iter":{},"tol":{}}}"#, p.radius, p.max_iter, p.tol)
 }
 
 /// Get default Tikhonov parameters as JSON string
