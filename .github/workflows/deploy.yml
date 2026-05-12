@@ -145,9 +145,6 @@ jobs:
           # Copy dcm2niix WASM module (DICOM conversion)
           cp -r dcm2niix deploy/
 
-          # Copy schemas (DiCompare validation)
-          cp -r schemas deploy/
-
           # Copy built WASM
           cp rust-wasm/pkg/qsm_wasm.js deploy/wasm/
           cp rust-wasm/pkg/qsm_wasm_bg.wasm deploy/wasm/
