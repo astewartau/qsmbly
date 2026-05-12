@@ -801,14 +801,22 @@ class QSMApp {
     const { baseUrl, files } = QSMConfig.EXAMPLE_DATA;
 
     btn.disabled = true;
-    btn.textContent = 'Downloading example data...';
     this.updateOutput('Downloading example data...');
 
+    // Add progress bar inside button
+    btn.innerHTML = '<div style="width:100%;text-align:center"><div>Downloading example data...</div><div style="background:var(--color-border);border-radius:3px;height:6px;margin-top:4px;overflow:hidden"><div id="exampleDataProgress" style="height:100%;width:0%;background:var(--color-primary);transition:width 0.2s ease"></div></div></div>';
+    const progressFill = document.getElementById('exampleDataProgress');
+
     try {
+      let completed = 0;
       const fetched = await Promise.all(files.map(async (name) => {
         const resp = await fetch(`${baseUrl}/${name}`);
         if (!resp.ok) throw new Error(`Failed to fetch ${name}: ${resp.status}`);
         const blob = await resp.blob();
+        completed++;
+        const pct = Math.round((completed / files.length) * 100);
+        if (progressFill) progressFill.style.width = `${pct}%`;
+        this.updateOutput(`Downloaded ${completed}/${files.length}: ${name}`);
         return new File([blob], name);
       }));
 
