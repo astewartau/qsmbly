@@ -264,6 +264,29 @@ export const MEDI_DEFAULTS = {
   dataWeighting: _MEDI.data_weighting,
 };
 
+// Example data (GitHub Release assets)
+export const EXAMPLE_DATA = {
+  baseUrl: 'https://github.com/astewartau/qsm-wasm/releases/download/example-data',
+  files: [
+    'sub-1_echo-1_part-mag_MEGRE.nii.gz',
+    'sub-1_echo-1_part-mag_MEGRE.json',
+    'sub-1_echo-1_part-phase_MEGRE.nii.gz',
+    'sub-1_echo-1_part-phase_MEGRE.json',
+    'sub-1_echo-2_part-mag_MEGRE.nii.gz',
+    'sub-1_echo-2_part-mag_MEGRE.json',
+    'sub-1_echo-2_part-phase_MEGRE.nii.gz',
+    'sub-1_echo-2_part-phase_MEGRE.json',
+    'sub-1_echo-3_part-mag_MEGRE.nii.gz',
+    'sub-1_echo-3_part-mag_MEGRE.json',
+    'sub-1_echo-3_part-phase_MEGRE.nii.gz',
+    'sub-1_echo-3_part-phase_MEGRE.json',
+    'sub-1_echo-4_part-mag_MEGRE.nii.gz',
+    'sub-1_echo-4_part-mag_MEGRE.json',
+    'sub-1_echo-4_part-phase_MEGRE.nii.gz',
+    'sub-1_echo-4_part-phase_MEGRE.json',
+  ]
+};
+
 // Stage display names for UI
 export const STAGE_DISPLAY_NAMES = {
   'magnitude': 'Magnitude',
@@ -413,6 +436,7 @@ const QSMConfig = {
   RTS_DEFAULTS,
   NLTV_DEFAULTS,
   MEDI_DEFAULTS,
+  EXAMPLE_DATA,
   STAGE_DISPLAY_NAMES,
   PIPELINE_METHODS,
   PIPELINE_DEFAULTS,

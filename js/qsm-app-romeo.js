@@ -341,6 +341,9 @@ class QSMApp {
     // Unified file input
     this._setupUnifiedDropZone();
 
+    // Load example data button
+    document.getElementById('loadExampleData')?.addEventListener('click', () => this._loadExampleData());
+
     // Field map units dropdown
     document.getElementById('fieldMapUnits')?.addEventListener('change', () => {
       this.updateInputParamsVisibility();
@@ -787,6 +790,37 @@ class QSMApp {
       if (jsonFiles.length > 0) {
         await this.fileIOController.processJsonFiles(jsonFiles);
       }
+    }
+  }
+
+  /**
+   * Fetch example data from GitHub Release and load it.
+   */
+  async _loadExampleData() {
+    const btn = document.getElementById('loadExampleData');
+    const { baseUrl, files } = QSMConfig.EXAMPLE_DATA;
+
+    btn.disabled = true;
+    btn.textContent = 'Downloading example data...';
+    this.updateOutput('Downloading example data...');
+
+    try {
+      const fetched = await Promise.all(files.map(async (name) => {
+        const resp = await fetch(`${baseUrl}/${name}`);
+        if (!resp.ok) throw new Error(`Failed to fetch ${name}: ${resp.status}`);
+        const blob = await resp.blob();
+        return new File([blob], name);
+      }));
+
+      this.updateOutput(`Downloaded ${fetched.length} files. Loading...`);
+      await this._handleUnifiedFiles(fetched);
+      this.updateOutput('Example data loaded successfully.');
+    } catch (err) {
+      this.updateOutput(`Error loading example data: ${err.message}`);
+      console.error('Example data load failed:', err);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Load example data';
     }
   }
 

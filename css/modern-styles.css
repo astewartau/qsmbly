@@ -1891,6 +1891,15 @@ select {
    ============================================ */
 
 /* Sidebar button */
+.btn-block {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  font-size: 0.75rem;
+}
+
 .btn-dicompare {
   font-size: 0.75rem;
   display: flex;
