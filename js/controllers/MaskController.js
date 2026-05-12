@@ -644,6 +644,14 @@ export class MaskController {
 
     URL.revokeObjectURL(maskUrl);
 
+    // Force overlay display range to [0, 1] for binary mask
+    if (this.nv.volumes.length > 1) {
+      const overlay = this.nv.volumes[this.nv.volumes.length - 1];
+      overlay.cal_min = 0;
+      overlay.cal_max = 1;
+      this.nv.updateGLVolume();
+    }
+
     // Show overlay opacity control when overlay exists
     this.showOverlayControl(true);
   }

@@ -317,10 +317,11 @@ class QSMApp {
   }
 
   updateProgressBar() {
+    const pct = `${this.animatedProgress * 100}%`;
     const fill = document.getElementById('progressFill');
-    if (fill) {
-      fill.style.width = `${this.animatedProgress * 100}%`;
-    }
+    if (fill) fill.style.width = pct;
+    const mobileFill = document.getElementById('mobileProgressFill');
+    if (mobileFill) mobileFill.style.width = pct;
   }
 
   stopProgressAnimation() {
@@ -331,6 +332,9 @@ class QSMApp {
   }
 
   setupEventListeners() {
+    // Mobile tab bar
+    this._setupMobileTabs();
+
     // Info tooltips
     this._setupInfoTooltips();
 
@@ -638,6 +642,28 @@ class QSMApp {
   /**
    * Set up hover-positioned info tooltips for all .info-icon elements.
    */
+  _setupMobileTabs() {
+    const container = document.querySelector('.app-container');
+    const tabs = document.querySelectorAll('.mobile-tab');
+    if (!container || tabs.length === 0) return;
+
+    // Set initial state
+    container.setAttribute('data-mobile-tab', 'controls');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
+        container.setAttribute('data-mobile-tab', tabName);
+        tabs.forEach(t => t.classList.toggle('active', t === tab));
+
+        // Trigger NiiVue resize when switching to viewer
+        if (tabName === 'viewer' && this.nv) {
+          requestAnimationFrame(() => this.nv.resizeListener());
+        }
+      });
+    });
+  }
+
   _setupInfoTooltips() {
     document.querySelectorAll('.info-icon').forEach(icon => {
       const tooltip = icon.querySelector('.info-tooltip');
@@ -1789,7 +1815,6 @@ class QSMApp {
         this.hideEchoNavigation();
         this.showStageButtons();
         this.addStageButton('preparedMagnitude', 'Masking input');
-        this.autoDetectThreshold();
       }
     });
   }
@@ -2348,7 +2373,7 @@ class QSMApp {
     if (existingItem) {
       // Already exists, just make sure it's enabled
       const showBtn = existingItem.querySelector('.stage-tab');
-      const downloadBtn = existingItem.querySelector('.download-btn');
+      const downloadBtn = existingItem.querySelector('.stage-download');
       if (showBtn) showBtn.disabled = false;
       if (downloadBtn) downloadBtn.disabled = false;
       return;
@@ -2374,8 +2399,72 @@ class QSMApp {
     showBtn.title = description || stage;
     showBtn.addEventListener('click', () => this.showStage(stage));
 
+    // Download button
+    const downloadBtn = document.createElement('button');
+    downloadBtn.className = 'btn btn-secondary btn-sm btn-icon stage-download';
+    downloadBtn.title = `Download ${displayName} as NIfTI`;
+    downloadBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+    downloadBtn.addEventListener('click', () => this.downloadStage(stage));
+
     stageItem.appendChild(showBtn);
+    stageItem.appendChild(downloadBtn);
     container.appendChild(stageItem);
+  }
+
+  /**
+   * Download a specific stage result as NIfTI
+   */
+  downloadStage(stage) {
+    // Pipeline results stored as File objects
+    if (this.results[stage]?.file) {
+      const file = this.results[stage].file;
+      const url = URL.createObjectURL(file);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name || `${stage}.nii`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      this.updateOutput(`Downloaded: ${a.download}`);
+      return;
+    }
+
+    // Mask (local data)
+    const headerBytes = this.magnitudeFileBytes || this.maskController.magnitudeFileBytes;
+    if (stage === 'mask') {
+      const maskData = this.currentMaskData || this.maskController.currentMaskData;
+      if (maskData && headerBytes) {
+        const nifti = createMaskNifti(maskData, headerBytes);
+        this._downloadBuffer(nifti, 'brain_mask.nii');
+        return;
+      }
+    }
+
+    // Prepared magnitude (local data)
+    if (stage === 'preparedMagnitude') {
+      const prepData = this.preparedMagnitudeData || this.maskController.preparedMagnitudeData;
+      if (prepData && headerBytes) {
+        const nifti = createFloat64Nifti(prepData, headerBytes);
+        this._downloadBuffer(nifti, 'masking_input.nii');
+        return;
+      }
+    }
+
+    this.updateOutput(`No data available to download for ${stage}`);
+  }
+
+  _downloadBuffer(buffer, filename) {
+    const blob = new Blob([buffer], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    this.updateOutput(`Downloaded: ${filename}`);
   }
 
   // Get a user-friendly display name for a stage
@@ -2465,7 +2554,10 @@ class QSMApp {
 
       // Handle prepared magnitude (local data, not from pipeline)
       if (stage === 'preparedMagnitude') {
-        if (this.preparedMagnitudeData) {
+        if (this.preparedMagnitudeData || this.maskController.preparedMagnitudeData) {
+          if (!this.preparedMagnitudeData) {
+            this.preparedMagnitudeData = this.maskController.preparedMagnitudeData;
+          }
           await this.displayPreparedMagnitude();
           this.updateDataUnits(null);
           this.updateOutput("Displaying: Masking input");
@@ -2477,7 +2569,10 @@ class QSMApp {
 
       // Handle mask (local data, not from pipeline)
       if (stage === 'mask') {
-        if (this.currentMaskData) {
+        if (this.currentMaskData || this.maskController.currentMaskData) {
+          if (!this.currentMaskData) {
+            this.currentMaskData = this.maskController.currentMaskData;
+          }
           await this.displayCurrentMask();
           this.updateDataUnits(null);
           this.updateOutput("Displaying: Brain Mask");
@@ -2571,21 +2666,6 @@ class QSMApp {
     } catch (error) {
       this.updateOutput(`Error caching data: ${error.message}`);
     }
-  }
-
-  async downloadStage(stage) {
-    if (!this.results[stage]?.file) {
-      this.updateOutput(`${stage} not available - run the pipeline first`);
-      return;
-    }
-
-    const file = this.results[stage].file;
-    const url = URL.createObjectURL(file);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${stage}_${new Date().toISOString().slice(0,10)}.nii`;
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   /**

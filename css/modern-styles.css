@@ -1603,16 +1603,240 @@ select {
 }
 
 /* Responsive */
+/* ============================================
+   Mobile Layout (tabbed view)
+   ============================================ */
+
+/* Tab bar: hidden on desktop, shown on mobile */
+.mobile-tab-bar {
+  display: none;
+  grid-column: 1 / -1;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  justify-content: space-around;
+  align-items: center;
+  padding: var(--space-xs) 0;
+  padding-bottom: max(var(--space-xs), env(safe-area-inset-bottom));
+}
+
+.mobile-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  font-size: 0.6rem;
+  font-weight: 500;
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-tab.active {
+  color: var(--color-primary);
+}
+
+.mobile-tab svg {
+  stroke: currentColor;
+}
+
+/* Mobile progress bar — thin bar at top, visible across all tabs */
+.mobile-progress {
+  display: none;
+  height: 3px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.mobile-progress-fill {
+  height: 100%;
+  background: var(--color-primary);
+  transition: width 0.3s ease;
+}
+
 @media (max-width: 1024px) {
+  /* Grid: header, content area, tab bar */
   .app-container {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto 1fr auto;
+    grid-template-rows: auto 1fr auto;
+    height: 100vh;
+    height: 100dvh;
   }
 
+  /* Hide footer on mobile — tab bar replaces it */
+  .app-footer {
+    display: none;
+  }
+
+  /* Header: compact */
+  .app-header {
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .logo h1 {
+    font-size: 0.9rem;
+  }
+
+  .logo h1 > span {
+    display: none;
+  }
+
+  .header-links span {
+    display: none;
+  }
+
+  .header-links {
+    gap: var(--space-xs);
+  }
+
+  .header-link {
+    padding: var(--space-xs);
+  }
+
+  /* Header in row 1, panels in row 2, tab bar in row 3 */
+  .app-header {
+    grid-row: 1;
+  }
+
+  .app-sidebar,
+  .app-main {
+    grid-column: 1;
+    grid-row: 2;
+    border: none;
+    max-height: none;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .mobile-tab-bar {
+    display: flex;
+    grid-row: 3;
+  }
+
+  /* Tabbed visibility — only active tab is shown */
   .app-sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--color-border);
-    max-height: 50vh;
+    display: none;
+  }
+
+  .app-main {
+    display: none;
+  }
+
+  .app-container[data-mobile-tab="controls"] .app-sidebar {
+    display: flex;
+  }
+
+  .app-container[data-mobile-tab="viewer"] .app-main {
+    display: flex;
+  }
+
+  /* Console tab: show main but hide viewer parts, show console full-height */
+  .app-container[data-mobile-tab="console"] .app-main {
+    display: flex;
+  }
+
+  .app-container[data-mobile-tab="console"] .viewer-toolbar,
+  .app-container[data-mobile-tab="console"] .viewer-canvas-wrapper,
+  .app-container[data-mobile-tab="console"] .viewer-info {
+    display: none;
+  }
+
+  .app-container[data-mobile-tab="console"] .console-container {
+    flex: 1;
+    height: auto;
+  }
+
+  /* When on viewer tab, hide console to maximize canvas space */
+  .app-container[data-mobile-tab="viewer"] .console-container {
+    display: none;
+  }
+
+  /* Sidebar fills available space */
+  .app-sidebar {
+    max-height: none;
+    overflow-y: auto;
+  }
+
+  /* Status bar always visible as thin bar under header when not on controls tab */
+  .sidebar-status {
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  /* Viewer toolbar: wrap and compact */
+  .viewer-toolbar {
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .viewer-actions {
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+  }
+
+  .view-tabs {
+    gap: 2px;
+  }
+
+  .view-tab {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 0.7rem;
+  }
+
+  /* Window controls: simplify on mobile */
+  .window-controls {
+    gap: 4px;
+  }
+
+  .window-input {
+    width: 50px;
+    font-size: 0.7rem;
+  }
+
+  .range-slider-container {
+    width: 80px;
+  }
+
+  /* Touch-friendly buttons */
+  .btn, button {
+    min-height: 36px;
+  }
+
+  .btn-sm {
+    min-height: 32px;
+  }
+
+  .btn-icon {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  /* Section titles: slightly larger touch target */
+  .section-title {
+    padding: var(--space-sm) var(--space-md);
+    min-height: 40px;
+  }
+
+  /* Param labels and inputs: slightly larger */
+  select, input[type="number"] {
+    min-height: 36px;
+    font-size: 0.85rem;
+  }
+
+}
+
+@media (max-width: 1024px) {
+  .mobile-progress {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    pointer-events: none;
   }
 }
 
@@ -1675,6 +1899,28 @@ select {
   gap: var(--space-xs);
   width: 100%;
   margin-top: var(--space-sm);
+}
+
+/* Stage result items in Results section */
+.stage-buttons-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stage-item {
+  display: flex;
+  gap: 4px;
+}
+
+.stage-item .stage-tab {
+  flex: 1;
+  text-align: left;
+}
+
+.stage-item .stage-download {
+  flex-shrink: 0;
+  padding: 0 var(--space-xs);
 }
 
 .btn-qsmxtrs {

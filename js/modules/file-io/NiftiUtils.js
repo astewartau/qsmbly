@@ -157,6 +157,10 @@ export function createMaskNifti(maskData, sourceHeader) {
   destView.setFloat32(112, 1, true); // scl_slope = 1
   destView.setFloat32(116, 0, true); // scl_inter = 0
 
+  // Reset cal_min/cal_max so NiiVue displays 0/1 correctly
+  destView.setFloat32(124, 0, true); // cal_max = 0 (let NiiVue auto-detect)
+  destView.setFloat32(128, 0, true); // cal_min = 0
+
   // Copy mask data as float32
   const dataView = new Float32Array(buffer, headerSize);
   dataView.set(maskData);
