@@ -99,12 +99,6 @@
           <span class="dicom-status-text" id="dicomStatusText">Converting...</span>
         </div>
 
-        <!-- File triage buckets (populated dynamically after files are added) -->
-        <div id="fileTriage" style="display: none;"></div>
-
-        <!-- Validation messages -->
-        <div id="inputValidation" style="display: none;"></div>
-
         <!-- dicompare validation button -->
         <button class="btn btn-secondary btn-dicompare" id="dicompareReportBtn" disabled>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
@@ -113,6 +107,12 @@
           </svg>
           dicompare Report
         </button>
+
+        <!-- File triage buckets (populated dynamically after files are added) -->
+        <div id="fileTriage" style="display: none;"></div>
+
+        <!-- Validation messages -->
+        <div id="inputValidation" style="display: none;"></div>
 
         </div>
       </section>
@@ -154,22 +154,25 @@
         </div>
       </section>
 
-      <!-- Magnitude Preparation Section -->
-      <section class="sidebar-section collapsed" id="magnitudePrepSection">
+      <!-- Masking Section -->
+      <section class="sidebar-section collapsed" id="maskSection">
         <h2 class="section-title" onclick="toggleSection(this.parentElement)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
           </svg>
-          Masking Input Preparation
+          Masking
         </h2>
         <div class="section-content">
+
+        <!-- Masking input source selection -->
         <div class="param-group">
-          <label class="param-label" for="maskInputSource">Masking Input <span class="info-icon">i<span class="info-tooltip">Data source used to generate the brain mask. Phase quality maps (ROMEO voxel quality) often produce more reliable masks than magnitude-based approaches.</span></span></label>
+          <label class="param-label" for="maskInputSource">Masking Input <span class="info-icon">i<span class="info-tooltip">Data source used to generate the brain mask. Phase quality maps (ROMEO voxel quality) often produce more reliable masks than magnitude-based approaches. Choose "Custom mask" to upload your own.</span></span></label>
           <select id="maskInputSource">
             <option value="first_echo">First-echo magnitude</option>
             <option value="last_echo">Last-echo magnitude</option>
             <option value="combined">Combined magnitude (RSS)</option>
             <option value="phase_quality" selected>Phase quality map</option>
+            <option value="custom">Custom mask</option>
           </select>
         </div>
 
@@ -180,28 +183,18 @@
           </label>
         </div>
 
+        <!-- Prepare button (hidden when custom mask is selected) -->
         <button class="btn btn-secondary btn-sm" id="prepareMaskInput" style="width: 100%; margin-bottom: 0;" disabled>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
           </svg>
-          Prepare
+          Prepare Input
         </button>
-        </div>
-      </section>
 
-      <!-- Masking Section -->
-      <section class="sidebar-section collapsed" id="maskSection">
-        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
-          </svg>
-          Masking
-        </h2>
-        <div class="section-content">
-        <!-- Direct mask file upload -->
-        <div class="param-group" id="maskUploadGroup">
+        <!-- Custom mask upload (shown only when custom is selected) -->
+        <div class="param-group" id="maskUploadGroup" style="display: none;">
           <div class="file-upload-header">
-            <label class="param-label">Upload Mask <span class="optional-label">(optional)</span></label>
+            <label class="param-label">Upload Mask</label>
             <button class="btn-icon btn-preview" id="vis_mask" title="Preview mask" disabled>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -221,10 +214,6 @@
             </div>
             <div class="file-list" id="maskList"></div>
           </div>
-        </div>
-
-        <div class="mask-divider" id="maskDivider">
-          <span>or generate automatically</span>
         </div>
 
         <div class="mask-preview-buttons" id="maskGenerateButtons">
@@ -334,45 +323,28 @@
         </h2>
         <div class="section-content">
           <h5 style="margin: 0 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">SWI</h5>
-          <div class="param-group">
-            <label class="param-label" for="sidebarSwiScaling">Phase Scaling <span class="info-icon">i<span class="info-tooltip">How phase is converted to a [0,1] weighting mask. Tanh is recommended for most applications.</span></span></label>
-            <select id="sidebarSwiScaling">
-              <option value="tanh" selected>Tanh (default)</option>
-              <option value="negative_tanh">Negative Tanh</option>
-              <option value="positive">Positive</option>
-              <option value="negative">Negative</option>
-              <option value="triangular">Triangular</option>
-            </select>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" id="openSwiSettings" style="flex: 1;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              Advanced
+            </button>
+            <button class="btn btn-primary" id="runSWI" style="flex: 3;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              <span>Start SWI</span>
+            </button>
           </div>
-          <div class="param-group">
-            <label class="param-label" for="sidebarSwiStrength">Strength <span class="info-icon">i<span class="info-tooltip">Phase scaling strength. Higher values produce stronger phase contrast in the SWI image.</span></span></label>
-            <input type="number" id="sidebarSwiStrength" value="4" min="1" max="20" step="1" style="width: 100%;">
-          </div>
-          <div class="param-group">
-            <label class="param-label" for="sidebarSwiHpSigma">HP Filter Sigma <span class="info-icon">i<span class="info-tooltip">Gaussian high-pass filter sigma in voxels [X, Y, Z]. Separates local phase from background. Set Z=0 for thin axial slices.</span></span></label>
-            <div style="display: flex; gap: 4px;">
-              <input type="number" id="sidebarSwiHpSigmaX" value="4" min="0" max="20" step="1" style="width: 33%;" placeholder="X">
-              <input type="number" id="sidebarSwiHpSigmaY" value="4" min="0" max="20" step="1" style="width: 33%;" placeholder="Y">
-              <input type="number" id="sidebarSwiHpSigmaZ" value="0" min="0" max="20" step="1" style="width: 33%;" placeholder="Z">
-            </div>
-          </div>
-          <div class="param-group">
-            <label class="param-label" for="sidebarSwiMipWindow">MIP Window <span class="info-icon">i<span class="info-tooltip">Number of slices for the minimum intensity projection. Larger windows show more venous structure but reduce spatial specificity.</span></span></label>
-            <input type="number" id="sidebarSwiMipWindow" value="7" min="1" max="30" step="1" style="width: 100%;">
-          </div>
-          <button class="btn btn-primary" id="runSWI" style="width: 100%;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"/>
-            </svg>
-            <span>Compute SWI</span>
-          </button>
           <hr style="border: none; border-top: 1px solid var(--color-border); margin: var(--space-sm) 0;">
           <h5 style="margin: 0 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">T2* / R2*</h5>
           <button class="btn btn-primary" id="runT2starR2star" style="width: 100%;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
-            <span>Compute T2* &amp; R2*</span>
+            <span>Start T2* &amp; R2*</span>
           </button>
         </div>
       </section>
@@ -460,7 +432,14 @@
         <div class="section-content">
         <!-- Stage buttons are dynamically added here -->
         <div class="stage-buttons-grid" id="dynamicStageButtons"></div>
-        <button class="btn btn-secondary btn-sm" id="clearAllResults" style="width: 100%; margin-top: var(--space-sm);">
+        <button class="btn btn-sm btn-qsmxtrs" id="previewCommand" style="width: 100%; margin-top: var(--space-sm);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+          </svg>
+          Export qsmxt.rs Command
+        </button>
+        <button class="btn btn-secondary btn-sm" id="clearAllResults" style="width: 100%; margin-top: var(--space-xs);">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="3 6 5 6 21 6"/>
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -472,15 +451,6 @@
       </div>
 
       <!-- Command Preview -->
-      <div style="padding: var(--space-xs) var(--space-sm);">
-        <button class="btn btn-secondary btn-sm" id="previewCommand" style="width: 100%;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="16 18 22 12 16 6"/>
-            <polyline points="8 6 2 12 8 18"/>
-          </svg>
-          Preview qsmxt.rs Command
-        </button>
-      </div>
 
       <!-- Status Bar (fixed at bottom) -->
       <div class="sidebar-status" id="statusBar">
@@ -1322,6 +1292,49 @@
           </svg>
           Copy to Clipboard
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SWI Settings Modal -->
+  <div class="modal-overlay" id="swiSettingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>SWI Settings</h3>
+        <button class="modal-close" id="closeSwiSettings">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section">
+          <div class="param-group">
+            <label class="param-label" for="sidebarSwiScaling">Phase Scaling <span class="info-icon">i<span class="info-tooltip">How phase is converted to a [0,1] weighting mask. Tanh is recommended for most applications.</span></span></label>
+            <select id="sidebarSwiScaling">
+              <option value="tanh" selected>Tanh (default)</option>
+              <option value="negative_tanh">Negative Tanh</option>
+              <option value="positive">Positive</option>
+              <option value="negative">Negative</option>
+              <option value="triangular">Triangular</option>
+            </select>
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="sidebarSwiStrength">Strength <span class="info-icon">i<span class="info-tooltip">Phase scaling strength. Higher values produce stronger phase contrast in the SWI image.</span></span></label>
+            <input type="number" id="sidebarSwiStrength" value="4" min="1" max="20" step="1" style="width: 100%;">
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="sidebarSwiHpSigma">HP Filter Sigma <span class="info-icon">i<span class="info-tooltip">Gaussian high-pass filter sigma in voxels [X, Y, Z]. Separates local phase from background. Set Z=0 for thin axial slices.</span></span></label>
+            <div style="display: flex; gap: 4px;">
+              <input type="number" id="sidebarSwiHpSigmaX" value="4" min="0" max="20" step="1" style="width: 33%;" placeholder="X">
+              <input type="number" id="sidebarSwiHpSigmaY" value="4" min="0" max="20" step="1" style="width: 33%;" placeholder="Y">
+              <input type="number" id="sidebarSwiHpSigmaZ" value="0" min="0" max="20" step="1" style="width: 33%;" placeholder="Z">
+            </div>
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="sidebarSwiMipWindow">MIP Window <span class="info-icon">i<span class="info-tooltip">Number of slices for the minimum intensity projection. Larger windows show more venous structure but reduce spatial specificity.</span></span></label>
+            <input type="number" id="sidebarSwiMipWindow" value="7" min="1" max="30" step="1" style="width: 100%;">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="closeSwiSettings2">Close</button>
       </div>
     </div>
   </div>

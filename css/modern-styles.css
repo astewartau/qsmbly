@@ -348,7 +348,7 @@ input[type="range"]:disabled::-moz-range-thumb {
   padding: 0 var(--space-md) var(--space-md);
   overflow: hidden;
   transition: max-height 0.25s ease-out, padding 0.25s ease-out, opacity 0.2s ease-out;
-  max-height: 1000px;
+  max-height: 10000px;
   opacity: 1;
 }
 
@@ -1675,6 +1675,26 @@ select {
   gap: var(--space-xs);
   width: 100%;
   margin-top: var(--space-sm);
+}
+
+.btn-qsmxtrs {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+}
+
+.btn-qsmxtrs:hover {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+}
+
+.btn-qsmxtrs:disabled {
+  background: var(--color-border);
+  color: var(--color-text-dim);
 }
 
 /* Modal sizing */

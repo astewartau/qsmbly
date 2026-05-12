@@ -15,8 +15,8 @@ import { ProgressManager } from './modules/ui/ProgressManager.js';
 import { EchoNavigator } from './modules/viewer/EchoNavigator.js';
 import { FileIOController, PipelineExecutor, PipelineSettingsController, MaskController, ViewerController } from './controllers/index.js';
 import { DicomController } from './controllers/DicomController.js';
-import { DicompareController } from './controllers/DicompareController.js';
-import { DicompareReportRenderer } from './modules/ui/DicompareReportRenderer.js';
+import { DicompareController } from 'https://dicompare.neurodesk.org/embed/DicompareController.js';
+import { DicompareReportRenderer } from 'https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js';
 import * as QSMConfig from './app/config.js';
 import { generateQsmxtCommand } from './modules/CommandGenerator.js';
 
@@ -190,6 +190,7 @@ class QSMApp {
 
     // Initialize dicompare controller
     this.dicompareController = new DicompareController({
+      schemaUrl: 'https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json',
       updateOutput: (msg) => this.updateOutput(msg)
     });
     this.dicompareRenderer = new DicompareReportRenderer();
@@ -434,16 +435,25 @@ class QSMApp {
 
     // Mask Input Preparation
     document.getElementById('maskInputSource')?.addEventListener('change', (e) => {
+      const isCustom = e.target.value === 'custom';
       this.maskPrepSettings.source = e.target.value;
       this.maskPrepSettings.prepared = false;
       this.updateMagnitudePrepSection();
       this.updatePrepareButtonState();
 
-      // Hide bias correction for phase quality map (not applicable)
+      // Show/hide custom mask upload vs prepare button
+      const maskUploadGroup = document.getElementById('maskUploadGroup');
+      const prepareMaskInput = document.getElementById('prepareMaskInput');
+      if (maskUploadGroup) maskUploadGroup.style.display = isCustom ? '' : 'none';
+      if (prepareMaskInput) prepareMaskInput.style.display = isCustom ? 'none' : '';
+
+      // Hide bias correction for phase quality map and custom mask (not applicable)
       const biasCorrectionGroup = document.getElementById('biasCorrectionGroup');
       if (biasCorrectionGroup) {
-        biasCorrectionGroup.style.display = e.target.value === 'phase_quality' ? 'none' : '';
+        biasCorrectionGroup.style.display = (e.target.value === 'phase_quality' || isCustom) ? 'none' : '';
       }
+
+      this.updateMaskSectionState();
     });
 
     document.getElementById('applyBiasCorrection')?.addEventListener('change', (e) => {
@@ -466,6 +476,16 @@ class QSMApp {
     document.getElementById('closeCommandPreview')?.addEventListener('click', () => this.commandPreviewModal?.close());
     document.getElementById('closeCommandPreviewBtn')?.addEventListener('click', () => this.commandPreviewModal?.close());
     document.getElementById('copyCommand')?.addEventListener('click', () => this.copyCommandToClipboard());
+    document.getElementById('openSwiSettings')?.addEventListener('click', () => {
+      document.getElementById('swiSettingsModal')?.classList.add('active');
+    });
+    document.getElementById('closeSwiSettings')?.addEventListener('click', () => {
+      document.getElementById('swiSettingsModal')?.classList.remove('active');
+    });
+    document.getElementById('closeSwiSettings2')?.addEventListener('click', () => {
+      document.getElementById('swiSettingsModal')?.classList.remove('active');
+    });
+
     document.getElementById('runSWI')?.addEventListener('click', () => {
       // Sync sidebar SWI settings to pipeline settings before running
       const scaling = document.getElementById('sidebarSwiScaling')?.value || 'tanh';
@@ -1438,13 +1458,14 @@ class QSMApp {
   }
 
   updateMagnitudePrepSection() {
-    const section = document.getElementById('magnitudePrepSection');
+    const section = document.getElementById('maskSection');
     if (!section) return;
 
     const hasMag = this.fileIOController.buckets.magnitude.length > 0;
     const hasPhase = this.fileIOController.buckets.phase.length > 0;
     const source = this.maskPrepSettings.source;
-    const canPrepare = source === 'phase_quality' ? hasPhase : hasMag;
+    const isCustom = source === 'custom';
+    const canPrepare = isCustom || (source === 'phase_quality' ? hasPhase : hasMag);
 
     // Show/hide inline warning instead of greying out
     let warning = document.getElementById('magnitudePrepWarning');
@@ -1476,16 +1497,33 @@ class QSMApp {
 
     const hasMaskFile = this.fileIOController.hasMask();
     const hasPrepared = this.maskPrepSettings.prepared;
+    const isCustom = this.maskPrepSettings.source === 'custom';
+
+    const generateButtons = document.getElementById('maskGenerateButtons');
+    const thresholdModeButtons = document.getElementById('thresholdModeButtons');
+    const thresholdSliderGroup = document.getElementById('thresholdSliderGroup');
+    const maskOps = document.getElementById('maskOperations');
+
+    // Hide generation controls entirely for custom mask mode
+    if (isCustom) {
+      if (generateButtons) generateButtons.style.display = 'none';
+      if (thresholdModeButtons) thresholdModeButtons.style.display = 'none';
+      if (thresholdSliderGroup) thresholdSliderGroup.style.display = 'none';
+      if (maskOps) maskOps.style.display = 'none';
+      const maskFileNote = document.getElementById('maskFileUploadedNote');
+      if (maskFileNote) maskFileNote.style.display = 'none';
+      return;
+    }
+
+    if (generateButtons) generateButtons.style.display = '';
 
     // When mask file uploaded: disable Threshold/BET generation controls + show info note
     const maskFileNote = document.getElementById('maskFileUploadedNote');
     if (hasMaskFile) {
-      const generateButtons = document.getElementById('maskGenerateButtons');
       if (generateButtons) generateButtons.style.opacity = '0.5';
       document.getElementById('previewMask')?.setAttribute('disabled', '');
       document.getElementById('runBET')?.setAttribute('disabled', '');
       document.getElementById('maskThreshold')?.setAttribute('disabled', '');
-      const maskOps = document.getElementById('maskOperations');
       if (maskOps) maskOps.style.display = 'none';
       // Show info note
       if (!maskFileNote) {
@@ -1493,8 +1531,7 @@ class QSMApp {
         note.id = 'maskFileUploadedNote';
         note.className = 'validation-message info inline-warning';
         note.innerHTML = '<span>Using uploaded mask file. Remove it to use generated masks.</span>';
-        const generateBtns = document.getElementById('maskGenerateButtons');
-        if (generateBtns) generateBtns.parentNode.insertBefore(note, generateBtns.nextSibling);
+        if (generateButtons) generateButtons.parentNode.insertBefore(note, generateButtons.nextSibling);
       } else {
         maskFileNote.style.display = 'flex';
       }
@@ -1502,7 +1539,6 @@ class QSMApp {
       if (maskFileNote) maskFileNote.style.display = 'none';
       if (hasPrepared) {
         // Magnitude prepared: enable generation controls
-        const generateButtons = document.getElementById('maskGenerateButtons');
         if (generateButtons) generateButtons.style.opacity = '1';
         document.getElementById('previewMask')?.removeAttribute('disabled');
         document.getElementById('runBET')?.removeAttribute('disabled');
