@@ -801,11 +801,9 @@ class QSMApp {
     const { baseUrl, files } = QSMConfig.EXAMPLE_DATA;
 
     btn.disabled = true;
+    btn.textContent = 'Downloading example data...';
     this.updateOutput('Downloading example data...');
-
-    // Add progress bar inside button
-    btn.innerHTML = '<div style="width:100%;text-align:center"><div>Downloading example data...</div><div style="background:var(--color-border);border-radius:3px;height:6px;margin-top:4px;overflow:hidden"><div id="exampleDataProgress" style="height:100%;width:0%;background:var(--color-primary);transition:width 0.2s ease"></div></div></div>';
-    const progressFill = document.getElementById('exampleDataProgress');
+    this.setProgress(0, 'Downloading example data...');
 
     try {
       let completed = 0;
@@ -814,16 +812,16 @@ class QSMApp {
         if (!resp.ok) throw new Error(`Failed to fetch ${name}: ${resp.status}`);
         const blob = await resp.blob();
         completed++;
-        const pct = Math.round((completed / files.length) * 100);
-        if (progressFill) progressFill.style.width = `${pct}%`;
-        this.updateOutput(`Downloaded ${completed}/${files.length}: ${name}`);
+        this.setProgress(completed / files.length, `Downloaded ${completed}/${files.length}`);
         return new File([blob], name);
       }));
 
       this.updateOutput(`Downloaded ${fetched.length} files. Loading...`);
       await this._handleUnifiedFiles(fetched);
+      this.setProgress(0, '');
       this.updateOutput('Example data loaded successfully.');
     } catch (err) {
+      this.setProgress(0, '');
       this.updateOutput(`Error loading example data: ${err.message}`);
       console.error('Example data load failed:', err);
     } finally {
