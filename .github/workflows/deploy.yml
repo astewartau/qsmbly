@@ -125,6 +125,30 @@ jobs:
             rust-wasm/pkg/qsm_wasm_bg.wasm \
             --clobber
 
+      - name: Download example data from OSF
+        run: |
+          mkdir -p data/example
+          OSF_BASE="https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage"
+          echo "Downloading example data from OSF..."
+          curl -L -o data/example/sub-1_echo-1_part-mag_MEGRE.json      "$OSF_BASE/6a031592f1ede34d5380d7bf"
+          curl -L -o data/example/sub-1_echo-1_part-mag_MEGRE.nii.gz    "$OSF_BASE/6a0315d064a982ca5fec727c"
+          curl -L -o data/example/sub-1_echo-1_part-phase_MEGRE.json    "$OSF_BASE/6a031594d9869f43beec7017"
+          curl -L -o data/example/sub-1_echo-1_part-phase_MEGRE.nii.gz  "$OSF_BASE/6a0315d369675bd488fdf827"
+          curl -L -o data/example/sub-1_echo-2_part-mag_MEGRE.json      "$OSF_BASE/6a031594f1ede34d5380d7c2"
+          curl -L -o data/example/sub-1_echo-2_part-mag_MEGRE.nii.gz    "$OSF_BASE/6a0315d469675bd488fdf828"
+          curl -L -o data/example/sub-1_echo-2_part-phase_MEGRE.json    "$OSF_BASE/6a031591ca0aa1330880d636"
+          curl -L -o data/example/sub-1_echo-2_part-phase_MEGRE.nii.gz  "$OSF_BASE/6a0315d369675bd488fdf825"
+          curl -L -o data/example/sub-1_echo-3_part-mag_MEGRE.json      "$OSF_BASE/6a03159071aec37958ec71a4"
+          curl -L -o data/example/sub-1_echo-3_part-mag_MEGRE.nii.gz    "$OSF_BASE/6a0315d37bd2b1503380d819"
+          curl -L -o data/example/sub-1_echo-3_part-phase_MEGRE.json    "$OSF_BASE/6a0315917bd2b1503380d7d1"
+          curl -L -o data/example/sub-1_echo-3_part-phase_MEGRE.nii.gz  "$OSF_BASE/6a0315d542632a6310ec7522"
+          curl -L -o data/example/sub-1_echo-4_part-mag_MEGRE.json      "$OSF_BASE/6a03159442632a6310ec74a2"
+          curl -L -o data/example/sub-1_echo-4_part-mag_MEGRE.nii.gz    "$OSF_BASE/6a0315d5a6ee1f1cc6fdf838"
+          curl -L -o data/example/sub-1_echo-4_part-phase_MEGRE.json    "$OSF_BASE/6a03159442632a6310ec74a1"
+          curl -L -o data/example/sub-1_echo-4_part-phase_MEGRE.nii.gz  "$OSF_BASE/6a0315d571aec37958ec71c0"
+          echo "Example data downloaded:"
+          ls -lh data/example/
+
       - name: Prepare deployment directory
         run: |
           mkdir -p deploy/wasm
@@ -144,6 +168,9 @@ jobs:
 
           # Copy dcm2niix WASM module (DICOM conversion)
           cp -r dcm2niix deploy/
+
+          # Copy example data
+          cp -r data deploy/
 
           # Copy built WASM
           cp rust-wasm/pkg/qsm_wasm.js deploy/wasm/

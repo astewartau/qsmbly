@@ -264,9 +264,9 @@ export const MEDI_DEFAULTS = {
   dataWeighting: _MEDI.data_weighting,
 };
 
-// Example data (GitHub Release assets)
+// Example data (downloaded from OSF during CI, served same-origin)
 export const EXAMPLE_DATA = {
-  baseUrl: 'https://github.com/astewartau/qsmbly/releases/download/example-data',
+  baseUrl: './data/example',
   files: [
     'sub-1_echo-1_part-mag_MEGRE.nii.gz',
     'sub-1_echo-1_part-mag_MEGRE.json',
