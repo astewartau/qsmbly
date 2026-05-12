@@ -806,13 +806,38 @@ class QSMApp {
     this.setProgress(0, 'Downloading example data...');
 
     try {
-      let completed = 0;
-      const fetched = await Promise.all(files.map(async (name) => {
+      // First, issue HEAD requests in parallel to learn total size
+      const headResponses = await Promise.all(files.map(async (name) => {
+        const resp = await fetch(`${baseUrl}/${name}`, { method: 'HEAD' });
+        const len = parseInt(resp.headers.get('Content-Length') || '0', 10);
+        return { name, size: len };
+      }));
+      const totalBytes = headResponses.reduce((sum, h) => sum + h.size, 0);
+      const perFileBytes = new Array(files.length).fill(0);
+      let downloadedBytes = 0;
+
+      const updateProgress = () => {
+        downloadedBytes = perFileBytes.reduce((s, b) => s + b, 0);
+        const frac = totalBytes > 0 ? downloadedBytes / totalBytes : 0;
+        const mb = (downloadedBytes / 1e6).toFixed(1);
+        const totalMb = (totalBytes / 1e6).toFixed(1);
+        this.setProgress(frac, `Downloaded ${mb} / ${totalMb} MB`);
+      };
+
+      const fetched = await Promise.all(files.map(async (name, i) => {
         const resp = await fetch(`${baseUrl}/${name}`);
         if (!resp.ok) throw new Error(`Failed to fetch ${name}: ${resp.status}`);
-        const blob = await resp.blob();
-        completed++;
-        this.setProgress(completed / files.length, `Downloaded ${completed}/${files.length}`);
+
+        const reader = resp.body.getReader();
+        const chunks = [];
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          perFileBytes[i] += value.byteLength;
+          updateProgress();
+        }
+        const blob = new Blob(chunks);
         return new File([blob], name);
       }));
 
@@ -825,7 +850,6 @@ class QSMApp {
       this.updateOutput(`Error loading example data: ${err.message}`);
       console.error('Example data load failed:', err);
     } finally {
-      btn.disabled = false;
       btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Load example data';
     }
   }
@@ -865,6 +889,10 @@ class QSMApp {
     }
     const dropZone = document.getElementById('unifiedDrop');
     if (dropZone) dropZone.classList.toggle('has-files', hasFiles);
+
+    // Disable example data button when files are loaded
+    const exampleBtn = document.getElementById('loadExampleData');
+    if (exampleBtn) exampleBtn.disabled = hasFiles;
 
     // Update validation messages
     this._updateInputValidation();
