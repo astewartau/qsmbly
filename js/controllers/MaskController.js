@@ -263,7 +263,7 @@ export class MaskController {
     // Check if gzipped (magic bytes 0x1f, 0x8b)
     if (data[0] === 0x1f && data[1] === 0x8b) {
       // Use fflate for decompression (bundled in niivue)
-      const fflate = await import('../niivue/index.js').then(m => m.fflate || window.fflate);
+      const fflate = await import('../../niivue/index.js').then(m => m.fflate || window.fflate);
       if (fflate && fflate.gunzipSync) {
         data = fflate.gunzipSync(data);
       } else {
@@ -292,7 +292,7 @@ export class MaskController {
     // Check if gzipped (magic bytes 0x1f, 0x8b)
     if (data[0] === 0x1f && data[1] === 0x8b) {
       // Use fflate for decompression (bundled in niivue)
-      const fflate = await import('../niivue/index.js').then(m => m.fflate || window.fflate);
+      const fflate = await import('../../niivue/index.js').then(m => m.fflate || window.fflate);
       if (fflate && fflate.gunzipSync) {
         data = fflate.gunzipSync(data);
       } else {
