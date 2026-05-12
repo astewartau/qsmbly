@@ -266,7 +266,7 @@ export const MEDI_DEFAULTS = {
 
 // Example data (GitHub Release assets)
 export const EXAMPLE_DATA = {
-  baseUrl: 'https://github.com/astewartau/qsm-wasm/releases/download/example-data',
+  baseUrl: 'https://github.com/astewartau/qsmbly/releases/download/example-data',
   files: [
     'sub-1_echo-1_part-mag_MEGRE.nii.gz',
     'sub-1_echo-1_part-mag_MEGRE.json',
