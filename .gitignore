@@ -148,5 +148,8 @@ MriResearchTools.jl/
 rust-wasm/target/
 rust-wasm/pkg/
 
+# Example data (downloaded from OSF by build.sh / CI)
+data/
+
 # WASM binaries (built by CI)
 wasm/*.wasm
