@@ -153,3 +153,5 @@ data/
 
 # WASM binaries (built by CI)
 wasm/*.wasm
+
+paper/
