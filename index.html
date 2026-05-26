@@ -1443,8 +1443,11 @@
         <h4>How it works</h4>
         <p>QSMbly compiles its processing algorithms from Rust to WebAssembly (WASM), which runs natively in the browser at near-native speed. Your NIfTI files are read directly into browser memory, processed locally, and results are displayed without any network transfer.</p>
 
-        <h4>Third-party services</h4>
-        <p>QSMbly does not use analytics, tracking, cookies, or any external services. The only network request is loading the application itself (HTML, JavaScript, and WASM files).</p>
+        <h4>Analytics</h4>
+        <p>QSMbly uses <a href="https://www.cloudflare.com/web-analytics/" target="_blank" rel="noopener">Cloudflare Web Analytics</a> to collect anonymous page-view statistics (e.g. number of visitors, country, referrer). This does not use cookies, does not track individual users, and does not have access to any of your data or processing results. It helps us understand how many people use QSMbly and where they come from.</p>
+
+        <h4>No other third-party services</h4>
+        <p>Beyond the lightweight analytics above, QSMbly does not use cookies, fingerprinting, or any other tracking. The only network requests are loading the application itself and the analytics beacon.</p>
       </div>
     </div>
   </div>
