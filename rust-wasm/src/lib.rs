@@ -1980,12 +1980,13 @@ pub fn mcpc3ds_b0_pipeline_wasm(
         .collect();
     let unwrapped: Vec<Vec<f64>> = match unwrap_method {
         "laplacian" => {
-            let mut phases_unwrapped: Vec<Vec<f64>> = corrected_phases.iter()
+            // Per-echo Laplacian unwrapping (matching Julia's laplacian_combine)
+            // No inter-echo alignment — Laplacian removes harmonic component
+            // independently per echo, and calculate_b0_weighted handles
+            // the per-echo phase/TE division and averaging
+            corrected_phases.iter()
                 .map(|phase| qsm_core::unwrap::laplacian_unwrap(phase, mask, nx, ny, nz, vsx, vsy, vsz))
-                .collect();
-            // Inter-echo 2π alignment (median wrap correction)
-            qsm_core::unwrap::correct_multi_echo_wraps(&mut phases_unwrapped, tes, mask);
-            phases_unwrapped
+                .collect()
         }
         _ => {
             let params = qsm_core::unwrap::romeo::RomeoParams {
