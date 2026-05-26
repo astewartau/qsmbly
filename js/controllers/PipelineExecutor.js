@@ -198,7 +198,7 @@ export class PipelineExecutor {
 
       const inputMode = pipelineConfig.inputMode || 'raw';
       const modeLabels = {
-        raw: 'ROMEO QSM Pipeline',
+        raw: 'QSM Pipeline',
         totalField: 'Total Field Map Pipeline',
         localField: 'Local Field Map Pipeline'
       };
