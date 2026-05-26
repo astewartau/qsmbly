@@ -163,7 +163,7 @@ function computeFieldMapDirect(wasmModule, {
     const allUnwrapped = new Float64Array(voxelCount * nEchoes);
     allUnwrapped.set(unwrappedPhase, 0);
 
-    postLog(`Unwrapping remaining ${nEchoes - 1} echoes...`);
+    postLog(`Unwrapping ${nEchoes} echoes...`);
     const [seedI, seedJ, seedK] = findSeedPoint(mask, nx, ny, nz);
 
     for (let e = 1; e < nEchoes; e++) {
