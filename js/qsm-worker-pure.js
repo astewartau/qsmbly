@@ -446,15 +446,17 @@ async function runPipeline(data) {
 
       const { phasesFlat, magsFlat } = flattenEchoes();
 
-      // Internally: phase_offset_removal → bipolar correction → ROMEO unwrap → weighted B0
+      // phase_offset_removal → bipolar correction → unwrap → weighted B0
       const result = wasmModule.mcpc3ds_b0_pipeline_wasm(
         phasesFlat, magsFlat,
         new Float64Array(echoTimes),
         mask,
         nx, ny, nz,
+        vsx, vsy, vsz,
         mcpc3dsSettings.sigma[0], mcpc3dsSettings.sigma[1], mcpc3dsSettings.sigma[2],
         b0WeightType,
-        doBipolar
+        doBipolar,
+        unwrapMethod
       );
 
       b0Fieldmap = new Float64Array(result.slice(0, voxelCount));
@@ -464,7 +466,8 @@ async function runPipeline(data) {
       sendStageData('phaseOffset', phaseOffset, dims, voxelSize, affine, 'Phase Offset (rad)', false);
 
       postProgress(0.40, 'Field mapping complete');
-      postLog(`Phase unwrapping: ROMEO (multi-echo temporal)`);
+      const unwrapLabel = unwrapMethod === 'laplacian' ? 'Laplacian (per-echo)' : 'ROMEO (multi-echo temporal)';
+      postLog(`Phase unwrapping: ${unwrapLabel}`);
       postLog(`B0 estimation: weighted averaging (weight=${b0WeightType})`);
 
     } else {

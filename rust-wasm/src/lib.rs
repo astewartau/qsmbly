@@ -1929,15 +1929,17 @@ pub fn mcpc3ds_b0_pipeline_wasm(
     tes: &[f64],
     mask: &[u8],
     nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
     sigma_x: f64, sigma_y: f64, sigma_z: f64,
     weight_type: &str,
     do_bipolar_correction: bool,
+    unwrap_method: &str,
 ) -> Vec<f64> {
     let n_echoes = tes.len();
     let n_total = nx * ny * nz;
 
-    console_log!("WASM mcpc3ds_b0_pipeline: {}x{}x{}, {} echoes, n_total={}, weight_type={}, bipolar={}",
-                 nx, ny, nz, n_echoes, n_total, weight_type, do_bipolar_correction);
+    console_log!("WASM mcpc3ds_b0_pipeline: {}x{}x{}, {} echoes, unwrap={}, weight_type={}, bipolar={}",
+                 nx, ny, nz, n_echoes, unwrap_method, weight_type, do_bipolar_correction);
 
     // Use slices into the flat input instead of cloning (~990 MB savings for large data)
     let phases: Vec<&[f64]> = (0..n_echoes)
@@ -1949,12 +1951,12 @@ pub fn mcpc3ds_b0_pipeline_wasm(
 
     let wt = qsm_core::utils::multi_echo::B0WeightType::from_str(weight_type);
 
-    // Step 1: Phase offset removal
+    // Step 1: Phase offset removal (always uses ROMEO internally for HIP unwrapping)
     let (mut corrected_phases, phase_offset) = qsm_core::utils::multi_echo::phase_offset_removal(
         &phases, &mags, tes, mask,
         [sigma_x, sigma_y, sigma_z], [0, 1],
         qsm_core::unwrap::UnwrapMethod::Romeo,
-        [1.0, 1.0, 1.0],
+        [vsx, vsy, vsz],
         nx, ny, nz
     );
 
@@ -1970,15 +1972,24 @@ pub fn mcpc3ds_b0_pipeline_wasm(
         );
     }
 
-    // Step 3: Multi-echo ROMEO unwrapping
+    // Step 3: Multi-echo unwrapping (user-selected method)
     let mag_refs: Vec<&[f64]> = (0..n_echoes)
         .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
         .collect();
-    let unwrapped = qsm_core::unwrap::romeo::unwrap_romeo_multi_echo(
-        &corrected_phases, &mag_refs, tes, mask,
-        &qsm_core::unwrap::romeo::RomeoParams::default(),
-        nx, ny, nz,
-    );
+    let unwrapped: Vec<Vec<f64>> = match unwrap_method {
+        "laplacian" => {
+            corrected_phases.iter()
+                .map(|phase| qsm_core::unwrap::laplacian_unwrap(phase, mask, nx, ny, nz, vsx, vsy, vsz))
+                .collect()
+        }
+        _ => {
+            qsm_core::unwrap::romeo::unwrap_romeo_multi_echo(
+                &corrected_phases, &mag_refs, tes, mask,
+                &qsm_core::unwrap::romeo::RomeoParams::default(),
+                nx, ny, nz,
+            )
+        }
+    };
 
     // Step 4: Weighted B0 averaging
     let b0 = qsm_core::utils::multi_echo::calculate_b0_weighted(
