@@ -55,6 +55,16 @@ export function generateQsmxtCommand(settings, maskOps = [], options = {}) {
     if (settings.romeo?.magWeight === false) {
       parts.push('--no-romeo-mag-weight');
     }
+    // ROMEO multi-echo mode (default: individual=true, correctGlobal=true)
+    if (settings.romeo?.individual === false) {
+      parts.push('--romeo-template');
+      if (settings.romeo?.template != null && settings.romeo.template !== 0) {
+        parts.push(`--romeo-template-echo ${settings.romeo.template + 1}`);
+      }
+    }
+    if (settings.romeo?.correctGlobal === false) {
+      parts.push('--no-romeo-correct-global');
+    }
   }
 
   // --- MCPC-3D-S sigma ---

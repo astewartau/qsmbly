@@ -1934,12 +1934,14 @@ pub fn mcpc3ds_b0_pipeline_wasm(
     weight_type: &str,
     do_bipolar_correction: bool,
     unwrap_method: &str,
+    romeo_individual: bool,
+    romeo_correct_global: bool,
 ) -> Vec<f64> {
     let n_echoes = tes.len();
     let n_total = nx * ny * nz;
 
-    console_log!("WASM mcpc3ds_b0_pipeline: {}x{}x{}, {} echoes, unwrap={}, weight_type={}, bipolar={}",
-                 nx, ny, nz, n_echoes, unwrap_method, weight_type, do_bipolar_correction);
+    console_log!("WASM field_mapping: {}x{}x{}, {} echoes, unwrap={}, individual={}, correct_global={}, weight={}, bipolar={}",
+                 nx, ny, nz, n_echoes, unwrap_method, romeo_individual, romeo_correct_global, weight_type, do_bipolar_correction);
 
     // Use slices into the flat input instead of cloning (~990 MB savings for large data)
     let phases: Vec<&[f64]> = (0..n_echoes)
@@ -1978,15 +1980,22 @@ pub fn mcpc3ds_b0_pipeline_wasm(
         .collect();
     let unwrapped: Vec<Vec<f64>> = match unwrap_method {
         "laplacian" => {
-            corrected_phases.iter()
+            let mut phases_unwrapped: Vec<Vec<f64>> = corrected_phases.iter()
                 .map(|phase| qsm_core::unwrap::laplacian_unwrap(phase, mask, nx, ny, nz, vsx, vsy, vsz))
-                .collect()
+                .collect();
+            // Inter-echo 2π alignment (median wrap correction)
+            qsm_core::unwrap::correct_multi_echo_wraps(&mut phases_unwrapped, tes, mask);
+            phases_unwrapped
         }
         _ => {
+            let params = qsm_core::unwrap::romeo::RomeoParams {
+                individual: romeo_individual,
+                correct_global: romeo_correct_global,
+                ..Default::default()
+            };
             qsm_core::unwrap::romeo::unwrap_romeo_multi_echo(
                 &corrected_phases, &mag_refs, tes, mask,
-                &qsm_core::unwrap::romeo::RomeoParams::default(),
-                nx, ny, nz,
+                &params, nx, ny, nz,
             )
         }
     };

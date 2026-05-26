@@ -852,6 +852,27 @@
               <div class="param-checklist-row"><label><input type="checkbox" id="romeoMagCoherence" checked> Magnitude Coherence</label></div>
               <div class="param-checklist-row"><label><input type="checkbox" id="romeoMagWeight" checked> Magnitude Weight</label></div>
             </div>
+            <!-- Multi-echo mode (shown for multi-echo data) -->
+            <div id="romeoMultiEchoSettings" style="display: none;">
+              <div class="param-group">
+                <label class="param-label" for="romeoMultiEchoMode">Multi-Echo Mode</label>
+                <select id="romeoMultiEchoMode">
+                  <option value="individual" selected>Individual (per-echo)</option>
+                  <option value="template">Template (temporal)</option>
+                </select>
+              </div>
+              <div id="romeoTemplateSettings" style="display: none;">
+                <div class="param-group">
+                  <label class="param-label" for="romeoTemplateEcho">Template Echo</label>
+                  <input type="number" id="romeoTemplateEcho" value="1" min="1" max="10" step="1">
+                </div>
+              </div>
+              <div id="romeoCorrectGlobalSettings">
+                <div class="param-checklist">
+                  <label><input type="checkbox" id="romeoCorrectGlobal" checked> Correct Global Offsets</label>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Laplacian Settings -->
@@ -1993,6 +2014,19 @@
       romeoSettings.style.display = method === 'romeo' ? 'block' : 'none';
       laplacianSettings.style.display = method === 'laplacian' ? 'block' : 'none';
     }
+
+    // ROMEO multi-echo mode controls
+    const romeoMultiEchoMode = document.getElementById('romeoMultiEchoMode');
+    const romeoTemplateSettings = document.getElementById('romeoTemplateSettings');
+    const romeoCorrectGlobalSettings = document.getElementById('romeoCorrectGlobalSettings');
+
+    function updateRomeoMultiEchoUI() {
+      const isTemplate = romeoMultiEchoMode.value === 'template';
+      romeoTemplateSettings.style.display = isTemplate ? 'block' : 'none';
+      romeoCorrectGlobalSettings.style.display = isTemplate ? 'none' : 'block';
+    }
+    romeoMultiEchoMode.addEventListener('change', updateRomeoMultiEchoUI);
+    updateRomeoMultiEchoUI();
 
     phaseOffsetMethod.addEventListener('change', updatePhaseOffsetUI);
     unwrapMethod.addEventListener('change', updateUnwrapUI);

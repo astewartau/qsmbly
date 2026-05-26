@@ -112,6 +112,9 @@ export class PipelineSettingsController {
     this._setChecked('romeoPhaseGradientCoherence', ROMEO_DEFAULTS.phaseGradientCoherence);
     this._setChecked('romeoMagCoherence', ROMEO_DEFAULTS.magCoherence);
     this._setChecked('romeoMagWeight', ROMEO_DEFAULTS.magWeight);
+    this._setEl('romeoMultiEchoMode', 'individual');
+    this._setChecked('romeoCorrectGlobal', true);
+    this._setEl('romeoTemplateEcho', '1');
 
     // Field calculation method
     this._setEl('fieldCalculationMethod', D.fieldCalculationMethod);
@@ -273,7 +276,10 @@ export class PipelineSettingsController {
       romeo: {
         phaseGradientCoherence: romeoPhaseGradientCoherence,
         magCoherence: romeoMagCoherence,
-        magWeight: romeoMagWeight
+        magWeight: romeoMagWeight,
+        individual: (this._getEl('romeoMultiEchoMode') || 'individual') === 'individual',
+        correctGlobal: this._getChecked('romeoCorrectGlobal') ?? true,
+        template: parseInt(this._getEl('romeoTemplateEcho') || '1') - 1,
       },
       backgroundRemoval: this._getEl('bgRemovalMethod'),
       vsharp: {
@@ -416,6 +422,9 @@ export class PipelineSettingsController {
       currentUnwrapMethod === 'laplacian' && isMultiEcho,
       'No temporal coherence — ROMEO recommended for multi-echo',
       'warning');
+
+    // ROMEO multi-echo mode (only shown for multi-echo + ROMEO)
+    this._showEl('romeoMultiEchoSettings', currentUnwrapMethod === 'romeo' && isMultiEcho);
 
     // Phase Gradient Coherence only meaningful for multi-echo
     const pgcLabel = document.getElementById('romeoPgcLabel');
@@ -571,6 +580,9 @@ export class PipelineSettingsController {
     this._setChecked('romeoPhaseGradientCoherence', romeoSettings.phaseGradientCoherence !== false);
     this._setChecked('romeoMagCoherence', romeoSettings.magCoherence !== false);
     this._setChecked('romeoMagWeight', romeoSettings.magWeight !== false);
+    this._setEl('romeoMultiEchoMode', romeoSettings.individual === false ? 'template' : 'individual');
+    this._setChecked('romeoCorrectGlobal', romeoSettings.correctGlobal !== false);
+    this._setEl('romeoTemplateEcho', String((romeoSettings.template ?? 0) + 1));
 
     // Field calculation method
     const fieldCalcMethod = settings.fieldCalculationMethod || 'weighted_avg';
