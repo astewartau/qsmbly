@@ -153,7 +153,7 @@ export class ViewerController {
    */
   async loadAndVisualizeFile(file, description) {
     try {
-      this.updateOutput(`Loading ${description}...`);
+      // Loading message removed — just log when done
 
       // Create a blob URL for NiiVue to load
       const url = URL.createObjectURL(file);

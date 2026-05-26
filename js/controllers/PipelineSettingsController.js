@@ -19,6 +19,7 @@ export class PipelineSettingsController {
   constructor(modalElement) {
     this.modal = modalElement;
     this.inputMode = 'dicom'; // 'dicom', 'raw', 'totalField', or 'localField'
+    this._setupTabs();
     this._setupEventListeners();
   }
 
@@ -39,8 +40,10 @@ export class PipelineSettingsController {
    */
   open(settings, defaults, nEchoes, hasMagnitude = true) {
     this.hasMagnitude = hasMagnitude;
+    this.nEchoes = nEchoes;
     this._populateForm(settings, defaults);
     this.updateVisibility(nEchoes);
+    this._switchTab('tabQsmPipeline');
     this.modal.classList.add('active');
   }
 
@@ -88,12 +91,15 @@ export class PipelineSettingsController {
     this._setEl('qsmartIlsqrTol', QSMART_DEFAULTS.ilsqrTol);
     this._setEl('qsmartIlsqrMaxIter', QSMART_DEFAULTS.ilsqrMaxIter);
 
-    // Phase offset method
+    // Phase offset
+    this._setChecked('phaseOffsetEnabled', true);
     this._setEl('phaseOffsetMethod', D.phaseOffsetMethod);
-    this._showEl('mcpc3dsSettings', true);
     this._setEl('mcpc3dsSigmaX', MCPC3DS_DEFAULTS.sigma[0]);
     this._setEl('mcpc3dsSigmaY', MCPC3DS_DEFAULTS.sigma[1]);
     this._setEl('mcpc3dsSigmaZ', MCPC3DS_DEFAULTS.sigma[2]);
+
+    // Bipolar correction
+    this._setChecked('bipolarCorrectionEnabled', false);
 
     // Unwrap method
     this._setEl('unwrapMethod', D.unwrapMethod);
@@ -115,12 +121,6 @@ export class PipelineSettingsController {
 
     // Linear fit defaults
     this._setChecked('linearFitEstimateOffset', LINEAR_FIT_DEFAULTS.estimateOffset);
-
-    // Single-echo unwrap (sync with multi-echo)
-    this._setEl('singleEchoUnwrapMethod', D.unwrapMethod);
-    this._showEl('singleEchoRomeoSettings', true);
-    this._setChecked('singleEchoRomeoMagCoherence', ROMEO_DEFAULTS.magCoherence);
-    this._setChecked('singleEchoRomeoMagWeight', ROMEO_DEFAULTS.magWeight);
 
     // Background removal
     this._setEl('bgRemovalMethod', D.backgroundRemoval);
@@ -206,23 +206,20 @@ export class PipelineSettingsController {
   save(nEchoes) {
     const isMultiEcho = nEchoes > 1;
 
-    // Get unwrap method from appropriate dropdown based on echo count
-    // Auto-correct: MCPC-3D-S requires ROMEO regardless of dropdown value
-    const phaseOffset = this._getEl('phaseOffsetMethod') || 'mcpc3ds';
+    // Phase offset: use checkbox state (multi-echo) or 'none' (single-echo)
+    const phaseOffsetEnabled = isMultiEcho && (this._getChecked('phaseOffsetEnabled') ?? true);
+    const phaseOffsetMethod = phaseOffsetEnabled ? (this._getEl('phaseOffsetMethod') || 'mcpc3ds') : 'none';
+
     const unwrapMethod = isMultiEcho
-      ? (phaseOffset === 'mcpc3ds' ? 'romeo' : this._getEl('unwrapMethod'))
+      ? this._getEl('unwrapMethod')
       : this._getEl('singleEchoUnwrapMethod');
 
-    // Get ROMEO weight settings from checkboxes
+    // ROMEO weight settings
     const romeoPhaseGradientCoherence = isMultiEcho
       ? this._getChecked('romeoPhaseGradientCoherence') ?? true
       : true;
-    const romeoMagCoherence = isMultiEcho
-      ? this._getChecked('romeoMagCoherence') ?? true
-      : this._getChecked('singleEchoRomeoMagCoherence') ?? true;
-    const romeoMagWeight = isMultiEcho
-      ? this._getChecked('romeoMagWeight') ?? true
-      : this._getChecked('singleEchoRomeoMagWeight') ?? true;
+    const romeoMagCoherence = this._getChecked('romeoMagCoherence') ?? true;
+    const romeoMagWeight = this._getChecked('romeoMagWeight') ?? true;
 
     return {
       combinedMethod: this._getEl('combinedMethod'),
@@ -259,7 +256,8 @@ export class PipelineSettingsController {
         ilsqrMaxIter: parseInt(this._getEl('qsmartIlsqrMaxIter'))
       },
       unwrapMethod: unwrapMethod,
-      phaseOffsetMethod: this._getEl('phaseOffsetMethod') || 'mcpc3ds',
+      phaseOffsetMethod: phaseOffsetMethod,
+      bipolarCorrection: isMultiEcho && nEchoes >= 3 && (this._getChecked('bipolarCorrectionEnabled') ?? false),
       fieldCalculationMethod: this._getEl('fieldCalculationMethod') || 'weighted_avg',
       mcpc3ds: {
         sigma: [
@@ -392,35 +390,43 @@ export class PipelineSettingsController {
     // QSMART settings - show when QSMART selected in any mode
     this._showEl('qsmartSettings', isQsmart);
 
-    // Multi-echo section - only in raw mode with multi-echo data
-    // (single-echo has its own separate unwrap section, so hide this to avoid duplication)
-    const multiEchoSectionEl = document.getElementById('multiEchoSection');
-    if (multiEchoSectionEl) {
-      multiEchoSectionEl.style.display = (isRawMode && isMultiEcho) ? '' : 'none';
-    }
+    // Phase offset removal
+    const phaseOffsetEnabled = this._getChecked('phaseOffsetEnabled') ?? true;
+    this._disableEl('phaseOffsetContent', !phaseOffsetEnabled);
+    this._showWarning('phaseOffsetEnabled', 'phaseOffsetWarning',
+      phaseOffsetEnabled && nEchoes === 1,
+      'Requires multi-echo data', 'error');
 
-    // MCPC-3D-S settings and unwrap (raw mode only)
-    this._showEl('mcpc3dsSettings', isMcpc3ds && isRawMode);
-    if (isRawMode) {
-      if (isMcpc3ds) this._setEl('unwrapMethod', 'romeo');
-      // Show error only when MCPC-3D-S is active and unwrap is not ROMEO
-      const unwrapVal = this._getEl('unwrapMethod') || 'romeo';
-      const hint = document.getElementById('unwrapLockedHint');
-      if (hint) hint.style.display = (isMcpc3ds && unwrapVal !== 'romeo') ? 'flex' : 'none';
-    }
+    // Hide the old locked hint (no longer forcing ROMEO)
+    const hint = document.getElementById('unwrapLockedHint');
+    if (hint) hint.style.display = 'none';
 
-    // Unwrap settings visibility (raw mode only)
+    // Bipolar correction
+    const bipolarEnabled = this._getChecked('bipolarCorrectionEnabled');
+    this._showWarning('bipolarCorrectionEnabled', 'bipolarWarning',
+      bipolarEnabled && nEchoes >= 1 && nEchoes < 3,
+      nEchoes === 1 ? 'Requires multi-echo data (3+ echoes)' : 'Requires 3+ echoes',
+      'error');
+
+    // Phase unwrapping
     const currentUnwrapMethod = this._getEl('unwrapMethod') || 'romeo';
-    this._showEl('romeoSettings', currentUnwrapMethod === 'romeo' && isRawMode);
-    this._showEl('laplacianSettings', currentUnwrapMethod === 'laplacian' && isRawMode);
+    this._showEl('romeoSettings', currentUnwrapMethod === 'romeo');
+    this._showEl('laplacianSettings', currentUnwrapMethod === 'laplacian');
+    this._showWarning('unwrapMethod', 'laplacianMultiEchoWarning',
+      currentUnwrapMethod === 'laplacian' && isMultiEcho,
+      'No temporal coherence — ROMEO recommended for multi-echo',
+      'warning');
 
-    // Field calculation settings visibility (raw mode only)
+    // Phase Gradient Coherence only meaningful for multi-echo
+    const pgcLabel = document.getElementById('romeoPgcLabel');
+    if (pgcLabel) pgcLabel.style.display = isMultiEcho ? '' : 'none';
+
+    // Multi-echo fitting
     const fieldCalcMethod = this._getEl('fieldCalculationMethod') || 'weighted_avg';
-    this._showEl('weightedAvgSettings', fieldCalcMethod === 'weighted_avg' && isRawMode);
-    this._showEl('linearFitSettings', fieldCalcMethod === 'linear_fit' && isRawMode);
-
-    // Single-echo unwrap section - show only for single-echo + standard pipeline + raw mode
-    this._showEl('singleEchoUnwrapSection', !isMultiEcho && !isCombined && isRawMode);
+    this._showEl('weightedAvgSettings', fieldCalcMethod === 'weighted_avg');
+    this._showEl('linearFitSettings', fieldCalcMethod === 'linear_fit');
+    this._showWarning('fieldCalculationMethod', 'multiEchoFittingWarning',
+      nEchoes === 1, 'Requires multi-echo data', 'error');
 
     // Background removal - show for:
     // - Raw mode standard pipeline (not TGV/QSMART)
@@ -440,7 +446,12 @@ export class PipelineSettingsController {
     const bgDisabledByMediSmv = dipoleMethod === 'medi' && mediSmvEnabled && showBgRemoval;
 
     const bgHint = document.getElementById('bgRemovalDisabledHint');
-    if (bgHint) bgHint.style.display = bgDisabledByMediSmv ? 'flex' : 'none';
+    if (bgHint) bgHint.style.display = bgDisabledByMediSmv ? '' : 'none';
+
+    // Enable/disable tabs based on pipeline state
+    this._setTabEnabled('tabPhaseProcessing', isRawMode);
+    this._setTabEnabled('tabBgRemoval', showBgRemoval);
+    this._setTabEnabled('tabDipoleInversion', showDipoleInversion);
 
     // Show errors for magnitude-dependent features when no magnitude is available
     const noMag = this.hasMagnitude === false;
@@ -461,26 +472,61 @@ export class PipelineSettingsController {
         'Requires magnitude', 'error');
     }
 
-    // ROMEO magnitude weight checkboxes — multi-echo section
+    // ROMEO magnitude weight checkboxes
     const romeoMagCoh = document.getElementById('romeoMagCoherence');
     const romeoMagWt = document.getElementById('romeoMagWeight');
-    this._showWarning('romeoSettings', 'romeoMagWarning',
-      noMag && (romeoMagCoh?.checked || romeoMagWt?.checked),
-      'Requires magnitude', 'error');
+    if (romeoMagCoh) {
+      this._showWarning('romeoMagCoherence', 'romeoMagCohWarning',
+        noMag && romeoMagCoh.checked, 'Requires magnitude', 'error');
+    }
+    if (romeoMagWt) {
+      this._showWarning('romeoMagWeight', 'romeoMagWtWarning',
+        noMag && romeoMagWt.checked, 'Requires magnitude', 'error');
+    }
 
-    // ROMEO magnitude weight checkboxes — single-echo section
-    const singleRomeoMagCoh = document.getElementById('singleEchoRomeoMagCoherence');
-    const singleRomeoMagWt = document.getElementById('singleEchoRomeoMagWeight');
-    this._showWarning('singleEchoRomeoSettings', 'singleEchoRomeoMagWarning',
-      noMag && (singleRomeoMagCoh?.checked || singleRomeoMagWt?.checked),
-      'Requires magnitude', 'error');
-
-    // B0 weight phase_snr option
+    // B0 weight type — phase_snr, phase_var, and mag all require magnitude
     const b0WeightSelect = document.getElementById('b0WeightType');
     if (b0WeightSelect) {
+      const magWeights = ['phase_snr', 'phase_var', 'mag'];
       this._showWarning('b0WeightType', 'b0WeightWarning',
-        noMag && b0WeightSelect.value === 'phase_snr',
+        noMag && magWeights.includes(b0WeightSelect.value),
         'Requires magnitude', 'error');
+    }
+  }
+
+  // ---- Tab management ----
+
+  _setupTabs() {
+    const tabBar = this.modal.querySelector('.pipeline-tabs');
+    if (!tabBar) return;
+    tabBar.addEventListener('click', (e) => {
+      const btn = e.target.closest('.pipeline-tab');
+      if (!btn || btn.disabled) return;
+      this._switchTab(btn.dataset.tab);
+    });
+  }
+
+  _switchTab(tabId) {
+    const tabBar = this.modal.querySelector('.pipeline-tabs');
+    if (!tabBar) return;
+    for (const btn of tabBar.querySelectorAll('.pipeline-tab')) {
+      btn.classList.toggle('active', btn.dataset.tab === tabId);
+    }
+    const body = this.modal.querySelector('.modal-body');
+    if (!body) return;
+    for (const panel of body.querySelectorAll('.tab-panel')) {
+      panel.classList.toggle('active', panel.id === tabId);
+    }
+  }
+
+  _setTabEnabled(tabId, enabled) {
+    const btn = this.modal.querySelector(`.pipeline-tab[data-tab="${tabId}"]`);
+    if (!btn) return;
+    btn.disabled = !enabled;
+    // If the disabled tab was active, switch to first enabled tab
+    if (!enabled && btn.classList.contains('active')) {
+      const first = this.modal.querySelector('.pipeline-tab:not(:disabled)');
+      if (first) this._switchTab(first.dataset.tab);
     }
   }
 
@@ -504,9 +550,15 @@ export class PipelineSettingsController {
     this._setEl('tgvIterations', settings.tgv.iterations);
     this._setEl('tgvErosions', settings.tgv.erosions);
 
-    // Phase offset method
+    // Phase offset
     const phaseOffsetMethod = settings.phaseOffsetMethod || 'mcpc3ds';
-    this._setEl('phaseOffsetMethod', phaseOffsetMethod);
+    this._setChecked('phaseOffsetEnabled', phaseOffsetMethod !== 'none');
+    this._setEl('phaseOffsetMethod', phaseOffsetMethod === 'none' ? 'mcpc3ds' : phaseOffsetMethod);
+
+    // MCPC-3D-S settings
+    this._setEl('mcpc3dsSigmaX', settings.mcpc3ds?.sigma?.[0] ?? 10);
+    this._setEl('mcpc3dsSigmaY', settings.mcpc3ds?.sigma?.[1] ?? 10);
+    this._setEl('mcpc3dsSigmaZ', settings.mcpc3ds?.sigma?.[2] ?? 5);
 
     // Phase unwrap method
     const unwrapMethod = settings.unwrapMethod || 'romeo';
@@ -519,23 +571,6 @@ export class PipelineSettingsController {
     this._setChecked('romeoPhaseGradientCoherence', romeoSettings.phaseGradientCoherence !== false);
     this._setChecked('romeoMagCoherence', romeoSettings.magCoherence !== false);
     this._setChecked('romeoMagWeight', romeoSettings.magWeight !== false);
-
-    // Show error only when MCPC-3D-S + non-ROMEO
-    const isMcpc3ds = phaseOffsetMethod === 'mcpc3ds';
-    const popHint = document.getElementById('unwrapLockedHint');
-    if (popHint) popHint.style.display = (isMcpc3ds && unwrapMethod !== 'romeo') ? 'flex' : 'none';
-
-    // Single-echo unwrap method (sync with multi-echo settings)
-    this._setEl('singleEchoUnwrapMethod', unwrapMethod);
-    this._showEl('singleEchoRomeoSettings', unwrapMethod === 'romeo');
-    this._setChecked('singleEchoRomeoMagCoherence', romeoSettings.magCoherence !== false);
-    this._setChecked('singleEchoRomeoMagWeight', romeoSettings.magWeight !== false);
-
-    // MCPC-3D-S settings
-    this._setEl('mcpc3dsSigmaX', settings.mcpc3ds?.sigma?.[0] ?? 10);
-    this._setEl('mcpc3dsSigmaY', settings.mcpc3ds?.sigma?.[1] ?? 10);
-    this._setEl('mcpc3dsSigmaZ', settings.mcpc3ds?.sigma?.[2] ?? 5);
-    this._showEl('mcpc3dsSettings', isMcpc3ds);
 
     // Field calculation method
     const fieldCalcMethod = settings.fieldCalculationMethod || 'weighted_avg';
@@ -658,22 +693,14 @@ export class PipelineSettingsController {
     // Combined method dropdown - show/hide TGV/QSMART settings
     this._on('combinedMethod', 'change', () => this._onCombinedMethodChange());
 
-    // Unwrap method dropdown
-    this._on('unwrapMethod', 'change', (e) => {
-      const isRomeo = e.target.value === 'romeo';
-      this._showEl('romeoSettings', isRomeo);
-      this._showEl('laplacianSettings', !isRomeo);
-      // Show MCPC-3D-S incompatibility error if needed
-      const isMcpc3ds = this._getEl('phaseOffsetMethod') === 'mcpc3ds';
-      const hint = document.getElementById('unwrapLockedHint');
-      if (hint) hint.style.display = (isMcpc3ds && !isRomeo) ? 'flex' : 'none';
-    });
+    // Phase offset enabled checkbox
+    this._on('phaseOffsetEnabled', 'change', () => this._onCombinedMethodChange());
 
-    // Single-echo unwrap method dropdown
-    this._on('singleEchoUnwrapMethod', 'change', (e) => {
-      const isRomeo = e.target.value === 'romeo';
-      this._showEl('singleEchoRomeoSettings', isRomeo);
-    });
+    // Bipolar correction checkbox
+    this._on('bipolarCorrectionEnabled', 'change', () => this._onCombinedMethodChange());
+
+    // Unwrap method dropdown
+    this._on('unwrapMethod', 'change', () => this._onCombinedMethodChange());
 
     // Background removal method dropdown
     this._on('bgRemovalMethod', 'change', (e) => {
@@ -715,7 +742,7 @@ export class PipelineSettingsController {
     this._on('fieldCalculationMethod', 'change', () => this._onCombinedMethodChange());
 
     // ROMEO magnitude weight checkboxes - re-evaluate warnings on change
-    ['romeoMagCoherence', 'romeoMagWeight', 'singleEchoRomeoMagCoherence', 'singleEchoRomeoMagWeight'].forEach(id => {
+    ['romeoMagCoherence', 'romeoMagWeight'].forEach(id => {
       this._on(id, 'change', () => this._onCombinedMethodChange());
     });
 
@@ -727,10 +754,7 @@ export class PipelineSettingsController {
   }
 
   _onCombinedMethodChange() {
-    // Get nEchoes from DOM (count phase file items)
-    const phaseList = document.getElementById('phaseList');
-    const nEchoes = phaseList ? phaseList.querySelectorAll('.file-item').length : 0;
-    this.updateVisibility(nEchoes);
+    this.updateVisibility(this.nEchoes || 0);
   }
 
   // DOM helper methods
@@ -759,6 +783,17 @@ export class PipelineSettingsController {
     if (el) el.style.display = show ? 'block' : 'none';
   }
 
+  _disableEl(id, disabled) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.opacity = disabled ? '0.4' : '';
+    el.style.pointerEvents = disabled ? 'none' : '';
+    for (const input of el.querySelectorAll('input, select, button')) {
+      input.disabled = disabled;
+    }
+  }
+
+
   /**
    * Show/hide an inline warning message near a control
    * @param {string} anchorId - ID of the element to attach warning after
@@ -773,15 +808,17 @@ export class PipelineSettingsController {
 
     if (show) {
       if (!warning && anchor) {
-        warning = document.createElement('div');
+        warning = document.createElement('span');
         warning.id = warningId;
         warning.className = `validation-message ${type} inline-warning`;
         warning.innerHTML = '<span></span>';
-        anchor.parentNode.insertBefore(warning, anchor.nextSibling);
+        // If anchor is inside a <label>, insert after the label instead
+        const insertAfter = anchor.parentNode.tagName === 'LABEL' ? anchor.parentNode : anchor;
+        insertAfter.parentNode.insertBefore(warning, insertAfter.nextSibling);
       }
       if (warning) {
         warning.querySelector('span').textContent = message;
-        warning.style.display = 'flex';
+        warning.style.display = '';
       }
     } else if (warning) {
       warning.style.display = 'none';

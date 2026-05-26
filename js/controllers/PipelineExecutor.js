@@ -90,7 +90,7 @@ export class PipelineExecutor {
 
         case 'initialized':
           this.workerReady = true;
-          this.updateOutput("WASM ready");
+          // version already logged by worker, no extra message needed
           this.onInitialized();
           break;
 
@@ -170,7 +170,7 @@ export class PipelineExecutor {
 
     // Start initialization
     this.workerInitializing = true;
-    this.updateOutput("Initializing WASM...");
+    this.updateOutput("Loading WASM module...");
 
     // Send init message to worker
     this.worker.postMessage({

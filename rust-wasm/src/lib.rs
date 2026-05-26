@@ -168,9 +168,17 @@ pub fn calculate_weights_romeo_configurable_wasm(
 
     let phase2_opt = if phase2.is_empty() { None } else { Some(phase2) };
 
-    let weights = qsm_core::unwrap::romeo::calculate_weights_romeo_configurable(
+    let flags = [
+        true,                          // phase coherence (always on)
+        use_phase_gradient_coherence,  // phase gradient coherence
+        false,                         // phase linearity
+        use_mag_coherence,             // magnitude coherence
+        use_mag_weight,                // magnitude weight
+        false,                         // magnitude weight 2
+    ];
+    let weights = qsm_core::unwrap::romeo::calculate_weights_romeo_with_flags(
         phase, mag, phase2_opt, te1, te2, mask, nx, ny, nz,
-        use_phase_gradient_coherence, use_mag_coherence, use_mag_weight
+        flags
     );
 
     console_log!("WASM weights calculation complete");
@@ -1828,9 +1836,11 @@ pub fn mcpc3ds_single_coil_wasm(
         .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
         .collect();
 
-    let (corrected_phases, phase_offset) = qsm_core::utils::multi_echo::mcpc3ds_single_coil(
+    let (corrected_phases, phase_offset) = qsm_core::utils::multi_echo::phase_offset_removal(
         &phases, &mags, tes, mask,
         [sigma_x, sigma_y, sigma_z], [echo1, echo2],
+        qsm_core::unwrap::UnwrapMethod::Romeo,
+        [1.0, 1.0, 1.0], // voxel size not needed for offset removal
         nx, ny, nz
     );
 
@@ -1921,12 +1931,13 @@ pub fn mcpc3ds_b0_pipeline_wasm(
     nx: usize, ny: usize, nz: usize,
     sigma_x: f64, sigma_y: f64, sigma_z: f64,
     weight_type: &str,
+    do_bipolar_correction: bool,
 ) -> Vec<f64> {
     let n_echoes = tes.len();
     let n_total = nx * ny * nz;
 
-    console_log!("WASM mcpc3ds_b0_pipeline: {}x{}x{}, {} echoes, n_total={}, weight_type={}",
-                 nx, ny, nz, n_echoes, n_total, weight_type);
+    console_log!("WASM mcpc3ds_b0_pipeline: {}x{}x{}, {} echoes, n_total={}, weight_type={}, bipolar={}",
+                 nx, ny, nz, n_echoes, n_total, weight_type, do_bipolar_correction);
 
     // Use slices into the flat input instead of cloning (~990 MB savings for large data)
     let phases: Vec<&[f64]> = (0..n_echoes)
@@ -1938,10 +1949,40 @@ pub fn mcpc3ds_b0_pipeline_wasm(
 
     let wt = qsm_core::utils::multi_echo::B0WeightType::from_str(weight_type);
 
-    let (b0, phase_offset, corrected_phases) = qsm_core::utils::multi_echo::mcpc3ds_b0_pipeline(
+    // Step 1: Phase offset removal
+    let (mut corrected_phases, phase_offset) = qsm_core::utils::multi_echo::phase_offset_removal(
         &phases, &mags, tes, mask,
-        [sigma_x, sigma_y, sigma_z], wt,
+        [sigma_x, sigma_y, sigma_z], [0, 1],
+        qsm_core::unwrap::UnwrapMethod::Romeo,
+        [1.0, 1.0, 1.0],
         nx, ny, nz
+    );
+
+    // Step 2: Bipolar correction (after offset removal, before unwrapping — matches MriResearchTools.jl)
+    if do_bipolar_correction && n_echoes >= 3 {
+        console_log!("WASM bipolar correction (post-offset-removal)");
+        let mag_refs: Vec<&[f64]> = (0..n_echoes)
+            .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
+            .collect();
+        qsm_core::utils::multi_echo::bipolar_correction(
+            &mut corrected_phases, &mag_refs, tes, mask,
+            [sigma_x, sigma_y, sigma_z], nx, ny, nz,
+        );
+    }
+
+    // Step 3: Multi-echo ROMEO unwrapping
+    let mag_refs: Vec<&[f64]> = (0..n_echoes)
+        .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
+        .collect();
+    let unwrapped = qsm_core::unwrap::romeo::unwrap_romeo_multi_echo(
+        &corrected_phases, &mag_refs, tes, mask,
+        &qsm_core::unwrap::romeo::RomeoParams::default(),
+        nx, ny, nz,
+    );
+
+    // Step 4: Weighted B0 averaging
+    let b0 = qsm_core::utils::multi_echo::calculate_b0_weighted(
+        &unwrapped, &mags, tes, mask, wt, n_total,
     );
 
     // Flatten output: b0, phase_offset, then all corrected phases
@@ -2016,6 +2057,48 @@ pub fn multi_echo_linear_fit_wasm(
     output.extend(result.reliability_mask.iter().map(|&v| v as f64));
 
     console_log!("WASM multi_echo_linear_fit complete");
+    output
+}
+
+
+/// Bipolar gradient correction for multi-echo phase data
+///
+/// Removes linear phase artefact caused by bipolar readout gradients.
+/// Requires at least 3 echoes; with fewer, returns input unchanged.
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn bipolar_correction_wasm(
+    phases_flat: &[f64],
+    mags_flat: &[f64],
+    tes: &[f64],
+    mask: &[u8],
+    sigma_x: f64, sigma_y: f64, sigma_z: f64,
+    nx: usize, ny: usize, nz: usize,
+) -> Vec<f64> {
+    let n_echoes = tes.len();
+    let n_total = nx * ny * nz;
+
+    console_log!("WASM bipolar_correction: {} echoes, {}x{}x{}, sigma=[{:.1},{:.1},{:.1}]",
+                 n_echoes, nx, ny, nz, sigma_x, sigma_y, sigma_z);
+
+    let mut phases: Vec<Vec<f64>> = (0..n_echoes)
+        .map(|e| phases_flat[e * n_total..(e + 1) * n_total].to_vec())
+        .collect();
+    let mags: Vec<&[f64]> = (0..n_echoes)
+        .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
+        .collect();
+
+    qsm_core::utils::multi_echo::bipolar_correction(
+        &mut phases, &mags, tes, mask,
+        [sigma_x, sigma_y, sigma_z], nx, ny, nz,
+    );
+
+    let mut output = Vec::with_capacity(n_echoes * n_total);
+    for echo in &phases {
+        output.extend_from_slice(echo);
+    }
+
+    console_log!("WASM bipolar_correction complete");
     output
 }
 
@@ -2676,8 +2759,9 @@ pub fn get_qsmart_defaults() -> String {
 #[wasm_bindgen]
 pub fn get_romeo_defaults() -> String {
     let p = qsm_core::unwrap::RomeoParams::default();
-    format!(r#"{{"phase_gradient_coherence":{},"mag_coherence":{},"mag_weight":{}}}"#,
-        p.phase_gradient_coherence, p.mag_coherence, p.mag_weight)
+    format!(r#"{{"phase_coherence":{},"phase_gradient_coherence":{},"phase_linearity":{},"mag_coherence":{},"mag_weight":{},"mag_weight2":{}}}"#,
+        p.phase_coherence, p.phase_gradient_coherence, p.phase_linearity,
+        p.mag_coherence, p.mag_weight, p.mag_weight2)
 }
 
 /// Get default MCPC-3D-S parameters as JSON string

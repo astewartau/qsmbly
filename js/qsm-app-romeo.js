@@ -790,6 +790,41 @@ class QSMApp {
       if (jsonFiles.length > 0) {
         await this.fileIOController.processJsonFiles(jsonFiles);
       }
+
+      // Auto-advance to masking section if data looks complete
+      this._autoAdvanceToMasking();
+    }
+  }
+
+  /**
+   * If magnitude and phase are balanced, JSONs present, and field strength + echo times populated,
+   * auto-open the masking section.
+   */
+  _autoAdvanceToMasking() {
+    const b = this.fileIOController.buckets;
+    const nMag = b.magnitude.length;
+    const nPhase = b.phase.length;
+    const nJson = b.json?.length || 0;
+
+    // Need equal mag/phase, at least one of each, and matching JSON count
+    if (nMag === 0 || nPhase === 0 || nMag !== nPhase) return;
+    if (nJson < nPhase) return;
+
+    // Check field strength is populated
+    const fieldInput = document.getElementById('magField');
+    if (!fieldInput || !fieldInput.value || parseFloat(fieldInput.value) <= 0) return;
+
+    // Check echo times are populated
+    const echoTagify = this.fileIOController.echoTagify;
+    if (!echoTagify || echoTagify.value.length < nPhase) return;
+
+    // All good — collapse input, open masking
+    const inputSection = document.getElementById('inputSection');
+    const maskSection = document.getElementById('maskSection');
+    if (inputSection && maskSection) {
+      inputSection.classList.add('collapsed');
+      document.getElementById('paramsSection')?.classList.add('collapsed');
+      maskSection.classList.remove('collapsed');
     }
   }
 
@@ -2199,7 +2234,7 @@ class QSMApp {
       if (this.currentMaskData && this.magnitudeFileBytes) {
         const maskNifti = this.createMaskNifti(this.currentMaskData);
         customMaskBuffer = maskNifti;
-        this.updateOutput("Using custom edited mask");
+        this.updateOutput("Using edited mask");
       }
 
       // Determine which stages can be skipped based on settings changes
@@ -2298,7 +2333,7 @@ class QSMApp {
       if (this.currentMaskData && this.magnitudeFileBytes) {
         const maskNifti = this.createMaskNifti(this.currentMaskData);
         customMaskBuffer = maskNifti;
-        this.updateOutput("Using custom edited mask");
+        this.updateOutput("Using edited mask");
       }
 
       // Preview the field map
@@ -2379,7 +2414,7 @@ class QSMApp {
       if (this.currentMaskData && this.magnitudeFileBytes) {
         const maskNifti = this.createMaskNifti(this.currentMaskData);
         customMaskBuffer = maskNifti;
-        this.updateOutput("Using custom edited mask");
+        this.updateOutput("Using edited mask");
       }
 
       if (!maskBuffer && !customMaskBuffer && combinedMethod === 'none') {
@@ -2730,7 +2765,7 @@ class QSMApp {
       // Cache the result (but don't display)
       this.results[stage] = { file: file, path: `${stage}.nii`, description: description };
 
-      this.updateOutput(`Cached: ${description}`);
+      // Silently cached — no console message needed
     } catch (error) {
       this.updateOutput(`Error caching data: ${error.message}`);
     }
@@ -3082,6 +3117,16 @@ class QSMApp {
     if (modal && modal.classList.contains('active')) {
       this.savePipelineSettings();
     }
+
+    // Collapse pipeline section, open results
+    const pipelineSection = document.getElementById('pipelineSection');
+    const resultsSection = document.getElementById('stage-buttons');
+    if (pipelineSection) pipelineSection.classList.add('collapsed');
+    if (resultsSection) {
+      resultsSection.classList.remove('collapsed');
+      resultsSection.classList.remove('hidden');
+    }
+
     this.runRomeoQSM();
   }
 

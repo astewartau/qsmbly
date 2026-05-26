@@ -8,13 +8,14 @@ import {
   RTS_DEFAULTS, TV_DEFAULTS, TKD_DEFAULTS, TSVD_DEFAULTS,
   TIKHONOV_DEFAULTS, NLTV_DEFAULTS, MEDI_DEFAULTS,
   VSHARP_DEFAULTS, PDF_DEFAULTS, LBV_DEFAULTS, ISMV_DEFAULTS, SHARP_DEFAULTS,
+  RESHARP_DEFAULTS, HARPERELLA_DEFAULTS,
   TGV_DEFAULTS, QSMART_DEFAULTS,
   ROMEO_DEFAULTS, MCPC3DS_DEFAULTS,
   SWI_DEFAULTS,
 } from '../app/config.js';
 
 // qsmxt.rs default mask ops (robust threshold)
-const DEFAULT_MASK_OPS = ['threshold:otsu', 'dilate:2', 'fill-holes:0', 'erode:2'];
+const DEFAULT_MASK_OPS = ['threshold:otsu', 'dilate:1', 'fill-holes:0', 'erode:1'];
 
 /**
  * @param {Object} settings - Pipeline settings from PipelineSettingsController.save()
@@ -95,6 +96,22 @@ export function generateQsmxtCommand(settings, maskOps = [], options = {}) {
       case 'sharp':
         emitNum(parts, '--sharp-threshold', settings.sharp?.threshold, SHARP_DEFAULTS.threshold);
         emitNum(parts, '--sharp-radius-factor', settings.sharp?.radius, SHARP_DEFAULTS.radiusFactor);
+        break;
+      case 'resharp':
+        emitNum(parts, '--resharp-radius', settings.resharp?.radius, RESHARP_DEFAULTS.radius);
+        emitNum(parts, '--resharp-tik-reg', settings.resharp?.tikReg, RESHARP_DEFAULTS.tikReg);
+        emitNum(parts, '--resharp-tol', settings.resharp?.tol, RESHARP_DEFAULTS.tol);
+        emitNum(parts, '--resharp-max-iter', settings.resharp?.maxIter, RESHARP_DEFAULTS.maxIter);
+        break;
+      case 'harperella':
+        emitNum(parts, '--harperella-radius', settings.harperella?.radius, HARPERELLA_DEFAULTS.radius);
+        emitNum(parts, '--harperella-max-iter', settings.harperella?.maxIter, HARPERELLA_DEFAULTS.maxIter);
+        emitNum(parts, '--harperella-tol', settings.harperella?.tol, HARPERELLA_DEFAULTS.tol);
+        break;
+      case 'iharperella':
+        emitNum(parts, '--iharperella-radius', settings.iharperella?.radius, HARPERELLA_DEFAULTS.radius);
+        emitNum(parts, '--iharperella-max-iter', settings.iharperella?.maxIter, HARPERELLA_DEFAULTS.maxIter);
+        emitNum(parts, '--iharperella-tol', settings.iharperella?.tol, HARPERELLA_DEFAULTS.tol);
         break;
     }
   }

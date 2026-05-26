@@ -5,7 +5,7 @@
     "QSM-WASM"
   ],
   "description": "WASM bindings for QSM processing pipeline (powered by qsm-core)",
-  "version": "0.8.4",
+  "version": "0.14.2",
   "files": [
     "qsm_wasm_bg.wasm",
     "qsm_wasm.js",

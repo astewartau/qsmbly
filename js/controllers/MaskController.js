@@ -112,7 +112,8 @@ export class MaskController {
       // Debug: show current settings
       console.log('Prepare settings:', maskPrepSettings);
       this.setProgress(0.05, 'Preparing...');
-      this.updateOutput(`Preparing: source=${maskPrepSettings.source}, biasCorrection=${maskPrepSettings.biasCorrection}`);
+      const sourceLabel = maskPrepSettings.source === 'phase_quality' ? 'phase quality' : maskPrepSettings.source.replace('_', ' ');
+      this.updateOutput(`Preparing mask input (${sourceLabel}${maskPrepSettings.biasCorrection ? ' + bias correction' : ''})`);
 
       let magnitudeData;
       let headerSourceFile;
