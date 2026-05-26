@@ -136,9 +136,12 @@ export const QSMART_DEFAULTS = {
 };
 
 export const ROMEO_DEFAULTS = {
+  "phase_coherence": true,
   "phase_gradient_coherence": true,
+  "phase_linearity": true,
   "mag_coherence": true,
-  "mag_weight": true
+  "mag_weight": false,
+  "mag_weight2": false
 };
 
 export const MCPC3DS_DEFAULTS = {
