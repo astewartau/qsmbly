@@ -7,7 +7,8 @@
  * Shared by standard, TGV, and field map pipelines.
  */
 
-import { computeB0FromUnwrapped, findSeedPoint } from './PhaseUtils.js';
+import { computeB0FromUnwrapped } from './PhaseUtils.js';
+import { findSeedPoint } from './MaskUtils.js';
 
 /**
  * Compute a B0 field map from multi-echo phase + magnitude data.
