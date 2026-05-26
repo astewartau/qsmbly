@@ -209,13 +209,14 @@ export class PipelineSettingsController {
   save(nEchoes) {
     const isMultiEcho = nEchoes > 1;
 
-    // Phase offset: use checkbox state (multi-echo) or 'none' (single-echo)
-    const phaseOffsetEnabled = isMultiEcho && (this._getChecked('phaseOffsetEnabled') ?? true);
-    const phaseOffsetMethod = phaseOffsetEnabled ? (this._getEl('phaseOffsetMethod') || 'mcpc3ds') : 'none';
-
     const unwrapMethod = isMultiEcho
       ? this._getEl('unwrapMethod')
       : this._getEl('singleEchoUnwrapMethod');
+    const isLaplacian = unwrapMethod === 'laplacian';
+
+    // Phase offset: disabled for Laplacian (inherently removes offsets)
+    const phaseOffsetEnabled = !isLaplacian && isMultiEcho && (this._getChecked('phaseOffsetEnabled') ?? true);
+    const phaseOffsetMethod = phaseOffsetEnabled ? (this._getEl('phaseOffsetMethod') || 'mcpc3ds') : 'none';
 
     // ROMEO weight settings
     const romeoPhaseGradientCoherence = isMultiEcho
@@ -260,7 +261,7 @@ export class PipelineSettingsController {
       },
       unwrapMethod: unwrapMethod,
       phaseOffsetMethod: phaseOffsetMethod,
-      bipolarCorrection: isMultiEcho && nEchoes >= 3 && (this._getChecked('bipolarCorrectionEnabled') ?? false),
+      bipolarCorrection: !isLaplacian && isMultiEcho && nEchoes >= 3 && (this._getChecked('bipolarCorrectionEnabled') ?? false),
       fieldCalculationMethod: this._getEl('fieldCalculationMethod') || 'weighted_avg',
       mcpc3ds: {
         sigma: [
@@ -396,35 +397,41 @@ export class PipelineSettingsController {
     // QSMART settings - show when QSMART selected in any mode
     this._showEl('qsmartSettings', isQsmart);
 
-    // Phase offset removal
-    const phaseOffsetEnabled = this._getChecked('phaseOffsetEnabled') ?? true;
+    // Phase unwrapping (check this first — Laplacian disables offset removal + bipolar)
+    const currentUnwrapMethod = this._getEl('unwrapMethod') || 'romeo';
+    const isLaplacian = currentUnwrapMethod === 'laplacian';
+    this._showEl('romeoSettings', currentUnwrapMethod === 'romeo');
+    this._showEl('laplacianSettings', isLaplacian);
+
+    // ROMEO multi-echo mode (only shown for multi-echo + ROMEO)
+    this._showEl('romeoMultiEchoSettings', currentUnwrapMethod === 'romeo' && isMultiEcho);
+
+    // Phase offset removal — disabled for Laplacian (it inherently removes offsets)
+    const phaseOffsetEnabled = !isLaplacian && (this._getChecked('phaseOffsetEnabled') ?? true);
     this._disableEl('phaseOffsetContent', !phaseOffsetEnabled);
+    const phaseOffsetCheckbox = document.getElementById('phaseOffsetEnabled');
+    if (phaseOffsetCheckbox) phaseOffsetCheckbox.disabled = isLaplacian;
     this._showWarning('phaseOffsetEnabled', 'phaseOffsetWarning',
       phaseOffsetEnabled && nEchoes === 1,
       'Requires multi-echo data', 'error');
+    this._showWarning('phaseOffsetEnabled', 'phaseOffsetLaplacianNote',
+      isLaplacian && isMultiEcho,
+      'Not needed — Laplacian unwrapping inherently removes phase offsets',
+      'info');
 
-    // Hide the old locked hint (no longer forcing ROMEO)
-    const hint = document.getElementById('unwrapLockedHint');
-    if (hint) hint.style.display = 'none';
 
-    // Bipolar correction
-    const bipolarEnabled = this._getChecked('bipolarCorrectionEnabled');
+    // Bipolar correction — disabled for Laplacian
+    const bipolarCheckbox = document.getElementById('bipolarCorrectionEnabled');
+    if (bipolarCheckbox) bipolarCheckbox.disabled = isLaplacian;
+    const bipolarEnabled = !isLaplacian && (this._getChecked('bipolarCorrectionEnabled') ?? false);
     this._showWarning('bipolarCorrectionEnabled', 'bipolarWarning',
       bipolarEnabled && nEchoes >= 1 && nEchoes < 3,
       nEchoes === 1 ? 'Requires multi-echo data (3+ echoes)' : 'Requires 3+ echoes',
       'error');
-
-    // Phase unwrapping
-    const currentUnwrapMethod = this._getEl('unwrapMethod') || 'romeo';
-    this._showEl('romeoSettings', currentUnwrapMethod === 'romeo');
-    this._showEl('laplacianSettings', currentUnwrapMethod === 'laplacian');
-    this._showWarning('unwrapMethod', 'laplacianMultiEchoWarning',
-      currentUnwrapMethod === 'laplacian' && isMultiEcho,
-      'No temporal coherence — ROMEO recommended for multi-echo',
-      'warning');
-
-    // ROMEO multi-echo mode (only shown for multi-echo + ROMEO)
-    this._showEl('romeoMultiEchoSettings', currentUnwrapMethod === 'romeo' && isMultiEcho);
+    this._showWarning('bipolarCorrectionEnabled', 'bipolarLaplacianNote',
+      isLaplacian,
+      'Not applicable with Laplacian unwrapping',
+      'info');
 
     // Phase Gradient Coherence only meaningful for multi-echo
     const pgcLabel = document.getElementById('romeoPgcLabel');
