@@ -2837,11 +2837,12 @@ pub fn generate_command_wasm(toml_string: &str) -> String {
 }
 
 /// Generate a methods section with citations from a TOML config string.
+/// `tool` should be "qsmxt.rs" or "QSMbly" to credit the correct tool.
 /// Returns markdown text, or an error message prefixed with "ERROR: ".
 #[wasm_bindgen]
-pub fn generate_methods_wasm(toml_string: &str) -> String {
+pub fn generate_methods_wasm(toml_string: &str, tool: &str) -> String {
     match qsmxt_config::PipelineConfig::from_toml(toml_string) {
-        Ok(config) => qsmxt_config::generate_methods(&config),
+        Ok(config) => qsmxt_config::methods::generate_methods_for(&config, tool),
         Err(e) => format!("ERROR: {}", e),
     }
 }

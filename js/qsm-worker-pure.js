@@ -2886,7 +2886,7 @@ self.onmessage = async function (e) {
         break;
 
       case 'generateMethods':
-        self.postMessage({ type: 'methodsResult', result: wasmModule.generate_methods_wasm(data.toml) });
+        self.postMessage({ type: 'methodsResult', result: wasmModule.generate_methods_wasm(data.toml, 'QSMbly') });
         break;
 
       default:
