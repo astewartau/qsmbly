@@ -23,6 +23,18 @@ import { settingsToToml, appendMaskFlags } from './modules/ConfigBridge.js';
 // Make config available globally for backward compatibility
 window.QSMConfig = QSMConfig;
 
+/** Simple markdown → HTML for methods text (headings, paragraphs, lists). */
+function renderMarkdown(md) {
+  return md
+    .replace(/^## (.+)$/gm, '<h3 style="margin-top: 1em; margin-bottom: 0.3em; font-size: 1rem;">$1</h3>')
+    .replace(/^# (.+)$/gm, '<h2 style="margin-top: 0; margin-bottom: 0.5em; font-size: 1.1rem;">$1</h2>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul style="margin: 0.3em 0; padding-left: 1.5em;">${m}</ul>`)
+    .replace(/\n\n/g, '</p><p style="margin: 0.5em 0;">')
+    .replace(/^\s*</, '<')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+}
+
 class QSMApp {
   constructor() {
     // Config is required - no fallbacks
@@ -3327,9 +3339,10 @@ class QSMApp {
 
     // Show modal immediately with loading state
     const cmdEl = document.getElementById('commandPreviewText');
-    const methodsEl = document.getElementById('methodsPreviewText');
+    const methodsRendered = document.getElementById('methodsPreviewRendered');
+    const methodsRaw = document.getElementById('methodsPreviewRaw');
     if (cmdEl) cmdEl.textContent = 'Generating...';
-    if (methodsEl) methodsEl.textContent = 'Generating...';
+    if (methodsRendered) methodsRendered.innerHTML = '<em>Generating...</em>';
     this.switchExportTab('command');
     this.commandPreviewModal?.open();
 
@@ -3343,7 +3356,9 @@ class QSMApp {
         cmd = appendMaskFlags(cmd, this.maskOpsHistory, maskSource);
         if (cmdEl) cmdEl.textContent = cmd;
       } else if (e.data.type === 'methodsResult') {
-        if (methodsEl) methodsEl.textContent = e.data.result;
+        const raw = e.data.result;
+        if (methodsRaw) methodsRaw.textContent = raw;
+        if (methodsRendered) methodsRendered.innerHTML = renderMarkdown(raw);
         worker.removeEventListener('message', handler);
       }
     };
@@ -3375,11 +3390,11 @@ class QSMApp {
   }
 
   copyCommandToClipboard() {
-    // Copy whichever tab is visible
+    // Copy command text or raw markdown depending on active tab
     const cmdPane = document.getElementById('exportCommandPane');
     const el = cmdPane.style.display !== 'none'
       ? document.getElementById('commandPreviewText')
-      : document.getElementById('methodsPreviewText');
+      : document.getElementById('methodsPreviewRaw');
     if (!el) return;
     navigator.clipboard.writeText(el.textContent).then(() => {
       const btn = document.getElementById('copyCommand');

@@ -586,7 +586,7 @@
       <div class="console-container" id="console">
         <div class="console-header">
           <span class="console-title">Console</span>
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; margin-left: 12px;">
             <button class="console-clear" id="exportCommand">Command</button>
             <button class="console-clear" id="exportMethods">Methods</button>
           </div>
@@ -1354,7 +1354,8 @@
           <p class="command-modal-description">
             Auto-generated methods section with citations based on your pipeline settings:
           </p>
-          <div id="methodsPreviewText" class="command-modal-code" style="white-space: pre-wrap; font-family: inherit; font-size: 0.85rem; line-height: 1.5;"></div>
+          <div id="methodsPreviewRendered" style="font-size: 0.85rem; line-height: 1.6; padding: 12px 16px; background: var(--color-surface); border-radius: 8px; border: 1px solid var(--color-border);"></div>
+          <div id="methodsPreviewRaw" style="display: none;"></div>
         </div>
       </div>
       <div class="modal-footer">
