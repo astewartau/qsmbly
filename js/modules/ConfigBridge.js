@@ -42,7 +42,28 @@ export function setWasmModule(wasm) {
 export function generateCommand(settings, maskOps = [], maskSource = 'phase_quality', options = {}) {
   if (!wasmModule) return 'ERROR: WASM not loaded';
   const toml = settingsToToml(settings, maskOps, maskSource, options);
-  return wasmModule.generate_command_wasm(toml);
+  let cmd = wasmModule.generate_command_wasm(toml);
+
+  // Append --mask flag if mask differs from default
+  // (Mask sections use complex serde tagged enums that are hard to serialize
+  // from JS to TOML, so we handle them directly here)
+  const DEFAULT_MASK_OPS = ['threshold:otsu', 'dilate:1', 'fill-holes:0', 'erode:1'];
+  if (maskOps && maskOps.length > 0) {
+    const inputMap = {
+      'phase_quality': 'phase-quality',
+      'combined': 'magnitude',
+      'first_echo': 'magnitude-first',
+      'last_echo': 'magnitude-last',
+    };
+    const input = inputMap[maskSource] || 'phase-quality';
+    const defaultSection = `phase-quality,${DEFAULT_MASK_OPS.join(',')}`;
+    const currentSection = `${input},${maskOps.join(',')}`;
+    if (currentSection !== defaultSection) {
+      cmd += ` --mask ${currentSection}`;
+    }
+  }
+
+  return cmd;
 }
 
 /**
