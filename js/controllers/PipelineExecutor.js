@@ -98,8 +98,12 @@ export class PipelineExecutor {
         case 'defaultConfig':
           try {
             this.defaultPipelineConfig = JSON.parse(data.result);
-            // Update ConfigBridge with defaults from qsmxt-config
             import('../modules/ConfigBridge.js').then(m => m.setDefaultsFromConfig(this.defaultPipelineConfig));
+            // Enable export buttons now that WASM config is available
+            const cmdBtn = document.getElementById('exportCommand');
+            const methodsBtn = document.getElementById('exportMethods');
+            if (cmdBtn) cmdBtn.disabled = false;
+            if (methodsBtn) methodsBtn.disabled = false;
           } catch (e) {
             console.warn('Failed to parse default config:', e);
           }
