@@ -86,8 +86,8 @@ export function settingsToToml(settings, maskOps = [], maskSource = 'phase_quali
       phase_offset_sigma: settings.mcpc3ds?.sigma || [4, 4, 4],
       bipolar_correction: !!settings.bipolarCorrection,
       unwrapping_algorithm: settings.unwrapMethod || 'romeo',
-      b0_estimation: settings.fieldCalculationMethod === 'linear_fit' ? 'linear-fit' : 'weighted-avg',
-      b0_weight_type: settings.b0WeightType || 'phase-snr',
+      b0_estimation: (settings.fieldCalculationMethod || 'weighted_avg').replace(/_/g, '-'),
+      b0_weight_type: (settings.b0WeightType || 'phase_snr').replace(/_/g, '-'),
       romeo: {
         individual: settings.romeo?.individual ?? true,
         correct_global: settings.romeo?.correctGlobal ?? true,
