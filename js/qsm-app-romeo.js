@@ -3375,17 +3375,13 @@ class QSMApp {
     if (tab === 'methods') {
       cmdPane.style.display = 'none';
       methodsPane.style.display = '';
-      cmdTab.style.opacity = '0.6';
-      cmdTab.style.fontWeight = '';
-      methodsTab.style.opacity = '1';
-      methodsTab.style.fontWeight = '600';
+      cmdTab.classList.remove('active');
+      methodsTab.classList.add('active');
     } else {
       cmdPane.style.display = '';
       methodsPane.style.display = 'none';
-      cmdTab.style.opacity = '1';
-      cmdTab.style.fontWeight = '600';
-      methodsTab.style.opacity = '0.6';
-      methodsTab.style.fontWeight = '';
+      cmdTab.classList.add('active');
+      methodsTab.classList.remove('active');
     }
   }
 
