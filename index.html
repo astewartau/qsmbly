@@ -1333,14 +1333,25 @@
   <div class="modal-overlay" id="commandPreviewModal">
     <div class="modal command-modal">
       <div class="modal-header">
-        <h3>qsmxt.rs Command</h3>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-sm" id="exportTabCommand" style="font-weight: 600;">Command</button>
+          <button class="btn btn-sm" id="exportTabMethods" style="opacity: 0.6;">Methods</button>
+        </div>
         <button class="modal-close" id="closeCommandPreview">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="command-modal-description">
-          Run this command with <a href="https://github.com/astewartau/qsmxt.rs" target="_blank" rel="noopener">qsmxt.rs</a> to process a full BIDS dataset with your current settings:
-        </p>
-        <pre id="commandPreviewText" class="command-modal-code"></pre>
+        <div id="exportCommandPane">
+          <p class="command-modal-description">
+            Run this command with <a href="https://github.com/astewartau/qsmxt.rs" target="_blank" rel="noopener">qsmxt.rs</a> to process a full BIDS dataset with your current settings:
+          </p>
+          <pre id="commandPreviewText" class="command-modal-code"></pre>
+        </div>
+        <div id="exportMethodsPane" style="display: none;">
+          <p class="command-modal-description">
+            Auto-generated methods section with citations based on your pipeline settings:
+          </p>
+          <div id="methodsPreviewText" class="command-modal-code" style="white-space: pre-wrap; font-family: inherit; font-size: 0.85rem; line-height: 1.5;"></div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn" id="closeCommandPreviewBtn">Close</button>

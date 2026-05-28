@@ -486,6 +486,8 @@ class QSMApp {
     document.getElementById('closeCommandPreview')?.addEventListener('click', () => this.commandPreviewModal?.close());
     document.getElementById('closeCommandPreviewBtn')?.addEventListener('click', () => this.commandPreviewModal?.close());
     document.getElementById('copyCommand')?.addEventListener('click', () => this.copyCommandToClipboard());
+    document.getElementById('exportTabCommand')?.addEventListener('click', () => this.switchExportTab('command'));
+    document.getElementById('exportTabMethods')?.addEventListener('click', () => this.switchExportTab('methods'));
     document.getElementById('openSwiSettings')?.addEventListener('click', () => {
       document.getElementById('swiSettingsModal')?.classList.add('active');
     });
@@ -3324,11 +3326,53 @@ class QSMApp {
     );
     const el = document.getElementById('commandPreviewText');
     if (el) el.textContent = command;
+
+    // Also generate methods text
+    const methods = generateMethods(
+      this.pipelineSettings,
+      this.maskOpsHistory,
+      this.maskPrepSettings?.source || 'phase_quality',
+      {
+        doSwi: !!this.results?.swi?.file,
+        doT2star: !!this.results?.t2star?.file,
+        doR2star: !!this.results?.r2star?.file,
+      }
+    );
+    const methodsEl = document.getElementById('methodsPreviewText');
+    if (methodsEl) methodsEl.textContent = methods;
+
+    this.switchExportTab('command');
     this.commandPreviewModal?.open();
   }
 
+  switchExportTab(tab) {
+    const cmdPane = document.getElementById('exportCommandPane');
+    const methodsPane = document.getElementById('exportMethodsPane');
+    const cmdTab = document.getElementById('exportTabCommand');
+    const methodsTab = document.getElementById('exportTabMethods');
+    if (tab === 'methods') {
+      cmdPane.style.display = 'none';
+      methodsPane.style.display = '';
+      cmdTab.style.opacity = '0.6';
+      cmdTab.style.fontWeight = '';
+      methodsTab.style.opacity = '1';
+      methodsTab.style.fontWeight = '600';
+    } else {
+      cmdPane.style.display = '';
+      methodsPane.style.display = 'none';
+      cmdTab.style.opacity = '1';
+      cmdTab.style.fontWeight = '600';
+      methodsTab.style.opacity = '0.6';
+      methodsTab.style.fontWeight = '';
+    }
+  }
+
   copyCommandToClipboard() {
-    const el = document.getElementById('commandPreviewText');
+    // Copy whichever tab is visible
+    const cmdPane = document.getElementById('exportCommandPane');
+    const el = cmdPane.style.display !== 'none'
+      ? document.getElementById('commandPreviewText')
+      : document.getElementById('methodsPreviewText');
     if (!el) return;
     navigator.clipboard.writeText(el.textContent).then(() => {
       const btn = document.getElementById('copyCommand');
