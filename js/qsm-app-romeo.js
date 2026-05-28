@@ -485,6 +485,8 @@ class QSMApp {
     document.getElementById('copyCommand')?.addEventListener('click', () => this.copyCommandToClipboard());
     document.getElementById('exportTabCommand')?.addEventListener('click', () => this.switchExportTab('command'));
     document.getElementById('exportTabMethods')?.addEventListener('click', () => this.switchExportTab('methods'));
+    document.getElementById('exportCommand')?.addEventListener('click', () => { this.showCommandPreview(); this.switchExportTab('command'); });
+    document.getElementById('exportMethods')?.addEventListener('click', () => { this.showCommandPreview(); this.switchExportTab('methods'); });
     document.getElementById('openSwiSettings')?.addEventListener('click', () => {
       document.getElementById('swiSettingsModal')?.classList.add('active');
     });
