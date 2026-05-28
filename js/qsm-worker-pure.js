@@ -2877,6 +2877,10 @@ self.onmessage = async function (e) {
         await runVoxelQuality(data);
         break;
 
+      case 'getDefaultConfig':
+        self.postMessage({ type: 'defaultConfig', result: wasmModule.get_default_config_json_wasm() });
+        break;
+
       case 'generateCommand':
         self.postMessage({ type: 'commandResult', result: wasmModule.generate_command_wasm(data.toml) });
         break;

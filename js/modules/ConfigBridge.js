@@ -94,8 +94,39 @@ export function settingsToToml(settings, maskOps = [], maskSource = 'phase_quali
  * Append mask CLI flags to a command string.
  * (Mask sections use complex serde tagged enums that can't easily go through TOML.)
  */
+/**
+ * Default mask ops from qsmxt-config (robust threshold preset).
+ * Set dynamically from WASM default config; falls back to hardcoded.
+ */
+let DEFAULT_MASK_OPS = ['threshold:otsu', 'dilate:1', 'fill-holes:0', 'erode:1'];
+
+/**
+ * Update default mask ops from a parsed qsmxt-config default config JSON.
+ */
+export function setDefaultsFromConfig(config) {
+  if (config?.masking?.sections?.[0]) {
+    const s = config.masking.sections[0];
+    const ops = [];
+    if (s.generator) ops.push(maskOpToString(s.generator));
+    if (s.refinements) s.refinements.forEach(r => ops.push(maskOpToString(r)));
+    if (ops.length > 0) DEFAULT_MASK_OPS = ops;
+  }
+}
+
+function maskOpToString(op) {
+  switch (op.op) {
+    case 'threshold': return `threshold:${op.method || 'otsu'}`;
+    case 'bet': return `bet:${op.fractional_intensity ?? 0.5}`;
+    case 'erode': return `erode:${op.iterations ?? 1}`;
+    case 'dilate': return `dilate:${op.iterations ?? 1}`;
+    case 'close': return `close:${op.radius ?? 1}`;
+    case 'fill-holes': return `fill-holes:${op.max_size ?? 0}`;
+    case 'gaussian-smooth': return `gaussian:${op.sigma_mm ?? 4.0}`;
+    default: return op.op;
+  }
+}
+
 export function appendMaskFlags(cmd, maskOps, maskSource) {
-  const DEFAULT_MASK_OPS = ['threshold:otsu', 'dilate:1', 'fill-holes:0', 'erode:1'];
   if (maskOps && maskOps.length > 0) {
     const inputMap = {
       'phase_quality': 'phase-quality', 'combined': 'magnitude',

@@ -90,8 +90,19 @@ export class PipelineExecutor {
 
         case 'initialized':
           this.workerReady = true;
-          // version already logged by worker, no extra message needed
           this.onInitialized();
+          // Fetch default pipeline config from qsmxt-config WASM
+          this.worker.postMessage({ type: 'getDefaultConfig' });
+          break;
+
+        case 'defaultConfig':
+          try {
+            this.defaultPipelineConfig = JSON.parse(data.result);
+            // Update ConfigBridge with defaults from qsmxt-config
+            import('../modules/ConfigBridge.js').then(m => m.setDefaultsFromConfig(this.defaultPipelineConfig));
+          } catch (e) {
+            console.warn('Failed to parse default config:', e);
+          }
           break;
 
         case 'complete':
