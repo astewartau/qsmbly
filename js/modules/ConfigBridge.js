@@ -167,24 +167,11 @@ export function settingsToToml(settings, maskOps = [], maskSource = 'phase_quali
     mip_window: settings.swi.mipWindow,
   };
 
-  // Mask sections
-  if (maskOps && maskOps.length > 0) {
-    const inputMap = {
-      'phase_quality': 'phase-quality',
-      'combined': 'magnitude',
-      'first_echo': 'magnitude-first',
-      'last_echo': 'magnitude-last',
-    };
-    const input = inputMap[maskSource] || 'phase-quality';
-
-    // First op is generator, rest are refinements
-    // Convert to structured format for TOML
-    config.masking.sections = [{
-      input: input,
-      generator: parseMaskOp(maskOps[0]),
-      refinements: maskOps.slice(1).map(parseMaskOp),
-    }];
-  }
+  // Mask sections — don't emit in TOML (complex tagged enum structure).
+  // The generate_command() in Rust uses defaults. The command preview
+  // won't show --mask flags unless we add mask CLI flag generation
+  // directly in JS (like the old CommandGenerator did).
+  // TODO: serialize mask sections properly or handle via separate mechanism.
 
   return toTomlString(config);
 }
