@@ -18,7 +18,7 @@ import { DicomController } from './controllers/DicomController.js';
 import { DicompareController } from 'https://dicompare.neurodesk.org/embed/DicompareController.js';
 import { DicompareReportRenderer } from 'https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js';
 import * as QSMConfig from './app/config.js';
-import { generateQsmxtCommand } from './modules/CommandGenerator.js';
+import { generateCommand, generateMethods, initConfigBridge } from './modules/ConfigBridge.js';
 
 // Make config available globally for backward compatibility
 window.QSMConfig = QSMConfig;
@@ -120,6 +120,9 @@ class QSMApp {
   }
 
   async init() {
+    // Initialize config bridge (WASM for command/methods generation)
+    initConfigBridge().catch(() => {});
+
     // Display version in header
     const versionEl = document.getElementById('appVersion');
     if (versionEl && window.QSMConfig?.VERSION) {
@@ -3309,9 +3312,10 @@ class QSMApp {
         parseFloat(document.getElementById('sidebarSwiHpSigmaZ')?.value) || 0,
       ];
     }
-    const command = generateQsmxtCommand(
+    const command = generateCommand(
       this.pipelineSettings,
       this.maskOpsHistory,
+      this.maskPrepSettings?.source || 'phase_quality',
       {
         doSwi: !!this.results?.swi?.file,
         doT2star: !!this.results?.t2star?.file,

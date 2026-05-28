@@ -2821,3 +2821,52 @@ mod tests {
         assert!(!version.is_empty());
     }
 }
+
+// ============================================================================
+// Pipeline Configuration (via qsmxt-config library)
+// ============================================================================
+
+/// Generate a qsmxt CLI command from a TOML config string.
+/// Returns the command string, or an error message prefixed with "ERROR: ".
+#[wasm_bindgen]
+pub fn generate_command_wasm(toml_string: &str) -> String {
+    match qsmxt_config::PipelineConfig::from_toml(toml_string) {
+        Ok(config) => qsmxt_config::generate_command(&config),
+        Err(e) => format!("ERROR: {}", e),
+    }
+}
+
+/// Generate a methods section with citations from a TOML config string.
+/// Returns markdown text, or an error message prefixed with "ERROR: ".
+#[wasm_bindgen]
+pub fn generate_methods_wasm(toml_string: &str) -> String {
+    match qsmxt_config::PipelineConfig::from_toml(toml_string) {
+        Ok(config) => qsmxt_config::generate_methods(&config),
+        Err(e) => format!("ERROR: {}", e),
+    }
+}
+
+/// Return the default PipelineConfig as a TOML string.
+#[wasm_bindgen]
+pub fn get_default_config_toml_wasm() -> String {
+    qsmxt_config::PipelineConfig::default()
+        .to_toml()
+        .unwrap_or_else(|e| format!("ERROR: {}", e))
+}
+
+/// Return the default PipelineConfig as a JSON string.
+#[wasm_bindgen]
+pub fn get_default_config_json_wasm() -> String {
+    qsmxt_config::PipelineConfig::default()
+        .to_json()
+        .unwrap_or_else(|e| format!("ERROR: {}", e))
+}
+
+/// Validate a TOML config string. Returns empty string on success, error message on failure.
+#[wasm_bindgen]
+pub fn validate_config_wasm(toml_string: &str) -> String {
+    match qsmxt_config::PipelineConfig::from_toml(toml_string) {
+        Err(e) => format!("Parse error: {}", e),
+        Ok(_) => String::new(),
+    }
+}
