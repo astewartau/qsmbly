@@ -18,7 +18,7 @@ import { DicomController } from './controllers/DicomController.js';
 import { DicompareController } from 'https://dicompare.neurodesk.org/embed/DicompareController.js';
 import { DicompareReportRenderer } from 'https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js';
 import * as QSMConfig from './app/config.js';
-import { generateCommand, generateMethods, initConfigBridge } from './modules/ConfigBridge.js';
+import { settingsToToml, appendMaskFlags } from './modules/ConfigBridge.js';
 
 // Make config available globally for backward compatibility
 window.QSMConfig = QSMConfig;
@@ -120,9 +120,6 @@ class QSMApp {
   }
 
   async init() {
-    // Initialize config bridge (WASM for command/methods generation)
-    initConfigBridge().catch(() => {});
-
     // Display version in header
     const versionEl = document.getElementById('appVersion');
     if (versionEl && window.QSMConfig?.VERSION) {
@@ -3314,7 +3311,7 @@ class QSMApp {
         parseFloat(document.getElementById('sidebarSwiHpSigmaZ')?.value) || 0,
       ];
     }
-    const command = generateCommand(
+    const toml = settingsToToml(
       this.pipelineSettings,
       this.maskOpsHistory,
       this.maskPrepSettings?.source || 'phase_quality',
@@ -3324,25 +3321,33 @@ class QSMApp {
         doR2star: !!this.results?.r2star?.file,
       }
     );
-    const el = document.getElementById('commandPreviewText');
-    if (el) el.textContent = command;
+    const maskSource = this.maskPrepSettings?.source || 'phase_quality';
 
-    // Also generate methods text
-    const methods = generateMethods(
-      this.pipelineSettings,
-      this.maskOpsHistory,
-      this.maskPrepSettings?.source || 'phase_quality',
-      {
-        doSwi: !!this.results?.swi?.file,
-        doT2star: !!this.results?.t2star?.file,
-        doR2star: !!this.results?.r2star?.file,
-      }
-    );
+    // Show modal immediately with loading state
+    const cmdEl = document.getElementById('commandPreviewText');
     const methodsEl = document.getElementById('methodsPreviewText');
-    if (methodsEl) methodsEl.textContent = methods;
-
+    if (cmdEl) cmdEl.textContent = 'Generating...';
+    if (methodsEl) methodsEl.textContent = 'Generating...';
     this.switchExportTab('command');
     this.commandPreviewModal?.open();
+
+    // Ask worker to generate command and methods via WASM
+    const worker = this.pipelineExecutor?.worker;
+    if (!worker) { if (cmdEl) cmdEl.textContent = 'ERROR: Worker not available'; return; }
+
+    const handler = (e) => {
+      if (e.data.type === 'commandResult') {
+        let cmd = e.data.result;
+        cmd = appendMaskFlags(cmd, this.maskOpsHistory, maskSource);
+        if (cmdEl) cmdEl.textContent = cmd;
+      } else if (e.data.type === 'methodsResult') {
+        if (methodsEl) methodsEl.textContent = e.data.result;
+        worker.removeEventListener('message', handler);
+      }
+    };
+    worker.addEventListener('message', handler);
+    worker.postMessage({ type: 'generateCommand', data: { toml } });
+    worker.postMessage({ type: 'generateMethods', data: { toml } });
   }
 
   switchExportTab(tab) {

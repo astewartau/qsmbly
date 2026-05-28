@@ -2877,6 +2877,14 @@ self.onmessage = async function (e) {
         await runVoxelQuality(data);
         break;
 
+      case 'generateCommand':
+        self.postMessage({ type: 'commandResult', result: wasmModule.generate_command_wasm(data.toml) });
+        break;
+
+      case 'generateMethods':
+        self.postMessage({ type: 'methodsResult', result: wasmModule.generate_methods_wasm(data.toml) });
+        break;
+
       default:
         postError(`Unknown message type: ${type}`);
     }
