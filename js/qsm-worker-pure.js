@@ -230,14 +230,14 @@ function computeSWI(pipelineSettings, unwrappedPhase, magnitude, mask, dims, vox
 
   postLog('Computing Susceptibility Weighted Image...');
 
-  const swiSettings = pipelineSettings?.swi || { hpSigma: [4, 4, 0], scaling: 'tanh', strength: 4, mipWindow: 7 };
+  const swiSettings = pipelineSettings?.swi || { hp_sigma: [4, 4, 0], scaling: 'tanh', strength: 4, mip_window: 7 };
   const scalingMap = { 'tanh': 0, 'negative_tanh': 1, 'positive': 2, 'negative': 3, 'triangular': 4 };
   const scalingType = scalingMap[swiSettings.scaling] || 0;
 
   const swiResult = new Float64Array(wasmModule.calculate_swi_wasm(
     unwrappedPhase, magnitude, mask,
     nx, ny, nz, vsx, vsy, vsz,
-    swiSettings.hpSigma[0], swiSettings.hpSigma[1], swiSettings.hpSigma[2],
+    swiSettings.hp_sigma[0], swiSettings.hp_sigma[1], swiSettings.hp_sigma[2],
     scalingType, swiSettings.strength
   ));
 
@@ -245,14 +245,14 @@ function computeSWI(pipelineSettings, unwrappedPhase, magnitude, mask, dims, vox
   postLog('SWI complete');
 
   // Minimum intensity projection
-  const mipWindow = swiSettings.mipWindow || 0;
-  if (mipWindow > 0 && mipWindow <= nz) {
+  const mip_window = swiSettings.mip_window || 0;
+  if (mip_window > 0 && mip_window <= nz) {
     const mipResult = new Float64Array(wasmModule.create_mip_wasm(
-      swiResult, nx, ny, nz, mipWindow
+      swiResult, nx, ny, nz, mip_window
     ));
-    const mipNz = nz - mipWindow + 1;
+    const mipNz = nz - mip_window + 1;
     sendStageData('mip', mipResult, [nx, ny, mipNz], voxelSize, affine, 'SWI mIP');
-    postLog(`mIP complete (window=${mipWindow}, output nz=${mipNz})`);
+    postLog(`mIP complete (window=${mip_window}, output nz=${mipNz})`);
   }
 }
 
@@ -261,10 +261,10 @@ async function runPipeline(data) {
   const inputMode = data.inputMode || 'raw';
 
   if (inputMode === 'totalField' || inputMode === 'localField') {
-    const combinedMethod = data.pipelineSettings?.combinedMethod || 'none';
-    if (combinedMethod === 'tgv') {
+    const combined_method = data.pipelineSettings?.combined_method || 'none';
+    if (combined_method === 'tgv') {
       return await runTgvFieldMapPipeline(data);
-    } else if (combinedMethod === 'qsmart') {
+    } else if (combined_method === 'qsmart') {
       return await runQsmartFieldMapPipeline(data);
     }
     // Standard pipeline for field map inputs
@@ -286,42 +286,42 @@ async function runPipeline(data) {
   const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
 
   // Check for combined method (TGV)
-  const combinedMethod = pipelineSettings?.combinedMethod || 'none';
+  const combined_method = pipelineSettings?.combined_method || 'none';
 
-  if (combinedMethod === 'tgv') {
+  if (combined_method === 'tgv') {
     // Use TGV single-step reconstruction
     return await runTgvPipeline(data);
-  } else if (combinedMethod === 'qsmart') {
+  } else if (combined_method === 'qsmart') {
     // Use QSMART two-stage reconstruction
     return await runQsmartPipeline(data);
   }
 
   // Extract pipeline settings for standard pipeline
-  const unwrapMethod = pipelineSettings?.unwrapMethod || 'romeo';
-  const phaseOffsetMethod = pipelineSettings?.phaseOffsetMethod || 'mcpc3ds';  // 'mcpc3ds' or 'none'
-  const fieldCalculationMethod = pipelineSettings?.fieldCalculationMethod || 'weighted_avg';  // 'weighted_avg' or 'linear_fit'
+  const unwrapping_algorithm = pipelineSettings?.unwrapping_algorithm || 'romeo';
+  const phase_offset_method = pipelineSettings?.phase_offset_method || 'mcpc3ds';  // 'mcpc3ds' or 'none'
+  const b0_estimation = pipelineSettings?.b0_estimation || 'weighted_avg';  // 'weighted_avg' or 'linear_fit'
   const mcpc3dsSettings = pipelineSettings?.mcpc3ds || {
     sigma: [10, 10, 5]  // Smoothing sigma in voxels [x, y, z]
   };
-  const b0WeightType = pipelineSettings?.b0WeightType || 'phase_snr';
+  const b0_weight_type = pipelineSettings?.b0_weight_type || 'phase_snr';
   const linearFitSettings = pipelineSettings?.linearFit || {
-    estimateOffset: true
+    estimate_offset: true
   };
   const romeoSettings = pipelineSettings?.romeo || {
-    phaseGradientCoherence: true,
-    magCoherence: true,
-    magWeight: true
+    phase_gradient_coherence: true,
+    mag_coherence: true,
+    mag_weight: true
   };
-  const backgroundMethod = pipelineSettings?.backgroundRemoval || 'vsharp';
-  const dipoleMethod = pipelineSettings?.dipoleInversion || 'rts';
+  const backgroundMethod = pipelineSettings?.bf_algorithm || 'vsharp';
+  const dipoleMethod = pipelineSettings?.dipole_inversion || 'rts';
 
   // Validate methods upfront - never silently fall back to a different algorithm
   const validUnwrapMethods = ['romeo', 'laplacian'];
   const validBgMethods = ['vsharp', 'sharp', 'resharp', 'ismv', 'pdf', 'lbv', 'harperella', 'iharperella'];
   const validInversionMethods = ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr'];
 
-  if (!validUnwrapMethods.includes(unwrapMethod)) {
-    throw new Error(`Unknown unwrapping method: '${unwrapMethod}'. Valid options are: ${validUnwrapMethods.join(', ')}`);
+  if (!validUnwrapMethods.includes(unwrapping_algorithm)) {
+    throw new Error(`Unknown unwrapping method: '${unwrapping_algorithm}'. Valid options are: ${validUnwrapMethods.join(', ')}`);
   }
   if (!validBgMethods.includes(backgroundMethod)) {
     throw new Error(`Unknown background removal method: '${backgroundMethod}'. Valid options are: ${validBgMethods.join(', ')}`);
@@ -330,28 +330,28 @@ async function runPipeline(data) {
     throw new Error(`Unknown dipole inversion method: '${dipoleMethod}'. Valid options are: ${validInversionMethods.join(', ')}`);
   }
   const vsharpSettings = {
-    maxRadius: pipelineSettings?.vsharp?.maxRadius ?? 18,
-    minRadius: pipelineSettings?.vsharp?.minRadius ?? 2,
+    max_radius: pipelineSettings?.vsharp?.max_radius ?? 18,
+    min_radius: pipelineSettings?.vsharp?.min_radius ?? 2,
     threshold: pipelineSettings?.vsharp?.threshold ?? 0.05
   };
   const lbvSettings = {
     tol: pipelineSettings?.lbv?.tol ?? 0.000001,
     maxit: pipelineSettings?.lbv?.maxit ?? 500
   };
-  const resharpSettings = pipelineSettings?.resharp || { radius: 6, tikReg: 1e-4, tol: 1e-6, maxIter: 30 };
-  const harperellaSettings = pipelineSettings?.harperella || { radius: 10, maxIter: 40, tol: 1e-6 };
-  const iharperellaSettings = pipelineSettings?.iharperella || { radius: 10, maxIter: 40, tol: 1e-6 };
-  const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 };
+  const resharpSettings = pipelineSettings?.resharp || { radius: 6, tik_reg: 1e-4, tol: 1e-6, max_iter: 30 };
+  const harperellaSettings = pipelineSettings?.harperella || { radius: 10, max_iter: 40, tol: 1e-6 };
+  const iharperellaSettings = pipelineSettings?.iharperella || { radius: 10, max_iter: 40, tol: 1e-6 };
+  const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, max_iter: 20 };
   const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
   const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
   const tikhonovSettings = pipelineSettings?.tikhonov || { lambda: 0.01, reg: 'identity' };
-  const tvSettings = pipelineSettings?.tv || { lambda: 0.0002, maxIter: 250, tol: 0.001 };
-  const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, maxIter: 250, tol: 0.001, newtonMaxIter: 10 };
+  const tvSettings = pipelineSettings?.tv || { lambda: 0.0002, max_iter: 250, tol: 0.001 };
+  const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, max_iter: 250, tol: 0.001, newton_max_iter: 10 };
   const mediSettings = pipelineSettings?.medi || {
-    lambda: 7.5e-5, percentage: 0.3, maxIter: 30, cgMaxIter: 10, cgTol: 0.01, tol: 0.1,
-    smv: false, smvRadius: 5, merit: false, dataWeighting: 1
+    lambda: 7.5e-5, percentage: 0.3, max_iter: 30, cg_max_iter: 10, cg_tol: 0.01, tol: 0.1,
+    smv: false, smv_radius: 5, merit: false, data_weighting: 1
   };
-  const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, maxIter: 50 };
+  const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, max_iter: 50 };
 
   try {
     // =========================================================================
@@ -451,7 +451,7 @@ async function runPipeline(data) {
       postLog(`Removing background field using ${backgroundMethod.toUpperCase()}...`);
       // Create radii array
       const radii = [];
-      for (let r = vsharpSettings.maxRadius; r >= vsharpSettings.minRadius; r -= 2) {
+      for (let r = vsharpSettings.max_radius; r >= vsharpSettings.min_radius; r -= 2) {
         radii.push(r);
       }
       const numRadii = radii.length;
@@ -564,7 +564,7 @@ async function runPipeline(data) {
     } else if (backgroundMethod === 'resharp') {
       postProgress(0.42, 'Preparing RESHARP background removal...');
       postLog('Removing background field using RESHARP...');
-      postLog(`  radius=${resharpSettings.radius}mm, tikReg=${resharpSettings.tikReg}, maxIter=${resharpSettings.maxIter}`);
+      postLog(`  radius=${resharpSettings.radius}mm, tik_reg=${resharpSettings.tik_reg}, max_iter=${resharpSettings.max_iter}`);
 
       const resharpProgress = (current, total) => {
         const progress = 0.42 + (current / total) * 0.20;
@@ -573,7 +573,7 @@ async function runPipeline(data) {
 
       const result = wasmModule.resharp_wasm_with_progress(
         b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-        resharpSettings.radius, resharpSettings.tikReg, resharpSettings.tol, resharpSettings.maxIter,
+        resharpSettings.radius, resharpSettings.tik_reg, resharpSettings.tol, resharpSettings.max_iter,
         magField || 3.0,
         resharpProgress
       );
@@ -588,7 +588,7 @@ async function runPipeline(data) {
       const settings = backgroundMethod === 'iharperella' ? iharperellaSettings : harperellaSettings;
       postProgress(0.42, `Preparing ${label}...`);
       postLog(`Removing background field using ${label}...`);
-      postLog(`  radius=${settings.radius}mm, maxIter=${settings.maxIter}`);
+      postLog(`  radius=${settings.radius}mm, max_iter=${settings.max_iter}`);
 
       const harpProgress = (current, total) => {
         const progress = 0.42 + (current / total) * 0.20;
@@ -600,7 +600,7 @@ async function runPipeline(data) {
         : wasmModule.harperella_wasm_with_progress;
       const result = wasm_fn(
         b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-        settings.radius, settings.maxIter, settings.tol,
+        settings.radius, settings.max_iter, settings.tol,
         harpProgress
       );
 
@@ -670,7 +670,7 @@ async function runPipeline(data) {
 
       qsmResult = new Float64Array(wasmModule.tv_admm_wasm_with_progress(
         localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-        0, 0, 1, tvSettings.lambda, rho, tvSettings.tol, tvSettings.maxIter,
+        0, 0, 1, tvSettings.lambda, rho, tvSettings.tol, tvSettings.max_iter,
         magField || 3.0,
         tvProgress
       ));
@@ -686,7 +686,7 @@ async function runPipeline(data) {
         localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
         0, 0, 1,
         rtsSettings.delta, rtsSettings.mu, rtsSettings.rho,
-        0.01, rtsSettings.maxIter, 4,
+        0.01, rtsSettings.max_iter, 4,
         magField || 3.0,
         rtsProgress
       ));
@@ -702,7 +702,7 @@ async function runPipeline(data) {
         localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
         0, 0, 1,
         nltvSettings.lambda, nltvSettings.mu,
-        nltvSettings.tol, nltvSettings.maxIter, nltvSettings.newtonMaxIter,
+        nltvSettings.tol, nltvSettings.max_iter, nltvSettings.newton_max_iter,
         magField || 3.0,
         nltvProgress
       ));
@@ -721,7 +721,7 @@ async function runPipeline(data) {
       const magSource = hasPreparedMagnitude ? 'prepared' : 'first echo';
       postLog(`MEDI using ${magSource} magnitude for gradient weighting`);
       if (mediSettings.smv) {
-        postLog(`MEDI SMV preprocessing enabled: radius=${mediSettings.smvRadius}mm`);
+        postLog(`MEDI SMV preprocessing enabled: radius=${mediSettings.smv_radius}mm`);
       }
 
       // Create noise std map (uniform for now - could be computed from data)
@@ -748,12 +748,12 @@ async function runPipeline(data) {
         mediSettings.lambda,
         mediSettings.merit,
         mediSettings.smv,
-        mediSettings.smvRadius,
-        mediSettings.dataWeighting,
+        mediSettings.smv_radius,
+        mediSettings.data_weighting,
         mediSettings.percentage,
-        mediSettings.cgTol,
-        mediSettings.cgMaxIter,
-        mediSettings.maxIter,
+        mediSettings.cg_tol,
+        mediSettings.cg_max_iter,
+        mediSettings.max_iter,
         mediSettings.tol,
         mediProgress
       ));
@@ -772,12 +772,12 @@ async function runPipeline(data) {
       };
 
       postProgress(0.70, 'iLSQR: Running 4-step artifact removal...');
-      postLog(`iLSQR parameters: tol=${ilsqrSettings.tol}, maxIter=${ilsqrSettings.maxIter}`);
+      postLog(`iLSQR parameters: tol=${ilsqrSettings.tol}, max_iter=${ilsqrSettings.max_iter}`);
 
       qsmResult = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
         localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
         0, 0, 1,  // B0 direction
-        ilsqrSettings.tol, ilsqrSettings.maxIter,
+        ilsqrSettings.tol, ilsqrSettings.max_iter,
         magField || 3.0,
         ilsqrProgress
       ));
@@ -807,7 +807,7 @@ async function runPipeline(data) {
     postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
 
     // Apply QSM referencing if enabled
-    if (pipelineSettings?.referenceMean !== false) {
+    if (pipelineSettings?.reference_mean !== false) {
       postLog('Applying mean referencing...');
       qsmResult = applyMeanReference(qsmResult, erodedMask);
     }
@@ -833,7 +833,7 @@ async function runTgvCore({
   tgvInputPhase, mask, dims, voxelSize, affine,
   te, fieldstrength, tgvSettings,
   progressStart = 0.40, progressEnd = 0.95, label = 'QSM Result (ppm) - TGV',
-  referenceMean = true,
+  reference_mean = true,
 }) {
   const [nx, ny, nz] = dims;
   const [vsx, vsy, vsz] = voxelSize;
@@ -844,10 +844,10 @@ async function runTgvCore({
   const alpha1 = alphas[1];
 
   // Use adaptive iterations from WASM if available, otherwise fall back to settings
-  const stepSize = 3.0;
+  const step_size = 3.0;
   let iterations = tgvSettings.iterations;
   if (wasmModule.tgv_get_default_iterations) {
-    iterations = wasmModule.tgv_get_default_iterations(vsx, vsy, vsz, stepSize);
+    iterations = wasmModule.tgv_get_default_iterations(vsx, vsy, vsz, step_size);
   }
 
   postProgress(progressStart, 'Starting TGV reconstruction...');
@@ -879,7 +879,7 @@ async function runTgvCore({
   postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
 
   // Apply QSM referencing if enabled
-  if (referenceMean) {
+  if (reference_mean) {
     postLog('Applying mean referencing...');
     qsmResult = applyMeanReference(qsmResult, mask);
   }
@@ -904,16 +904,16 @@ async function runTgvPipeline(data) {
   const tgvSettings = pipelineSettings?.tgv || { regularization: 2, iterations: 1000, erosions: 3 };
 
   // Multi-echo combination settings (same as standard pipeline)
-  const unwrapMethod = pipelineSettings?.unwrapMethod || 'romeo';
-  const phaseOffsetMethod = pipelineSettings?.phaseOffsetMethod || 'mcpc3ds';
-  const fieldCalculationMethod = pipelineSettings?.fieldCalculationMethod || 'weighted_avg';
+  const unwrapping_algorithm = pipelineSettings?.unwrapping_algorithm || 'romeo';
+  const phase_offset_method = pipelineSettings?.phase_offset_method || 'mcpc3ds';
+  const b0_estimation = pipelineSettings?.b0_estimation || 'weighted_avg';
   const mcpc3dsSettings = pipelineSettings?.mcpc3ds || { sigma: [10, 10, 5] };
-  const b0WeightType = pipelineSettings?.b0WeightType || 'phase_snr';
-  const linearFitSettings = pipelineSettings?.linearFit || { estimateOffset: true };
+  const b0_weight_type = pipelineSettings?.b0_weight_type || 'phase_snr';
+  const linearFitSettings = pipelineSettings?.linearFit || { estimate_offset: true };
   const romeoSettings = pipelineSettings?.romeo || {
-    phaseGradientCoherence: true,
-    magCoherence: true,
-    magWeight: true
+    phase_gradient_coherence: true,
+    mag_coherence: true,
+    mag_weight: true
   };
 
   try {
@@ -1024,7 +1024,7 @@ async function runTgvPipeline(data) {
       tgvInputPhase, mask, dims, voxelSize, affine,
       te, fieldstrength, tgvSettings,
       progressStart: 0.40, progressEnd: 0.95,
-      referenceMean: pipelineSettings?.referenceMean !== false,
+      reference_mean: pipelineSettings?.reference_mean !== false,
     });
 
     postProgress(1.0, 'TGV pipeline complete!');
@@ -1059,25 +1059,25 @@ async function runQsmartCore({
 
   // QSMART settings with defaults from Demo_QSMART.m
   const qsmartSettings = pipelineSettings?.qsmart || {};
-  const sdfSigma1Stage1 = qsmartSettings.sdfSigma1Stage1 ?? 10;
-  const sdfSigma2Stage1 = qsmartSettings.sdfSigma2Stage1 ?? 0;
-  const sdfSigma1Stage2 = qsmartSettings.sdfSigma1Stage2 ?? 8;
-  const sdfSigma2Stage2 = qsmartSettings.sdfSigma2Stage2 ?? 2;
-  const sdfSpatialRadius = qsmartSettings.sdfSpatialRadius ?? 8;
-  const sdfLowerLim = qsmartSettings.sdfLowerLim ?? 0.6;
-  const sdfCurvConstant = qsmartSettings.sdfCurvConstant ?? 500;
+  const sdf_sigma1_stage1 = qsmartSettings.sdf_sigma1_stage1 ?? 10;
+  const sdf_sigma2_stage1 = qsmartSettings.sdf_sigma2_stage1 ?? 0;
+  const sdf_sigma1_stage2 = qsmartSettings.sdf_sigma1_stage2 ?? 8;
+  const sdf_sigma2_stage2 = qsmartSettings.sdf_sigma2_stage2 ?? 2;
+  const sdf_spatial_radius = qsmartSettings.sdf_spatial_radius ?? 8;
+  const sdf_lower_lim = qsmartSettings.sdf_lower_lim ?? 0.6;
+  const sdf_curv_constant = qsmartSettings.sdf_curv_constant ?? 500;
   const useCurvature = qsmartSettings.useCurvature !== false;
-  const vasculatureSphereRadiusMm = qsmartSettings.vascSphereRadiusMm ?? 8.0;
+  const vasculatureSphereRadiusMm = qsmartSettings.vasc_sphere_radius ?? 8.0;
   const vasculatureSphereRadiusOverride = qsmartSettings.vascSphereRadius ?? qsmartSettings.vasculatureSphereRadius;
-  const frangiScaleMinMm = qsmartSettings.frangiScaleMinMm ?? 0.5;
-  const frangiScaleMaxMm = qsmartSettings.frangiScaleMaxMm ?? 6.0;
-  const frangiScaleRatioMm = qsmartSettings.frangiScaleRatioMm ?? 0.5;
+  const frangi_scale_min = qsmartSettings.frangi_scale_min ?? 0.5;
+  const frangi_scale_max = qsmartSettings.frangi_scale_max ?? 6.0;
+  const frangi_scale_ratio = qsmartSettings.frangi_scale_ratio ?? 0.5;
   const frangiScaleMinVoxelOverride = qsmartSettings.frangiScaleRange?.[0] ?? qsmartSettings.frangiScaleMin;
   const frangiScaleMaxVoxelOverride = qsmartSettings.frangiScaleRange?.[1] ?? qsmartSettings.frangiScaleMax;
   const frangiScaleRatioOverride = qsmartSettings.frangiScaleRatio;
-  const frangiC = qsmartSettings.frangiC ?? 500;
-  const ilsqrTol = qsmartSettings.ilsqrTol ?? 0.01;
-  const ilsqrMaxIter = qsmartSettings.ilsqrMaxIter ?? 50;
+  const frangi_c = qsmartSettings.frangi_c ?? 500;
+  const ilsqr_tol = qsmartSettings.ilsqr_tol ?? 0.01;
+  const ilsqr_max_iter = qsmartSettings.ilsqr_max_iter ?? 50;
   const enableVasculature = qsmartSettings.enableVasculature !== false && magnitudeData !== null;
 
   const b0Tesla = magField || 7.0;
@@ -1096,16 +1096,16 @@ async function runQsmartCore({
     const avgVoxelSize = (vsx + vsy + vsz) / 3.0;
     const sphereRadiusVoxels = vasculatureSphereRadiusOverride ?? Math.round(vasculatureSphereRadiusMm / avgVoxelSize);
     const effectiveSphereRadius = Math.max(sphereRadiusVoxels, 2);
-    const frangiScaleMin = frangiScaleMinVoxelOverride ?? (frangiScaleMinMm / avgVoxelSize);
-    const frangiScaleMax = frangiScaleMaxVoxelOverride ?? (frangiScaleMaxMm / avgVoxelSize);
-    const frangiScaleRatio = frangiScaleRatioOverride ?? (frangiScaleRatioMm / avgVoxelSize);
+    const frangiScaleMin = frangiScaleMinVoxelOverride ?? (frangi_scale_min / avgVoxelSize);
+    const frangiScaleMax = frangiScaleMaxVoxelOverride ?? (frangi_scale_max / avgVoxelSize);
+    const frangiScaleRatio = frangiScaleRatioOverride ?? (frangi_scale_ratio / avgVoxelSize);
     const effectiveScaleRatio = Math.max(frangiScaleRatio, 0.1);
 
     postLog(`Generating vasculature mask:`);
     postLog(`  Voxel size: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm (avg=${avgVoxelSize.toFixed(2)}mm)`);
     postLog(`  Sphere radius: ${effectiveSphereRadius} voxels (${vasculatureSphereRadiusMm.toFixed(1)}mm)`);
     postLog(`  Frangi scales: [${frangiScaleMin.toFixed(2)}, ${frangiScaleMax.toFixed(2)}] voxels (step=${effectiveScaleRatio.toFixed(2)})`);
-    postLog(`  (Physical: [${frangiScaleMinMm.toFixed(1)}, ${frangiScaleMaxMm.toFixed(1)}]mm, Frangi C: ${frangiC})`);
+    postLog(`  (Physical: [${frangi_scale_min.toFixed(1)}, ${frangi_scale_max.toFixed(1)}]mm, Frangi C: ${frangi_c})`);
 
     const vascProgress = (current, total) => {
       postProgress(0.20 + (current / total) * 0.10, `Vasculature: Step ${current}/${total}`);
@@ -1115,7 +1115,7 @@ async function runQsmartCore({
       magnitudeData, mask, nx, ny, nz,
       effectiveSphereRadius,
       frangiScaleMin, frangiScaleMax, effectiveScaleRatio,
-      frangiC,
+      frangi_c,
       vascProgress
     ));
 
@@ -1157,7 +1157,7 @@ async function runQsmartCore({
     lfsStage1 = fieldMap;
   } else {
     postProgress(0.30, 'Stage 1: SDF background removal...');
-    postLog(`Stage 1 SDF: sigma1=${sdfSigma1Stage1}, sigma2=${sdfSigma2Stage1}, curvature=${useCurvature}`);
+    postLog(`Stage 1 SDF: sigma1=${sdf_sigma1_stage1}, sigma2=${sdf_sigma2_stage1}, curvature=${useCurvature}`);
 
     const onesArray = new Float64Array(voxelCount).fill(1.0);
     const sdfProgress1 = (current, total) => {
@@ -1167,9 +1167,9 @@ async function runQsmartCore({
     lfsStage1 = new Float64Array(wasmModule.sdf_wasm_with_progress(
       fieldMap, weightedMask, onesArray,
       nx, ny, nz,
-      sdfSigma1Stage1, sdfSigma2Stage1,
-      sdfSpatialRadius,
-      sdfLowerLim, sdfCurvConstant,
+      sdf_sigma1_stage1, sdf_sigma2_stage1,
+      sdf_spatial_radius,
+      sdf_lower_lim, sdf_curv_constant,
       useCurvature,
       sdfProgress1
     ));
@@ -1199,7 +1199,7 @@ async function runQsmartCore({
   }
 
   postProgress(0.42, 'Stage 1: iLSQR inversion...');
-  postLog(`Stage 1 iLSQR: tol=${ilsqrTol}, maxIter=${ilsqrMaxIter}`);
+  postLog(`Stage 1 iLSQR: tol=${ilsqr_tol}, max_iter=${ilsqr_max_iter}`);
 
   const maskStage1 = new Uint8Array(voxelCount);
   for (let i = 0; i < voxelCount; i++) {
@@ -1213,7 +1213,7 @@ async function runQsmartCore({
   const chiStage1 = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
     lfsStage1, maskStage1, nx, ny, nz, vsx, vsy, vsz,
     0, 0, 1,
-    ilsqrTol, ilsqrMaxIter,
+    ilsqr_tol, ilsqr_max_iter,
     magField || 3.0,
     ilsqrProgress1
   ));
@@ -1237,7 +1237,7 @@ async function runQsmartCore({
     lfsStage2 = fieldMap;
   } else {
     postProgress(0.50, 'Stage 2: SDF on tissue region...');
-    postLog(`Stage 2 SDF: sigma1=${sdfSigma1Stage2}, sigma2=${sdfSigma2Stage2}`);
+    postLog(`Stage 2 SDF: sigma1=${sdf_sigma1_stage2}, sigma2=${sdf_sigma2_stage2}`);
 
     const tfsWeighted = new Float64Array(voxelCount);
     for (let i = 0; i < voxelCount; i++) {
@@ -1251,9 +1251,9 @@ async function runQsmartCore({
     lfsStage2 = new Float64Array(wasmModule.sdf_wasm_with_progress(
       tfsWeighted, weightedMask, vascOnly,
       nx, ny, nz,
-      sdfSigma1Stage2, sdfSigma2Stage2,
-      sdfSpatialRadius,
-      sdfLowerLim, sdfCurvConstant,
+      sdf_sigma1_stage2, sdf_sigma2_stage2,
+      sdf_spatial_radius,
+      sdf_lower_lim, sdf_curv_constant,
       useCurvature,
       sdfProgress2
     ));
@@ -1275,7 +1275,7 @@ async function runQsmartCore({
   const chiStage2 = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
     lfsStage2, maskStage2, nx, ny, nz, vsx, vsy, vsz,
     0, 0, 1,
-    ilsqrTol, ilsqrMaxIter,
+    ilsqr_tol, ilsqr_max_iter,
     magField || 3.0,
     ilsqrProgress2
   ));
@@ -1330,7 +1330,7 @@ async function runQsmartCore({
   postLog(`QSMART QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
 
   // Apply QSM referencing if enabled
-  if (pipelineSettings?.referenceMean !== false) {
+  if (pipelineSettings?.reference_mean !== false) {
     postLog('Applying mean referencing...');
     qsmResult = applyMeanReference(qsmResult, mask);
   }
@@ -1722,8 +1722,8 @@ async function runTotalFieldPipeline(data) {
   const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
 
   // Extract pipeline settings
-  const backgroundMethod = pipelineSettings?.backgroundRemoval || 'vsharp';
-  const dipoleMethod = pipelineSettings?.dipoleInversion || 'rts';
+  const backgroundMethod = pipelineSettings?.bf_algorithm || 'vsharp';
+  const dipoleMethod = pipelineSettings?.dipole_inversion || 'rts';
 
   // Validate methods
   const validBgMethods = ['vsharp', 'sharp', 'resharp', 'ismv', 'pdf', 'lbv', 'harperella', 'iharperella'];
@@ -1737,28 +1737,28 @@ async function runTotalFieldPipeline(data) {
 
   // Extract method-specific settings (same as standard pipeline)
   const vsharpSettings = {
-    maxRadius: pipelineSettings?.vsharp?.maxRadius ?? 18,
-    minRadius: pipelineSettings?.vsharp?.minRadius ?? 2,
+    max_radius: pipelineSettings?.vsharp?.max_radius ?? 18,
+    min_radius: pipelineSettings?.vsharp?.min_radius ?? 2,
     threshold: pipelineSettings?.vsharp?.threshold ?? 0.05
   };
   const lbvSettings = {
     tol: pipelineSettings?.lbv?.tol ?? 0.000001,
     maxit: pipelineSettings?.lbv?.maxit ?? 500
   };
-  const resharpSettings = pipelineSettings?.resharp || { radius: 6, tikReg: 1e-4, tol: 1e-6, maxIter: 30 };
-  const harperellaSettings = pipelineSettings?.harperella || { radius: 10, maxIter: 40, tol: 1e-6 };
-  const iharperellaSettings = pipelineSettings?.iharperella || { radius: 10, maxIter: 40, tol: 1e-6 };
-  const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 };
+  const resharpSettings = pipelineSettings?.resharp || { radius: 6, tik_reg: 1e-4, tol: 1e-6, max_iter: 30 };
+  const harperellaSettings = pipelineSettings?.harperella || { radius: 10, max_iter: 40, tol: 1e-6 };
+  const iharperellaSettings = pipelineSettings?.iharperella || { radius: 10, max_iter: 40, tol: 1e-6 };
+  const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, max_iter: 20 };
   const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
   const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
   const tikhonovSettings = pipelineSettings?.tikhonov || { lambda: 0.01, reg: 'identity' };
-  const tvSettings = pipelineSettings?.tv || { lambda: 0.0002, maxIter: 250, tol: 0.001 };
-  const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, maxIter: 250, tol: 0.001, newtonMaxIter: 10 };
+  const tvSettings = pipelineSettings?.tv || { lambda: 0.0002, max_iter: 250, tol: 0.001 };
+  const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, max_iter: 250, tol: 0.001, newton_max_iter: 10 };
   const mediSettings = pipelineSettings?.medi || {
-    lambda: 7.5e-5, percentage: 0.3, maxIter: 30, cgMaxIter: 10, cgTol: 0.01, tol: 0.1,
-    smv: false, smvRadius: 5, merit: false, dataWeighting: 1
+    lambda: 7.5e-5, percentage: 0.3, max_iter: 30, cg_max_iter: 10, cg_tol: 0.01, tol: 0.1,
+    smv: false, smv_radius: 5, merit: false, data_weighting: 1
   };
-  const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, maxIter: 50 };
+  const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, max_iter: 50 };
 
   try {
     // =========================================================================
@@ -1920,7 +1920,7 @@ async function runTotalFieldPipeline(data) {
     postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
 
     // Apply QSM referencing if enabled
-    if (pipelineSettings?.referenceMean !== false) {
+    if (pipelineSettings?.reference_mean !== false) {
       postLog('Applying mean referencing...');
       qsmResult = applyMeanReference(qsmResult, erodedMask);
     }
@@ -1953,7 +1953,7 @@ async function runLocalFieldPipeline(data) {
   const hasMaskFile = maskBuffer !== null && maskBuffer !== undefined;
   const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
 
-  const dipoleMethod = pipelineSettings?.dipoleInversion || 'rts';
+  const dipoleMethod = pipelineSettings?.dipole_inversion || 'rts';
   const validInversionMethods = ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr'];
   if (!validInversionMethods.includes(dipoleMethod)) {
     throw new Error(`Unknown dipole inversion method: '${dipoleMethod}'`);
@@ -2082,7 +2082,7 @@ async function runLocalFieldPipeline(data) {
     postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
 
     // Apply QSM referencing if enabled
-    if (pipelineSettings?.referenceMean !== false) {
+    if (pipelineSettings?.reference_mean !== false) {
       postLog('Applying mean referencing...');
       qsmResult = applyMeanReference(qsmResult, mask);
     }
@@ -2226,7 +2226,7 @@ async function runTgvFieldMapPipeline(data) {
       te, fieldstrength, tgvSettings,
       progressStart: 0.15, progressEnd: 0.95,
       label: `QSM Result (ppm) - TGV (from ${fieldLabel} field)`,
-      referenceMean: pipelineSettings?.referenceMean !== false,
+      reference_mean: pipelineSettings?.reference_mean !== false,
     });
 
     postProgress(1.0, 'TGV pipeline complete!');
@@ -2381,8 +2381,8 @@ async function runBackgroundRemoval(
 ) {
   const voxelCount = nx * ny * nz;
   const vsharpSettings = {
-    maxRadius: pipelineSettings?.vsharp?.maxRadius ?? 18,
-    minRadius: pipelineSettings?.vsharp?.minRadius ?? 2,
+    max_radius: pipelineSettings?.vsharp?.max_radius ?? 18,
+    min_radius: pipelineSettings?.vsharp?.min_radius ?? 2,
     threshold: pipelineSettings?.vsharp?.threshold ?? 0.05
   };
   let localField, erodedMask;
@@ -2391,7 +2391,7 @@ async function runBackgroundRemoval(
     postProgress(0.42, 'Preparing V-SHARP background removal...');
     postLog(`Removing background field using V-SHARP...`);
     const radii = [];
-    for (let r = vsharpSettings.maxRadius; r >= vsharpSettings.minRadius; r -= 2) {
+    for (let r = vsharpSettings.max_radius; r >= vsharpSettings.min_radius; r -= 2) {
       radii.push(r);
     }
     postLog(`  V-SHARP radii: ${radii.map(r => r.toFixed(1)).join(', ')}`);
@@ -2482,14 +2482,14 @@ async function runBackgroundRemoval(
   } else if (backgroundMethod === 'resharp') {
     postProgress(0.42, 'Preparing RESHARP background removal...');
     postLog('Removing background field using RESHARP...');
-    const resharpSettings = pipelineSettings?.resharp || { radius: 6, tikReg: 1e-4, tol: 1e-6, maxIter: 30 };
-    postLog(`  radius=${resharpSettings.radius}mm, tikReg=${resharpSettings.tikReg}, maxIter=${resharpSettings.maxIter}`);
+    const resharpSettings = pipelineSettings?.resharp || { radius: 6, tik_reg: 1e-4, tol: 1e-6, max_iter: 30 };
+    postLog(`  radius=${resharpSettings.radius}mm, tik_reg=${resharpSettings.tik_reg}, max_iter=${resharpSettings.max_iter}`);
     const resharpProgress = (current, total) => {
       postProgress(0.42 + (current / total) * 0.20, `RESHARP: Iteration ${current}/${total}`);
     };
     const result = wasmModule.resharp_wasm_with_progress(
       b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-      resharpSettings.radius, resharpSettings.tikReg, resharpSettings.tol, resharpSettings.maxIter,
+      resharpSettings.radius, resharpSettings.tik_reg, resharpSettings.tol, resharpSettings.max_iter,
       magField || 3.0, resharpProgress
     );
     localField = new Float64Array(result.slice(0, voxelCount));
@@ -2500,11 +2500,11 @@ async function runBackgroundRemoval(
   } else if (backgroundMethod === 'harperella' || backgroundMethod === 'iharperella') {
     const label = backgroundMethod === 'iharperella' ? 'iHARPERELLA' : 'HARPERELLA';
     const settings = backgroundMethod === 'iharperella'
-      ? (pipelineSettings?.iharperella || { radius: 10, maxIter: 40, tol: 1e-6 })
-      : (pipelineSettings?.harperella || { radius: 10, maxIter: 40, tol: 1e-6 });
+      ? (pipelineSettings?.iharperella || { radius: 10, max_iter: 40, tol: 1e-6 })
+      : (pipelineSettings?.harperella || { radius: 10, max_iter: 40, tol: 1e-6 });
     postProgress(0.42, `Preparing ${label} background removal...`);
     postLog(`Removing background field using ${label}...`);
-    postLog(`  radius=${settings.radius}mm, maxIter=${settings.maxIter}`);
+    postLog(`  radius=${settings.radius}mm, max_iter=${settings.max_iter}`);
     const harpProgress = (current, total) => {
       postProgress(0.42 + (current / total) * 0.20, `${label}: Iteration ${current}/${total}`);
     };
@@ -2513,7 +2513,7 @@ async function runBackgroundRemoval(
       : wasmModule.harperella_wasm_with_progress;
     const result = wasm_fn(
       b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-      settings.radius, settings.maxIter, settings.tol,
+      settings.radius, settings.max_iter, settings.tol,
       harpProgress
     );
     localField = new Float64Array(result.slice(0, voxelCount));
@@ -2538,17 +2538,17 @@ async function runDipoleInversion(
   magnitudeData, echoTimes, skipHzConversion, magField
 ) {
   const voxelCount = nx * ny * nz;
-  const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, maxIter: 20 };
+  const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, max_iter: 20 };
   const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
   const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
   const tikhonovSettings = pipelineSettings?.tikhonov || { lambda: 0.01, reg: 'identity' };
-  const tvSettings = pipelineSettings?.tv || { lambda: 0.0002, maxIter: 250, tol: 0.001 };
-  const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, maxIter: 250, tol: 0.001, newtonMaxIter: 10 };
+  const tvSettings = pipelineSettings?.tv || { lambda: 0.0002, max_iter: 250, tol: 0.001 };
+  const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, max_iter: 250, tol: 0.001, newton_max_iter: 10 };
   const mediSettings = pipelineSettings?.medi || {
-    lambda: 7.5e-5, percentage: 0.3, maxIter: 30, cgMaxIter: 10, cgTol: 0.01, tol: 0.1,
-    smv: false, smvRadius: 5, merit: false, dataWeighting: 1
+    lambda: 7.5e-5, percentage: 0.3, max_iter: 30, cg_max_iter: 10, cg_tol: 0.01, tol: 0.1,
+    smv: false, smv_radius: 5, merit: false, data_weighting: 1
   };
-  const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, maxIter: 50 };
+  const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, max_iter: 50 };
 
   postProgress(0.67, `Preparing ${dipoleMethod.toUpperCase()} dipole inversion...`);
   postLog(`Running ${dipoleMethod.toUpperCase()} dipole inversion...`);
@@ -2587,7 +2587,7 @@ async function runDipoleInversion(
     };
     qsmResult = new Float64Array(wasmModule.tv_admm_wasm_with_progress(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-      0, 0, 1, tvSettings.lambda, rho, tvSettings.tol, tvSettings.maxIter,
+      0, 0, 1, tvSettings.lambda, rho, tvSettings.tol, tvSettings.max_iter,
       magField || 3.0, tvProgress
     ));
   } else if (dipoleMethod === 'rts') {
@@ -2598,7 +2598,7 @@ async function runDipoleInversion(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
       0, 0, 1,
       rtsSettings.delta, rtsSettings.mu, rtsSettings.rho,
-      0.01, rtsSettings.maxIter, 4,
+      0.01, rtsSettings.max_iter, 4,
       magField || 3.0, rtsProgress
     ));
   } else if (dipoleMethod === 'nltv') {
@@ -2609,7 +2609,7 @@ async function runDipoleInversion(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
       0, 0, 1,
       nltvSettings.lambda, nltvSettings.mu,
-      nltvSettings.tol, nltvSettings.maxIter, nltvSettings.newtonMaxIter,
+      nltvSettings.tol, nltvSettings.max_iter, nltvSettings.newton_max_iter,
       magField || 3.0, nltvProgress
     ));
   } else if (dipoleMethod === 'medi') {
@@ -2623,7 +2623,7 @@ async function runDipoleInversion(
       postLog("MEDI: No magnitude available, using uniform weighting");
     }
     if (mediSettings.smv) {
-      postLog(`MEDI SMV preprocessing enabled: radius=${mediSettings.smvRadius}mm`);
+      postLog(`MEDI SMV preprocessing enabled: radius=${mediSettings.smv_radius}mm`);
     }
 
     const nStd = new Float64Array(voxelCount).fill(1.0);
@@ -2646,9 +2646,9 @@ async function runDipoleInversion(
     qsmResult = new Float64Array(wasmModule.medi_l1_wasm_with_progress(
       localFieldForMedi, nStd, magData, erodedMask,
       nx, ny, nz, vsx, vsy, vsz, 0, 0, 1,
-      mediSettings.lambda, mediSettings.merit, mediSettings.smv, mediSettings.smvRadius,
-      mediSettings.dataWeighting, mediSettings.percentage,
-      mediSettings.cgTol, mediSettings.cgMaxIter, mediSettings.maxIter, mediSettings.tol,
+      mediSettings.lambda, mediSettings.merit, mediSettings.smv, mediSettings.smv_radius,
+      mediSettings.data_weighting, mediSettings.percentage,
+      mediSettings.cg_tol, mediSettings.cg_max_iter, mediSettings.max_iter, mediSettings.tol,
       mediProgress
     ));
 
@@ -2666,7 +2666,7 @@ async function runDipoleInversion(
     postProgress(0.70, 'iLSQR: Running...');
     qsmResult = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-      0, 0, 1, ilsqrSettings.tol, ilsqrSettings.maxIter,
+      0, 0, 1, ilsqrSettings.tol, ilsqrSettings.max_iter,
       magField || 3.0, ilsqrProgress
     ));
   } else {

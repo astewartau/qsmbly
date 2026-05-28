@@ -513,15 +513,15 @@ class QSMApp {
       // Sync sidebar SWI settings to pipeline settings before running
       const scaling = document.getElementById('sidebarSwiScaling')?.value || 'tanh';
       const strength = parseFloat(document.getElementById('sidebarSwiStrength')?.value) || 4;
-      const mipWindow = parseInt(document.getElementById('sidebarSwiMipWindow')?.value) || 7;
-      const hpSigmaX = parseFloat(document.getElementById('sidebarSwiHpSigmaX')?.value) || 4;
-      const hpSigmaY = parseFloat(document.getElementById('sidebarSwiHpSigmaY')?.value) || 4;
-      const hpSigmaZ = parseFloat(document.getElementById('sidebarSwiHpSigmaZ')?.value) || 0;
+      const mip_window = parseInt(document.getElementById('sidebarSwiMipWindow')?.value) || 7;
+      const hp_sigmaX = parseFloat(document.getElementById('sidebarSwiHpSigmaX')?.value) || 4;
+      const hp_sigmaY = parseFloat(document.getElementById('sidebarSwiHpSigmaY')?.value) || 4;
+      const hp_sigmaZ = parseFloat(document.getElementById('sidebarSwiHpSigmaZ')?.value) || 0;
       if (this.pipelineSettings.swi) {
         this.pipelineSettings.swi.scaling = scaling;
         this.pipelineSettings.swi.strength = strength;
-        this.pipelineSettings.swi.mipWindow = mipWindow;
-        this.pipelineSettings.swi.hpSigma = [hpSigmaX, hpSigmaY, hpSigmaZ];
+        this.pipelineSettings.swi.mip_window = mip_window;
+        this.pipelineSettings.swi.hp_sigma = [hp_sigmaX, hp_sigmaY, hp_sigmaZ];
       }
       this.runSWI();
     });
@@ -1480,10 +1480,10 @@ class QSMApp {
 
   setupSidebarDropdownListeners() {
     const mappings = [
-      { id: 'sidebarCombinedMethod', key: 'combinedMethod' },
-      { id: 'sidebarUnwrapMethod', key: 'unwrapMethod' },
-      { id: 'sidebarBgRemovalMethod', key: 'backgroundRemoval' },
-      { id: 'sidebarDipoleMethod', key: 'dipoleInversion' }
+      { id: 'sidebarCombinedMethod', key: 'combined_method' },
+      { id: 'sidebarUnwrapMethod', key: 'unwrapping_algorithm' },
+      { id: 'sidebarBgRemovalMethod', key: 'bf_algorithm' },
+      { id: 'sidebarDipoleMethod', key: 'dipole_inversion' }
     ];
 
     for (const { id, key } of mappings) {
@@ -1501,7 +1501,7 @@ class QSMApp {
     const mode = this.fileIOController?.getInputMode() || 'raw';
     const isRaw = mode === 'raw';
     const isTotalField = mode === 'totalField';
-    const combined = this.pipelineSettings?.combinedMethod || 'none';
+    const combined = this.pipelineSettings?.combined_method || 'none';
     const isStandard = combined === 'none';
 
     // Phase unwrapping: raw mode + standard pipeline only
@@ -1526,7 +1526,7 @@ class QSMApp {
     if (combinedSelect) {
       if (autoCorrect && noMag && combinedSelect.value === 'qsmart') {
         combinedSelect.value = 'none';
-        this.pipelineSettings.combinedMethod = 'none';
+        this.pipelineSettings.combined_method = 'none';
       }
       this._showSidebarWarning('sidebarCombinedMethod', 'sidebarCombinedWarning',
         noMag && combinedSelect.value === 'qsmart',
@@ -1537,7 +1537,7 @@ class QSMApp {
     if (dipoleSelect) {
       if (autoCorrect && noMag && dipoleSelect.value === 'medi') {
         dipoleSelect.value = 'rts';
-        this.pipelineSettings.dipoleInversion = 'rts';
+        this.pipelineSettings.dipole_inversion = 'rts';
       }
       this._showSidebarWarning('sidebarDipoleMethod', 'sidebarDipoleWarning',
         noMag && dipoleSelect.value === 'medi',
@@ -1572,10 +1572,10 @@ class QSMApp {
       const el = document.getElementById(id);
       if (el) el.value = val;
     };
-    set('sidebarCombinedMethod', s?.combinedMethod || 'none');
-    set('sidebarUnwrapMethod', s?.unwrapMethod || 'romeo');
-    set('sidebarBgRemovalMethod', s?.backgroundRemoval || 'vsharp');
-    set('sidebarDipoleMethod', s?.dipoleInversion || 'tv');
+    set('sidebarCombinedMethod', s?.combined_method || 'none');
+    set('sidebarUnwrapMethod', s?.unwrapping_algorithm || 'romeo');
+    set('sidebarBgRemovalMethod', s?.bf_algorithm || 'vsharp');
+    set('sidebarDipoleMethod', s?.dipole_inversion || 'tv');
     this.updateSidebarDropdownVisibility();
   }
 
@@ -1585,9 +1585,9 @@ class QSMApp {
     const mode = this.fileIOController.getInputMode();
     const isRaw = mode === 'raw';
     const units = this.fileIOController.getFieldMapUnits();
-    const combinedMethod = this.pipelineSettings?.combinedMethod || 'none';
+    const combined_method = this.pipelineSettings?.combined_method || 'none';
     // Field strength needed for: raw mode, Hz/rad_s units, or TGV/QSMART (internal scaling)
-    const needsFieldStrength = isRaw || units !== 'ppm' || combinedMethod !== 'none';
+    const needsFieldStrength = isRaw || units !== 'ppm' || combined_method !== 'none';
 
     // Show/hide raw-mode-only parameters
     const echoTimesGroup = document.getElementById('echoTimesGroup');
@@ -1756,7 +1756,7 @@ class QSMApp {
   updateEchoInfo() {
     const mode = this.fileIOController?.getInputMode() || 'raw';
     const isValid = this.fileIOController?.hasValidData() || false;
-    const combinedMethod = this.pipelineSettings?.combinedMethod || 'none';
+    const combined_method = this.pipelineSettings?.combined_method || 'none';
     let canRun = false;
 
     switch (mode) {
@@ -1770,7 +1770,7 @@ class QSMApp {
       case 'localField': {
         const units = this.fileIOController.getFieldMapUnits();
         // Field strength needed for Hz/rad_s, and for TGV/QSMART internal scaling
-        const needsFieldStrength = units !== 'ppm' || combinedMethod !== 'none';
+        const needsFieldStrength = units !== 'ppm' || combined_method !== 'none';
         const hasFieldStrength = !needsFieldStrength || (this.fileIOController.getFieldStrength() > 0);
         // Mask can come from: UI editing, mask file upload, or magnitude (for threshold generation)
         const hasMaskSource = this.currentMaskData !== null
@@ -1778,8 +1778,8 @@ class QSMApp {
           || this.fileIOController.hasFieldMapMagnitude()
           || this.preparedMagnitudeData !== null;
         // QSMART and MEDI require magnitude
-        const dipoleMethod = this.pipelineSettings?.dipoleInversion || 'rts';
-        const needsMagnitude = combinedMethod === 'qsmart' || dipoleMethod === 'medi';
+        const dipoleMethod = this.pipelineSettings?.dipole_inversion || 'rts';
+        const needsMagnitude = combined_method === 'qsmart' || dipoleMethod === 'medi';
         const hasMagnitude = this.fileIOController.hasFieldMapMagnitude()
           || this.preparedMagnitudeData !== null;
         const algorithmOk = !needsMagnitude || hasMagnitude;
@@ -2306,9 +2306,9 @@ class QSMApp {
     }
 
     const units = this.fileIOController.getFieldMapUnits();
-    const combinedMethod = this.pipelineSettings?.combinedMethod || 'none';
+    const combined_method = this.pipelineSettings?.combined_method || 'none';
     // Field strength needed for Hz/rad_s conversion, and for TGV/QSMART internal scaling
-    const needsFieldStrength = units !== 'ppm' || combinedMethod !== 'none';
+    const needsFieldStrength = units !== 'ppm' || combined_method !== 'none';
     const magField = needsFieldStrength ? parseFloat(document.getElementById('magField').value) : null;
 
     if (needsFieldStrength && (!magField || magField <= 0)) {
@@ -2317,10 +2317,10 @@ class QSMApp {
     }
 
     // QSMART and MEDI require magnitude
-    const dipoleMethod = this.pipelineSettings?.dipoleInversion || 'rts';
-    if ((combinedMethod === 'qsmart' || dipoleMethod === 'medi')
+    const dipoleMethod = this.pipelineSettings?.dipole_inversion || 'rts';
+    if ((combined_method === 'qsmart' || dipoleMethod === 'medi')
         && !this.fileIOController.hasFieldMapMagnitude() && !this.preparedMagnitudeData) {
-      const method = combinedMethod === 'qsmart' ? 'QSMART' : 'MEDI';
+      const method = combined_method === 'qsmart' ? 'QSMART' : 'MEDI';
       this.updateOutput(`${method} requires a magnitude image`);
       return;
     }
@@ -2389,8 +2389,8 @@ class QSMApp {
     }
 
     const units = this.fileIOController.getFieldMapUnits();
-    const combinedMethod = this.pipelineSettings?.combinedMethod || 'none';
-    const needsFieldStrength = units !== 'ppm' || combinedMethod !== 'none';
+    const combined_method = this.pipelineSettings?.combined_method || 'none';
+    const needsFieldStrength = units !== 'ppm' || combined_method !== 'none';
     const magField = needsFieldStrength ? parseFloat(document.getElementById('magField').value) : null;
 
     if (needsFieldStrength && (!magField || magField <= 0)) {
@@ -2399,10 +2399,10 @@ class QSMApp {
     }
 
     // QSMART and MEDI require magnitude
-    const dipoleMethod = this.pipelineSettings?.dipoleInversion || 'rts';
-    if ((combinedMethod === 'qsmart' || dipoleMethod === 'medi')
+    const dipoleMethod = this.pipelineSettings?.dipole_inversion || 'rts';
+    if ((combined_method === 'qsmart' || dipoleMethod === 'medi')
         && !this.fileIOController.hasFieldMapMagnitude() && !this.preparedMagnitudeData) {
-      const method = combinedMethod === 'qsmart' ? 'QSMART' : 'MEDI';
+      const method = combined_method === 'qsmart' ? 'QSMART' : 'MEDI';
       this.updateOutput(`${method} requires a magnitude image`);
       return;
     }
@@ -2433,7 +2433,7 @@ class QSMApp {
         this.updateOutput("Using edited mask");
       }
 
-      if (!maskBuffer && !customMaskBuffer && combinedMethod === 'none') {
+      if (!maskBuffer && !customMaskBuffer && combined_method === 'none') {
         this.updateOutput("Please provide a mask file or create one from magnitude");
         return;
       }
@@ -3085,9 +3085,9 @@ class QSMApp {
     if (!this.voxelSize) return;
     const defaults = this.getVoxelBasedDefaults();
     const s = this.pipelineSettings;
-    if (s.vsharp.maxRadius == null) s.vsharp.maxRadius = defaults.vsharpMaxRadius;
-    if (s.vsharp.minRadius == null) s.vsharp.minRadius = defaults.vsharpMinRadius;
-    if (s.ismv.radius == null) s.ismv.radius = defaults.ismvRadius;
+    if (s.vsharp.max_radius == null) s.vsharp.max_radius = defaults.vsharpMaxRadius;
+    if (s.vsharp.min_radius == null) s.vsharp.min_radius = defaults.vsharpMinRadius;
+    if (s.ismv.radius == null) s.ismv.radius = defaults.ismv_radius;
     if (s.pdf.maxit == null) s.pdf.maxit = defaults.pdfMaxit;
   }
 
@@ -3318,8 +3318,8 @@ class QSMApp {
     if (this.pipelineSettings.swi) {
       this.pipelineSettings.swi.scaling = document.getElementById('sidebarSwiScaling')?.value || 'tanh';
       this.pipelineSettings.swi.strength = parseFloat(document.getElementById('sidebarSwiStrength')?.value) || 4;
-      this.pipelineSettings.swi.mipWindow = parseInt(document.getElementById('sidebarSwiMipWindow')?.value) || 7;
-      this.pipelineSettings.swi.hpSigma = [
+      this.pipelineSettings.swi.mip_window = parseInt(document.getElementById('sidebarSwiMipWindow')?.value) || 7;
+      this.pipelineSettings.swi.hp_sigma = [
         parseFloat(document.getElementById('sidebarSwiHpSigmaX')?.value) || 4,
         parseFloat(document.getElementById('sidebarSwiHpSigmaY')?.value) || 4,
         parseFloat(document.getElementById('sidebarSwiHpSigmaZ')?.value) || 0,

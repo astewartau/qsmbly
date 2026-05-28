@@ -84,15 +84,15 @@ export const RTS_DEFAULTS = {
   mu: _RTS.mu,
   rho: _RTS.rho,
   tol: _RTS.tol,
-  maxIter: _RTS.max_iter,
-  lsmrIter: _RTS.lsmr_iter,
+  max_iter: _RTS.max_iter,
+  lsmr_iter: _RTS.lsmr_iter,
 };
 
 export const TV_DEFAULTS = {
   lambda: _TV.lambda,
   rho: _TV.rho,
   tol: _TV.tol,
-  maxIter: _TV.max_iter,
+  max_iter: _TV.max_iter,
 };
 
 export const TKD_DEFAULTS = {
@@ -101,8 +101,8 @@ export const TKD_DEFAULTS = {
 
 export const VSHARP_DEFAULTS = {
   threshold: _VSHARP.threshold,
-  maxRadiusFactor: _VSHARP.max_radius_factor,
-  minRadiusFactor: _VSHARP.min_radius_factor,
+  max_radius_factor: _VSHARP.max_radius_factor,
+  min_radius_factor: _VSHARP.min_radius_factor,
 };
 
 export const PDF_DEFAULTS = {
@@ -116,7 +116,7 @@ export const LBV_DEFAULTS = {
 export const ISMV_DEFAULTS = {
   tol: _ISMV.tol,
   maxit: _ISMV.max_iter,
-  radiusFactor: _ISMV.radius_factor,
+  radius_factor: _ISMV.radius_factor,
 };
 
 // Adapted re-exports (field name mapping from snake_case to camelCase)
@@ -135,15 +135,15 @@ export const TGV_DEFAULTS = {
   alpha1: _TGV.alpha1,
   iterations: _TGV.iterations,
   erosions: _TGV.erosions,
-  stepSize: _TGV.step_size,
+  step_size: _TGV.step_size,
   tol: _TGV.tol,
 };
 
 export const SWI_DEFAULTS = {
-  hpSigma: _SWI.hp_sigma,
+  hp_sigma: _SWI.hp_sigma,
   scaling: _SWI.scaling,
   strength: _SWI.strength,
-  mipWindow: _SWI.mip_window,
+  mip_window: _SWI.mip_window,
 };
 
 // Mask configuration defaults
@@ -168,28 +168,28 @@ export const PROGRESS_CONFIG = {
 
 // QSMART pipeline defaults (from QSM.rs QsmartParams)
 export const QSMART_DEFAULTS = {
-  sdfSigma1Stage1: _QSMART.sdf_sigma1_stage1,
-  sdfSigma2Stage1: _QSMART.sdf_sigma2_stage1,
-  sdfSigma1Stage2: _QSMART.sdf_sigma1_stage2,
-  sdfSigma2Stage2: _QSMART.sdf_sigma2_stage2,
-  sdfSpatialRadius: _QSMART.sdf_spatial_radius,
-  sdfLowerLim: _QSMART.sdf_lower_lim,
-  sdfCurvConstant: _QSMART.sdf_curv_constant,
-  vascSphereRadiusMm: _QSMART.vasc_sphere_radius,
-  frangiScaleMinMm: _QSMART.frangi_scale_range[0],
-  frangiScaleMaxMm: _QSMART.frangi_scale_range[1],
-  frangiScaleRatioMm: _QSMART.frangi_scale_ratio,
-  frangiC: _QSMART.frangi_c,
-  ilsqrTol: _QSMART.ilsqr_tol,
-  ilsqrMaxIter: _QSMART.ilsqr_max_iter,
+  sdf_sigma1_stage1: _QSMART.sdf_sigma1_stage1,
+  sdf_sigma2_stage1: _QSMART.sdf_sigma2_stage1,
+  sdf_sigma1_stage2: _QSMART.sdf_sigma1_stage2,
+  sdf_sigma2_stage2: _QSMART.sdf_sigma2_stage2,
+  sdf_spatial_radius: _QSMART.sdf_spatial_radius,
+  sdf_lower_lim: _QSMART.sdf_lower_lim,
+  sdf_curv_constant: _QSMART.sdf_curv_constant,
+  vasc_sphere_radius: _QSMART.vasc_sphere_radius,
+  frangi_scale_min: _QSMART.frangi_scale_range[0],
+  frangi_scale_max: _QSMART.frangi_scale_range[1],
+  frangi_scale_ratio: _QSMART.frangi_scale_ratio,
+  frangi_c: _QSMART.frangi_c,
+  ilsqr_tol: _QSMART.ilsqr_tol,
+  ilsqr_max_iter: _QSMART.ilsqr_max_iter,
 };
 
 // ROMEO unwrapping defaults
 export const ROMEO_DEFAULTS = {
   weighting: 'phase_snr',
-  phaseGradientCoherence: _ROMEO.phase_gradient_coherence,
-  magCoherence: _ROMEO.mag_coherence,
-  magWeight: _ROMEO.mag_weight,
+  phase_gradient_coherence: _ROMEO.phase_gradient_coherence,
+  mag_coherence: _ROMEO.mag_coherence,
+  mag_weight: _ROMEO.mag_weight,
 };
 
 // MCPC-3D-S phase offset correction defaults
@@ -199,7 +199,7 @@ export const MCPC3DS_DEFAULTS = {
 
 // Linear fit B0 calculation defaults
 export const LINEAR_FIT_DEFAULTS = {
-  estimateOffset: _LINEAR_FIT.estimate_offset,
+  estimate_offset: _LINEAR_FIT.estimate_offset,
 };
 
 // Homogeneity correction defaults
@@ -210,19 +210,19 @@ export const HOMOGENEITY_DEFAULTS = {
 
 export const SHARP_DEFAULTS = {
   threshold: _SHARP.threshold,
-  radiusFactor: _SHARP.radius_factor,
+  radius_factor: _SHARP.radius_factor,
 };
 
 export const RESHARP_DEFAULTS = {
   radius: _RESHARP.radius,
-  tikReg: _RESHARP.tik_reg,
+  tik_reg: _RESHARP.tik_reg,
   tol: _RESHARP.tol,
-  maxIter: _RESHARP.max_iter,
+  max_iter: _RESHARP.max_iter,
 };
 
 export const HARPERELLA_DEFAULTS = {
   radius: _HARPERELLA.radius,
-  maxIter: _HARPERELLA.max_iter,
+  max_iter: _HARPERELLA.max_iter,
   tol: _HARPERELLA.tol,
 };
 
@@ -246,22 +246,22 @@ export const TIKHONOV_DEFAULTS = {
 export const NLTV_DEFAULTS = {
   lambda: _NLTV.lambda,
   mu: _NLTV.mu,
-  maxIter: _NLTV.max_iter,
+  max_iter: _NLTV.max_iter,
   tol: _NLTV.tol,
-  newtonMaxIter: _NLTV.newton_iter,
+  newton_max_iter: _NLTV.newton_iter,
 };
 
 export const MEDI_DEFAULTS = {
   lambda: _MEDI.lambda,
   percentage: _MEDI.percentage,
-  maxIter: _MEDI.max_iter,
-  cgMaxIter: _MEDI.cg_max_iter,
-  cgTol: _MEDI.cg_tol,
+  max_iter: _MEDI.max_iter,
+  cg_max_iter: _MEDI.cg_max_iter,
+  cg_tol: _MEDI.cg_tol,
   tol: _MEDI.tol,
   smv: _MEDI.smv,
-  smvRadius: _MEDI.smv_radius,
+  smv_radius: _MEDI.smv_radius,
   merit: _MEDI.merit,
-  dataWeighting: _MEDI.data_weighting,
+  data_weighting: _MEDI.data_weighting,
 };
 
 // Example data (downloaded from OSF during CI, served same-origin)
@@ -318,26 +318,26 @@ export const PIPELINE_METHODS = {
   unwrap: ['romeo', 'laplacian'],
   phaseOffset: ['mcpc3ds', 'none'],
   fieldCalculation: ['weighted_avg', 'linear_fit'],
-  b0WeightType: ['phase_snr', 'phase_var', 'average', 'tes', 'mag'],
-  backgroundRemoval: ['vsharp', 'sharp', 'resharp', 'ismv', 'pdf', 'lbv', 'harperella', 'iharperella'],
-  dipoleInversion: ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi']
+  b0_weight_type: ['phase_snr', 'phase_var', 'average', 'tes', 'mag'],
+  bf_algorithm: ['vsharp', 'sharp', 'resharp', 'ismv', 'pdf', 'lbv', 'harperella', 'iharperella'],
+  dipole_inversion: ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi']
 };
 
 // Default pipeline settings (assembled from individual defaults)
 export const PIPELINE_DEFAULTS = {
-  combinedMethod: 'none',
+  combined_method: 'none',
   swi: { ...SWI_DEFAULTS },
   tgv: { ...TGV_DEFAULTS },
   qsmart: { ...QSMART_DEFAULTS },
-  unwrapMethod: 'romeo',
-  phaseOffsetMethod: 'mcpc3ds',
-  fieldCalculationMethod: 'weighted_avg',
+  unwrapping_algorithm: 'romeo',
+  phase_offset_method: 'mcpc3ds',
+  b0_estimation: 'weighted_avg',
   mcpc3ds: { ...MCPC3DS_DEFAULTS },
-  b0WeightType: 'phase_snr',
+  b0_weight_type: 'phase_snr',
   linearFit: { ...LINEAR_FIT_DEFAULTS },
   romeo: { ...ROMEO_DEFAULTS },
-  backgroundRemoval: 'vsharp',
-  vsharp: { ...VSHARP_DEFAULTS, maxRadius: null, minRadius: null },
+  bf_algorithm: 'vsharp',
+  vsharp: { ...VSHARP_DEFAULTS, max_radius: null, min_radius: null },
   sharp: { radius: 6, ...SHARP_DEFAULTS },
   resharp: { ...RESHARP_DEFAULTS },
   ismv: { ...ISMV_DEFAULTS, radius: null },
@@ -345,7 +345,7 @@ export const PIPELINE_DEFAULTS = {
   lbv: { ...LBV_DEFAULTS },
   harperella: { ...HARPERELLA_DEFAULTS },
   iharperella: { ...HARPERELLA_DEFAULTS },
-  dipoleInversion: 'rts',
+  dipole_inversion: 'rts',
   tkd: { ...TKD_DEFAULTS },
   tsvd: { ...TSVD_DEFAULTS },
   tikhonov: { ...TIKHONOV_DEFAULTS },
@@ -374,13 +374,13 @@ export function getVoxelBasedDefaults(voxelSize = [1, 1, 1], maskDims = null) {
   const maxDim = maskDims ? Math.max(maskDims[0], maskDims[1], maskDims[2]) : 256;
 
   return {
-    // V-SHARP: maxRadius = 18 * min(vsz), minRadius = 2 * max(vsz)
+    // V-SHARP: max_radius = 18 * min(vsz), min_radius = 2 * max(vsz)
     vsharpMaxRadius: Math.round(18 * minVsz),
     vsharpMinRadius: Math.round(Math.max(1, 2 * minVsz)),
     // SHARP: radius = 18 * min(vsz) - matches QSM.jl sharp.jl line 22
     sharpRadius: Math.round(18 * minVsz),
     // iSMV: radius = 2 * max(vsz) - matches QSM.jl ismv.jl line 20
-    ismvRadius: Math.round(Math.max(2, 2 * maxVsz)),
+    ismv_radius: Math.round(Math.max(2, 2 * maxVsz)),
     // PDF: maxit = ceil(sqrt(numel(mask))) - matches QSM.jl pdf.jl
     pdfMaxit: Math.ceil(Math.sqrt(maskSize)),
     // LBV: maxit = max(dims) - matches QSM.jl lbv.jl

@@ -38,20 +38,20 @@ export function computeFieldMap(wasmModule, {
   const nEchoes = echoTimes.length;
   const voxelCount = nx * ny * nz;
 
-  const unwrapMethod = settings?.unwrapMethod || 'romeo';
-  const phaseOffsetMethod = settings?.phaseOffsetMethod || 'mcpc3ds';
-  const fieldCalculationMethod = settings?.fieldCalculationMethod || 'weighted_avg';
+  const unwrapping_algorithm = settings?.unwrapping_algorithm || 'romeo';
+  const phase_offset_method = settings?.phase_offset_method || 'mcpc3ds';
+  const b0_estimation = settings?.b0_estimation || 'weighted_avg';
   const mcpc3dsSettings = settings?.mcpc3ds || { sigma: [10, 10, 5] };
-  const b0WeightType = settings?.b0WeightType || 'phase_snr';
-  const linearFitSettings = settings?.linearFit || { estimateOffset: true };
-  const doBipolar = settings?.bipolarCorrection === true && nEchoes >= 3;
+  const b0_weight_type = settings?.b0_weight_type || 'phase_snr';
+  const linearFitSettings = settings?.linearFit || { estimate_offset: true };
+  const doBipolar = settings?.bipolar_correction === true && nEchoes >= 3;
   const romeoIndividual = settings?.romeo?.individual ?? true;
-  const romeoCorrectGlobal = settings?.romeo?.correctGlobal ?? true;
+  const romeoCorrectGlobal = settings?.romeo?.correct_global ?? true;
 
   let b0Fieldmap;
   let phaseOffset = null;
 
-  if (nEchoes > 1 && phaseOffsetMethod === 'mcpc3ds') {
+  if (nEchoes > 1 && phase_offset_method === 'mcpc3ds') {
     // ---- Phase offset removal + unwrap + B0 (single WASM call) ----
     postProgress(0.15, 'Field mapping...');
     const parts = [`Phase offset removal (sigma=[${mcpc3dsSettings.sigma.join(',')}])`];
@@ -66,7 +66,7 @@ export function computeFieldMap(wasmModule, {
       mask,
       nx, ny, nz, vsx, vsy, vsz,
       mcpc3dsSettings.sigma[0], mcpc3dsSettings.sigma[1], mcpc3dsSettings.sigma[2],
-      b0WeightType, doBipolar, unwrapMethod,
+      b0_weight_type, doBipolar, unwrapping_algorithm,
       romeoIndividual, romeoCorrectGlobal
     );
 
@@ -77,11 +77,11 @@ export function computeFieldMap(wasmModule, {
       sendStageData('phaseOffset', phaseOffset, dims, voxelSize, affine, 'Phase Offset (rad)', false);
     }
 
-    const unwrapLabel = unwrapMethod === 'laplacian'
+    const unwrapLabel = unwrapping_algorithm === 'laplacian'
       ? 'Laplacian (per-echo + echo alignment)'
       : `ROMEO (${romeoIndividual ? 'individual' : 'template'}, correct_global=${romeoCorrectGlobal})`;
     postLog(`Phase unwrapping: ${unwrapLabel}`);
-    postLog(`B0 estimation: weighted averaging (weight=${b0WeightType})`);
+    postLog(`B0 estimation: weighted averaging (weight=${b0_weight_type})`);
 
   } else {
     // ---- Direct unwrapping (no phase offset removal) ----
@@ -124,15 +124,15 @@ function computeFieldMapDirect(wasmModule, {
   const nEchoes = echoTimes.length;
   const voxelCount = nx * ny * nz;
 
-  const unwrapMethod = settings?.unwrapMethod || 'romeo';
-  const fieldCalculationMethod = settings?.fieldCalculationMethod || 'weighted_avg';
-  const linearFitSettings = settings?.linearFit || { estimateOffset: true };
+  const unwrapping_algorithm = settings?.unwrapping_algorithm || 'romeo';
+  const b0_estimation = settings?.b0_estimation || 'weighted_avg';
+  const linearFitSettings = settings?.linearFit || { estimate_offset: true };
 
   // Unwrap first echo
   const phase1 = new Float64Array(phase4d[0]);
   let unwrappedPhase;
 
-  if (unwrapMethod === 'laplacian') {
+  if (unwrapping_algorithm === 'laplacian') {
     postProgress(0.20, 'Phase unwrapping (Laplacian)...');
     postLog('Phase unwrapping: Laplacian');
     unwrappedPhase = new Float64Array(wasmModule.laplacian_unwrap_wasm(
@@ -168,7 +168,7 @@ function computeFieldMapDirect(wasmModule, {
 
     for (let e = 1; e < nEchoes; e++) {
       postProgress(0.25 + (e / nEchoes) * 0.05, `Unwrapping echo ${e + 1}/${nEchoes}...`);
-      if (unwrapMethod === 'laplacian') {
+      if (unwrapping_algorithm === 'laplacian') {
         const phaseE = new Float64Array(phase4d[e]);
         const unwrappedE = new Float64Array(wasmModule.laplacian_unwrap_wasm(
           phaseE, mask, nx, ny, nz, vsx, vsy, vsz
@@ -213,14 +213,14 @@ function computeFieldMapDirect(wasmModule, {
 
     // B0 estimation
     postProgress(0.35, 'B0 estimation...');
-    if (fieldCalculationMethod === 'linear_fit') {
-      postLog(`B0 estimation: linear fit (offset=${linearFitSettings.estimateOffset})`);
+    if (b0_estimation === 'linear_fit') {
+      postLog(`B0 estimation: linear fit (offset=${linearFitSettings.estimate_offset})`);
       const magsFlat = new Float64Array(nEchoes * voxelCount);
       for (let e = 0; e < nEchoes; e++) magsFlat.set(magnitude4d[e], e * voxelCount);
       const tesSec = echoTimes.map(te => te / 1000);
       const result = wasmModule.multi_echo_linear_fit_wasm(
         allUnwrapped, magsFlat, new Float64Array(tesSec), mask,
-        voxelCount, linearFitSettings.estimateOffset, 0
+        voxelCount, linearFitSettings.estimate_offset, 0
       );
       return new Float64Array(result.slice(0, voxelCount));
     } else {

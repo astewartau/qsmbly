@@ -60,7 +60,7 @@ export class PipelineSettingsController {
    */
   reset(defaults) {
     // Combined method
-    this._setEl('combinedMethod', D.combinedMethod);
+    this._setEl('combined_method', D.combined_method);
 
     // TGV defaults
     this._setEl('tgvRegularization', 2); // UI preset level (qsmbly-specific)
@@ -70,78 +70,78 @@ export class PipelineSettingsController {
     // SWI defaults
     this._setEl('swiScaling', SWI_DEFAULTS.scaling);
     this._setEl('swiStrength', SWI_DEFAULTS.strength);
-    this._setEl('swiHpSigmaX', SWI_DEFAULTS.hpSigma[0]);
-    this._setEl('swiHpSigmaY', SWI_DEFAULTS.hpSigma[1]);
-    this._setEl('swiHpSigmaZ', SWI_DEFAULTS.hpSigma[2]);
-    this._setEl('swiMipWindow', SWI_DEFAULTS.mipWindow);
+    this._setEl('swiHpSigmaX', SWI_DEFAULTS.hp_sigma[0]);
+    this._setEl('swiHpSigmaY', SWI_DEFAULTS.hp_sigma[1]);
+    this._setEl('swiHpSigmaZ', SWI_DEFAULTS.hp_sigma[2]);
+    this._setEl('swiMipWindow', SWI_DEFAULTS.mip_window);
 
     // QSMART defaults
-    this._setEl('qsmartSdfSigma1Stage1', QSMART_DEFAULTS.sdfSigma1Stage1);
-    this._setEl('qsmartSdfSigma2Stage1', QSMART_DEFAULTS.sdfSigma2Stage1);
-    this._setEl('qsmartSdfSigma1Stage2', QSMART_DEFAULTS.sdfSigma1Stage2);
-    this._setEl('qsmartSdfSigma2Stage2', QSMART_DEFAULTS.sdfSigma2Stage2);
-    this._setEl('qsmartSdfSpatialRadius', QSMART_DEFAULTS.sdfSpatialRadius);
-    this._setEl('qsmartSdfLowerLim', QSMART_DEFAULTS.sdfLowerLim);
-    this._setEl('qsmartSdfCurvConstant', QSMART_DEFAULTS.sdfCurvConstant);
-    this._setEl('qsmartVascSphereRadius', QSMART_DEFAULTS.vascSphereRadiusMm);
-    this._setEl('qsmartFrangiScaleMin', QSMART_DEFAULTS.frangiScaleMinMm);
-    this._setEl('qsmartFrangiScaleMax', QSMART_DEFAULTS.frangiScaleMaxMm);
-    this._setEl('qsmartFrangiScaleRatio', QSMART_DEFAULTS.frangiScaleRatioMm);
-    this._setEl('qsmartFrangiC', QSMART_DEFAULTS.frangiC);
-    this._setEl('qsmartIlsqrTol', QSMART_DEFAULTS.ilsqrTol);
-    this._setEl('qsmartIlsqrMaxIter', QSMART_DEFAULTS.ilsqrMaxIter);
+    this._setEl('qsmartSdfSigma1Stage1', QSMART_DEFAULTS.sdf_sigma1_stage1);
+    this._setEl('qsmartSdfSigma2Stage1', QSMART_DEFAULTS.sdf_sigma2_stage1);
+    this._setEl('qsmartSdfSigma1Stage2', QSMART_DEFAULTS.sdf_sigma1_stage2);
+    this._setEl('qsmartSdfSigma2Stage2', QSMART_DEFAULTS.sdf_sigma2_stage2);
+    this._setEl('qsmartSdfSpatialRadius', QSMART_DEFAULTS.sdf_spatial_radius);
+    this._setEl('qsmartSdfLowerLim', QSMART_DEFAULTS.sdf_lower_lim);
+    this._setEl('qsmartSdfCurvConstant', QSMART_DEFAULTS.sdf_curv_constant);
+    this._setEl('qsmartVascSphereRadius', QSMART_DEFAULTS.vasc_sphere_radius);
+    this._setEl('qsmartFrangiScaleMin', QSMART_DEFAULTS.frangi_scale_min);
+    this._setEl('qsmartFrangiScaleMax', QSMART_DEFAULTS.frangi_scale_max);
+    this._setEl('qsmartFrangiScaleRatio', QSMART_DEFAULTS.frangi_scale_ratio);
+    this._setEl('qsmartFrangiC', QSMART_DEFAULTS.frangi_c);
+    this._setEl('qsmartIlsqrTol', QSMART_DEFAULTS.ilsqr_tol);
+    this._setEl('qsmartIlsqrMaxIter', QSMART_DEFAULTS.ilsqr_max_iter);
 
     // Phase offset
-    this._setChecked('phaseOffsetEnabled', true);
-    this._setEl('phaseOffsetMethod', D.phaseOffsetMethod);
+    this._setChecked('phase_offset_enabled', true);
+    this._setEl('phase_offset_method', D.phase_offset_method);
     this._setEl('mcpc3dsSigmaX', MCPC3DS_DEFAULTS.sigma[0]);
     this._setEl('mcpc3dsSigmaY', MCPC3DS_DEFAULTS.sigma[1]);
     this._setEl('mcpc3dsSigmaZ', MCPC3DS_DEFAULTS.sigma[2]);
 
     // Bipolar correction
-    this._setChecked('bipolarCorrectionEnabled', false);
+    this._setChecked('bipolar_correctionEnabled', false);
 
     // Unwrap method
-    this._setEl('unwrapMethod', D.unwrapMethod);
+    this._setEl('unwrapping_algorithm', D.unwrapping_algorithm);
     const resetHint = document.getElementById('unwrapLockedHint');
     if (resetHint) resetHint.style.display = 'none';
-    this._showEl('romeoSettings', true);
-    this._showEl('laplacianSettings', false);
+    this._showEl('romeo_settings', true);
+    this._showEl('laplacian_settings', false);
 
     // ROMEO weight checkboxes
-    this._setChecked('romeoPhaseGradientCoherence', ROMEO_DEFAULTS.phaseGradientCoherence);
-    this._setChecked('romeoMagCoherence', ROMEO_DEFAULTS.magCoherence);
-    this._setChecked('romeoMagWeight', ROMEO_DEFAULTS.magWeight);
-    this._setEl('romeoMultiEchoMode', 'individual');
-    this._setChecked('romeoCorrectGlobal', true);
-    this._setEl('romeoTemplateEcho', '1');
+    this._setChecked('romeo_phase_gradient_coherence', ROMEO_DEFAULTS.phase_gradient_coherence);
+    this._setChecked('romeo_mag_coherence', ROMEO_DEFAULTS.mag_coherence);
+    this._setChecked('romeo_mag_weight', ROMEO_DEFAULTS.mag_weight);
+    this._setEl('romeo_multi_echo_mode', 'individual');
+    this._setChecked('romeo_correct_global', true);
+    this._setEl('romeo_template_echo', '1');
 
     // Field calculation method
-    this._setEl('fieldCalculationMethod', D.fieldCalculationMethod);
-    this._showEl('weightedAvgSettings', true);
-    this._showEl('linearFitSettings', false);
-    this._setEl('b0WeightType', D.b0WeightType);
+    this._setEl('b0_estimation', D.b0_estimation);
+    this._showEl('weighted_avg_settings', true);
+    this._showEl('linear_fit_settings', false);
+    this._setEl('b0_weight_type', D.b0_weight_type);
 
     // Linear fit defaults
-    this._setChecked('linearFitEstimateOffset', LINEAR_FIT_DEFAULTS.estimateOffset);
+    this._setChecked('linear_fit_estimate_offset', LINEAR_FIT_DEFAULTS.estimate_offset);
 
     // Background removal
-    this._setEl('bgRemovalMethod', D.backgroundRemoval);
-    this._showEl('vsharpSettings', true);
-    this._showEl('sharpSettings', false);
-    this._showEl('resharpSettings', false);
-    this._showEl('ismvSettings', false);
-    this._showEl('pdfSettings', false);
-    this._showEl('lbvSettings', false);
-    this._showEl('harperellaSettings', false);
-    this._showEl('iharperellaSettings', false);
+    this._setEl('bf_algorithm', D.bf_algorithm);
+    this._showEl('vsharp_settings', true);
+    this._showEl('sharp_settings', false);
+    this._showEl('resharp_settings', false);
+    this._showEl('ismv_settings', false);
+    this._showEl('pdf_settings', false);
+    this._showEl('lbv_settings', false);
+    this._showEl('harperella_settings', false);
+    this._showEl('iharperella_settings', false);
 
     this._setEl('vsharpMaxRadius', defaults.vsharpMaxRadius);
     this._setEl('vsharpMinRadius', defaults.vsharpMinRadius);
     this._setEl('vsharpThreshold', VSHARP_DEFAULTS.threshold);
     this._setEl('sharpRadius', defaults.sharpRadius);
     this._setEl('sharpThreshold', SHARP_DEFAULTS.threshold);
-    this._setEl('ismvRadius', defaults.ismvRadius);
+    this._setEl('ismv_radius', defaults.ismv_radius);
     this._setEl('ismvTol', ISMV_DEFAULTS.tol);
     this._setEl('ismvMaxit', ISMV_DEFAULTS.maxit);
     this._setEl('pdfTol', PDF_DEFAULTS.tol);
@@ -149,24 +149,24 @@ export class PipelineSettingsController {
     this._setEl('lbvTol', LBV_DEFAULTS.tol);
     this._setEl('lbvMaxit', defaults.lbvMaxit);
     this._setEl('resharpRadius', RESHARP_DEFAULTS.radius);
-    this._setEl('resharpTikReg', RESHARP_DEFAULTS.tikReg);
+    this._setEl('resharpTikReg', RESHARP_DEFAULTS.tik_reg);
     this._setEl('resharpTol', RESHARP_DEFAULTS.tol);
-    this._setEl('resharpMaxIter', RESHARP_DEFAULTS.maxIter);
+    this._setEl('resharpMaxIter', RESHARP_DEFAULTS.max_iter);
     this._setEl('harperellaRadius', HARPERELLA_DEFAULTS.radius);
-    this._setEl('harperellaMaxIter', HARPERELLA_DEFAULTS.maxIter);
+    this._setEl('harperellaMaxIter', HARPERELLA_DEFAULTS.max_iter);
     this._setEl('iharperellaRadius', HARPERELLA_DEFAULTS.radius);
-    this._setEl('iharperellaMaxIter', HARPERELLA_DEFAULTS.maxIter);
+    this._setEl('iharperellaMaxIter', HARPERELLA_DEFAULTS.max_iter);
 
     // Dipole inversion
-    this._setEl('dipoleMethod', D.dipoleInversion);
-    this._showEl('tkdSettings', false);
-    this._showEl('tsvdSettings', false);
-    this._showEl('tikhonovSettings', false);
-    this._showEl('tvSettings', false);
-    this._showEl('rtsSettings', true);
-    this._showEl('nltvSettings', false);
-    this._showEl('mediSettings', false);
-    this._showEl('ilsqrSettings', false);
+    this._setEl('dipole_method', D.dipole_inversion);
+    this._showEl('tkd_settings', false);
+    this._showEl('tsvd_settings', false);
+    this._showEl('tikhonov_settings', false);
+    this._showEl('tv_settings', false);
+    this._showEl('rts_settings', true);
+    this._showEl('nltv_settings', false);
+    this._showEl('medi_settings', false);
+    this._showEl('ilsqr_settings', false);
 
     this._setEl('tkdThreshold', TKD_DEFAULTS.threshold);
     this._setEl('tsvdThreshold', TSVD_DEFAULTS.threshold);
@@ -174,31 +174,31 @@ export class PipelineSettingsController {
     this._setEl('tikhReg', 'identity');
 
     this._setEl('tvLambda', TV_DEFAULTS.lambda);
-    this._setEl('tvMaxIter', TV_DEFAULTS.maxIter);
+    this._setEl('tvMaxIter', TV_DEFAULTS.max_iter);
     this._setEl('tvTol', TV_DEFAULTS.tol);
 
     this._setEl('rtsDelta', RTS_DEFAULTS.delta);
     this._setEl('rtsMu', RTS_DEFAULTS.mu);
     this._setEl('rtsRho', RTS_DEFAULTS.rho);
-    this._setEl('rtsMaxIter', RTS_DEFAULTS.maxIter);
+    this._setEl('rtsMaxIter', RTS_DEFAULTS.max_iter);
 
     this._setEl('nltvLambda', NLTV_DEFAULTS.lambda);
     this._setEl('nltvMu', NLTV_DEFAULTS.mu);
-    this._setEl('nltvMaxIter', NLTV_DEFAULTS.maxIter);
+    this._setEl('nltvMaxIter', NLTV_DEFAULTS.max_iter);
     this._setEl('nltvTol', NLTV_DEFAULTS.tol);
-    this._setEl('nltvNewtonMaxIter', NLTV_DEFAULTS.newtonMaxIter);
+    this._setEl('nltvNewtonMaxIter', NLTV_DEFAULTS.newton_max_iter);
 
     this._setEl('mediLambda', MEDI_DEFAULTS.lambda);
     this._setEl('mediPercentage', MEDI_DEFAULTS.percentage);
-    this._setEl('mediMaxIter', MEDI_DEFAULTS.maxIter);
-    this._setEl('mediCgMaxIter', MEDI_DEFAULTS.cgMaxIter);
+    this._setEl('mediMaxIter', MEDI_DEFAULTS.max_iter);
+    this._setEl('mediCgMaxIter', MEDI_DEFAULTS.cg_max_iter);
     this._setChecked('mediSmv', MEDI_DEFAULTS.smv);
-    this._setEl('mediSmvRadius', MEDI_DEFAULTS.smvRadius);
+    this._setEl('mediSmvRadius', MEDI_DEFAULTS.smv_radius);
     this._showEl('mediSmvRadiusGroup', MEDI_DEFAULTS.smv);
     this._setChecked('mediMerit', MEDI_DEFAULTS.merit);
 
-    this._setEl('ilsqrTol', QSMART_DEFAULTS.ilsqrTol);
-    this._setEl('ilsqrMaxIter', QSMART_DEFAULTS.ilsqrMaxIter);
+    this._setEl('ilsqr_tol', QSMART_DEFAULTS.ilsqr_tol);
+    this._setEl('ilsqr_max_iter', QSMART_DEFAULTS.ilsqr_max_iter);
   }
 
   /**
@@ -209,34 +209,34 @@ export class PipelineSettingsController {
   save(nEchoes) {
     const isMultiEcho = nEchoes > 1;
 
-    const unwrapMethod = isMultiEcho
-      ? this._getEl('unwrapMethod')
-      : this._getEl('singleEchoUnwrapMethod');
-    const isLaplacian = unwrapMethod === 'laplacian';
+    const unwrapping_algorithm = isMultiEcho
+      ? this._getEl('unwrapping_algorithm')
+      : this._getEl('single_echo_unwrapping_algorithm');
+    const isLaplacian = unwrapping_algorithm === 'laplacian';
 
     // Phase offset: disabled for Laplacian (inherently removes offsets)
-    const phaseOffsetEnabled = !isLaplacian && isMultiEcho && (this._getChecked('phaseOffsetEnabled') ?? true);
-    const phaseOffsetMethod = phaseOffsetEnabled ? (this._getEl('phaseOffsetMethod') || 'mcpc3ds') : 'none';
+    const phaseOffsetEnabled = !isLaplacian && isMultiEcho && (this._getChecked('phase_offset_enabled') ?? true);
+    const phase_offset_method = phaseOffsetEnabled ? (this._getEl('phase_offset_method') || 'mcpc3ds') : 'none';
 
     // ROMEO weight settings
     const romeoPhaseGradientCoherence = isMultiEcho
-      ? this._getChecked('romeoPhaseGradientCoherence') ?? true
+      ? this._getChecked('romeo_phase_gradient_coherence') ?? true
       : true;
-    const romeoMagCoherence = this._getChecked('romeoMagCoherence') ?? true;
-    const romeoMagWeight = this._getChecked('romeoMagWeight') ?? true;
+    const romeoMagCoherence = this._getChecked('romeo_mag_coherence') ?? true;
+    const romeoMagWeight = this._getChecked('romeo_mag_weight') ?? true;
 
     return {
-      combinedMethod: this._getEl('combinedMethod'),
-      referenceMean: this._getChecked('qsmReferenceMean') ?? true,
+      combined_method: this._getEl('combined_method'),
+      reference_mean: this._getChecked('qsm_reference_mean') ?? true,
       swi: {
-        hpSigma: [
+        hp_sigma: [
           parseFloat(this._getEl('swiHpSigmaX')),
           parseFloat(this._getEl('swiHpSigmaY')),
           parseFloat(this._getEl('swiHpSigmaZ'))
         ],
         scaling: this._getEl('swiScaling') || 'tanh',
         strength: parseFloat(this._getEl('swiStrength')),
-        mipWindow: parseInt(this._getEl('swiMipWindow'))
+        mip_window: parseInt(this._getEl('swiMipWindow'))
       },
       tgv: {
         regularization: parseInt(this._getEl('tgvRegularization')),
@@ -244,25 +244,25 @@ export class PipelineSettingsController {
         erosions: parseInt(this._getEl('tgvErosions'))
       },
       qsmart: {
-        sdfSigma1Stage1: parseFloat(this._getEl('qsmartSdfSigma1Stage1')),
-        sdfSigma2Stage1: parseFloat(this._getEl('qsmartSdfSigma2Stage1')),
-        sdfSigma1Stage2: parseFloat(this._getEl('qsmartSdfSigma1Stage2')),
-        sdfSigma2Stage2: parseFloat(this._getEl('qsmartSdfSigma2Stage2')),
-        sdfSpatialRadius: parseInt(this._getEl('qsmartSdfSpatialRadius')),
-        sdfLowerLim: parseFloat(this._getEl('qsmartSdfLowerLim')),
-        sdfCurvConstant: parseFloat(this._getEl('qsmartSdfCurvConstant')),
-        vascSphereRadiusMm: parseFloat(this._getEl('qsmartVascSphereRadius')),
-        frangiScaleMinMm: parseFloat(this._getEl('qsmartFrangiScaleMin')),
-        frangiScaleMaxMm: parseFloat(this._getEl('qsmartFrangiScaleMax')),
-        frangiScaleRatioMm: parseFloat(this._getEl('qsmartFrangiScaleRatio')),
-        frangiC: parseFloat(this._getEl('qsmartFrangiC')),
-        ilsqrTol: parseFloat(this._getEl('qsmartIlsqrTol')),
-        ilsqrMaxIter: parseInt(this._getEl('qsmartIlsqrMaxIter'))
+        sdf_sigma1_stage1: parseFloat(this._getEl('qsmartSdfSigma1Stage1')),
+        sdf_sigma2_stage1: parseFloat(this._getEl('qsmartSdfSigma2Stage1')),
+        sdf_sigma1_stage2: parseFloat(this._getEl('qsmartSdfSigma1Stage2')),
+        sdf_sigma2_stage2: parseFloat(this._getEl('qsmartSdfSigma2Stage2')),
+        sdf_spatial_radius: parseInt(this._getEl('qsmartSdfSpatialRadius')),
+        sdf_lower_lim: parseFloat(this._getEl('qsmartSdfLowerLim')),
+        sdf_curv_constant: parseFloat(this._getEl('qsmartSdfCurvConstant')),
+        vasc_sphere_radius: parseFloat(this._getEl('qsmartVascSphereRadius')),
+        frangi_scale_min: parseFloat(this._getEl('qsmartFrangiScaleMin')),
+        frangi_scale_max: parseFloat(this._getEl('qsmartFrangiScaleMax')),
+        frangi_scale_ratio: parseFloat(this._getEl('qsmartFrangiScaleRatio')),
+        frangi_c: parseFloat(this._getEl('qsmartFrangiC')),
+        ilsqr_tol: parseFloat(this._getEl('qsmartIlsqrTol')),
+        ilsqr_max_iter: parseInt(this._getEl('qsmartIlsqrMaxIter'))
       },
-      unwrapMethod: unwrapMethod,
-      phaseOffsetMethod: phaseOffsetMethod,
-      bipolarCorrection: !isLaplacian && isMultiEcho && nEchoes >= 3 && (this._getChecked('bipolarCorrectionEnabled') ?? false),
-      fieldCalculationMethod: this._getEl('fieldCalculationMethod') || 'weighted_avg',
+      unwrapping_algorithm: unwrapping_algorithm,
+      phase_offset_method: phase_offset_method,
+      bipolar_correction: !isLaplacian && isMultiEcho && nEchoes >= 3 && (this._getChecked('bipolar_correctionEnabled') ?? false),
+      b0_estimation: this._getEl('b0_estimation') || 'weighted_avg',
       mcpc3ds: {
         sigma: [
           parseInt(this._getEl('mcpc3dsSigmaX')),
@@ -270,22 +270,22 @@ export class PipelineSettingsController {
           parseInt(this._getEl('mcpc3dsSigmaZ'))
         ]
       },
-      b0WeightType: this._getEl('b0WeightType') || 'phase_snr',
+      b0_weight_type: this._getEl('b0_weight_type') || 'phase_snr',
       linearFit: {
-        estimateOffset: this._getChecked('linearFitEstimateOffset') ?? true
+        estimate_offset: this._getChecked('linear_fit_estimate_offset') ?? true
       },
       romeo: {
-        phaseGradientCoherence: romeoPhaseGradientCoherence,
-        magCoherence: romeoMagCoherence,
-        magWeight: romeoMagWeight,
-        individual: (this._getEl('romeoMultiEchoMode') || 'individual') === 'individual',
-        correctGlobal: this._getChecked('romeoCorrectGlobal') ?? true,
-        template: parseInt(this._getEl('romeoTemplateEcho') || '1') - 1,
+        phase_gradient_coherence: romeoPhaseGradientCoherence,
+        mag_coherence: romeoMagCoherence,
+        mag_weight: romeoMagWeight,
+        individual: (this._getEl('romeo_multi_echo_mode') || 'individual') === 'individual',
+        correct_global: this._getChecked('romeo_correct_global') ?? true,
+        template: parseInt(this._getEl('romeo_template_echo') || '1') - 1,
       },
-      backgroundRemoval: this._getEl('bgRemovalMethod'),
+      bf_algorithm: this._getEl('bf_algorithm'),
       vsharp: {
-        maxRadius: parseFloat(this._getEl('vsharpMaxRadius')),
-        minRadius: parseFloat(this._getEl('vsharpMinRadius')),
+        max_radius: parseFloat(this._getEl('vsharpMaxRadius')),
+        min_radius: parseFloat(this._getEl('vsharpMinRadius')),
         threshold: parseFloat(this._getEl('vsharpThreshold'))
       },
       sharp: {
@@ -293,7 +293,7 @@ export class PipelineSettingsController {
         threshold: parseFloat(this._getEl('sharpThreshold'))
       },
       ismv: {
-        radius: parseFloat(this._getEl('ismvRadius')),
+        radius: parseFloat(this._getEl('ismv_radius')),
         tol: parseFloat(this._getEl('ismvTol')),
         maxit: parseInt(this._getEl('ismvMaxit'))
       },
@@ -303,25 +303,25 @@ export class PipelineSettingsController {
       },
       resharp: {
         radius: parseFloat(this._getEl('resharpRadius')),
-        tikReg: parseFloat(this._getEl('resharpTikReg')),
+        tik_reg: parseFloat(this._getEl('resharpTikReg')),
         tol: parseFloat(this._getEl('resharpTol')),
-        maxIter: parseInt(this._getEl('resharpMaxIter'))
+        max_iter: parseInt(this._getEl('resharpMaxIter'))
       },
       harperella: {
         radius: parseFloat(this._getEl('harperellaRadius')),
-        maxIter: parseInt(this._getEl('harperellaMaxIter')),
+        max_iter: parseInt(this._getEl('harperellaMaxIter')),
         tol: 1e-6
       },
       iharperella: {
         radius: parseFloat(this._getEl('iharperellaRadius')),
-        maxIter: parseInt(this._getEl('iharperellaMaxIter')),
+        max_iter: parseInt(this._getEl('iharperellaMaxIter')),
         tol: 1e-6
       },
       lbv: {
         tol: parseFloat(this._getEl('lbvTol')),
         maxit: parseInt(this._getEl('lbvMaxit'))
       },
-      dipoleInversion: this._getEl('dipoleMethod'),
+      dipole_inversion: this._getEl('dipole_method'),
       tkd: {
         threshold: parseFloat(this._getEl('tkdThreshold'))
       },
@@ -334,37 +334,37 @@ export class PipelineSettingsController {
       },
       tv: {
         lambda: parseFloat(this._getEl('tvLambda')),
-        maxIter: parseInt(this._getEl('tvMaxIter')),
+        max_iter: parseInt(this._getEl('tvMaxIter')),
         tol: parseFloat(this._getEl('tvTol'))
       },
       rts: {
         delta: parseFloat(this._getEl('rtsDelta')),
         mu: parseFloat(this._getEl('rtsMu')),
         rho: parseFloat(this._getEl('rtsRho')),
-        maxIter: parseInt(this._getEl('rtsMaxIter'))
+        max_iter: parseInt(this._getEl('rtsMaxIter'))
       },
       nltv: {
         lambda: parseFloat(this._getEl('nltvLambda')),
         mu: parseFloat(this._getEl('nltvMu')),
-        maxIter: parseInt(this._getEl('nltvMaxIter')),
+        max_iter: parseInt(this._getEl('nltvMaxIter')),
         tol: parseFloat(this._getEl('nltvTol')),
-        newtonMaxIter: parseInt(this._getEl('nltvNewtonMaxIter'))
+        newton_max_iter: parseInt(this._getEl('nltvNewtonMaxIter'))
       },
       medi: {
         lambda: parseFloat(this._getEl('mediLambda')),
         percentage: parseFloat(this._getEl('mediPercentage')),
-        maxIter: parseInt(this._getEl('mediMaxIter')),
-        cgMaxIter: parseInt(this._getEl('mediCgMaxIter')),
-        cgTol: 0.01,
+        max_iter: parseInt(this._getEl('mediMaxIter')),
+        cg_max_iter: parseInt(this._getEl('mediCgMaxIter')),
+        cg_tol: 0.01,
         tol: 0.1,
         smv: this._getChecked('mediSmv'),
-        smvRadius: parseFloat(this._getEl('mediSmvRadius')),
+        smv_radius: parseFloat(this._getEl('mediSmvRadius')),
         merit: this._getChecked('mediMerit'),
-        dataWeighting: 1
+        data_weighting: 1
       },
       ilsqr: {
-        tol: parseFloat(this._getEl('ilsqrTol')),
-        maxIter: parseInt(this._getEl('ilsqrMaxIter'))
+        tol: parseFloat(this._getEl('ilsqr_tol')),
+        max_iter: parseInt(this._getEl('ilsqr_max_iter'))
       }
     };
   }
@@ -379,56 +379,56 @@ export class PipelineSettingsController {
     const isLocalFieldMode = this.inputMode === 'localField';
     const isFieldMapMode = isTotalFieldMode || isLocalFieldMode;
 
-    const combinedMethod = this._getEl('combinedMethod');
-    const phaseOffsetMethod = this._getEl('phaseOffsetMethod') || 'mcpc3ds';
-    const isTgv = combinedMethod === 'tgv';
-    const isQsmart = combinedMethod === 'qsmart';
+    const combined_method = this._getEl('combined_method');
+    const phase_offset_method = this._getEl('phase_offset_method') || 'mcpc3ds';
+    const isTgv = combined_method === 'tgv';
+    const isQsmart = combined_method === 'qsmart';
     const isCombined = isTgv || isQsmart;
-    const isMcpc3ds = phaseOffsetMethod === 'mcpc3ds';
+    const isMcpc3ds = phase_offset_method === 'mcpc3ds';
     const isMultiEcho = nEchoes > 1;
 
     // Combined method selector - available in all modes
-    const combinedMethodGroup = document.getElementById('combinedMethod')?.closest('.param-group');
-    if (combinedMethodGroup) combinedMethodGroup.style.display = '';
+    const combined_methodGroup = document.getElementById('combined_method')?.closest('.param-group');
+    if (combined_methodGroup) combined_methodGroup.style.display = '';
 
     // TGV settings - show when TGV selected in any mode
-    this._showEl('tgvSettings', isTgv);
+    this._showEl('tgv_settings', isTgv);
 
     // QSMART settings - show when QSMART selected in any mode
-    this._showEl('qsmartSettings', isQsmart);
+    this._showEl('qsmart_settings', isQsmart);
 
     // Phase unwrapping (check this first — Laplacian disables offset removal + bipolar)
-    const currentUnwrapMethod = this._getEl('unwrapMethod') || 'romeo';
+    const currentUnwrapMethod = this._getEl('unwrapping_algorithm') || 'romeo';
     const isLaplacian = currentUnwrapMethod === 'laplacian';
-    this._showEl('romeoSettings', currentUnwrapMethod === 'romeo');
-    this._showEl('laplacianSettings', isLaplacian);
+    this._showEl('romeo_settings', currentUnwrapMethod === 'romeo');
+    this._showEl('laplacian_settings', isLaplacian);
 
     // ROMEO multi-echo mode (only shown for multi-echo + ROMEO)
-    this._showEl('romeoMultiEchoSettings', currentUnwrapMethod === 'romeo' && isMultiEcho);
+    this._showEl('romeo_multi_echo_settings', currentUnwrapMethod === 'romeo' && isMultiEcho);
 
     // Phase offset removal — disabled for Laplacian (it inherently removes offsets)
-    const phaseOffsetEnabled = !isLaplacian && (this._getChecked('phaseOffsetEnabled') ?? true);
-    this._disableEl('phaseOffsetContent', !phaseOffsetEnabled);
-    const phaseOffsetCheckbox = document.getElementById('phaseOffsetEnabled');
+    const phaseOffsetEnabled = !isLaplacian && (this._getChecked('phase_offset_enabled') ?? true);
+    this._disableEl('phase_offset_content', !phaseOffsetEnabled);
+    const phaseOffsetCheckbox = document.getElementById('phase_offset_enabled');
     if (phaseOffsetCheckbox) phaseOffsetCheckbox.disabled = isLaplacian;
-    this._showWarning('phaseOffsetEnabled', 'phaseOffsetWarning',
+    this._showWarning('phase_offset_enabled', 'phaseOffsetWarning',
       phaseOffsetEnabled && nEchoes === 1,
       'Requires multi-echo data', 'error');
-    this._showWarning('phaseOffsetEnabled', 'phaseOffsetLaplacianNote',
+    this._showWarning('phase_offset_enabled', 'phaseOffsetLaplacianNote',
       isLaplacian && isMultiEcho,
       'Not needed — Laplacian unwrapping inherently removes phase offsets',
       'info');
 
 
     // Bipolar correction — disabled for Laplacian
-    const bipolarCheckbox = document.getElementById('bipolarCorrectionEnabled');
+    const bipolarCheckbox = document.getElementById('bipolar_correctionEnabled');
     if (bipolarCheckbox) bipolarCheckbox.disabled = isLaplacian;
-    const bipolarEnabled = !isLaplacian && (this._getChecked('bipolarCorrectionEnabled') ?? false);
-    this._showWarning('bipolarCorrectionEnabled', 'bipolarWarning',
+    const bipolarEnabled = !isLaplacian && (this._getChecked('bipolar_correctionEnabled') ?? false);
+    this._showWarning('bipolar_correctionEnabled', 'bipolarWarning',
       bipolarEnabled && nEchoes >= 1 && nEchoes < 3,
       nEchoes === 1 ? 'Requires multi-echo data (3+ echoes)' : 'Requires 3+ echoes',
       'error');
-    this._showWarning('bipolarCorrectionEnabled', 'bipolarLaplacianNote',
+    this._showWarning('bipolar_correctionEnabled', 'bipolarLaplacianNote',
       isLaplacian,
       'Not applicable with Laplacian unwrapping',
       'info');
@@ -438,10 +438,10 @@ export class PipelineSettingsController {
     if (pgcLabel) pgcLabel.style.display = isMultiEcho ? '' : 'none';
 
     // Multi-echo fitting
-    const fieldCalcMethod = this._getEl('fieldCalculationMethod') || 'weighted_avg';
-    this._showEl('weightedAvgSettings', fieldCalcMethod === 'weighted_avg');
-    this._showEl('linearFitSettings', fieldCalcMethod === 'linear_fit');
-    this._showWarning('fieldCalculationMethod', 'multiEchoFittingWarning',
+    const fieldCalcMethod = this._getEl('b0_estimation') || 'weighted_avg';
+    this._showEl('weighted_avg_settings', fieldCalcMethod === 'weighted_avg');
+    this._showEl('linear_fit_settings', fieldCalcMethod === 'linear_fit');
+    this._showWarning('b0_estimation', 'multiEchoFittingWarning',
       nEchoes === 1, 'Requires multi-echo data', 'error');
 
     // Background removal - show for:
@@ -454,10 +454,10 @@ export class PipelineSettingsController {
 
     // Dipole inversion - show for standard pipeline only (TGV/QSMART handle inversion internally)
     const showDipoleInversion = (!isCombined && isRawMode) || (!isCombined && isFieldMapMode);
-    this._showEl('dipoleInversionSection', showDipoleInversion);
+    this._showEl('dipole_inversionSection', showDipoleInversion);
 
     // Check if MEDI with SMV is enabled - show error on background removal
-    const dipoleMethod = this._getEl('dipoleMethod');
+    const dipoleMethod = this._getEl('dipole_method');
     const mediSmvEnabled = this._getChecked('mediSmv');
     const bgDisabledByMediSmv = dipoleMethod === 'medi' && mediSmvEnabled && showBgRemoval;
 
@@ -473,39 +473,39 @@ export class PipelineSettingsController {
     const noMag = this.hasMagnitude === false;
 
     // QSMART option in combined method dropdown
-    const combinedSelect = document.getElementById('combinedMethod');
+    const combinedSelect = document.getElementById('combined_method');
     if (combinedSelect) {
-      this._showWarning('combinedMethod', 'combinedMethodWarning',
+      this._showWarning('combined_method', 'combined_methodWarning',
         noMag && combinedSelect.value === 'qsmart',
         'Requires magnitude', 'error');
     }
 
     // MEDI option in dipole inversion dropdown
-    const dipoleSelect = document.getElementById('dipoleMethod');
+    const dipoleSelect = document.getElementById('dipole_method');
     if (dipoleSelect) {
-      this._showWarning('dipoleMethod', 'dipoleMethodWarning',
+      this._showWarning('dipole_method', 'dipoleMethodWarning',
         noMag && dipoleSelect.value === 'medi',
         'Requires magnitude', 'error');
     }
 
     // ROMEO magnitude weight checkboxes
-    const romeoMagCoh = document.getElementById('romeoMagCoherence');
-    const romeoMagWt = document.getElementById('romeoMagWeight');
+    const romeoMagCoh = document.getElementById('romeo_mag_coherence');
+    const romeoMagWt = document.getElementById('romeo_mag_weight');
     if (romeoMagCoh) {
-      this._showWarning('romeoMagCoherence', 'romeoMagCohWarning',
+      this._showWarning('romeo_mag_coherence', 'romeoMagCohWarning',
         noMag && romeoMagCoh.checked, 'Requires magnitude', 'error');
     }
     if (romeoMagWt) {
-      this._showWarning('romeoMagWeight', 'romeoMagWtWarning',
+      this._showWarning('romeo_mag_weight', 'romeoMagWtWarning',
         noMag && romeoMagWt.checked, 'Requires magnitude', 'error');
     }
 
     // B0 weight type — phase_snr, phase_var, and mag all require magnitude
-    const b0WeightSelect = document.getElementById('b0WeightType');
+    const b0WeightSelect = document.getElementById('b0_weight_type');
     if (b0WeightSelect) {
-      const magWeights = ['phase_snr', 'phase_var', 'mag'];
-      this._showWarning('b0WeightType', 'b0WeightWarning',
-        noMag && magWeights.includes(b0WeightSelect.value),
+      const mag_weights = ['phase_snr', 'phase_var', 'mag'];
+      this._showWarning('b0_weight_type', 'b0WeightWarning',
+        noMag && mag_weights.includes(b0WeightSelect.value),
         'Requires magnitude', 'error');
     }
   }
@@ -550,16 +550,16 @@ export class PipelineSettingsController {
 
   _populateForm(settings, defaults) {
     // Combined method
-    this._setEl('combinedMethod', settings.combinedMethod || 'none');
+    this._setEl('combined_method', settings.combined_method || 'none');
 
     // SWI settings
     const swiSettings = settings.swi || {};
     this._setEl('swiScaling', swiSettings.scaling || 'tanh');
     this._setEl('swiStrength', swiSettings.strength ?? 4);
-    this._setEl('swiHpSigmaX', swiSettings.hpSigma?.[0] ?? 4);
-    this._setEl('swiHpSigmaY', swiSettings.hpSigma?.[1] ?? 4);
-    this._setEl('swiHpSigmaZ', swiSettings.hpSigma?.[2] ?? 0);
-    this._setEl('swiMipWindow', swiSettings.mipWindow ?? 7);
+    this._setEl('swiHpSigmaX', swiSettings.hp_sigma?.[0] ?? 4);
+    this._setEl('swiHpSigmaY', swiSettings.hp_sigma?.[1] ?? 4);
+    this._setEl('swiHpSigmaZ', swiSettings.hp_sigma?.[2] ?? 0);
+    this._setEl('swiMipWindow', swiSettings.mip_window ?? 7);
 
     // TGV settings
     this._setEl('tgvRegularization', settings.tgv.regularization);
@@ -567,9 +567,9 @@ export class PipelineSettingsController {
     this._setEl('tgvErosions', settings.tgv.erosions);
 
     // Phase offset
-    const phaseOffsetMethod = settings.phaseOffsetMethod || 'mcpc3ds';
-    this._setChecked('phaseOffsetEnabled', phaseOffsetMethod !== 'none');
-    this._setEl('phaseOffsetMethod', phaseOffsetMethod === 'none' ? 'mcpc3ds' : phaseOffsetMethod);
+    const phase_offset_method = settings.phase_offset_method || 'mcpc3ds';
+    this._setChecked('phase_offset_enabled', phase_offset_method !== 'none');
+    this._setEl('phase_offset_method', phase_offset_method === 'none' ? 'mcpc3ds' : phase_offset_method);
 
     // MCPC-3D-S settings
     this._setEl('mcpc3dsSigmaX', settings.mcpc3ds?.sigma?.[0] ?? 10);
@@ -577,71 +577,71 @@ export class PipelineSettingsController {
     this._setEl('mcpc3dsSigmaZ', settings.mcpc3ds?.sigma?.[2] ?? 5);
 
     // Phase unwrap method
-    const unwrapMethod = settings.unwrapMethod || 'romeo';
-    this._setEl('unwrapMethod', unwrapMethod);
-    this._showEl('romeoSettings', unwrapMethod === 'romeo');
-    this._showEl('laplacianSettings', unwrapMethod === 'laplacian');
+    const unwrapping_algorithm = settings.unwrapping_algorithm || 'romeo';
+    this._setEl('unwrapping_algorithm', unwrapping_algorithm);
+    this._showEl('romeo_settings', unwrapping_algorithm === 'romeo');
+    this._showEl('laplacian_settings', unwrapping_algorithm === 'laplacian');
 
     // ROMEO weight component checkboxes
     const romeoSettings = settings.romeo || {};
-    this._setChecked('romeoPhaseGradientCoherence', romeoSettings.phaseGradientCoherence !== false);
-    this._setChecked('romeoMagCoherence', romeoSettings.magCoherence !== false);
-    this._setChecked('romeoMagWeight', romeoSettings.magWeight !== false);
-    this._setEl('romeoMultiEchoMode', romeoSettings.individual === false ? 'template' : 'individual');
-    this._setChecked('romeoCorrectGlobal', romeoSettings.correctGlobal !== false);
-    this._setEl('romeoTemplateEcho', String((romeoSettings.template ?? 0) + 1));
+    this._setChecked('romeo_phase_gradient_coherence', romeoSettings.phase_gradient_coherence !== false);
+    this._setChecked('romeo_mag_coherence', romeoSettings.mag_coherence !== false);
+    this._setChecked('romeo_mag_weight', romeoSettings.mag_weight !== false);
+    this._setEl('romeo_multi_echo_mode', romeoSettings.individual === false ? 'template' : 'individual');
+    this._setChecked('romeo_correct_global', romeoSettings.correct_global !== false);
+    this._setEl('romeo_template_echo', String((romeoSettings.template ?? 0) + 1));
 
     // Field calculation method
-    const fieldCalcMethod = settings.fieldCalculationMethod || 'weighted_avg';
-    this._setEl('fieldCalculationMethod', fieldCalcMethod);
-    this._showEl('weightedAvgSettings', fieldCalcMethod === 'weighted_avg');
-    this._showEl('linearFitSettings', fieldCalcMethod === 'linear_fit');
+    const fieldCalcMethod = settings.b0_estimation || 'weighted_avg';
+    this._setEl('b0_estimation', fieldCalcMethod);
+    this._showEl('weighted_avg_settings', fieldCalcMethod === 'weighted_avg');
+    this._showEl('linear_fit_settings', fieldCalcMethod === 'linear_fit');
 
     // B0 weight type
-    this._setEl('b0WeightType', settings.b0WeightType ?? 'phase_snr');
+    this._setEl('b0_weight_type', settings.b0_weight_type ?? 'phase_snr');
 
     // Linear fit settings
-    this._setChecked('linearFitEstimateOffset', settings.linearFit?.estimateOffset ?? true);
+    this._setChecked('linear_fit_estimate_offset', settings.linearFit?.estimate_offset ?? true);
 
     // Background removal method
-    const bgMethod = settings.backgroundRemoval;
-    this._setEl('bgRemovalMethod', bgMethod);
-    this._showEl('vsharpSettings', bgMethod === 'vsharp');
-    this._showEl('sharpSettings', bgMethod === 'sharp');
-    this._showEl('resharpSettings', bgMethod === 'resharp');
-    this._showEl('ismvSettings', bgMethod === 'ismv');
-    this._showEl('pdfSettings', bgMethod === 'pdf');
-    this._showEl('lbvSettings', bgMethod === 'lbv');
-    this._showEl('harperellaSettings', bgMethod === 'harperella');
-    this._showEl('iharperellaSettings', bgMethod === 'iharperella');
+    const bgMethod = settings.bf_algorithm;
+    this._setEl('bf_algorithm', bgMethod);
+    this._showEl('vsharp_settings', bgMethod === 'vsharp');
+    this._showEl('sharp_settings', bgMethod === 'sharp');
+    this._showEl('resharp_settings', bgMethod === 'resharp');
+    this._showEl('ismv_settings', bgMethod === 'ismv');
+    this._showEl('pdf_settings', bgMethod === 'pdf');
+    this._showEl('lbv_settings', bgMethod === 'lbv');
+    this._showEl('harperella_settings', bgMethod === 'harperella');
+    this._showEl('iharperella_settings', bgMethod === 'iharperella');
 
     // V-SHARP settings
-    this._setEl('vsharpMaxRadius', settings.vsharp.maxRadius ?? defaults.vsharpMaxRadius);
-    this._setEl('vsharpMinRadius', settings.vsharp.minRadius ?? defaults.vsharpMinRadius);
+    this._setEl('vsharpMaxRadius', settings.vsharp.max_radius ?? defaults.vsharpMaxRadius);
+    this._setEl('vsharpMinRadius', settings.vsharp.min_radius ?? defaults.vsharpMinRadius);
     this._setEl('vsharpThreshold', settings.vsharp.threshold);
 
     // RESHARP settings
     if (settings.resharp) {
       this._setEl('resharpRadius', settings.resharp.radius);
-      this._setEl('resharpTikReg', settings.resharp.tikReg);
+      this._setEl('resharpTikReg', settings.resharp.tik_reg);
       this._setEl('resharpTol', settings.resharp.tol);
-      this._setEl('resharpMaxIter', settings.resharp.maxIter);
+      this._setEl('resharpMaxIter', settings.resharp.max_iter);
     }
 
     // HARPERELLA settings
     if (settings.harperella) {
       this._setEl('harperellaRadius', settings.harperella.radius);
-      this._setEl('harperellaMaxIter', settings.harperella.maxIter);
+      this._setEl('harperellaMaxIter', settings.harperella.max_iter);
     }
 
     // iHARPERELLA settings
     if (settings.iharperella) {
       this._setEl('iharperellaRadius', settings.iharperella.radius);
-      this._setEl('iharperellaMaxIter', settings.iharperella.maxIter);
+      this._setEl('iharperellaMaxIter', settings.iharperella.max_iter);
     }
 
     // iSMV settings
-    this._setEl('ismvRadius', settings.ismv.radius ?? defaults.ismvRadius);
+    this._setEl('ismv_radius', settings.ismv.radius ?? defaults.ismv_radius);
     this._setEl('ismvTol', settings.ismv.tol);
     this._setEl('ismvMaxit', settings.ismv.maxit);
 
@@ -654,16 +654,16 @@ export class PipelineSettingsController {
     this._setEl('lbvMaxit', settings.lbv.maxit ?? defaults.lbvMaxit);
 
     // Dipole inversion method
-    const dipoleMethod = settings.dipoleInversion;
-    this._setEl('dipoleMethod', dipoleMethod);
-    this._showEl('tkdSettings', dipoleMethod === 'tkd');
-    this._showEl('tsvdSettings', dipoleMethod === 'tsvd');
-    this._showEl('tikhonovSettings', dipoleMethod === 'tikhonov');
-    this._showEl('tvSettings', dipoleMethod === 'tv');
-    this._showEl('rtsSettings', dipoleMethod === 'rts');
-    this._showEl('nltvSettings', dipoleMethod === 'nltv');
-    this._showEl('mediSettings', dipoleMethod === 'medi');
-    this._showEl('ilsqrSettings', dipoleMethod === 'ilsqr');
+    const dipoleMethod = settings.dipole_inversion;
+    this._setEl('dipole_method', dipoleMethod);
+    this._showEl('tkd_settings', dipoleMethod === 'tkd');
+    this._showEl('tsvd_settings', dipoleMethod === 'tsvd');
+    this._showEl('tikhonov_settings', dipoleMethod === 'tikhonov');
+    this._showEl('tv_settings', dipoleMethod === 'tv');
+    this._showEl('rts_settings', dipoleMethod === 'rts');
+    this._showEl('nltv_settings', dipoleMethod === 'nltv');
+    this._showEl('medi_settings', dipoleMethod === 'medi');
+    this._showEl('ilsqr_settings', dipoleMethod === 'ilsqr');
 
     // TKD settings
     this._setEl('tkdThreshold', settings.tkd.threshold);
@@ -677,61 +677,61 @@ export class PipelineSettingsController {
 
     // TV-ADMM settings
     this._setEl('tvLambda', settings.tv.lambda);
-    this._setEl('tvMaxIter', settings.tv.maxIter);
+    this._setEl('tvMaxIter', settings.tv.max_iter);
     this._setEl('tvTol', settings.tv.tol);
 
     // RTS settings
     this._setEl('rtsDelta', settings.rts.delta);
     this._setEl('rtsMu', settings.rts.mu);
     this._setEl('rtsRho', settings.rts.rho);
-    this._setEl('rtsMaxIter', settings.rts.maxIter);
+    this._setEl('rtsMaxIter', settings.rts.max_iter);
 
     // NLTV settings
     this._setEl('nltvLambda', settings.nltv.lambda);
     this._setEl('nltvMu', settings.nltv.mu);
-    this._setEl('nltvMaxIter', settings.nltv.maxIter);
+    this._setEl('nltvMaxIter', settings.nltv.max_iter);
     this._setEl('nltvTol', settings.nltv.tol);
-    this._setEl('nltvNewtonMaxIter', settings.nltv.newtonMaxIter);
+    this._setEl('nltvNewtonMaxIter', settings.nltv.newton_max_iter);
 
     // MEDI settings
     this._setEl('mediLambda', settings.medi.lambda);
     this._setEl('mediPercentage', settings.medi.percentage);
-    this._setEl('mediMaxIter', settings.medi.maxIter);
-    this._setEl('mediCgMaxIter', settings.medi.cgMaxIter);
+    this._setEl('mediMaxIter', settings.medi.max_iter);
+    this._setEl('mediCgMaxIter', settings.medi.cg_max_iter);
     this._setChecked('mediSmv', settings.medi.smv);
-    this._setEl('mediSmvRadius', settings.medi.smvRadius);
+    this._setEl('mediSmvRadius', settings.medi.smv_radius);
     this._showEl('mediSmvRadiusGroup', settings.medi.smv);
     this._setChecked('mediMerit', settings.medi.merit);
 
     // iLSQR settings
-    this._setEl('ilsqrTol', settings.ilsqr?.tol || 0.01);
-    this._setEl('ilsqrMaxIter', settings.ilsqr?.maxIter || 50);
+    this._setEl('ilsqr_tol', settings.ilsqr?.tol || 0.01);
+    this._setEl('ilsqr_max_iter', settings.ilsqr?.max_iter || 50);
   }
 
   _setupEventListeners() {
     // Combined method dropdown - show/hide TGV/QSMART settings
-    this._on('combinedMethod', 'change', () => this._onCombinedMethodChange());
+    this._on('combined_method', 'change', () => this._onCombinedMethodChange());
 
     // Phase offset enabled checkbox
-    this._on('phaseOffsetEnabled', 'change', () => this._onCombinedMethodChange());
+    this._on('phase_offset_enabled', 'change', () => this._onCombinedMethodChange());
 
     // Bipolar correction checkbox
-    this._on('bipolarCorrectionEnabled', 'change', () => this._onCombinedMethodChange());
+    this._on('bipolar_correctionEnabled', 'change', () => this._onCombinedMethodChange());
 
     // Unwrap method dropdown
-    this._on('unwrapMethod', 'change', () => this._onCombinedMethodChange());
+    this._on('unwrapping_algorithm', 'change', () => this._onCombinedMethodChange());
 
     // Background removal method dropdown
-    this._on('bgRemovalMethod', 'change', (e) => {
+    this._on('bf_algorithm', 'change', (e) => {
       const method = e.target.value;
-      this._showEl('vsharpSettings', method === 'vsharp');
-      this._showEl('sharpSettings', method === 'sharp');
-      this._showEl('resharpSettings', method === 'resharp');
-      this._showEl('ismvSettings', method === 'ismv');
-      this._showEl('pdfSettings', method === 'pdf');
-      this._showEl('lbvSettings', method === 'lbv');
-      this._showEl('harperellaSettings', method === 'harperella');
-      this._showEl('iharperellaSettings', method === 'iharperella');
+      this._showEl('vsharp_settings', method === 'vsharp');
+      this._showEl('sharp_settings', method === 'sharp');
+      this._showEl('resharp_settings', method === 'resharp');
+      this._showEl('ismv_settings', method === 'ismv');
+      this._showEl('pdf_settings', method === 'pdf');
+      this._showEl('lbv_settings', method === 'lbv');
+      this._showEl('harperella_settings', method === 'harperella');
+      this._showEl('iharperella_settings', method === 'iharperella');
     });
 
     // MEDI SMV checkbox toggle
@@ -741,27 +741,27 @@ export class PipelineSettingsController {
     });
 
     // Dipole method change
-    this._on('dipoleMethod', 'change', (e) => {
+    this._on('dipole_method', 'change', (e) => {
       const method = e.target.value;
-      this._showEl('tkdSettings', method === 'tkd');
-      this._showEl('tsvdSettings', method === 'tsvd');
-      this._showEl('tikhonovSettings', method === 'tikhonov');
-      this._showEl('tvSettings', method === 'tv');
-      this._showEl('rtsSettings', method === 'rts');
-      this._showEl('nltvSettings', method === 'nltv');
-      this._showEl('mediSettings', method === 'medi');
-      this._showEl('ilsqrSettings', method === 'ilsqr');
+      this._showEl('tkd_settings', method === 'tkd');
+      this._showEl('tsvd_settings', method === 'tsvd');
+      this._showEl('tikhonov_settings', method === 'tikhonov');
+      this._showEl('tv_settings', method === 'tv');
+      this._showEl('rts_settings', method === 'rts');
+      this._showEl('nltv_settings', method === 'nltv');
+      this._showEl('medi_settings', method === 'medi');
+      this._showEl('ilsqr_settings', method === 'ilsqr');
       this._onCombinedMethodChange(); // Re-check visibility for MEDI SMV
     });
 
     // Phase offset method dropdown
-    this._on('phaseOffsetMethod', 'change', () => this._onCombinedMethodChange());
+    this._on('phase_offset_method', 'change', () => this._onCombinedMethodChange());
 
     // Field calculation method dropdown
-    this._on('fieldCalculationMethod', 'change', () => this._onCombinedMethodChange());
+    this._on('b0_estimation', 'change', () => this._onCombinedMethodChange());
 
     // ROMEO magnitude weight checkboxes - re-evaluate warnings on change
-    ['romeoMagCoherence', 'romeoMagWeight'].forEach(id => {
+    ['romeo_mag_coherence', 'romeo_mag_weight'].forEach(id => {
       this._on(id, 'change', () => this._onCombinedMethodChange());
     });
 

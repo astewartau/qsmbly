@@ -55,18 +55,18 @@ describe('Config Module', () => {
 
   describe('QSMART_DEFAULTS', () => {
     test('should have SDF parameters', () => {
-      expect(QSMART_DEFAULTS.sdfSigma1Stage1).toBe(10);
-      expect(QSMART_DEFAULTS.sdfLowerLim).toBe(0.6);
+      expect(QSMART_DEFAULTS.sdf_sigma1_stage1).toBe(10);
+      expect(QSMART_DEFAULTS.sdf_lower_lim).toBe(0.6);
     });
 
     test('should have Frangi filter parameters in mm', () => {
-      expect(QSMART_DEFAULTS.frangiScaleMinMm).toBe(1.0);
-      expect(QSMART_DEFAULTS.frangiScaleMaxMm).toBe(10.0);
+      expect(QSMART_DEFAULTS.frangi_scale_min).toBe(0.5);
+      expect(QSMART_DEFAULTS.frangi_scale_max).toBe(6.0);
     });
 
     test('should have iLSQR parameters', () => {
-      expect(QSMART_DEFAULTS.ilsqrTol).toBe(0.01);
-      expect(QSMART_DEFAULTS.ilsqrMaxIter).toBe(50);
+      expect(QSMART_DEFAULTS.ilsqr_tol).toBe(0.01);
+      expect(QSMART_DEFAULTS.ilsqr_max_iter).toBe(50);
     });
   });
 
@@ -74,7 +74,7 @@ describe('Config Module', () => {
     test('should have expected values', () => {
       expect(RTS_DEFAULTS.delta).toBe(0.15);
       expect(RTS_DEFAULTS.mu).toBe(100000);
-      expect(RTS_DEFAULTS.maxIter).toBe(20);
+      expect(RTS_DEFAULTS.max_iter).toBe(20);
     });
   });
 
@@ -96,10 +96,10 @@ describe('Config Module', () => {
 
   describe('PIPELINE_DEFAULTS', () => {
     test('should have all algorithm settings', () => {
-      expect(PIPELINE_DEFAULTS.combinedMethod).toBe('none');
-      expect(PIPELINE_DEFAULTS.unwrapMethod).toBe('romeo');
-      expect(PIPELINE_DEFAULTS.backgroundRemoval).toBe('vsharp');
-      expect(PIPELINE_DEFAULTS.dipoleInversion).toBe('rts');
+      expect(PIPELINE_DEFAULTS.combined_method).toBe('none');
+      expect(PIPELINE_DEFAULTS.unwrapping_algorithm).toBe('romeo');
+      expect(PIPELINE_DEFAULTS.bf_algorithm).toBe('vsharp');
+      expect(PIPELINE_DEFAULTS.dipole_inversion).toBe('rts');
     });
 
     test('should have nested algorithm settings', () => {
@@ -130,7 +130,7 @@ describe('Config Module', () => {
     test('should calculate iSMV radius', () => {
       const defaults = getVoxelBasedDefaults([1, 1, 1]);
       // radius = max(2, 2 * max(vsz)) = 2
-      expect(defaults.ismvRadius).toBe(2);
+      expect(defaults.ismv_radius).toBe(2);
     });
 
     test('should handle anisotropic voxels', () => {

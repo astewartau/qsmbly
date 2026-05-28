@@ -304,18 +304,18 @@ export class PipelineExecutor {
 
     // Check if background removal settings changed
     const bgChanged =
-      current.backgroundRemoval !== last.backgroundRemoval ||
-      (current.backgroundRemoval === 'vsharp' &&
+      current.bf_algorithm !== last.bf_algorithm ||
+      (current.bf_algorithm === 'vsharp' &&
         (current.vsharp?.minRadius !== last.vsharp?.minRadius ||
           current.vsharp?.maxRadius !== last.vsharp?.maxRadius)) ||
-      (current.backgroundRemoval === 'pdf' &&
+      (current.bf_algorithm === 'pdf' &&
         (current.pdf?.tolerance !== last.pdf?.tolerance ||
           current.pdf?.iterations !== last.pdf?.iterations)) ||
-      (current.backgroundRemoval === 'sharp' &&
+      (current.bf_algorithm === 'sharp' &&
         current.sharp?.radius !== last.sharp?.radius) ||
-      (current.backgroundRemoval === 'lbv' &&
+      (current.bf_algorithm === 'lbv' &&
         current.lbv?.tolerance !== last.lbv?.tolerance) ||
-      (current.backgroundRemoval === 'ismv' &&
+      (current.bf_algorithm === 'ismv' &&
         (current.ismv?.tolerance !== last.ismv?.tolerance ||
           current.ismv?.iterations !== last.ismv?.iterations));
 

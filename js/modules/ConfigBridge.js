@@ -17,8 +17,8 @@
 export function settingsToToml(settings, maskOps = [], maskSource = 'phase_quality', options = {}) {
   if (!settings) return '';
 
-  const isTgv = settings.combinedMethod === 'tgv';
-  const isQsmart = settings.combinedMethod === 'qsmart';
+  const isTgv = settings.combined_method === 'tgv';
+  const isQsmart = settings.combined_method === 'qsmart';
 
   const config = {
     pipeline: {
@@ -28,30 +28,30 @@ export function settingsToToml(settings, maskOps = [], maskSource = 'phase_quali
       do_r2starmap: !!options.doR2star,
     },
     field_mapping: {
-      phase_offset_removal: settings.phaseOffsetMethod !== 'none',
+      phase_offset_removal: settings.phase_offset_method !== 'none',
       phase_offset_sigma: settings.mcpc3ds?.sigma || [4, 4, 4],
-      bipolar_correction: !!settings.bipolarCorrection,
-      unwrapping_algorithm: settings.unwrapMethod || 'romeo',
-      b0_estimation: (settings.fieldCalculationMethod || 'weighted_avg').replace(/_/g, '-'),
-      b0_weight_type: (settings.b0WeightType || 'phase_snr').replace(/_/g, '-'),
+      bipolar_correction: !!settings.bipolar_correction,
+      unwrapping_algorithm: settings.unwrapping_algorithm || 'romeo',
+      b0_estimation: (settings.b0_estimation || 'weighted_avg').replace(/_/g, '-'),
+      b0_weight_type: (settings.b0_weight_type || 'phase_snr').replace(/_/g, '-'),
       romeo: {
         individual: settings.romeo?.individual ?? true,
-        correct_global: settings.romeo?.correctGlobal ?? true,
+        correct_global: settings.romeo?.correct_global ?? true,
         template: settings.romeo?.template ?? 0,
-        phase_gradient_coherence: settings.romeo?.phaseGradientCoherence ?? true,
-        mag_coherence: settings.romeo?.magCoherence ?? true,
-        mag_weight: settings.romeo?.magWeight ?? false,
+        phase_gradient_coherence: settings.romeo?.phase_gradient_coherence ?? true,
+        mag_coherence: settings.romeo?.mag_coherence ?? true,
+        mag_weight: settings.romeo?.mag_weight ?? false,
       },
     },
     masking: { inhomogeneity_correction: true },
-    bg_removal: { algorithm: settings.backgroundRemoval || 'vsharp' },
+    bg_removal: { algorithm: settings.bf_algorithm || 'vsharp' },
     inversion: {},
-    qsm: { reference: settings.referenceMean === false ? 'none' : 'mean' },
+    qsm: { reference: settings.reference_mean === false ? 'none' : 'mean' },
   };
 
   if (isTgv) config.inversion.algorithm = 'tgv';
   else if (isQsmart) config.inversion.algorithm = 'qsmart';
-  else config.inversion.algorithm = settings.dipoleInversion || 'rts';
+  else config.inversion.algorithm = settings.dipole_inversion || 'rts';
 
   // Algorithm params
   if (settings.rts) config.inversion.rts = settings.rts;
@@ -65,26 +65,26 @@ export function settingsToToml(settings, maskOps = [], maskSource = 'phase_quali
   if (settings.tgv) config.inversion.tgv = {
     iterations: settings.tgv.iterations, erosions: settings.tgv.erosions,
     alpha0: settings.tgv.alpha0, alpha1: settings.tgv.alpha1,
-    step_size: settings.tgv.stepSize, tol: settings.tgv.tol,
+    step_size: settings.tgv.step_size, tol: settings.tgv.tol,
   };
   if (settings.qsmart) config.inversion.qsmart = {
-    ilsqr_tol: settings.qsmart.ilsqrTol, ilsqr_max_iter: settings.qsmart.ilsqrMaxIter,
-    vasc_sphere_radius: settings.qsmart.vascSphereRadiusMm, sdf_spatial_radius: settings.qsmart.sdfSpatialRadius,
+    ilsqr_tol: settings.qsmart.ilsqr_tol, ilsqr_max_iter: settings.qsmart.ilsqr_max_iter,
+    vasc_sphere_radius: settings.qsmart.vasc_sphere_radius, sdf_spatial_radius: settings.qsmart.sdf_spatial_radius,
   };
 
   // BG removal params
   if (settings.vsharp) config.bg_removal.vsharp = settings.vsharp;
   if (settings.pdf) config.bg_removal.pdf = settings.pdf;
   if (settings.lbv) config.bg_removal.lbv = settings.lbv;
-  if (settings.ismv) config.bg_removal.ismv = { tol: settings.ismv.tol, max_iter: settings.ismv.maxit, radius_factor: settings.ismv.radius };
-  if (settings.sharp) config.bg_removal.sharp = { threshold: settings.sharp.threshold, radius_factor: settings.sharp.radius };
+  if (settings.ismv) config.bg_removal.ismv = { tol: settings.ismv.tol, max_iter: settings.ismv.max_iter, radius_factor: settings.ismv.radius };
+  if (settings.sharp) config.bg_removal.sharp = { threshold: settings.sharp.threshold, radius_factor: settings.sharp.radius_factor };
   if (settings.resharp) config.bg_removal.resharp = settings.resharp;
   if (settings.harperella) config.bg_removal.harperella = settings.harperella;
   if (settings.iharperella) config.bg_removal.iharperella = settings.iharperella;
 
   if (settings.swi) config.swi = {
-    hp_sigma: settings.swi.hpSigma, scaling: settings.swi.scaling,
-    strength: settings.swi.strength, mip_window: settings.swi.mipWindow,
+    hp_sigma: settings.swi.hp_sigma, scaling: settings.swi.scaling,
+    strength: settings.swi.strength, mip_window: settings.swi.mip_window,
   };
 
   return toTomlString(config);
