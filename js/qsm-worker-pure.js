@@ -10,6 +10,7 @@ import { scalePhase, computeB0FromUnwrapped } from './worker/utils/PhaseUtils.js
 import { createThresholdMask, findSeedPoint } from './worker/utils/MaskUtils.js';
 import { boxFilter3D, boxFilter3dSeparable } from './worker/utils/FilterUtils.js';
 import { computeFieldMap } from './worker/utils/FieldMapping.js';
+import { settingsToToml } from './modules/ConfigBridge.js';
 import * as QSMConfig from './app/config.js';
 
 let wasmModule = null;
@@ -296,62 +297,10 @@ async function runPipeline(data) {
     return await runQsmartPipeline(data);
   }
 
-  // Extract pipeline settings for standard pipeline
-  const unwrapping_algorithm = pipelineSettings?.unwrapping_algorithm || 'romeo';
-  const phase_offset_method = pipelineSettings?.phase_offset_method || 'mcpc3ds';  // 'mcpc3ds' or 'none'
-  const b0_estimation = pipelineSettings?.b0_estimation || 'weighted_avg';  // 'weighted_avg' or 'linear_fit'
-  const mcpc3dsSettings = pipelineSettings?.mcpc3ds || {
-    sigma: [10, 10, 5]  // Smoothing sigma in voxels [x, y, z]
-  };
-  const b0_weight_type = pipelineSettings?.b0_weight_type || 'phase_snr';
-  const linearFitSettings = pipelineSettings?.linearFit || {
-    estimate_offset: true
-  };
-  const romeoSettings = pipelineSettings?.romeo || {
-    phase_gradient_coherence: true,
-    mag_coherence: true,
-    mag_weight: true
-  };
+  // Extract pipeline settings needed for logging/dispatch
   const backgroundMethod = pipelineSettings?.bf_algorithm || 'vsharp';
   const dipoleMethod = pipelineSettings?.dipole_inversion || 'rts';
-
-  // Validate methods upfront - never silently fall back to a different algorithm
-  const validUnwrapMethods = ['romeo', 'laplacian'];
-  const validBgMethods = ['vsharp', 'sharp', 'resharp', 'ismv', 'pdf', 'lbv', 'harperella', 'iharperella'];
-  const validInversionMethods = ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr'];
-
-  if (!validUnwrapMethods.includes(unwrapping_algorithm)) {
-    throw new Error(`Unknown unwrapping method: '${unwrapping_algorithm}'. Valid options are: ${validUnwrapMethods.join(', ')}`);
-  }
-  if (!validBgMethods.includes(backgroundMethod)) {
-    throw new Error(`Unknown background removal method: '${backgroundMethod}'. Valid options are: ${validBgMethods.join(', ')}`);
-  }
-  if (!validInversionMethods.includes(dipoleMethod)) {
-    throw new Error(`Unknown dipole inversion method: '${dipoleMethod}'. Valid options are: ${validInversionMethods.join(', ')}`);
-  }
-  const vsharpSettings = {
-    max_radius: pipelineSettings?.vsharp?.max_radius ?? 18,
-    min_radius: pipelineSettings?.vsharp?.min_radius ?? 2,
-    threshold: pipelineSettings?.vsharp?.threshold ?? 0.05
-  };
-  const lbvSettings = {
-    tol: pipelineSettings?.lbv?.tol ?? 0.000001,
-    maxit: pipelineSettings?.lbv?.maxit ?? 500
-  };
-  const resharpSettings = pipelineSettings?.resharp || { radius: 6, tik_reg: 1e-4, tol: 1e-6, max_iter: 30 };
-  const harperellaSettings = pipelineSettings?.harperella || { radius: 10, max_iter: 40, tol: 1e-6 };
-  const iharperellaSettings = pipelineSettings?.iharperella || { radius: 10, max_iter: 40, tol: 1e-6 };
-  const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, max_iter: 20 };
-  const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
-  const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
-  const tikhonovSettings = pipelineSettings?.tikhonov || { lambda: 0.01, reg: 'identity' };
-  const tvSettings = pipelineSettings?.tv || { lambda: 0.0002, max_iter: 250, tol: 0.001 };
-  const nltvSettings = pipelineSettings?.nltv || { lambda: 0.001, mu: 1, max_iter: 250, tol: 0.001, newton_max_iter: 10 };
-  const mediSettings = pipelineSettings?.medi || {
-    lambda: 7.5e-5, percentage: 0.3, max_iter: 30, cg_max_iter: 10, cg_tol: 0.01, tol: 0.1,
-    smv: false, smv_radius: 5, merit: false, data_weighting: 1
-  };
-  const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, max_iter: 50 };
+  const mediSettings = pipelineSettings?.medi || { smv: false };
 
   try {
     // =========================================================================
@@ -379,9 +328,9 @@ async function runPipeline(data) {
       const phaseResult = wasmModule.load_nifti_wasm(new Uint8Array(phaseBuffers[e]));
       let phaseData = Array.from(phaseResult.data);
 
-      // Scale phase to [-π, +π]
-      phaseData = scalePhase(new Float64Array(phaseData));
-      phase4d.push(Array.from(phaseData));
+      // Scale phase to [-π, +π] using shared pipeline function
+      phaseData = Array.from(wasmModule.scale_phase_to_pi_wasm(new Float64Array(phaseData)));
+      phase4d.push(phaseData);
 
       postLog(`  Echo ${e + 1}: shape ${dims[0]}x${dims[1]}x${dims[2]}`);
     }
@@ -407,7 +356,6 @@ async function runPipeline(data) {
         mask[i] = maskData[i] > 0.5 ? 1 : 0;
       }
     } else {
-      // Use prepared magnitude if available (combined/bias-corrected), otherwise first echo
       const maskMagnitude = hasPreparedMagnitude
         ? new Float64Array(preparedMagnitude)
         : new Float64Array(magnitude4d[0]);
@@ -420,383 +368,94 @@ async function runPipeline(data) {
     postLog(`Mask coverage: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
 
     // =========================================================================
-    // Step 3: Field mapping (15% - 45%)
+    // Step 3: Field mapping (15% - 45%) — shared with qsmxt.rs
     // =========================================================================
-    const { b0Fieldmap: b0Result, phaseOffset } = computeFieldMap(wasmModule, {
-      phase4d, magnitude4d: magnitude4d, echoTimes, mask,
-      dims, voxelSize, affine, settings: pipelineSettings,
-      postLog, postProgress, sendStageData,
-    });
-    let b0Fieldmap = b0Result;
+    postProgress(0.15, 'Field mapping...');
+    const configToml = settingsToToml(pipelineSettings);
+    const echoTimesSec = echoTimes.map(t => t / 1000); // ms → seconds
 
-    sendStageData('B0', b0Fieldmap, dims, voxelSize, affine, 'B0 Field Map (Hz)');
+    // Flatten per-echo arrays for WASM
+    const phasesFlat = new Float64Array(nEchoes * voxelCount);
+    const magsFlat = new Float64Array(nEchoes * voxelCount);
+    for (let e = 0; e < nEchoes; e++) {
+      phasesFlat.set(phase4d[e], e * voxelCount);
+      magsFlat.set(magnitude4d[e], e * voxelCount);
+    }
+
+    const fieldResult = wasmModule.run_field_mapping_wasm(
+      phasesFlat, magsFlat, mask,
+      new Float64Array(echoTimesSec),
+      nx, ny, nz, vsx, vsy, vsz,
+      magField || 3.0, configToml,
+    );
+
+    // Result is [b0_field_ppm..., phase_offset...] or just [b0_field_ppm...]
+    let b0Fieldmap = new Float64Array(fieldResult.slice(0, voxelCount));
+    const phaseOffset = fieldResult.length > voxelCount
+      ? new Float64Array(fieldResult.slice(voxelCount, 2 * voxelCount))
+      : null;
+
+    if (phaseOffset) {
+      sendStageData('phaseOffset', phaseOffset, dims, voxelSize, affine, 'Phase Offset (rad)', false);
+    }
+
+    sendStageData('B0', b0Fieldmap, dims, voxelSize, affine, 'B0 Field Map (ppm)');
 
     // =========================================================================
-    // Step 4: Background field removal (40% - 65%)
+    // Step 4: Background field removal (40% - 65%) — shared with qsmxt.rs
     // =========================================================================
+    postProgress(0.42, `Background removal (${backgroundMethod})...`);
+
+    const skipBgRemoval = dipoleMethod === 'medi' && mediSettings.smv;
     let localField, erodedMask;
 
-    // Check if MEDI with SMV is enabled - skip background removal (MEDI handles it internally)
-    const skipBgRemoval = dipoleMethod === 'medi' && mediSettings.smv;
-
     if (skipBgRemoval) {
-      postProgress(0.42, 'Skipping background removal (MEDI SMV handles it internally)...');
-      postLog('Background removal: Skipped - MEDI with SMV preprocessing enabled');
-      postLog('  MEDI will perform background removal internally using differential form');
-      // Pass B0 fieldmap directly - MEDI will handle background removal
+      postLog('Background removal: Skipped (MEDI SMV handles it internally)');
       localField = b0Fieldmap;
       erodedMask = mask;
-    } else if (backgroundMethod === 'vsharp') {
-      postProgress(0.42, `Preparing ${backgroundMethod.toUpperCase()} background removal...`);
-      postLog(`Removing background field using ${backgroundMethod.toUpperCase()}...`);
-      // Create radii array
-      const radii = [];
-      for (let r = vsharpSettings.max_radius; r >= vsharpSettings.min_radius; r -= 2) {
-        radii.push(r);
-      }
-      const numRadii = radii.length;
-      postLog(`  V-SHARP radii: ${radii.map(r => r.toFixed(1)).join(', ')}`);
-
-      // Progress callback for V-SHARP radii
-      const vsharpProgress = (current, total) => {
-        const progress = 0.42 + (current / total) * 0.20;
-        postProgress(progress, `V-SHARP: Radius ${current}/${total}`);
-      };
-
-      const result = wasmModule.vsharp_wasm_with_progress(
-        b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-        new Float64Array(radii), vsharpSettings.threshold,
-        magField || 3.0,
-        vsharpProgress
-      );
-
-      postProgress(0.63, 'V-SHARP: Extracting results...');
-      localField = new Float64Array(result.slice(0, voxelCount));
-      erodedMask = new Uint8Array(voxelCount);
-      for (let i = 0; i < voxelCount; i++) {
-        erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
-      }
-    } else if (backgroundMethod === 'pdf') {
-      postProgress(0.42, `Preparing ${backgroundMethod.toUpperCase()} background removal...`);
-      postLog(`Removing background field using ${backgroundMethod.toUpperCase()}...`);
-      const pdfSettings = pipelineSettings?.pdf || { tol: 0.00001, maxit: 100 };
-
-      // Progress callback for PDF iterations
-      const pdfProgress = (current, total) => {
-        const progress = 0.42 + (current / total) * 0.20;
-        postProgress(progress, `PDF: Iteration ${current}/${total}`);
-      };
-
-      localField = new Float64Array(wasmModule.pdf_wasm_with_progress(
-        b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-        0, 0, 1, pdfSettings.tol, pdfSettings.maxit,
-        magField || 3.0,
-        pdfProgress
-      ));
-      erodedMask = mask;
-    } else if (backgroundMethod === 'ismv') {
-      postProgress(0.42, `Preparing ${backgroundMethod.toUpperCase()} background removal...`);
-      postLog(`Removing background field using ${backgroundMethod.toUpperCase()}...`);
-      const ismvSettings = pipelineSettings?.ismv || { radius: 5, tol: 0.001, maxit: 500 };
-      // Compute default radius from voxel size if not set (matches QSM.jl: 2 * max(vsz))
-      if (ismvSettings.radius == null || isNaN(ismvSettings.radius) || ismvSettings.radius <= 0) {
-        ismvSettings.radius = Math.round(Math.max(2, 2 * Math.max(vsx, vsy, vsz)));
-        postLog(`  iSMV: computed default radius=${ismvSettings.radius}mm from voxel size`);
-      }
-
-      // Progress callback for iSMV iterations
-      const ismvProgress = (current, total) => {
-        const progress = 0.42 + (current / total) * 0.20;
-        postProgress(progress, `iSMV: Iteration ${current}/${total}`);
-      };
-
-      const result = wasmModule.ismv_wasm_with_progress(
-        b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-        ismvSettings.radius, ismvSettings.tol, ismvSettings.maxit,
-        magField || 3.0,
-        ismvProgress
-      );
-      postProgress(0.63, 'iSMV: Extracting results...');
-      localField = new Float64Array(result.slice(0, voxelCount));
-      erodedMask = new Uint8Array(voxelCount);
-      for (let i = 0; i < voxelCount; i++) {
-        erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
-      }
-    } else if (backgroundMethod === 'sharp') {
-      postProgress(0.42, `Preparing ${backgroundMethod.toUpperCase()} background removal...`);
-      postLog(`Removing background field using ${backgroundMethod.toUpperCase()}...`);
-      // SHARP (high-pass filter + deconvolution)
-      const sharpSettings = pipelineSettings?.sharp || { radius: 6, threshold: 0.05 };
-      postProgress(0.45, `SHARP: Processing radius ${sharpSettings.radius}mm...`);
-      const result = wasmModule.sharp_wasm(
-        b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-        sharpSettings.radius, sharpSettings.threshold,
-        magField || 3.0
-      );
-      postProgress(0.60, 'SHARP: Extracting results...');
-      localField = new Float64Array(result.slice(0, voxelCount));
-      erodedMask = new Uint8Array(voxelCount);
-      for (let i = 0; i < voxelCount; i++) {
-        erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
-      }
-    } else if (backgroundMethod === 'lbv') {
-      postProgress(0.42, `Preparing ${backgroundMethod.toUpperCase()} background removal...`);
-      postLog(`Removing background field using ${backgroundMethod.toUpperCase()}...`);
-      // LBV (Laplacian Boundary Value)
-      const lbvProgress = (current, total) => {
-        const progress = 0.42 + (current / total) * 0.20;
-        postProgress(progress, `LBV: Iteration ${current}/${total}`);
-      };
-
-      postProgress(0.45, 'LBV: Solving Poisson equation...');
-      const result = wasmModule.lbv_wasm_with_progress(
-        b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-        lbvSettings.tol, lbvSettings.maxit,
-        magField || 3.0,
-        lbvProgress
-      );
-      postProgress(0.63, 'LBV: Extracting results...');
-      localField = new Float64Array(result.slice(0, voxelCount));
-      erodedMask = new Uint8Array(voxelCount);
-      for (let i = 0; i < voxelCount; i++) {
-        erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
-      }
-    } else if (backgroundMethod === 'resharp') {
-      postProgress(0.42, 'Preparing RESHARP background removal...');
-      postLog('Removing background field using RESHARP...');
-      postLog(`  radius=${resharpSettings.radius}mm, tik_reg=${resharpSettings.tik_reg}, max_iter=${resharpSettings.max_iter}`);
-
-      const resharpProgress = (current, total) => {
-        const progress = 0.42 + (current / total) * 0.20;
-        postProgress(progress, `RESHARP: Iteration ${current}/${total}`);
-      };
-
-      const result = wasmModule.resharp_wasm_with_progress(
-        b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-        resharpSettings.radius, resharpSettings.tik_reg, resharpSettings.tol, resharpSettings.max_iter,
-        magField || 3.0,
-        resharpProgress
-      );
-      postProgress(0.63, 'RESHARP: Extracting results...');
-      localField = new Float64Array(result.slice(0, voxelCount));
-      erodedMask = new Uint8Array(voxelCount);
-      for (let i = 0; i < voxelCount; i++) {
-        erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
-      }
-    } else if (backgroundMethod === 'harperella' || backgroundMethod === 'iharperella') {
-      const label = backgroundMethod === 'iharperella' ? 'iHARPERELLA' : 'HARPERELLA';
-      const settings = backgroundMethod === 'iharperella' ? iharperellaSettings : harperellaSettings;
-      postProgress(0.42, `Preparing ${label}...`);
-      postLog(`Removing background field using ${label}...`);
-      postLog(`  radius=${settings.radius}mm, max_iter=${settings.max_iter}`);
-
-      const harpProgress = (current, total) => {
-        const progress = 0.42 + (current / total) * 0.20;
-        postProgress(progress, `${label}: Iteration ${current}/${total}`);
-      };
-
-      const wasm_fn = backgroundMethod === 'iharperella'
-        ? wasmModule.iharperella_wasm_with_progress
-        : wasmModule.harperella_wasm_with_progress;
-      const result = wasm_fn(
-        b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-        settings.radius, settings.max_iter, settings.tol,
-        harpProgress
-      );
-
-      postProgress(0.63, `${label}: Extracting results...`);
-      localField = new Float64Array(result.slice(0, voxelCount));
-      erodedMask = new Uint8Array(voxelCount);
-      for (let i = 0; i < voxelCount; i++) {
-        erodedMask[i] = result[voxelCount + i] > 0.5 ? 1 : 0;
-      }
     } else {
-      throw new Error(`Unknown background removal method: '${backgroundMethod}'.`);
+      postLog(`Removing background field using ${backgroundMethod.toUpperCase()}...`);
+      const bgProgress = (current, total) => {
+        postProgress(0.42 + (current / total) * 0.20, `${backgroundMethod.toUpperCase()}: ${current}/${total}`);
+      };
+      const bgResult = wasmModule.run_bg_removal_wasm(
+        b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
+        magField || 3.0, configToml, bgProgress,
+      );
+      localField = new Float64Array(bgResult.slice(0, voxelCount));
+      erodedMask = new Uint8Array(voxelCount);
+      for (let i = 0; i < voxelCount; i++) {
+        erodedMask[i] = bgResult[voxelCount + i] > 0.5 ? 1 : 0;
+      }
     }
 
     const erodedCount = erodedMask.reduce((a, b) => a + b, 0);
     postLog(`Eroded mask: ${erodedCount} voxels (${(100 * erodedCount / voxelCount).toFixed(1)}%)`);
-    postProgress(0.65, 'Sending local field for display...');
-
-    // Send local field for display
-    // When MEDI SMV is enabled, we're passing B0 directly (background removal handled by MEDI)
-    const localFieldLabel = skipBgRemoval ? 'B0 Field (MEDI SMV will handle BG removal)' : 'Local Field Map (Hz)';
-    sendStageData('bgRemoved', localField, dims, voxelSize, affine, localFieldLabel);
+    sendStageData('bgRemoved', localField, dims, voxelSize, affine,
+      skipBgRemoval ? 'B0 Field (MEDI SMV)' : 'Local Field Map (ppm)');
 
     // =========================================================================
-    // Step 5: Dipole inversion (65% - 95%)
+    // Step 5: Dipole inversion (65% - 95%) — shared with qsmxt.rs
     // =========================================================================
-    postProgress(0.67, `Preparing ${dipoleMethod.toUpperCase()} dipole inversion...`);
+    postProgress(0.67, `Dipole inversion (${dipoleMethod.toUpperCase()})...`);
     postLog(`Running ${dipoleMethod.toUpperCase()} dipole inversion...`);
 
-    let qsmResult;
+    // Combine magnitude for MEDI edge weighting
+    const magnitudeForInversion = hasPreparedMagnitude
+      ? new Float64Array(preparedMagnitude)
+      : new Float64Array(magnitude4d[0]);
 
-    if (dipoleMethod === 'tkd') {
-      // TKD is non-iterative (single FFT-based inversion)
-      postProgress(0.70, 'TKD: Computing thresholded k-space division...');
-      qsmResult = new Float64Array(wasmModule.tkd_wasm(
-        localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-        0, 0, 1, tkdSettings.threshold,
-        magField || 3.0
-      ));
-      postProgress(0.90, 'TKD: Complete');
-    } else if (dipoleMethod === 'tsvd') {
-      // TSVD is non-iterative (zeros small values instead of truncating)
-      postProgress(0.70, 'TSVD: Computing truncated SVD inversion...');
-      qsmResult = new Float64Array(wasmModule.tsvd_wasm(
-        localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-        0, 0, 1, tsvdSettings.threshold,
-        magField || 3.0
-      ));
-      postProgress(0.90, 'TSVD: Complete');
-    } else if (dipoleMethod === 'tikhonov') {
-      // Tikhonov is non-iterative (single FFT-based inversion)
-      const regType = { 'identity': 0, 'gradient': 1, 'laplacian': 2 }[tikhonovSettings.reg] || 0;
-      postProgress(0.70, `Tikhonov: Solving (λ=${tikhonovSettings.lambda})...`);
-      qsmResult = new Float64Array(wasmModule.tikhonov_wasm(
-        localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-        0, 0, 1, tikhonovSettings.lambda, regType,
-        magField || 3.0
-      ));
-      postProgress(0.90, 'Tikhonov: Complete');
-    } else if (dipoleMethod === 'tv') {
-      const rho = tvSettings.rho || 100 * tvSettings.lambda;
+    const invProgress = (current, total) => {
+      postProgress(0.67 + (current / total) * 0.25, `${dipoleMethod.toUpperCase()}: ${current}/${total}`);
+    };
+    let qsmResult = new Float64Array(wasmModule.run_dipole_inversion_wasm(
+      localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+      magField || 3.0, new Float64Array(echoTimesSec),
+      0, 0, 1, magnitudeForInversion,
+      configToml, invProgress,
+    ));
 
-      // Progress callback for TV-ADMM iterations
-      const tvProgress = (current, total) => {
-        const progress = 0.67 + (current / total) * 0.25;
-        postProgress(progress, `TV-ADMM: Iteration ${current}/${total}`);
-      };
-
-      qsmResult = new Float64Array(wasmModule.tv_admm_wasm_with_progress(
-        localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-        0, 0, 1, tvSettings.lambda, rho, tvSettings.tol, tvSettings.max_iter,
-        magField || 3.0,
-        tvProgress
-      ));
-    } else if (dipoleMethod === 'rts') {
-      // RTS (Rapid Two-Step)
-      // Progress callback for RTS iterations
-      const rtsProgress = (current, total) => {
-        const progress = 0.67 + (current / total) * 0.25;
-        postProgress(progress, `RTS: Iteration ${current}/${total}`);
-      };
-
-      qsmResult = new Float64Array(wasmModule.rts_wasm_with_progress(
-        localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-        0, 0, 1,
-        rtsSettings.delta, rtsSettings.mu, rtsSettings.rho,
-        0.01, rtsSettings.max_iter, 4,
-        magField || 3.0,
-        rtsProgress
-      ));
-    } else if (dipoleMethod === 'nltv') {
-      // NLTV (Nonlinear Total Variation)
-      const nltvProgress = (current, total) => {
-        const progress = 0.67 + (current / total) * 0.25;
-        postProgress(progress, `NLTV: Iteration ${current}/${total}`);
-      };
-
-      postProgress(0.70, 'NLTV: Running nonlinear TV inversion...');
-      qsmResult = new Float64Array(wasmModule.nltv_wasm_with_progress(
-        localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-        0, 0, 1,
-        nltvSettings.lambda, nltvSettings.mu,
-        nltvSettings.tol, nltvSettings.max_iter, nltvSettings.newton_max_iter,
-        magField || 3.0,
-        nltvProgress
-      ));
-    } else if (dipoleMethod === 'medi') {
-      // MEDI (Morphology Enabled Dipole Inversion)
-      const mediProgress = (current, total) => {
-        const progress = 0.67 + (current / total) * 0.25;
-        postProgress(progress, `MEDI: Iteration ${current}/${total}`);
-      };
-
-      // MEDI requires magnitude image for gradient weighting
-      // Use prepared magnitude if available (combined/bias-corrected), otherwise first echo
-      const magnitudeData = hasPreparedMagnitude
-        ? new Float64Array(preparedMagnitude)
-        : new Float64Array(magnitude4d[0]);
-      const magSource = hasPreparedMagnitude ? 'prepared' : 'first echo';
-      postLog(`MEDI using ${magSource} magnitude for gradient weighting`);
-      if (mediSettings.smv) {
-        postLog(`MEDI SMV preprocessing enabled: radius=${mediSettings.smv_radius}mm`);
-      }
-
-      // Create noise std map (uniform for now - could be computed from data)
-      const nStd = new Float64Array(voxelCount).fill(1.0);
-
-      // Convert local field from Hz to radians for MEDI
-      // MEDI uses exp(i*field) internally, so the field must be in radians
-      const te1Sec = echoTimes[0] / 1000; // first echo time in seconds
-      const hzToRad = 2 * Math.PI * te1Sec;
-      const localFieldRad = new Float64Array(voxelCount);
-      for (let i = 0; i < voxelCount; i++) {
-        localFieldRad[i] = localField[i] * hzToRad;
-      }
-      postLog(`MEDI: Converting local field from Hz to radians (TE1=${(te1Sec * 1000).toFixed(2)}ms, scale=${hzToRad.toFixed(4)})`);
-
-      qsmResult = new Float64Array(wasmModule.medi_l1_wasm_with_progress(
-        localFieldRad,    // local field in radians
-        nStd,             // noise standard deviation
-        magnitudeData,    // magnitude for edge weighting
-        erodedMask,       // mask
-        nx, ny, nz,
-        vsx, vsy, vsz,
-        0, 0, 1,          // B0 direction
-        mediSettings.lambda,
-        mediSettings.merit,
-        mediSettings.smv,
-        mediSettings.smv_radius,
-        mediSettings.data_weighting,
-        mediSettings.percentage,
-        mediSettings.cg_tol,
-        mediSettings.cg_max_iter,
-        mediSettings.max_iter,
-        mediSettings.tol,
-        mediProgress
-      ));
-
-      // Convert MEDI output from radians-equivalent back to Hz-equivalent
-      // so the generic ppm conversion (chi / (gamma * B0) * 1e6) works correctly
-      const radToHz = 1.0 / hzToRad;
-      for (let i = 0; i < voxelCount; i++) {
-        qsmResult[i] *= radToHz;
-      }
-    } else if (dipoleMethod === 'ilsqr') {
-      // iLSQR (iterative LSQR with streaking artifact removal)
-      const ilsqrProgress = (current, total) => {
-        const progress = 0.67 + (current / total) * 0.25;
-        postProgress(progress, `iLSQR: Step ${current}/${total}`);
-      };
-
-      postProgress(0.70, 'iLSQR: Running 4-step artifact removal...');
-      postLog(`iLSQR parameters: tol=${ilsqrSettings.tol}, max_iter=${ilsqrSettings.max_iter}`);
-
-      qsmResult = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
-        localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-        0, 0, 1,  // B0 direction
-        ilsqrSettings.tol, ilsqrSettings.max_iter,
-        magField || 3.0,
-        ilsqrProgress
-      ));
-    } else {
-      throw new Error(`Unknown dipole inversion method: '${dipoleMethod}'. Valid options are: tkd, tsvd, tikhonov, tv, rts, nltv, medi, ilsqr`);
-    }
-
-    // Scale to ppm: χ (ppm) = χ_raw / (γ × B0) × 1e6
-    postProgress(0.92, 'Scaling to ppm...');
-    const gamma = QSMConfig.PHYSICS.GYROMAGNETIC_RATIO; // Hz/T
-    const b0Tesla = magField || 3.0;
-    const scaleFactor = 1e6 / (gamma * b0Tesla);
-
-    for (let i = 0; i < voxelCount; i++) {
-      qsmResult[i] *= scaleFactor;
-      if (!erodedMask[i]) qsmResult[i] = 0;
-    }
-
-    // Calculate QSM range efficiently
+    // Already in ppm (pipeline stage handles all unit conversions)
     let qsmMin = Infinity, qsmMax = -Infinity;
     for (let i = 0; i < voxelCount; i++) {
       if (erodedMask[i]) {
@@ -806,11 +465,10 @@ async function runPipeline(data) {
     }
     postLog(`QSM range: [${qsmMin.toFixed(4)}, ${qsmMax.toFixed(4)}] ppm`);
 
-    // Apply QSM referencing if enabled
-    if (pipelineSettings?.reference_mean !== false) {
-      postLog('Applying mean referencing...');
-      qsmResult = applyMeanReference(qsmResult, erodedMask);
-    }
+    // Apply referencing — shared with qsmxt.rs
+    const refMethod = pipelineSettings?.reference_mean === false ? 'none' : 'mean';
+    qsmResult = new Float64Array(wasmModule.apply_reference_wasm(qsmResult, erodedMask, refMethod));
+    if (refMethod === 'mean') postLog('Applied mean referencing');
 
     // Send QSM result for display
     postProgress(0.95, 'Sending QSM result...');

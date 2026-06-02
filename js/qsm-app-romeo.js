@@ -256,7 +256,15 @@ class QSMApp {
     await this.nv.attachTo("gl1");
     this.nv.setMultiplanarPadPixels(5);
     this.nv.setSliceType(this.nv.sliceTypeMultiplanar);
-    // Clear any default loading text by drawing empty scene
+
+    // Guard against scroll/click events before any volume is loaded.
+    // NiiVue registers listeners on attachTo but crashes if volumes[] is empty.
+    const origMoveCrosshair = this.nv.moveCrosshairInVox.bind(this.nv);
+    this.nv.moveCrosshairInVox = (...args) => {
+      if (!this.nv.volumes || this.nv.volumes.length === 0) return;
+      return origMoveCrosshair(...args);
+    };
+
     this.nv.drawScene();
   }
 
