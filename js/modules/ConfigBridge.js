@@ -70,6 +70,12 @@ export function settingsToToml(settings, maskOps = [], maskSource = 'phase_quali
   if (settings.qsmart) config.inversion.qsmart = {
     ilsqr_tol: settings.qsmart.ilsqr_tol, ilsqr_max_iter: settings.qsmart.ilsqr_max_iter,
     vasc_sphere_radius: settings.qsmart.vasc_sphere_radius, sdf_spatial_radius: settings.qsmart.sdf_spatial_radius,
+    inversion: settings.qsmart.inversion_algorithm || 'ilsqr',
+    sdf_sigma1_stage1: settings.qsmart.sdf_sigma1_stage1, sdf_sigma2_stage1: settings.qsmart.sdf_sigma2_stage1,
+    sdf_sigma1_stage2: settings.qsmart.sdf_sigma1_stage2, sdf_sigma2_stage2: settings.qsmart.sdf_sigma2_stage2,
+    sdf_lower_lim: settings.qsmart.sdf_lower_lim, sdf_curv_constant: settings.qsmart.sdf_curv_constant,
+    frangi_scale_min: settings.qsmart.frangi_scale_min, frangi_scale_max: settings.qsmart.frangi_scale_max,
+    frangi_scale_ratio: settings.qsmart.frangi_scale_ratio, frangi_c: settings.qsmart.frangi_c,
   };
 
   // BG removal params
@@ -83,7 +89,9 @@ export function settingsToToml(settings, maskOps = [], maskSource = 'phase_quali
   if (settings.iharperella) config.bg_removal.iharperella = settings.iharperella;
 
   if (settings.swi) config.swi = {
-    hp_sigma: settings.swi.hp_sigma, scaling: settings.swi.scaling,
+    // scaling uses snake_case in the UI (e.g. negative_tanh) but qsmxt-config expects
+    // kebab-case (negative-tanh), same as b0_estimation/b0_weight_type above.
+    hp_sigma: settings.swi.hp_sigma, scaling: (settings.swi.scaling || 'tanh').replace(/_/g, '-'),
     strength: settings.swi.strength, mip_window: settings.swi.mip_window,
   };
 

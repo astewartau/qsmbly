@@ -25,10 +25,10 @@ export const TKD_DEFAULTS = {
 };
 
 export const TGV_DEFAULTS = {
-  "alpha0": 0.001,
-  "alpha1": 0.001,
   "iterations": 1000,
   "erosions": 3,
+  "alpha0": 0.001,
+  "alpha1": 0.001,
   "step_size": 3,
   "tol": 0.00001
 };
@@ -117,25 +117,27 @@ export const MEDI_DEFAULTS = {
 };
 
 export const QSMART_DEFAULTS = {
+  "ilsqr_tol": 0.01,
+  "ilsqr_max_iter": 50,
+  "vasc_sphere_radius": 8,
+  "sdf_spatial_radius": 8,
+  "inversion": "ilsqr",
   "sdf_sigma1_stage1": 10,
   "sdf_sigma2_stage1": 10,
   "sdf_sigma1_stage2": 8,
   "sdf_sigma2_stage2": 2,
-  "sdf_spatial_radius": 8,
   "sdf_lower_lim": 0.6,
   "sdf_curv_constant": 500,
-  "vasc_sphere_radius": 8,
-  "frangi_scale_range": [
-    0.5,
-    6
-  ],
+  "frangi_scale_min": 0.5,
+  "frangi_scale_max": 6,
   "frangi_scale_ratio": 0.5,
-  "frangi_c": 500,
-  "ilsqr_tol": 0.01,
-  "ilsqr_max_iter": 50
+  "frangi_c": 500
 };
 
 export const ROMEO_DEFAULTS = {
+  "individual": true,
+  "correct_global": true,
+  "template": 0,
   "phase_coherence": true,
   "phase_gradient_coherence": true,
   "phase_linearity": true,

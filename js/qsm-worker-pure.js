@@ -856,8 +856,23 @@ async function runQsmartCore({
     }
   }
 
-  postProgress(0.42, 'Stage 1: iLSQR inversion...');
-  postLog(`Stage 1 iLSQR: tol=${ilsqr_tol}, max_iter=${ilsqr_max_iter}`);
+  // Inner dipole inversion algorithm for both QSMART stages (default iLSQR).
+  const innerAlgo = (qsmartSettings.inversion_algorithm || 'ilsqr').toLowerCase();
+  // Per-algorithm params come from the QSMART panel's own inputs (qsmartSettings.<algo>);
+  // anything unset falls back to the algorithm defaults inside runDipoleInversionByMethod.
+  const qsmartInvSettings = {
+    ilsqr: { tol: ilsqr_tol, max_iter: ilsqr_max_iter },
+    tkd: qsmartSettings.tkd,
+    tsvd: qsmartSettings.tsvd,
+    tikhonov: qsmartSettings.tikhonov,
+    tv: qsmartSettings.tv,
+    rts: qsmartSettings.rts,
+    nltv: qsmartSettings.nltv,
+    medi: qsmartSettings.medi,
+  };
+
+  postProgress(0.42, `Stage 1: ${innerAlgo.toUpperCase()} inversion...`);
+  postLog(`Stage 1 ${innerAlgo.toUpperCase()} inversion`);
 
   const maskStage1 = new Uint8Array(voxelCount);
   for (let i = 0; i < voxelCount; i++) {
@@ -865,16 +880,16 @@ async function runQsmartCore({
   }
 
   const ilsqrProgress1 = (current, total) => {
-    postProgress(0.42 + (current / total) * 0.08, `Stage 1 iLSQR: Step ${current}/${total}`);
+    postProgress(0.42 + (current / total) * 0.08, `Stage 1 ${innerAlgo.toUpperCase()}: ${current}/${total}`);
   };
 
-  const chiStage1 = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
+  // QSMART fields are already ppm/Hz local fields; skip the MEDI Hz->rad conversion (no echo times here).
+  const chiStage1 = await runDipoleInversionByMethod(
     lfsStage1, maskStage1, nx, ny, nz, vsx, vsy, vsz,
-    0, 0, 1,
-    ilsqr_tol, ilsqr_max_iter,
-    magField || 3.0,
+    innerAlgo, qsmartInvSettings,
+    magnitudeData, null, isPpm, magField,
     ilsqrProgress1
-  ));
+  );
 
   let chi1Min = Infinity, chi1Max = -Infinity;
   for (let i = 0; i < voxelCount; i++) {
@@ -919,7 +934,7 @@ async function runQsmartCore({
     sendStageData('lfsStage2', lfsStage2, dims, voxelSize, affine, `Stage 2 Local Field (${isPpm ? 'ppm' : 'Hz'})`);
   }
 
-  postProgress(0.64, 'Stage 2: iLSQR inversion...');
+  postProgress(0.64, `Stage 2: ${innerAlgo.toUpperCase()} inversion...`);
 
   const maskStage2 = new Uint8Array(voxelCount);
   for (let i = 0; i < voxelCount; i++) {
@@ -927,16 +942,15 @@ async function runQsmartCore({
   }
 
   const ilsqrProgress2 = (current, total) => {
-    postProgress(0.64 + (current / total) * 0.10, `Stage 2 iLSQR: Step ${current}/${total}`);
+    postProgress(0.64 + (current / total) * 0.10, `Stage 2 ${innerAlgo.toUpperCase()}: ${current}/${total}`);
   };
 
-  const chiStage2 = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
+  const chiStage2 = await runDipoleInversionByMethod(
     lfsStage2, maskStage2, nx, ny, nz, vsx, vsy, vsz,
-    0, 0, 1,
-    ilsqr_tol, ilsqr_max_iter,
-    magField || 3.0,
+    innerAlgo, qsmartInvSettings,
+    magnitudeData, null, isPpm, magField,
     ilsqrProgress2
-  ));
+  );
 
   sendStageData('chiStage2', chiStage2, dims, voxelSize, affine, 'Stage 2 QSM (arb)');
 
@@ -2190,12 +2204,18 @@ async function runBackgroundRemoval(
 // Shared helper: Dipole inversion
 // Extracted from runPipeline to reuse in field map modes
 // =========================================================================
-async function runDipoleInversion(
+// Dispatch a single dipole inversion to the matching WASM binding.
+// `progressCb(current, total)` reports per-iteration progress; the caller owns the
+// absolute progress band, so this helper is reusable by both the standard pipeline
+// and QSMART's two inner inversion stages.
+async function runDipoleInversionByMethod(
   localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
   dipoleMethod, pipelineSettings,
-  magnitudeData, echoTimes, skipHzConversion, magField
+  magnitudeData, echoTimes, skipHzConversion, magField,
+  progressCb
 ) {
   const voxelCount = nx * ny * nz;
+  const progress = typeof progressCb === 'function' ? progressCb : () => {};
   const rtsSettings = pipelineSettings?.rts || { delta: 0.15, mu: 100000, rho: 10, max_iter: 20 };
   const tkdSettings = pipelineSettings?.tkd || { threshold: 0.15 };
   const tsvdSettings = pipelineSettings?.tsvd || { threshold: 0.15 };
@@ -2208,73 +2228,54 @@ async function runDipoleInversion(
   };
   const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, max_iter: 50 };
 
-  postProgress(0.67, `Preparing ${dipoleMethod.toUpperCase()} dipole inversion...`);
-  postLog(`Running ${dipoleMethod.toUpperCase()} dipole inversion...`);
-
   let qsmResult;
 
   if (dipoleMethod === 'tkd') {
-    postProgress(0.70, 'TKD: Computing thresholded k-space division...');
     qsmResult = new Float64Array(wasmModule.tkd_wasm(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
       0, 0, 1, tkdSettings.threshold,
       magField || 3.0
     ));
-    postProgress(0.90, 'TKD: Complete');
+    progress(1, 1);
   } else if (dipoleMethod === 'tsvd') {
-    postProgress(0.70, 'TSVD: Computing truncated SVD inversion...');
     qsmResult = new Float64Array(wasmModule.tsvd_wasm(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
       0, 0, 1, tsvdSettings.threshold,
       magField || 3.0
     ));
-    postProgress(0.90, 'TSVD: Complete');
+    progress(1, 1);
   } else if (dipoleMethod === 'tikhonov') {
     const regType = { 'identity': 0, 'gradient': 1, 'laplacian': 2 }[tikhonovSettings.reg] || 0;
-    postProgress(0.70, `Tikhonov: Solving...`);
     qsmResult = new Float64Array(wasmModule.tikhonov_wasm(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
       0, 0, 1, tikhonovSettings.lambda, regType,
       magField || 3.0
     ));
-    postProgress(0.90, 'Tikhonov: Complete');
+    progress(1, 1);
   } else if (dipoleMethod === 'tv') {
     const rho = tvSettings.rho || 100 * tvSettings.lambda;
-    const tvProgress = (current, total) => {
-      postProgress(0.67 + (current / total) * 0.25, `TV-ADMM: Iteration ${current}/${total}`);
-    };
     qsmResult = new Float64Array(wasmModule.tv_admm_wasm_with_progress(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
       0, 0, 1, tvSettings.lambda, rho, tvSettings.tol, tvSettings.max_iter,
-      magField || 3.0, tvProgress
+      magField || 3.0, progress
     ));
   } else if (dipoleMethod === 'rts') {
-    const rtsProgress = (current, total) => {
-      postProgress(0.67 + (current / total) * 0.25, `RTS: Iteration ${current}/${total}`);
-    };
     qsmResult = new Float64Array(wasmModule.rts_wasm_with_progress(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
       0, 0, 1,
       rtsSettings.delta, rtsSettings.mu, rtsSettings.rho,
       0.01, rtsSettings.max_iter, 4,
-      magField || 3.0, rtsProgress
+      magField || 3.0, progress
     ));
   } else if (dipoleMethod === 'nltv') {
-    const nltvProgress = (current, total) => {
-      postProgress(0.67 + (current / total) * 0.25, `NLTV: Iteration ${current}/${total}`);
-    };
     qsmResult = new Float64Array(wasmModule.nltv_wasm_with_progress(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
       0, 0, 1,
       nltvSettings.lambda, nltvSettings.mu,
       nltvSettings.tol, nltvSettings.max_iter, nltvSettings.newton_max_iter,
-      magField || 3.0, nltvProgress
+      magField || 3.0, progress
     ));
   } else if (dipoleMethod === 'medi') {
-    const mediProgress = (current, total) => {
-      postProgress(0.67 + (current / total) * 0.25, `MEDI: Iteration ${current}/${total}`);
-    };
-
     // MEDI requires magnitude for gradient weighting
     const magData = magnitudeData || new Float64Array(voxelCount).fill(1.0);
     if (!magnitudeData) {
@@ -2307,7 +2308,7 @@ async function runDipoleInversion(
       mediSettings.lambda, mediSettings.merit, mediSettings.smv, mediSettings.smv_radius,
       mediSettings.data_weighting, mediSettings.percentage,
       mediSettings.cg_tol, mediSettings.cg_max_iter, mediSettings.max_iter, mediSettings.tol,
-      mediProgress
+      progress
     ));
 
     // Convert back from radians if needed
@@ -2318,20 +2319,35 @@ async function runDipoleInversion(
       }
     }
   } else if (dipoleMethod === 'ilsqr') {
-    const ilsqrProgress = (current, total) => {
-      postProgress(0.67 + (current / total) * 0.25, `iLSQR: Step ${current}/${total}`);
-    };
-    postProgress(0.70, 'iLSQR: Running...');
     qsmResult = new Float64Array(wasmModule.ilsqr_wasm_with_progress(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
       0, 0, 1, ilsqrSettings.tol, ilsqrSettings.max_iter,
-      magField || 3.0, ilsqrProgress
+      magField || 3.0, progress
     ));
   } else {
     throw new Error(`Unknown dipole inversion method: '${dipoleMethod}'`);
   }
 
   return qsmResult;
+}
+
+// Standard (non-QSMART) dipole inversion: owns the 0.67–0.92 progress band.
+async function runDipoleInversion(
+  localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+  dipoleMethod, pipelineSettings,
+  magnitudeData, echoTimes, skipHzConversion, magField
+) {
+  postProgress(0.67, `Preparing ${dipoleMethod.toUpperCase()} dipole inversion...`);
+  postLog(`Running ${dipoleMethod.toUpperCase()} dipole inversion...`);
+  const progressCb = (current, total) => {
+    postProgress(0.67 + (current / total) * 0.25, `${dipoleMethod.toUpperCase()}: ${current}/${total}`);
+  };
+  return runDipoleInversionByMethod(
+    localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+    dipoleMethod, pipelineSettings,
+    magnitudeData, echoTimes, skipHzConversion, magField,
+    progressCb
+  );
 }
 
 // =========================================================================

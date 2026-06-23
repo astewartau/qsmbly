@@ -2690,191 +2690,41 @@ pub fn r2star_arlo_wasm(
 // Algorithm Default Parameters
 // ============================================================================
 
-/// Get default RTS parameters as JSON string
-#[wasm_bindgen]
-pub fn get_rts_defaults() -> String {
-    let p = qsm_core::inversion::rts::RtsParams::default();
-    format!(
-        r#"{{"delta":{},"mu":{},"rho":{},"tol":{},"max_iter":{},"lsmr_iter":{}}}"#,
-        p.delta, p.mu, p.rho, p.tol, p.max_iter, p.lsmr_iter
-    )
-}
-
-/// Get default TV-ADMM parameters as JSON string
-#[wasm_bindgen]
-pub fn get_tv_defaults() -> String {
-    let p = qsm_core::inversion::tv::TvParams::default();
-    format!(
-        r#"{{"lambda":{},"rho":{},"tol":{},"max_iter":{}}}"#,
-        p.lambda, p.rho, p.tol, p.max_iter
-    )
-}
-
-/// Get default TKD parameters as JSON string
-#[wasm_bindgen]
-pub fn get_tkd_defaults() -> String {
-    let p = qsm_core::inversion::tkd::TkdParams::default();
-    format!(r#"{{"threshold":{}}}"#, p.threshold)
-}
-
-/// Get default TGV parameters as JSON string
-#[wasm_bindgen]
-pub fn get_tgv_defaults() -> String {
-    let p = qsm_core::inversion::tgv::TgvParams::default();
-    format!(
-        r#"{{"alpha0":{},"alpha1":{},"iterations":{},"erosions":{},"step_size":{},"tol":{}}}"#,
-        p.alpha0, p.alpha1, p.iterations, p.erosions, p.step_size, p.tol
-    )
-}
-
-/// Get default BET parameters as JSON string
-#[wasm_bindgen]
-pub fn get_bet_defaults() -> String {
-    let p = qsm_core::bet::BetParams::default();
-    format!(
-        r#"{{"fractional_intensity":{},"smoothness":{},"gradient_threshold":{},"iterations":{},"subdivisions":{}}}"#,
-        p.fractional_intensity, p.smoothness, p.gradient_threshold, p.iterations, p.subdivisions
-    )
-}
-
-/// Get default V-SHARP parameters as JSON string
-#[wasm_bindgen]
-pub fn get_vsharp_defaults() -> String {
-    let p = qsm_core::bgremove::VsharpParams::default();
-    format!(r#"{{"threshold":{},"max_radius_factor":{},"min_radius_factor":{}}}"#, p.threshold, p.max_radius_factor, p.min_radius_factor)
-}
-
-/// Get default PDF parameters as JSON string
-#[wasm_bindgen]
-pub fn get_pdf_defaults() -> String {
-    let p = qsm_core::bgremove::PdfParams::default();
-    format!(r#"{{"tol":{}}}"#, p.tol)
-}
-
-/// Get default LBV parameters as JSON string
-#[wasm_bindgen]
-pub fn get_lbv_defaults() -> String {
-    let p = qsm_core::bgremove::LbvParams::default();
-    format!(r#"{{"tol":{}}}"#, p.tol)
-}
-
-/// Get default iSMV parameters as JSON string
-#[wasm_bindgen]
-pub fn get_ismv_defaults() -> String {
-    let p = qsm_core::bgremove::IsmvParams::default();
-    format!(r#"{{"tol":{},"max_iter":{},"radius_factor":{}}}"#, p.tol, p.max_iter, p.radius_factor)
-}
-
-/// Get default SWI parameters as JSON string
-#[wasm_bindgen]
-pub fn get_swi_defaults() -> String {
-    let p = qsm_core::swi::SwiParams::default();
-    let scaling = match p.scaling {
-        qsm_core::swi::PhaseScaling::Tanh => "tanh",
-        qsm_core::swi::PhaseScaling::NegativeTanh => "negative_tanh",
-        qsm_core::swi::PhaseScaling::Positive => "positive",
-        qsm_core::swi::PhaseScaling::Negative => "negative",
-        qsm_core::swi::PhaseScaling::Triangular => "triangular",
+// Each get_*_defaults() serializes the matching qsmxt-config config struct, whose
+// Default impl sources its values from qsm-core. qsmxt-config is the single source of
+// truth for the parameter set (field names + defaults); these bindings just hand it to
+// JS as JSON. Adding a field there automatically flows through here — no hand-typed list.
+macro_rules! config_defaults {
+    ($fn_name:ident, $config:ty) => {
+        #[wasm_bindgen]
+        pub fn $fn_name() -> String {
+            serde_json::to_string(&<$config>::default())
+                .expect("config serialization is infallible")
+        }
     };
-    format!(
-        r#"{{"hp_sigma":[{},{},{}],"scaling":"{}","strength":{},"mip_window":{}}}"#,
-        p.hp_sigma[0], p.hp_sigma[1], p.hp_sigma[2], scaling, p.strength, p.mip_window
-    )
 }
 
-/// Get default SHARP parameters as JSON string
-#[wasm_bindgen]
-pub fn get_sharp_defaults() -> String {
-    let p = qsm_core::bgremove::SharpParams::default();
-    format!(r#"{{"threshold":{},"radius_factor":{}}}"#, p.threshold, p.radius_factor)
-}
-
-/// Get default RESHARP parameters as JSON string
-#[wasm_bindgen]
-pub fn get_resharp_defaults() -> String {
-    let p = qsm_core::bgremove::ResharpParams::default();
-    format!(r#"{{"radius":{},"tik_reg":{},"tol":{},"max_iter":{}}}"#,
-        p.radius, p.tik_reg, p.tol, p.max_iter)
-}
-
-/// Get default HARPERELLA/iHARPERELLA parameters as JSON string
-#[wasm_bindgen]
-pub fn get_harperella_defaults() -> String {
-    let p = qsm_core::pipeline::HarperellaParams::default();
-    format!(r#"{{"radius":{},"max_iter":{},"tol":{}}}"#, p.radius, p.max_iter, p.tol)
-}
-
-/// Get default Tikhonov parameters as JSON string
-#[wasm_bindgen]
-pub fn get_tikhonov_defaults() -> String {
-    let p = qsm_core::inversion::TikhonovParams::default();
-    format!(r#"{{"lambda":{},"reg":"identity"}}"#, p.lambda)
-}
-
-/// Get default NLTV parameters as JSON string
-#[wasm_bindgen]
-pub fn get_nltv_defaults() -> String {
-    let p = qsm_core::inversion::NltvParams::default();
-    format!(
-        r#"{{"lambda":{},"mu":{},"tol":{},"max_iter":{},"newton_iter":{}}}"#,
-        p.lambda, p.mu, p.tol, p.max_iter, p.newton_iter
-    )
-}
-
-/// Get default MEDI parameters as JSON string
-#[wasm_bindgen]
-pub fn get_medi_defaults() -> String {
-    let p = qsm_core::inversion::MediParams::default();
-    format!(
-        r#"{{"lambda":{},"merit":{},"smv":{},"smv_radius":{},"data_weighting":{},"percentage":{},"cg_tol":{},"cg_max_iter":{},"max_iter":{},"tol":{}}}"#,
-        p.lambda, p.merit, p.smv, p.smv_radius, p.data_weighting, p.percentage,
-        p.cg_tol, p.cg_max_iter, p.max_iter, p.tol
-    )
-}
-
-/// Get default QSMART parameters as JSON string
-#[wasm_bindgen]
-pub fn get_qsmart_defaults() -> String {
-    let p = qsm_core::utils::QsmartParams::default();
-    format!(
-        r#"{{"sdf_sigma1_stage1":{},"sdf_sigma2_stage1":{},"sdf_sigma1_stage2":{},"sdf_sigma2_stage2":{},"sdf_spatial_radius":{},"sdf_lower_lim":{},"sdf_curv_constant":{},"vasc_sphere_radius":{},"frangi_scale_range":[{},{}],"frangi_scale_ratio":{},"frangi_c":{},"ilsqr_tol":{},"ilsqr_max_iter":{}}}"#,
-        p.sdf_sigma1_stage1, p.sdf_sigma2_stage1, p.sdf_sigma1_stage2, p.sdf_sigma2_stage2,
-        p.sdf_spatial_radius, p.sdf_lower_lim, p.sdf_curv_constant,
-        p.vasc_sphere_radius, p.frangi_scale_range[0], p.frangi_scale_range[1],
-        p.frangi_scale_ratio, p.frangi_c, p.ilsqr_tol, p.ilsqr_max_iter
-    )
-}
-
-/// Get default ROMEO parameters as JSON string
-#[wasm_bindgen]
-pub fn get_romeo_defaults() -> String {
-    let p = qsm_core::unwrap::RomeoParams::default();
-    format!(r#"{{"phase_coherence":{},"phase_gradient_coherence":{},"phase_linearity":{},"mag_coherence":{},"mag_weight":{},"mag_weight2":{}}}"#,
-        p.phase_coherence, p.phase_gradient_coherence, p.phase_linearity,
-        p.mag_coherence, p.mag_weight, p.mag_weight2)
-}
-
-/// Get default MCPC-3D-S parameters as JSON string
-#[wasm_bindgen]
-pub fn get_mcpc3ds_defaults() -> String {
-    let p = qsm_core::utils::Mcpc3dsParams::default();
-    format!(r#"{{"sigma":[{},{},{}]}}"#, p.sigma[0], p.sigma[1], p.sigma[2])
-}
-
-/// Get default linear fit parameters as JSON string
-#[wasm_bindgen]
-pub fn get_linear_fit_defaults() -> String {
-    let p = qsm_core::utils::LinearFitParams::default();
-    format!(r#"{{"estimate_offset":{},"reliability_threshold_percentile":{}}}"#,
-        p.estimate_offset, p.reliability_threshold_percentile)
-}
-
-/// Get default homogeneity correction parameters as JSON string
-#[wasm_bindgen]
-pub fn get_homogeneity_defaults() -> String {
-    let p = qsm_core::utils::HomogeneityParams::default();
-    format!(r#"{{"sigma_mm":{},"nbox":{}}}"#, p.sigma_mm, p.nbox)
-}
+config_defaults!(get_rts_defaults, qsmxt_config::config::RtsConfig);
+config_defaults!(get_tv_defaults, qsmxt_config::config::TvConfig);
+config_defaults!(get_tkd_defaults, qsmxt_config::config::TkdConfig);
+config_defaults!(get_tgv_defaults, qsmxt_config::config::TgvConfig);
+config_defaults!(get_bet_defaults, qsmxt_config::config::BetConfig);
+config_defaults!(get_vsharp_defaults, qsmxt_config::config::VsharpConfig);
+config_defaults!(get_pdf_defaults, qsmxt_config::config::PdfConfig);
+config_defaults!(get_lbv_defaults, qsmxt_config::config::LbvConfig);
+config_defaults!(get_ismv_defaults, qsmxt_config::config::IsmvConfig);
+config_defaults!(get_swi_defaults, qsmxt_config::config::SwiConfig);
+config_defaults!(get_sharp_defaults, qsmxt_config::config::SharpConfig);
+config_defaults!(get_resharp_defaults, qsmxt_config::config::ResharpConfig);
+config_defaults!(get_harperella_defaults, qsmxt_config::config::HarperellaConfig);
+config_defaults!(get_tikhonov_defaults, qsmxt_config::config::TikhonovConfig);
+config_defaults!(get_nltv_defaults, qsmxt_config::config::NltvConfig);
+config_defaults!(get_medi_defaults, qsmxt_config::config::MediConfig);
+config_defaults!(get_qsmart_defaults, qsmxt_config::config::QsmartConfig);
+config_defaults!(get_romeo_defaults, qsmxt_config::config::RomeoConfig);
+config_defaults!(get_mcpc3ds_defaults, qsmxt_config::config::Mcpc3dsConfig);
+config_defaults!(get_linear_fit_defaults, qsmxt_config::config::LinearFitConfig);
+config_defaults!(get_homogeneity_defaults, qsmxt_config::config::HomogeneityConfig);
 
 // ============================================================================
 // Tests

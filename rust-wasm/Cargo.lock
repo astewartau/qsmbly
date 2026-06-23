@@ -377,7 +377,7 @@ dependencies = [
 [[package]]
 name = "qsm-core"
 version = "0.0.0"
-source = "git+https://github.com/astewartau/QSM.rs.git?tag=v0.13.0#79fc993288a82b654ff8f1bb56166fbae983f922"
+source = "git+https://github.com/astewartau/QSM.rs.git?tag=v0.14.0#0566a864e7d36bf90fd40b804eb8df32cea207a2"
 dependencies = [
  "bytemuck",
  "delaunator",
@@ -398,6 +398,7 @@ dependencies = [
  "js-sys",
  "qsm-core",
  "qsmxt-config",
+ "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-test",
 ]
@@ -405,7 +406,7 @@ dependencies = [
 [[package]]
 name = "qsmxt-config"
 version = "0.0.0"
-source = "git+https://github.com/astewartau/qsmxt.rs.git?tag=v0.6.0#629a72b4a79ee93f1da41f9df2a41926a4ee2c00"
+source = "git+https://github.com/astewartau/qsmxt.rs.git?tag=v0.8.0#9276b700aa323e99400ad9715a67688358a42b2e"
 dependencies = [
  "qsm-core",
  "serde",

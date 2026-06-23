@@ -90,6 +90,32 @@ export class PipelineSettingsController {
     this._setEl('qsmartFrangiC', QSMART_DEFAULTS.frangi_c);
     this._setEl('qsmartIlsqrTol', QSMART_DEFAULTS.ilsqr_tol);
     this._setEl('qsmartIlsqrMaxIter', QSMART_DEFAULTS.ilsqr_max_iter);
+    this._setEl('qsmartInversionMethod', QSMART_DEFAULTS.inversion_algorithm);
+    // QSMART inner inversion per-algorithm params (reuse standard algorithm defaults)
+    this._setEl('qsmartTkdThreshold', TKD_DEFAULTS.threshold);
+    this._setEl('qsmartTsvdThreshold', TSVD_DEFAULTS.threshold);
+    this._setEl('qsmartTikhLambda', TIKHONOV_DEFAULTS.lambda);
+    this._setEl('qsmartTikhReg', 'identity');
+    this._setEl('qsmartTvLambda', TV_DEFAULTS.lambda);
+    this._setEl('qsmartTvMaxIter', TV_DEFAULTS.max_iter);
+    this._setEl('qsmartTvTol', TV_DEFAULTS.tol);
+    this._setEl('qsmartRtsDelta', RTS_DEFAULTS.delta);
+    this._setEl('qsmartRtsMu', RTS_DEFAULTS.mu);
+    this._setEl('qsmartRtsRho', RTS_DEFAULTS.rho);
+    this._setEl('qsmartRtsMaxIter', RTS_DEFAULTS.max_iter);
+    this._setEl('qsmartNltvLambda', NLTV_DEFAULTS.lambda);
+    this._setEl('qsmartNltvMu', NLTV_DEFAULTS.mu);
+    this._setEl('qsmartNltvMaxIter', NLTV_DEFAULTS.max_iter);
+    this._setEl('qsmartNltvTol', NLTV_DEFAULTS.tol);
+    this._setEl('qsmartNltvNewtonMaxIter', NLTV_DEFAULTS.newton_max_iter);
+    this._setEl('qsmartMediLambda', MEDI_DEFAULTS.lambda);
+    this._setEl('qsmartMediPercentage', MEDI_DEFAULTS.percentage);
+    this._setEl('qsmartMediMaxIter', MEDI_DEFAULTS.max_iter);
+    this._setEl('qsmartMediCgMaxIter', MEDI_DEFAULTS.cg_max_iter);
+    this._setChecked('qsmartMediSmv', MEDI_DEFAULTS.smv);
+    this._setEl('qsmartMediSmvRadius', MEDI_DEFAULTS.smv_radius);
+    this._setChecked('qsmartMediMerit', MEDI_DEFAULTS.merit);
+    this._updateQsmartInnerVisibility();
 
     // Phase offset
     this._setChecked('phase_offset_enabled', true);
@@ -257,7 +283,39 @@ export class PipelineSettingsController {
         frangi_scale_ratio: parseFloat(this._getEl('qsmartFrangiScaleRatio')),
         frangi_c: parseFloat(this._getEl('qsmartFrangiC')),
         ilsqr_tol: parseFloat(this._getEl('qsmartIlsqrTol')),
-        ilsqr_max_iter: parseInt(this._getEl('qsmartIlsqrMaxIter'))
+        ilsqr_max_iter: parseInt(this._getEl('qsmartIlsqrMaxIter')),
+        inversion_algorithm: this._getEl('qsmartInversionMethod') || 'ilsqr',
+        // Per-algorithm params for the inner inversion (used when the matching algorithm is selected)
+        tkd: { threshold: parseFloat(this._getEl('qsmartTkdThreshold')) },
+        tsvd: { threshold: parseFloat(this._getEl('qsmartTsvdThreshold')) },
+        tikhonov: { lambda: parseFloat(this._getEl('qsmartTikhLambda')), reg: this._getEl('qsmartTikhReg') },
+        tv: {
+          lambda: parseFloat(this._getEl('qsmartTvLambda')),
+          max_iter: parseInt(this._getEl('qsmartTvMaxIter')),
+          tol: parseFloat(this._getEl('qsmartTvTol'))
+        },
+        rts: {
+          delta: parseFloat(this._getEl('qsmartRtsDelta')),
+          mu: parseFloat(this._getEl('qsmartRtsMu')),
+          rho: parseFloat(this._getEl('qsmartRtsRho')),
+          max_iter: parseInt(this._getEl('qsmartRtsMaxIter'))
+        },
+        nltv: {
+          lambda: parseFloat(this._getEl('qsmartNltvLambda')),
+          mu: parseFloat(this._getEl('qsmartNltvMu')),
+          max_iter: parseInt(this._getEl('qsmartNltvMaxIter')),
+          tol: parseFloat(this._getEl('qsmartNltvTol')),
+          newton_max_iter: parseInt(this._getEl('qsmartNltvNewtonMaxIter'))
+        },
+        medi: {
+          lambda: parseFloat(this._getEl('qsmartMediLambda')),
+          percentage: parseFloat(this._getEl('qsmartMediPercentage')),
+          max_iter: parseInt(this._getEl('qsmartMediMaxIter')),
+          cg_max_iter: parseInt(this._getEl('qsmartMediCgMaxIter')),
+          smv: this._getChecked('qsmartMediSmv'),
+          smv_radius: parseFloat(this._getEl('qsmartMediSmvRadius')),
+          merit: this._getChecked('qsmartMediMerit')
+        }
       },
       unwrapping_algorithm: unwrapping_algorithm,
       phase_offset_method: phase_offset_method,
@@ -396,6 +454,7 @@ export class PipelineSettingsController {
 
     // QSMART settings - show when QSMART selected in any mode
     this._showEl('qsmart_settings', isQsmart);
+    if (isQsmart) this._updateQsmartInnerVisibility();
 
     // Phase unwrapping (check this first — Laplacian disables offset removal + bipolar)
     const currentUnwrapMethod = this._getEl('unwrapping_algorithm') || 'romeo';
@@ -754,6 +813,14 @@ export class PipelineSettingsController {
       this._onCombinedMethodChange(); // Re-check visibility for MEDI SMV
     });
 
+    // QSMART inner inversion method change - show that algorithm's params
+    this._on('qsmartInversionMethod', 'change', () => this._updateQsmartInnerVisibility());
+
+    // QSMART MEDI SMV checkbox toggle
+    this._on('qsmartMediSmv', 'change', (e) => {
+      this._showEl('qsmartMediSmvRadiusGroup', e.target.checked);
+    });
+
     // Phase offset method dropdown
     this._on('phase_offset_method', 'change', () => this._onCombinedMethodChange());
 
@@ -774,6 +841,17 @@ export class PipelineSettingsController {
 
   _onCombinedMethodChange() {
     this.updateVisibility(this.nEchoes || 0);
+  }
+
+  // Show the parameter group matching the QSMART inner inversion selection.
+  _updateQsmartInnerVisibility() {
+    const inner = this._getEl('qsmartInversionMethod') || 'ilsqr';
+    ['ilsqr', 'tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi'].forEach(a => {
+      this._showEl(`qsmart_${a}_settings`, a === inner);
+    });
+    if (inner === 'medi') {
+      this._showEl('qsmartMediSmvRadiusGroup', this._getChecked('qsmartMediSmv'));
+    }
   }
 
   // DOM helper methods

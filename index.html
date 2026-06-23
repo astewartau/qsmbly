@@ -694,6 +694,10 @@
               <a href="https://github.com/wtsyeda/QSMART" target="_blank" rel="noopener" title="Code: QSMART"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
 
+            <p style="font-size: 0.75rem; line-height: 1.4; color: var(--color-text); background: rgba(230,160,30,0.10); border-left: 3px solid #e6a01e; padding: var(--space-xs) var(--space-sm); margin: 0 0 var(--space-sm); border-radius: 3px;">
+              ⚠ QSMART needs a <strong>tight brain mask</strong>. Build the mask with <strong>BET</strong> in the masking step — a loose threshold mask leaks non-brain signal into the dipole inversion and causes heavy streaking artifacts.
+            </p>
+
             <h5 style="margin: var(--space-sm) 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">Stage 1: Whole ROI</h5>
             <div class="param-group">
               <label class="param-label" for="qsmartSdfSigma1Stage1">SDF Sigma 1 (voxels)</label>
@@ -751,14 +755,156 @@
               <input type="number" id="qsmartFrangiC" value="500" min="100" max="2000" step="50">
             </div>
 
-            <h5 style="margin: var(--space-sm) 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">iLSQR Inversion</h5>
+            <h5 style="margin: var(--space-sm) 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">Dipole Inversion</h5>
             <div class="param-group">
-              <label class="param-label" for="qsmartIlsqrTol">Tolerance</label>
-              <input type="number" id="qsmartIlsqrTol" value="0.01" min="0.001" max="0.1" step="0.001">
+              <label class="param-label" for="qsmartInversionMethod">Inner inversion (both stages)</label>
+              <select id="qsmartInversionMethod">
+                <option value="ilsqr" selected>iLSQR (iterative Least Squares QR)</option>
+                <option value="tkd">TKD (Thresholded K-space Division)</option>
+                <option value="tsvd">TSVD (Truncated Singular Value Decomposition)</option>
+                <option value="tikhonov">Tikhonov Regularization</option>
+                <option value="tv">TV-ADMM (Total Variation)</option>
+                <option value="rts">RTS (Rapid Two-Step)</option>
+                <option value="nltv">NLTV (Nonlinear Total Variation)</option>
+                <option value="medi">MEDI (Morphology Enabled Dipole Inversion)</option>
+              </select>
             </div>
-            <div class="param-group">
-              <label class="param-label" for="qsmartIlsqrMaxIter">Max Iterations</label>
-              <input type="number" id="qsmartIlsqrMaxIter" value="50" min="10" max="200" step="10">
+            <!-- iLSQR (default) -->
+            <div id="qsmart_ilsqr_settings" class="method-settings">
+              <div class="param-group">
+                <label class="param-label" for="qsmartIlsqrTol">iLSQR Tolerance</label>
+                <input type="number" id="qsmartIlsqrTol" value="0.01" min="0.001" max="0.1" step="0.001">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartIlsqrMaxIter">iLSQR Max Iterations</label>
+                <input type="number" id="qsmartIlsqrMaxIter" value="50" min="10" max="200" step="10">
+              </div>
+            </div>
+
+            <!-- TKD -->
+            <div id="qsmart_tkd_settings" class="method-settings" style="display: none;">
+              <div class="param-group">
+                <label class="param-label" for="qsmartTkdThreshold">K-space truncation threshold</label>
+                <input type="number" id="qsmartTkdThreshold" value="0.15" min="0.05" max="0.3" step="0.01">
+              </div>
+            </div>
+
+            <!-- TSVD -->
+            <div id="qsmart_tsvd_settings" class="method-settings" style="display: none;">
+              <div class="param-group">
+                <label class="param-label" for="qsmartTsvdThreshold">Singular value cutoff</label>
+                <input type="number" id="qsmartTsvdThreshold" value="0.15" min="0.05" max="0.3" step="0.01">
+              </div>
+            </div>
+
+            <!-- Tikhonov -->
+            <div id="qsmart_tikhonov_settings" class="method-settings" style="display: none;">
+              <div class="param-group">
+                <label class="param-label" for="qsmartTikhLambda">Regularization strength</label>
+                <input type="number" id="qsmartTikhLambda" value="0.01" min="0.001" max="1.0" step="0.001">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartTikhReg">Regularization Type</label>
+                <select id="qsmartTikhReg">
+                  <option value="identity" selected>Identity (minimal smoothing)</option>
+                  <option value="gradient">Gradient (moderate smoothing)</option>
+                  <option value="laplacian">Laplacian (strong smoothing)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- TV-ADMM -->
+            <div id="qsmart_tv_settings" class="method-settings" style="display: none;">
+              <div class="param-group">
+                <label class="param-label" for="qsmartTvLambda">Regularization strength</label>
+                <input type="number" id="qsmartTvLambda" value="0.001" min="0.0001" max="0.1" step="0.0001">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartTvMaxIter">Max ADMM iterations</label>
+                <input type="number" id="qsmartTvMaxIter" value="250" min="10" max="500" step="10">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartTvTol">Convergence tolerance</label>
+                <input type="number" id="qsmartTvTol" value="0.001" min="0.0001" max="0.01" step="0.0001">
+              </div>
+            </div>
+
+            <!-- RTS -->
+            <div id="qsmart_rts_settings" class="method-settings" style="display: none;">
+              <div class="param-group">
+                <label class="param-label" for="qsmartRtsDelta">K-space region threshold</label>
+                <input type="number" id="qsmartRtsDelta" value="0.15" min="0.05" max="0.3" step="0.01">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartRtsMu">Data fidelity weight</label>
+                <input type="number" id="qsmartRtsMu" value="100000" min="1000" max="1000000" step="1000">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartRtsRho">ADMM penalty</label>
+                <input type="number" id="qsmartRtsRho" value="10" min="1" max="100" step="1">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartRtsMaxIter">Max TV refinement iterations</label>
+                <input type="number" id="qsmartRtsMaxIter" value="20" min="5" max="100" step="5">
+              </div>
+            </div>
+
+            <!-- NLTV -->
+            <div id="qsmart_nltv_settings" class="method-settings" style="display: none;">
+              <div class="param-group">
+                <label class="param-label" for="qsmartNltvLambda">Regularization strength</label>
+                <input type="number" id="qsmartNltvLambda" value="0.001" min="0.0001" max="0.1" step="0.0001">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartNltvMu">Reweighting strength</label>
+                <input type="number" id="qsmartNltvMu" value="1" min="0.1" max="10" step="0.1">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartNltvMaxIter">Max ADMM iterations</label>
+                <input type="number" id="qsmartNltvMaxIter" value="250" min="50" max="1000" step="50">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartNltvTol">Convergence tolerance</label>
+                <input type="number" id="qsmartNltvTol" value="0.001" min="0.0001" max="0.01" step="0.0001">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartNltvNewtonMaxIter">Max reweighting iterations</label>
+                <input type="number" id="qsmartNltvNewtonMaxIter" value="10" min="1" max="50" step="1">
+              </div>
+            </div>
+
+            <!-- MEDI -->
+            <div id="qsmart_medi_settings" class="method-settings" style="display: none;">
+              <div class="param-group">
+                <label class="param-label" for="qsmartMediLambda">Regularization strength</label>
+                <input type="number" id="qsmartMediLambda" value="7.5e-5" min="1e-6" max="0.01" step="1e-5">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartMediPercentage">Edge reliability threshold</label>
+                <input type="number" id="qsmartMediPercentage" value="0.3" min="0.05" max="0.95" step="0.05">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartMediMaxIter">Max outer iterations</label>
+                <input type="number" id="qsmartMediMaxIter" value="30" min="1" max="100" step="1">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartMediCgMaxIter">Max CG solver iterations</label>
+                <input type="number" id="qsmartMediCgMaxIter" value="10" min="1" max="100" step="1">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartMediSmv">
+                  <input type="checkbox" id="qsmartMediSmv"> Pre-filter with SMV (reduces streaking)
+                </label>
+              </div>
+              <div class="param-group" id="qsmartMediSmvRadiusGroup" style="display: none;">
+                <label class="param-label" for="qsmartMediSmvRadius">SMV kernel radius (mm)</label>
+                <input type="number" id="qsmartMediSmvRadius" value="5" min="1" max="20" step="1">
+              </div>
+              <div class="param-group">
+                <label class="param-label" for="qsmartMediMerit">
+                  <input type="checkbox" id="qsmartMediMerit"> MERIT auto-tuning (preserves fine detail)
+                </label>
+              </div>
             </div>
           </div>
         </div>

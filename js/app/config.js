@@ -176,12 +176,13 @@ export const QSMART_DEFAULTS = {
   sdf_lower_lim: _QSMART.sdf_lower_lim,
   sdf_curv_constant: _QSMART.sdf_curv_constant,
   vasc_sphere_radius: _QSMART.vasc_sphere_radius,
-  frangi_scale_min: _QSMART.frangi_scale_range[0],
-  frangi_scale_max: _QSMART.frangi_scale_range[1],
+  frangi_scale_min: _QSMART.frangi_scale_min,
+  frangi_scale_max: _QSMART.frangi_scale_max,
   frangi_scale_ratio: _QSMART.frangi_scale_ratio,
   frangi_c: _QSMART.frangi_c,
   ilsqr_tol: _QSMART.ilsqr_tol,
   ilsqr_max_iter: _QSMART.ilsqr_max_iter,
+  inversion_algorithm: _QSMART.inversion,
 };
 
 // ROMEO unwrapping defaults
@@ -320,7 +321,9 @@ export const PIPELINE_METHODS = {
   fieldCalculation: ['weighted_avg', 'linear_fit'],
   b0_weight_type: ['phase_snr', 'phase_var', 'average', 'tes', 'mag'],
   bf_algorithm: ['vsharp', 'sharp', 'resharp', 'ismv', 'pdf', 'lbv', 'harperella', 'iharperella'],
-  dipole_inversion: ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi']
+  dipole_inversion: ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi'],
+  // Inner dipole inversion for QSMART's two stages (includes ilsqr, excludes tgv/qsmart)
+  qsmart_inversion: ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr']
 };
 
 // Default pipeline settings (assembled from individual defaults)
