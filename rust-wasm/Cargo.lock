@@ -377,6 +377,21 @@ dependencies = [
 [[package]]
 name = "qsm-core"
 version = "0.0.0"
+source = "git+https://github.com/astewartau/QSM.rs.git?tag=v0.14.0#0566a864e7d36bf90fd40b804eb8df32cea207a2"
+dependencies = [
+ "bytemuck",
+ "delaunator",
+ "flate2",
+ "ndarray",
+ "nifti",
+ "num-complex",
+ "num-traits",
+ "rustfft",
+]
+
+[[package]]
+name = "qsm-core"
+version = "0.0.0"
 source = "git+https://github.com/astewartau/QSM.rs.git?tag=v0.15.0#13795861ffa5b16056b2b0bb41018b201eeff573"
 dependencies = [
  "bytemuck",
@@ -392,11 +407,11 @@ dependencies = [
 
 [[package]]
 name = "qsm_wasm"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
- "qsm-core",
+ "qsm-core 0.0.0 (git+https://github.com/astewartau/QSM.rs.git?tag=v0.15.0)",
  "qsmxt-config",
  "serde_json",
  "wasm-bindgen",
@@ -406,9 +421,9 @@ dependencies = [
 [[package]]
 name = "qsmxt-config"
 version = "0.0.0"
-source = "git+https://github.com/astewartau/qsmxt.rs.git?tag=v0.9.0#c9a36b85b79b553fd481ed085f573c7a61250d84"
+source = "git+https://github.com/astewartau/qsmxt.rs.git?tag=v0.8.0#9276b700aa323e99400ad9715a67688358a42b2e"
 dependencies = [
- "qsm-core",
+ "qsm-core 0.0.0 (git+https://github.com/astewartau/QSM.rs.git?tag=v0.14.0)",
  "serde",
  "serde_json",
  "thiserror",
