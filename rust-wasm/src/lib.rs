@@ -2745,25 +2745,83 @@ mod tests {
 // Pipeline Configuration (via qsmxt-config library)
 // ============================================================================
 
-/// Generate a qsmxt CLI command from a TOML config string.
-/// Returns the command string, or an error message prefixed with "ERROR: ".
+// qsmbly builds its config as a JSON object (its UI→schema adapter) and lets
+// qsmxt-config do all serialization — so command, methods, the downloadable .toml,
+// and the pipeline-execution config are one canonical representation produced by the
+// library, never a hand-rolled parallel TOML. `mask_section` is the CLI-style mask
+// string parsed here (the tagged mask-op enums round-trip cleanly via serde, unlike a
+// hand-written TOML serializer).
+fn config_from_json(
+    config_json: &str,
+    mask_section: &str,
+) -> Result<qsmxt_config::PipelineConfig, String> {
+    let mut config: qsmxt_config::PipelineConfig =
+        serde_json::from_str(config_json).map_err(|e| format!("ERROR: {}", e))?;
+    apply_mask_section(&mut config, mask_section);
+    Ok(config)
+}
+
+/// Serialize a config (JSON, plus CLI-style mask string) to canonical TOML —
+/// identical to what the qsmxt.rs CLI writes. Returns "ERROR: ..." on failure.
 #[wasm_bindgen]
-pub fn generate_command_wasm(toml_string: &str) -> String {
-    match qsmxt_config::PipelineConfig::from_toml(toml_string) {
-        Ok(config) => qsmxt_config::generate_command(&config),
-        Err(e) => format!("ERROR: {}", e),
+pub fn config_json_to_toml_wasm(config_json: &str, mask_section: &str) -> String {
+    match config_from_json(config_json, mask_section) {
+        Ok(config) => config.to_toml().unwrap_or_else(|e| format!("ERROR: {}", e)),
+        Err(e) => e,
     }
 }
 
-/// Generate a methods section with citations from a TOML config string.
+/// Generate a qsmxt CLI command from a config (JSON + mask string).
+/// Returns the command string, or an error message prefixed with "ERROR: ".
+#[wasm_bindgen]
+pub fn generate_command_wasm(config_json: &str, mask_section: &str) -> String {
+    match config_from_json(config_json, mask_section) {
+        Ok(config) => qsmxt_config::generate_command(&config),
+        Err(e) => e,
+    }
+}
+
+/// Generate a methods section with citations from a config (JSON + mask string).
 /// `tool` should be "qsmxt.rs" or "QSMbly" to credit the correct tool.
 /// Returns markdown text, or an error message prefixed with "ERROR: ".
 #[wasm_bindgen]
-pub fn generate_methods_wasm(toml_string: &str, tool: &str) -> String {
-    match qsmxt_config::PipelineConfig::from_toml(toml_string) {
+pub fn generate_methods_wasm(config_json: &str, tool: &str, mask_section: &str) -> String {
+    match config_from_json(config_json, mask_section) {
         Ok(config) => qsmxt_config::methods::generate_methods_for(&config, tool),
-        Err(e) => format!("ERROR: {}", e),
+        Err(e) => e,
     }
+}
+
+/// Parse a CLI-style mask string ("input,gen,refine,...") into the config's mask
+/// sections, so command and methods both reflect the real mask. The TOML can't
+/// easily carry the tagged mask-op enums, so the UI passes the same string the CLI
+/// uses and we parse it here with qsmxt-config's parsers. Empty string = no change.
+fn apply_mask_section(config: &mut qsmxt_config::PipelineConfig, mask_section: &str) {
+    let parts: Vec<&str> = mask_section
+        .split(',')
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+        .collect();
+    // Need an input plus at least one (generator) op.
+    if parts.len() < 2 {
+        return;
+    }
+    let Some(input) = qsmxt_config::parse_masking_input(parts[0]) else {
+        return;
+    };
+    let mut ops = Vec::new();
+    for p in &parts[1..] {
+        match qsmxt_config::parse_mask_op(p) {
+            Ok(op) => ops.push(op),
+            Err(_) => return, // unrecognised op — leave the default mask untouched
+        }
+    }
+    let generator = ops.remove(0);
+    config.masking.sections = vec![qsmxt_config::MaskSection {
+        input,
+        generator,
+        refinements: ops,
+    }];
 }
 
 /// Return the default PipelineConfig as a TOML string.

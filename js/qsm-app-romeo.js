@@ -18,7 +18,7 @@ import { DicomController } from './controllers/DicomController.js';
 import { DicompareController } from 'https://dicompare.neurodesk.org/embed/DicompareController.js';
 import { DicompareReportRenderer } from 'https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js';
 import * as QSMConfig from './app/config.js';
-import { settingsToToml, appendMaskFlags } from './modules/ConfigBridge.js';
+import { buildConfigJson, maskSectionString } from './modules/ConfigBridge.js';
 
 // Make config available globally for backward compatibility
 window.QSMConfig = QSMConfig;
@@ -26,6 +26,10 @@ window.QSMConfig = QSMConfig;
 /** Simple markdown → HTML for methods text (headings, paragraphs, lists). */
 function renderMarkdown(md) {
   return md
+    // Protect literal scientific asterisks (T2*, R2*) so they aren't paired into
+    // markdown italics by the emphasis pass below. &#42; renders as a literal '*'.
+    // (The raw/copyable text keeps the plain 'T2*'.)
+    .replace(/(T2|R2)\*/g, '$1&#42;')
     .replace(/^## (.+)$/gm, '<h3 style="margin-top: 1em; margin-bottom: 0.3em; font-size: 1rem;">$1</h3>')
     .replace(/^# (.+)$/gm, '<h2 style="margin-top: 0; margin-bottom: 0.5em; font-size: 1.1rem;">$1</h2>')
     .replace(/^- (.+)$/gm, '<li>$1</li>')
@@ -503,6 +507,7 @@ class QSMApp {
     document.getElementById('closeCommandPreview')?.addEventListener('click', () => this.commandPreviewModal?.close());
     document.getElementById('closeCommandPreviewBtn')?.addEventListener('click', () => this.commandPreviewModal?.close());
     document.getElementById('copyCommand')?.addEventListener('click', () => this.copyCommandToClipboard());
+    document.getElementById('downloadSettingsToml')?.addEventListener('click', () => this.downloadSettingsToml());
     document.getElementById('exportTabCommand')?.addEventListener('click', () => this.switchExportTab('command'));
     document.getElementById('exportTabMethods')?.addEventListener('click', () => this.switchExportTab('methods'));
     document.getElementById('exportCommand')?.addEventListener('click', () => { this.showCommandPreview(); this.switchExportTab('command'); });
@@ -3333,17 +3338,13 @@ class QSMApp {
         parseFloat(document.getElementById('sidebarSwiHpSigmaZ')?.value) || 0,
       ];
     }
-    const toml = settingsToToml(
-      this.pipelineSettings,
-      this.maskOpsHistory,
-      this.maskPrepSettings?.source || 'phase_quality',
-      {
-        doSwi: !!this.results?.swi?.file,
-        doT2star: !!this.results?.t2star?.file,
-        doR2star: !!this.results?.r2star?.file,
-      }
-    );
+    const configJson = buildConfigJson(this.pipelineSettings, {
+      doSwi: !!this.results?.swi?.file,
+      doT2star: !!this.results?.t2star?.file,
+      doR2star: !!this.results?.r2star?.file,
+    });
     const maskSource = this.maskPrepSettings?.source || 'phase_quality';
+    this._lastToml = null; // populated async by configTomlResult (for the Download .toml button)
 
     // Show modal immediately with loading state
     const cmdEl = document.getElementById('commandPreviewText');
@@ -3358,21 +3359,23 @@ class QSMApp {
     const worker = this.pipelineExecutor?.worker;
     if (!worker) { if (cmdEl) cmdEl.textContent = 'ERROR: Worker not available'; return; }
 
+    const maskSection = maskSectionString(this.maskOpsHistory, maskSource);
     const handler = (e) => {
       if (e.data.type === 'commandResult') {
-        let cmd = e.data.result;
-        cmd = appendMaskFlags(cmd, this.maskOpsHistory, maskSource);
-        if (cmdEl) cmdEl.textContent = cmd;
+        if (cmdEl) cmdEl.textContent = e.data.result;
       } else if (e.data.type === 'methodsResult') {
         const raw = e.data.result;
         if (methodsRaw) methodsRaw.textContent = raw;
         if (methodsRendered) methodsRendered.innerHTML = renderMarkdown(raw);
+      } else if (e.data.type === 'configTomlResult') {
+        this._lastToml = e.data.result; // last message back — safe to detach
         worker.removeEventListener('message', handler);
       }
     };
     worker.addEventListener('message', handler);
-    worker.postMessage({ type: 'generateCommand', data: { toml } });
-    worker.postMessage({ type: 'generateMethods', data: { toml } });
+    worker.postMessage({ type: 'generateCommand', data: { configJson, maskSection } });
+    worker.postMessage({ type: 'generateMethods', data: { configJson, maskSection } });
+    worker.postMessage({ type: 'generateConfigToml', data: { configJson, maskSection } });
   }
 
   switchExportTab(tab) {
@@ -3391,6 +3394,12 @@ class QSMApp {
       cmdTab.classList.add('active');
       methodsTab.classList.remove('active');
     }
+  }
+
+  downloadSettingsToml() {
+    if (!this._lastToml) { this.updateOutput('Settings TOML not ready yet — try again in a moment.'); return; }
+    const bytes = new TextEncoder().encode(this._lastToml);
+    this._downloadBuffer(bytes, 'qsmbly-settings.toml');
   }
 
   copyCommandToClipboard() {

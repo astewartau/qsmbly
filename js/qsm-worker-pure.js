@@ -10,7 +10,7 @@ import { scalePhase, computeB0FromUnwrapped } from './worker/utils/PhaseUtils.js
 import { createThresholdMask, findSeedPoint } from './worker/utils/MaskUtils.js';
 import { boxFilter3D, boxFilter3dSeparable } from './worker/utils/FilterUtils.js';
 import { computeFieldMap } from './worker/utils/FieldMapping.js';
-import { settingsToToml } from './modules/ConfigBridge.js';
+import { buildConfigJson } from './modules/ConfigBridge.js';
 import * as QSMConfig from './app/config.js';
 
 let wasmModule = null;
@@ -371,7 +371,9 @@ async function runPipeline(data) {
     // Step 3: Field mapping (15% - 45%) — shared with qsmxt.rs
     // =========================================================================
     postProgress(0.15, 'Field mapping...');
-    const configToml = settingsToToml(pipelineSettings);
+    // Canonical TOML from qsmxt-config (serde). Mask is supplied separately to the
+    // pipeline, so the config's mask section is irrelevant here ('').
+    const configToml = wasmModule.config_json_to_toml_wasm(buildConfigJson(pipelineSettings), '');
     const echoTimesSec = echoTimes.map(t => t / 1000); // ms → seconds
 
     // Flatten per-echo arrays for WASM
@@ -2557,11 +2559,15 @@ self.onmessage = async function (e) {
         break;
 
       case 'generateCommand':
-        self.postMessage({ type: 'commandResult', result: wasmModule.generate_command_wasm(data.toml) });
+        self.postMessage({ type: 'commandResult', result: wasmModule.generate_command_wasm(data.configJson, data.maskSection || '') });
         break;
 
       case 'generateMethods':
-        self.postMessage({ type: 'methodsResult', result: wasmModule.generate_methods_wasm(data.toml, 'QSMbly') });
+        self.postMessage({ type: 'methodsResult', result: wasmModule.generate_methods_wasm(data.configJson, 'QSMbly', data.maskSection || '') });
+        break;
+
+      case 'generateConfigToml':
+        self.postMessage({ type: 'configTomlResult', result: wasmModule.config_json_to_toml_wasm(data.configJson, data.maskSection || '') });
         break;
 
       default:

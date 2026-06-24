@@ -1,21 +1,20 @@
 /**
- * Config Bridge — converts qsmbly pipeline settings to TOML
- * and calls qsmxt-config WASM (via worker) for command/methods generation.
- *
- * Replaces CommandGenerator.js with a single source of truth
- * shared between qsmxt.rs and qsmbly.
+ * Config Bridge — maps qsmbly pipeline settings to a qsmxt-config PipelineConfig
+ * shape (the UI→schema adapter). Serialization to TOML, command, and methods is
+ * delegated to qsmxt-config via WASM (see rust-wasm config_json_to_toml_wasm /
+ * generate_command_wasm / generate_methods_wasm) — qsmbly no longer hand-rolls TOML.
  */
 
 /**
- * Convert qsmbly pipeline settings to TOML string.
+ * Build a qsmxt-config PipelineConfig object from qsmbly pipeline settings.
+ * The returned object is JSON.stringify'd and handed to the WASM serializers; the
+ * mask is passed separately as a CLI-style string (see maskSectionString).
  * @param {Object} settings - Pipeline settings from PipelineSettingsController.save()
- * @param {string[]} maskOps - Mask operations history
- * @param {string} maskSource - Mask input source
  * @param {Object} options - { doSwi, doT2star, doR2star }
- * @returns {string} TOML config string
+ * @returns {Object} config object matching the qsmxt-config schema
  */
-export function settingsToToml(settings, maskOps = [], maskSource = 'phase_quality', options = {}) {
-  if (!settings) return '';
+export function buildConfig(settings, options = {}) {
+  if (!settings) return {};
 
   const isTgv = settings.combined_method === 'tgv';
   const isQsmart = settings.combined_method === 'qsmart';
@@ -95,13 +94,22 @@ export function settingsToToml(settings, maskOps = [], maskSource = 'phase_quali
     strength: settings.swi.strength, mip_window: settings.swi.mip_window,
   };
 
-  return toTomlString(config);
+  return config;
 }
 
 /**
- * Append mask CLI flags to a command string.
- * (Mask sections use complex serde tagged enums that can't easily go through TOML.)
+ * Serialize the config to JSON for the WASM serializers, dropping null/undefined
+ * and non-finite numbers (NaN/Infinity, e.g. from a blank numeric input). serde
+ * rejects null for a typed field; omitting it makes qsmxt-config fall back to the
+ * default — mirroring how the old hand-rolled TOML serializer skipped such values.
  */
+export function buildConfigJson(settings, options = {}) {
+  return JSON.stringify(
+    buildConfig(settings, options),
+    (_k, v) => (v === null || (typeof v === 'number' && !Number.isFinite(v))) ? undefined : v,
+  );
+}
+
 /**
  * Default mask ops from qsmxt-config (robust threshold preset).
  * Set dynamically from WASM default config; falls back to hardcoded.
@@ -134,58 +142,19 @@ function maskOpToString(op) {
   }
 }
 
-export function appendMaskFlags(cmd, maskOps, maskSource) {
-  if (maskOps && maskOps.length > 0) {
-    const inputMap = {
-      'phase_quality': 'phase-quality', 'combined': 'magnitude',
-      'first_echo': 'magnitude-first', 'last_echo': 'magnitude-last',
-    };
-    const input = inputMap[maskSource] || 'phase-quality';
-    const defaultSection = `phase-quality,${DEFAULT_MASK_OPS.join(',')}`;
-    const currentSection = `${input},${maskOps.join(',')}`;
-    if (currentSection !== defaultSection) {
-      cmd += ` --mask ${currentSection}`;
-    }
-  }
-  return cmd;
-}
-
 /**
- * Minimal TOML serializer for nested config objects.
+ * Build the CLI-style mask section string (e.g. "magnitude-first,bet:0.5,erode:1")
+ * from the UI's mask source + op history. Returns '' if no ops. This is the string
+ * the WASM command/methods generators parse to populate the config's mask sections,
+ * so both reflect the real mask. See apply_mask_section in rust-wasm/src/lib.rs.
  */
-function toTomlString(obj, prefix = '') {
-  let lines = [];
-  const tables = [];
-
-  for (const [key, value] of Object.entries(obj)) {
-    if (value === null || value === undefined) continue;
-    const fullKey = prefix ? `${prefix}.${key}` : key;
-
-    if (Array.isArray(value)) {
-      if (value.length > 0 && typeof value[0] === 'object') {
-        for (const item of value) {
-          lines.push(`\n[[${fullKey}]]`);
-          lines.push(toTomlString(item, '').trim());
-        }
-      } else {
-        const formatted = value.map(v => typeof v === 'string' ? `"${v}"` : v);
-        lines.push(`${key} = [${formatted.join(', ')}]`);
-      }
-    } else if (typeof value === 'object') {
-      tables.push({ key: fullKey, value });
-    } else if (typeof value === 'string') {
-      lines.push(`${key} = "${value}"`);
-    } else if (typeof value === 'boolean') {
-      lines.push(`${key} = ${value}`);
-    } else if (typeof value === 'number') {
-      lines.push(`${key} = ${value}`);
-    }
-  }
-
-  for (const { key, value } of tables) {
-    lines.push(`\n[${key}]`);
-    lines.push(toTomlString(value, key).trim());
-  }
-
-  return lines.join('\n') + '\n';
+export function maskSectionString(maskOps, maskSource) {
+  if (!maskOps || maskOps.length === 0) return '';
+  const inputMap = {
+    'phase_quality': 'phase-quality', 'combined': 'magnitude',
+    'first_echo': 'magnitude-first', 'last_echo': 'magnitude-last',
+  };
+  const input = inputMap[maskSource] || 'phase-quality';
+  return `${input},${maskOps.join(',')}`;
 }
+
