@@ -392,7 +392,7 @@ dependencies = [
 
 [[package]]
 name = "qsm_wasm"
-version = "0.14.2"
+version = "0.16.0"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
@@ -406,7 +406,7 @@ dependencies = [
 [[package]]
 name = "qsmxt-config"
 version = "0.0.0"
-source = "git+https://github.com/astewartau/qsmxt.rs.git?tag=v0.9.0#c9a36b85b79b553fd481ed085f573c7a61250d84"
+source = "git+https://github.com/astewartau/qsmxt.rs.git?tag=v0.10.0#8479c1a30436694706f3abb9e98c99ff7ee423a7"
 dependencies = [
  "qsm-core",
  "serde",

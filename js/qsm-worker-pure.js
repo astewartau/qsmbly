@@ -2567,7 +2567,8 @@ self.onmessage = async function (e) {
         break;
 
       case 'generateConfigToml':
-        self.postMessage({ type: 'configTomlResult', result: wasmModule.config_json_to_toml_wasm(data.configJson, data.maskSection || '') });
+        // Download path: pruned to the selected algorithm (still loads in qsmxt.rs).
+        self.postMessage({ type: 'configTomlResult', result: wasmModule.config_json_to_toml_selected_wasm(data.configJson, data.maskSection || '') });
         break;
 
       default:

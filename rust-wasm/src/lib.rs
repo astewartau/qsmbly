@@ -2762,11 +2762,22 @@ fn config_from_json(
 }
 
 /// Serialize a config (JSON, plus CLI-style mask string) to canonical TOML —
-/// identical to what the qsmxt.rs CLI writes. Returns "ERROR: ..." on failure.
+/// identical to what the qsmxt.rs CLI writes (all algorithms). Returns "ERROR: ..." on failure.
 #[wasm_bindgen]
 pub fn config_json_to_toml_wasm(config_json: &str, mask_section: &str) -> String {
     match config_from_json(config_json, mask_section) {
         Ok(config) => config.to_toml().unwrap_or_else(|e| format!("ERROR: {}", e)),
+        Err(e) => e,
+    }
+}
+
+/// Like config_json_to_toml_wasm, but prunes inversion/bg_removal to the selected
+/// algorithm only (the omitted ones round-trip as defaults). For the downloadable
+/// settings file. Returns "ERROR: ..." on failure.
+#[wasm_bindgen]
+pub fn config_json_to_toml_selected_wasm(config_json: &str, mask_section: &str) -> String {
+    match config_from_json(config_json, mask_section) {
+        Ok(config) => config.to_toml_selected().unwrap_or_else(|e| format!("ERROR: {}", e)),
         Err(e) => e,
     }
 }
