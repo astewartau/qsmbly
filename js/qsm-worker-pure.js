@@ -518,7 +518,7 @@ async function runTgvCore({
     postProgress(progress, `TGV: Iteration ${current}/${total}`);
   };
 
-  const qsmResult = new Float64Array(wasmModule.tgv_qsm_wasm_with_progress(
+  let qsmResult = new Float64Array(wasmModule.tgv_qsm_wasm_with_progress(
     tgvInputPhase, mask, nx, ny, nz, vsx, vsy, vsz,
     0, 0, 1,  // B0 direction
     alpha0, alpha1,
@@ -977,7 +977,8 @@ async function runQsmartCore({
   // =========================================================================
   postProgress(0.90, 'Scaling to ppm...');
 
-  const qsmResult = new Float64Array(voxelCount);
+  // `let`, not `const`: mean referencing below reassigns this.
+  let qsmResult = new Float64Array(voxelCount);
   if (!isPpm) {
     const gamma = QSMConfig.PHYSICS.GYROMAGNETIC_RATIO;
     const scaleFactor = 1e6 / (gamma * b0Tesla);
@@ -1558,7 +1559,7 @@ async function runTotalFieldPipeline(data) {
     // =========================================================================
     // Step 5: Dipole inversion
     // =========================================================================
-    const qsmResult = await runDipoleInversion(
+    let qsmResult = await runDipoleInversion(
       localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
       dipoleMethod, pipelineSettings,
       magnitudeData,
@@ -1720,7 +1721,7 @@ async function runLocalFieldPipeline(data) {
     // =========================================================================
     // Step 4: Dipole inversion
     // =========================================================================
-    const qsmResult = await runDipoleInversion(
+    let qsmResult = await runDipoleInversion(
       localField, mask, nx, ny, nz, vsx, vsy, vsz,
       dipoleMethod, pipelineSettings,
       magnitudeData,
