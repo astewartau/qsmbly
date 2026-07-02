@@ -14,6 +14,17 @@
 
   <!-- Our styles last to override -->
   <link rel="stylesheet" href="css/modern-styles.css">
+  <link rel="stylesheet" href="css/landing.css">
+
+  <!-- Hide the landing overlay immediately for returning visitors (avoids a
+       flash of the welcome screen before the app JS loads). -->
+  <script>
+    try {
+      if (localStorage.getItem('qsmbly_seen_landing') === 'true') {
+        document.documentElement.classList.add('landing-seen');
+      }
+    } catch (e) { /* storage unavailable; show landing */ }
+  </script>
 
   <!-- NiiVue -->
   <script type="module">
@@ -23,16 +34,139 @@
   </script>
 </head>
 <body>
+  <!-- ==================================================================== -->
+  <!-- Landing / welcome overlay (shown on first visit, hidden after Launch) -->
+  <!-- ==================================================================== -->
+  <div class="landing-overlay" id="landingPage">
+    <div class="landing-scroll">
+      <div class="landing-inner">
+        <nav class="landing-nav">
+          <div class="landing-brand">
+            <img src="QSMbly.png" alt="QSMbly" width="28" height="28">
+            <span>QSMbly</span>
+          </div>
+          <div class="landing-nav-links">
+            <a href="https://github.com/astewartau/qsmbly" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="https://qsmxt.github.io/QSMxT/" target="_blank" rel="noopener noreferrer">QSMxT</a>
+            <a href="#" id="landingNavLaunch" class="landing-nav-launch">Launch &rarr;</a>
+          </div>
+        </nav>
+
+        <header class="landing-hero">
+          <img src="QSMbly.png" alt="QSMbly" class="landing-hero-logo">
+          <h1><span class="grad">Quantitative Susceptibility Mapping</span><br>in your browser</h1>
+          <p class="landing-tagline">A complete QSM reconstruction pipeline that runs entirely on your machine.</p>
+          <p class="landing-sub">No installation. No servers. No data uploads. Load your MRI phase data, choose your algorithms, and generate susceptibility maps &mdash; all client-side using WebAssembly.</p>
+          <div class="landing-cta">
+            <button class="landing-btn-primary" id="landingLaunch" type="button">
+              Launch QSMbly
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </button>
+            <button class="landing-btn-ghost" id="landingLaunchTour" type="button">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Take a guided tour
+            </button>
+          </div>
+          <p class="landing-badges">Powered by QSM.rs &middot; WebAssembly &middot; Private by design</p>
+        </header>
+
+        <section class="landing-section">
+          <h2>Why QSMbly?</h2>
+          <div class="landing-features">
+            <div class="landing-card">
+              <div class="landing-card-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </div>
+              <h3>Completely private</h3>
+              <p>Your data never leaves your device. All processing happens locally, so there's no need to de-identify scans first.</p>
+            </div>
+            <div class="landing-card">
+              <div class="landing-card-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              </div>
+              <h3>Zero installation</h3>
+              <p>No Python, MATLAB, or Docker. Just open the page &mdash; the whole pipeline is compiled to WebAssembly.</p>
+            </div>
+            <div class="landing-card">
+              <div class="landing-card-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+              </div>
+              <h3>20+ algorithms</h3>
+              <p>A full pipeline: phase unwrapping, background field removal, and dipole inversion &mdash; mix and match to suit your data.</p>
+            </div>
+            <div class="landing-card">
+              <div class="landing-card-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </div>
+              <h3>Interactive</h3>
+              <p>Inspect every stage with a built-in NiiVue viewer. Adjust masking and contrast and see results in real time.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="landing-section">
+          <h2>How it works</h2>
+          <div class="landing-steps">
+            <div class="landing-step">
+              <h3>Load data</h3>
+              <p>Drop DICOM or NIfTI magnitude and phase images &mdash; or load the bundled example dataset.</p>
+            </div>
+            <div class="landing-step">
+              <h3>Set parameters</h3>
+              <p>Enter echo times and field strength. These auto-fill from JSON sidecars when available.</p>
+            </div>
+            <div class="landing-step">
+              <h3>Mask &amp; configure</h3>
+              <p>Generate a brain mask and pick an algorithm for each pipeline stage.</p>
+            </div>
+            <div class="landing-step">
+              <h3>Run &amp; explore</h3>
+              <p>Reconstruct your susceptibility map and explore every intermediate result.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="landing-sibling">
+          <h2>The same engine as QSMxT</h2>
+          <p>QSMbly runs the exact reconstruction algorithms as <a href="https://qsmxt.github.io/QSMxT/" target="_blank" rel="noopener noreferrer">QSMxT</a>, the BIDS-native command-line QSM toolbox. Both are powered by the shared <a href="https://github.com/astewartau/QSM.rs" target="_blank" rel="noopener noreferrer">QSM.rs</a> Rust core. Experiment here in the browser, then scale up to QSMxT for batch processing on your own machine.</p>
+          <button class="landing-btn-primary" id="landingLaunchBottom" type="button" onclick="document.getElementById('landingLaunch').click()">
+            Get started
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        </section>
+
+        <footer class="landing-footer">
+          <span>&copy; QSMbly &middot; <span id="landingVersion"></span></span>
+          <span>
+            <a href="https://github.com/astewartau/qsmbly" target="_blank" rel="noopener noreferrer">GitHub</a>
+            &nbsp;&middot;&nbsp;
+            <a href="https://github.com/astewartau/QSM.rs" target="_blank" rel="noopener noreferrer">QSM.rs</a>
+            &nbsp;&middot;&nbsp;
+            <a href="https://neurodesk.org/" target="_blank" rel="noopener noreferrer">Neurodesk</a>
+          </span>
+        </footer>
+      </div>
+    </div>
+  </div>
+
   <div class="app-container">
     <!-- Header -->
     <header class="app-header">
-      <div class="logo">
+      <div class="logo" id="appLogo" title="Back to welcome page" style="cursor: pointer;">
         <div class="logo-icon">
           <img src="QSMbly.png" alt="QSMbly" width="20" height="20">
         </div>
         <h1>QSMbly <span>Quantitative Susceptibility Mapping</span> <span class="version" id="appVersion"></span></h1>
       </div>
       <div class="header-links">
+        <button class="header-link" id="openGuide" title="Guided tour">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span>Guide</span>
+        </button>
         <button class="header-link" id="openAbout" title="About">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/>
@@ -462,7 +596,28 @@
       </section>
       </div>
 
-      <!-- Command Preview -->
+      <!-- Export bar (reproduce the pipeline as a command / methods write-up) -->
+      <div class="sidebar-toolbar" id="exportBar">
+        <div class="export-buttons">
+          <button class="export-btn" id="exportCommand" disabled title="View the equivalent QSMxT command line for this pipeline">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 17 10 11 4 5"/>
+              <line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            QSMxT Command
+          </button>
+          <button class="export-btn" id="exportMethods" disabled title="View a methods paragraph with citations for this pipeline">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <line x1="10" y1="9" x2="8" y2="9"/>
+            </svg>
+            Methods
+          </button>
+        </div>
+      </div>
 
       <!-- Status Bar (fixed at bottom) -->
       <div class="sidebar-status" id="statusBar">
@@ -579,10 +734,6 @@
       <div class="console-container" id="console">
         <div class="console-header">
           <span class="console-title">Console</span>
-          <div style="display: flex; gap: 8px; margin-left: 12px;">
-            <button class="console-clear" id="exportCommand" disabled>Command</button>
-            <button class="console-clear" id="exportMethods" disabled>Methods</button>
-          </div>
           <div style="display: flex; gap: 8px; margin-left: auto;">
             <button class="console-clear" id="copyConsole">Copy</button>
             <button class="console-clear" id="clearConsole">Clear</button>
@@ -1485,7 +1636,7 @@
       <div class="modal-body" style="min-height: 300px;">
         <div id="exportCommandPane">
           <p class="command-modal-description">
-            Run this command with <a href="https://github.com/astewartau/qsmxt.rs" target="_blank" rel="noopener">qsmxt.rs</a> to process a full BIDS dataset with your current settings:
+            Run this command with <a href="https://qsmxt.github.io/QSMxT/" target="_blank" rel="noopener">QSMxT</a> to process a full BIDS dataset with your current settings:
           </p>
           <pre id="commandPreviewText" class="command-modal-code"></pre>
         </div>
@@ -1553,6 +1704,26 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-primary" id="closeSwiSettings2">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Welcome-tour prompt (shown once after first launch) -->
+  <div class="modal-overlay" id="welcomeModal">
+    <div class="modal welcome-modal">
+      <div class="modal-body">
+        <div class="welcome-modal-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <h3>Welcome to QSMbly!</h3>
+        <p>New here? Take a quick guided tour and we'll walk you through building your first susceptibility map, step by step.</p>
+        <div class="welcome-modal-actions">
+          <button class="tour-btn tour-btn-ghost" id="welcomeLater" type="button">Maybe later</button>
+          <button class="tour-btn tour-btn-primary" id="welcomeStartTour" type="button">Start tour</button>
+        </div>
+        <label class="welcome-dontshow">
+          <input type="checkbox" id="welcomeDontShow"> Don't show this again
+        </label>
       </div>
     </div>
   </div>

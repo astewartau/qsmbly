@@ -12,6 +12,8 @@ import {
 import { ConsoleOutput } from './modules/ui/ConsoleOutput.js';
 import { ModalManager } from './modules/ui/ModalManager.js';
 import { ProgressManager } from './modules/ui/ProgressManager.js';
+import { LandingPage } from './modules/ui/LandingPage.js';
+import { Tutorial, WelcomePrompt } from './modules/ui/Tutorial.js';
 import { EchoNavigator } from './modules/viewer/EchoNavigator.js';
 import { FileIOController, PipelineExecutor, PipelineSettingsController, MaskController, ViewerController } from './controllers/index.js';
 import { DicomController } from './controllers/DicomController.js';
@@ -141,6 +143,14 @@ class QSMApp {
     if (versionEl && window.QSMConfig?.VERSION) {
       versionEl.textContent = `v${window.QSMConfig.VERSION}`;
     }
+    const landingVersionEl = document.getElementById('landingVersion');
+    if (landingVersionEl && window.QSMConfig?.VERSION) {
+      landingVersionEl.textContent = `v${window.QSMConfig.VERSION}`;
+    }
+
+    // Set up landing/tutorial first so the welcome overlay is always
+    // dismissable, even if a later init step (e.g. the WebGL viewer) fails.
+    this._setupOnboarding();
 
     // Initialize FileIOController first (other controllers depend on it)
     this.fileIOController = new FileIOController({
@@ -228,6 +238,106 @@ class QSMApp {
 
     // Start loading WASM in the background immediately
     this.pipelineExecutor.initialize();
+  }
+
+  /**
+   * Wire up the landing overlay, welcome-tour prompt and guided tutorial.
+   * On first visit the landing page is shown; launching from it may kick off
+   * the tour. The tour is always re-launchable from the header "Guide" button.
+   */
+  _setupOnboarding() {
+    this.tutorial = new Tutorial(this._buildTourSteps());
+
+    this.welcomePrompt = new WelcomePrompt({
+      onStart: () => this.tutorial.start(),
+    });
+
+    this.landingPage = new LandingPage({
+      // Normal launch: offer the tour once (unless the user opted out).
+      onLaunch: () => {
+        if (!this.welcomePrompt.isDismissed()) {
+          this.welcomePrompt.open();
+        }
+      },
+      // "Take a guided tour" button: start immediately.
+      onLaunchTour: () => this.tutorial.start(),
+    });
+
+    // Header "Guide" button re-runs the tour on demand.
+    document.getElementById('openGuide')?.addEventListener('click', () => {
+      if (!this.tutorial.isRunning()) this.tutorial.start();
+    });
+
+    // Clicking the logo returns to the welcome page.
+    document.getElementById('appLogo')?.addEventListener('click', () => {
+      this.tutorial.stop();
+      this.landingPage.show();
+    });
+  }
+
+  /** Expand a collapsed sidebar accordion section by id, and scroll to it. */
+  _expandSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    if (!section) return;
+    section.classList.remove('hidden');
+    section.classList.remove('collapsed');
+  }
+
+  /** Step definitions for the guided tour (targets existing sidebar elements). */
+  _buildTourSteps() {
+    return [
+      {
+        selector: '#inputSection',
+        title: 'Start with your data',
+        body: 'Drop NIfTI or DICOM magnitude and phase files here — or click "Load example data" to try QSMbly instantly.',
+        placement: 'right',
+        onEnter: () => this._expandSection('inputSection'),
+        // Advance once files have been loaded (the triage panel appears).
+        waitFor: () => {
+          const t = document.getElementById('fileTriage');
+          return !!t && t.style.display !== 'none';
+        },
+      },
+      {
+        selector: '#paramsSection',
+        title: 'Set acquisition parameters',
+        body: 'Enter the echo times and field strength for your scan. These auto-fill from JSON sidecars when available.',
+        placement: 'right',
+        onEnter: () => this._expandSection('paramsSection'),
+      },
+      {
+        selector: '#maskSection',
+        title: 'Create a brain mask',
+        body: 'Pick a masking source and click "Prepare Input" to generate a brain mask — or upload your own.',
+        placement: 'right',
+        onEnter: () => this._expandSection('maskSection'),
+      },
+      {
+        selector: '#pipelineSection',
+        title: 'Choose your pipeline',
+        body: 'Select an algorithm for each stage: phase unwrapping, background removal and dipole inversion. Use "Advanced" for fine-grained control.',
+        placement: 'right',
+        onEnter: () => this._expandSection('pipelineSection'),
+      },
+      {
+        selector: '#runPipelineSidebar',
+        title: 'Run the reconstruction',
+        body: 'Click "Start QSM" to run the full pipeline. Progress appears at the bottom of the sidebar.',
+        placement: 'right',
+      },
+      {
+        selector: '.app-main',
+        title: 'Explore your results',
+        body: 'Your susceptibility map and every intermediate stage appear here. Pan, zoom and adjust contrast interactively.',
+        placement: 'left',
+      },
+      {
+        selector: '#exportBar',
+        title: 'Reproduce & cite your run',
+        body: 'When you\'re happy with a pipeline, grab the equivalent QSMxT command line to batch-process on your own machine, or a ready-to-paste methods paragraph with citations. That\'s it — enjoy!',
+        placement: 'top',
+      },
+    ];
   }
 
   // Pipeline executor callbacks
