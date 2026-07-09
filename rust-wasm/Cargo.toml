@@ -14,10 +14,13 @@ simd = ["qsm-core/simd"]
 
 [dependencies]
 # Core QSM algorithms
-qsm-core = { git = "https://github.com/astewartau/QSM.rs.git", tag = "v0.15.0" }
+# TEMP: local paths while refactoring to the new QSM.rs API. NOTE: no `parallel`
+# feature (WASM is single-threaded). Switch back to published tags once QSM.rs
+# #43 and the matching qsmxt-config are merged & released.
+qsm-core = { path = "/home/ashley/repos/qsm/QSM.rs" }
 
 # Pipeline configuration, command generation, methods text
-qsmxt-config = { git = "https://github.com/astewartau/qsmxt.rs.git", tag = "v0.10.0" }
+qsmxt-config = { path = "/home/ashley/repos/qsm/qsmxt/qsmxt/crates/qsmxt-config" }
 
 # WASM bindings
 wasm-bindgen = "0.2"
