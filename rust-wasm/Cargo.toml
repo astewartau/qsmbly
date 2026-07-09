@@ -18,9 +18,8 @@ qsm-core = { git = "https://github.com/astewartau/QSM.rs.git", tag = "v0.16.0" }
 
 # Pipeline configuration, command generation, methods text.
 # qsmxt-config's canonical home is the QSMxT/QSMxT workspace (the old
-# astewartau/qsmxt.rs repo is being retired). Pinned to a commit until the next
-# tagged qsmxt release.
-qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", rev = "d415462f06f285c9e0bd791fea187827b33bc784" }
+# astewartau/qsmxt.rs repo is being retired).
+qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", tag = "v9.3.0" }
 
 # WASM bindings
 wasm-bindgen = "0.2"
