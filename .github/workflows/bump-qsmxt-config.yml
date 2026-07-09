@@ -1,15 +1,15 @@
 name: Bump qsmxt-config pin
 
-# Opens a PR bumping the qsmxt-config git tag in rust-wasm/Cargo.toml whenever
-# qsmxt.rs publishes a release (it fires a repository_dispatch). Can also be run
-# manually with a specific version.
+# Opens a PR pinning rust-wasm/Cargo.toml's qsmxt-config to a new QSMxT/QSMxT
+# release tag whenever QSMxT publishes a release (it fires a repository_dispatch).
+# Can also be run manually with a specific version.
 on:
   repository_dispatch:
     types: [qsmxt-config-release]
   workflow_dispatch:
     inputs:
       version:
-        description: 'qsmxt-config tag to pin (e.g. v0.9.0)'
+        description: 'QSMxT release tag to pin (e.g. v9.3.0)'
         required: true
 
 permissions:
@@ -29,10 +29,12 @@ jobs:
           if [ -z "$V" ]; then echo "no version provided" >&2; exit 1; fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
-      - name: Bump qsmxt-config tag in Cargo.toml
+      - name: Pin qsmxt-config to the release tag in Cargo.toml
         run: |
           V="${{ steps.ver.outputs.version }}"
-          sed -i -E "s#(qsmxt-config = \{ git = \"https://github.com/astewartau/qsmxt.rs.git\", tag = \")[^\"]+#\1${V}#" rust-wasm/Cargo.toml
+          # qsmxt-config lives in the QSMxT/QSMxT workspace; replace whatever
+          # git ref is pinned (rev or tag) with the new release tag.
+          sed -i -E "s#(qsmxt-config = \{ git = \"https://github.com/QSMxT/QSMxT.git\", )(rev|tag) = \"[^\"]+\"#\1tag = \"${V}\"#" rust-wasm/Cargo.toml
           grep qsmxt-config rust-wasm/Cargo.toml
 
       - name: Setup Rust
@@ -49,13 +51,13 @@ jobs:
           branch: bump-qsmxt-config-${{ steps.ver.outputs.version }}
           title: "Bump qsmxt-config to ${{ steps.ver.outputs.version }}"
           body: |
-            Automated pin bump triggered by a qsmxt.rs release
+            Automated pin bump triggered by a QSMxT release
             (**${{ steps.ver.outputs.version }}**).
 
-            Updates `rust-wasm/Cargo.toml` (+ `Cargo.lock`) to the new
-            qsmxt-config tag. Review, then merge — the GitHub Pages deploy
-            runs when you cut the next qsm-wasm release.
+            Pins `rust-wasm/Cargo.toml` (+ `Cargo.lock`) to the new QSMxT/QSMxT
+            release tag. Review, then merge — the GitHub Pages deploy runs when
+            you cut the next qsm-wasm release.
 
-            > If qsm-core was also bumped in this qsmxt-config release, bump
-            > the qsm-core pin here too so both resolve to the same version.
+            > If qsm-core was also bumped in this release, bump the qsm-core pin
+            > here too so both resolve to the same version.
           labels: dependencies
