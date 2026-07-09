@@ -340,9 +340,12 @@ pub fn tikhonov_wasm(
 // ============================================================================
 
 /// Build `VsharpParams` from an explicit list of mm radii (the wasm API still
-/// takes radii; qsm-core now derives them from min/max radius *factors*, so we
-/// invert the factor formula: max factor is relative to the smallest voxel,
-/// min factor to the largest — matching the CLI mapping).
+/// takes radii; qsm-core now derives them from radius *factors*).
+///
+/// qsm-core regenerates the radii as: `start = max_radius_factor * min_voxel`,
+/// stepping down by `step = min_radius_factor * max_voxel`. So we map the
+/// largest radius to `max_radius_factor` and the list's spacing (V-SHARP radii
+/// are uniformly spaced) to `min_radius_factor`.
 fn vsharp_params_from_radii(
     radii: &[f64], threshold: f64, vsx: f64, vsy: f64, vsz: f64,
 ) -> qsm_core::bgremove::VsharpParams {
@@ -353,11 +356,19 @@ fn vsharp_params_from_radii(
     let min_v = vsx.min(vsy).min(vsz);
     let max_v = vsx.max(vsy).max(vsz);
     let max_r = radii.iter().cloned().fold(f64::MIN, f64::max);
-    let min_r = radii.iter().cloned().fold(f64::MAX, f64::min);
+    // Recover the step from the two largest radii; a single-radius list has no
+    // step, so fall back to the radius itself (one-shot SMV).
+    let step = if radii.len() >= 2 {
+        let mut desc = radii.to_vec();
+        desc.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        (desc[0] - desc[1]).abs().max(f64::EPSILON)
+    } else {
+        max_r
+    };
     qsm_core::bgremove::VsharpParams {
         threshold,
         max_radius_factor: max_r / min_v,
-        min_radius_factor: min_r / max_v,
+        min_radius_factor: step / max_v,
     }
 }
 
