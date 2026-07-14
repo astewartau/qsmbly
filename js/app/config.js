@@ -12,11 +12,12 @@
 const isWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope;
 const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined' && window.QSMConfig === undefined);
 
-// Application version (keep in sync with package.json, Cargo.toml, and git tags)
-export const VERSION = '0.19.0';
+// Application version — 0.0.0 in git; the release CI stamps the real version (the release
+// tag) into the build at deploy time. Single source of truth is the git tag.
+export const VERSION = '0.0.0';
 
-// QSM.rs core library version (keep in sync with qsm-core dependency in rust-wasm/Cargo.toml)
-export const QSM_RS_VERSION = '0.16.0';
+// QSM.rs core library version (the pinned qsm-core dependency tag in rust-wasm/Cargo.toml)
+export const QSM_RS_VERSION = '0.18.0';
 
 // Physics constants
 export const PHYSICS = {

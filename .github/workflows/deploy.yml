@@ -14,7 +14,7 @@ on:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
-  contents: write  # Need write to commit version updates
+  contents: write  # upload build artifacts to the release (not for committing source)
   pages: write
   id-token: write
 
@@ -55,7 +55,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Deploying version: $VERSION"
 
-      - name: Update version in source files
+      - name: Stamp version into the build (working tree only — never committed)
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
 
@@ -64,36 +64,20 @@ jobs:
             exit 1
           fi
 
-          # Update config.js
+          # These files ship 0.0.0 placeholders in git; the real version comes from the
+          # release tag and is injected here at build time only (no commit, no tag move).
           sed -i "s/^export const VERSION = '[^']*'/export const VERSION = '$VERSION'/" js/app/config.js
-
-          # Update package.json
           sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
-
-          # Update Cargo.toml
           sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" rust-wasm/Cargo.toml
 
-          # Extract QSM.rs version from Cargo.toml dependency tag and update config.js
+          # QSM.rs core version comes from the pinned qsm-core dependency tag.
           QSM_RS_VERSION=$(grep 'qsm-core' rust-wasm/Cargo.toml | grep -oP 'tag = "v\K[^"]+' || echo "")
           if [ -n "$QSM_RS_VERSION" ]; then
             sed -i "s/^export const QSM_RS_VERSION = '[^']*'/export const QSM_RS_VERSION = '$QSM_RS_VERSION'/" js/app/config.js
-            echo "Updated QSM.rs version to $QSM_RS_VERSION"
+            echo "Stamped QSM.rs version $QSM_RS_VERSION"
           fi
 
-          echo "Updated version to $VERSION in all files"
-
-      - name: Commit version update and move tag
-        if: github.event_name == 'release'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add js/app/config.js package.json rust-wasm/Cargo.toml
-          git diff --staged --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
-          git push
-          TAG="v${{ steps.version.outputs.VERSION }}"
-          git tag -f "$TAG"
-          git push origin "$TAG" --force
+          echo "Stamped app version $VERSION into the build"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

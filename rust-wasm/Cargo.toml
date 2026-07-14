@@ -1,6 +1,6 @@
 [package]
 name = "qsm_wasm"
-version = "0.19.0"
+version = "0.0.0"  # set at build time from the release tag by the deploy workflow
 edition = "2021"
 authors = ["QSM-WASM"]
 description = "WASM bindings for QSM processing pipeline (powered by qsm-core)"
