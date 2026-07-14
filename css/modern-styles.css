@@ -1,6 +1,9 @@
 /* QSM-WASM Modern Styles */
 
 :root {
+  /* Height of the shared QSM ecosystem bar pinned at the very top */
+  --qsm-eco-h: 34px;
+
   /* Color palette - professional medical/scientific theme */
   --color-bg: #0f1419;
   --color-surface: #1a2332;
@@ -85,10 +88,22 @@ body {
   display: grid;
   grid-template-columns: 320px 1fr;
   grid-template-rows: auto 1fr auto;
-  height: 100vh;
-  max-height: 100vh;
+  /* leave room for the ecosystem bar pinned at the top of the viewport */
+  margin-top: var(--qsm-eco-h, 34px);
+  height: calc(100vh - var(--qsm-eco-h, 34px));
+  max-height: calc(100vh - var(--qsm-eco-h, 34px));
   gap: 0;
   overflow: hidden;
+}
+
+/* The shared ecosystem bar sits above both the landing overlay and the app.
+   z-index 2100: over the landing overlay (2000), under tour/modals (2500+). */
+.qsm-eco-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2100;
 }
 
 .app-header {
@@ -1729,8 +1744,8 @@ select {
   .app-container {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr auto;
-    height: 100vh;
-    height: 100dvh;
+    height: calc(100vh - var(--qsm-eco-h, 34px));
+    height: calc(100dvh - var(--qsm-eco-h, 34px));
   }
 
   /* Hide footer on mobile — tab bar replaces it */

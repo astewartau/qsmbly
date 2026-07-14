@@ -16,14 +16,25 @@
   <link rel="stylesheet" href="css/modern-styles.css">
   <link rel="stylesheet" href="css/landing.css">
 
-  <!-- Hide the landing overlay immediately for returning visitors (avoids a
-       flash of the welcome screen before the app JS loads). -->
+  <!-- Cross-project "ecosystem bar", shown atop the landing overlay
+       (canonical source: QSMxT/qsmxt.github.io → qsm-nav.js). -->
   <script>
-    try {
-      if (localStorage.getItem('qsmbly_seen_landing') === 'true') {
-        document.documentElement.classList.add('landing-seen');
-      }
-    } catch (e) { /* storage unavailable; show landing */ }
+    (function () {
+      var s = document.createElement("script");
+      var local = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+      s.src = local ? "/qsm-nav.js" : "https://qsmxt.github.io/qsm-nav.js";
+      s.dataset.current = "bly"; // mounts at the top of <body> — pinned above both landing and app
+      document.head.appendChild(s);
+    })();
+  </script>
+
+  <!-- The splash is always the front door. The app lives at "#app" (e.g.
+       /qsmbly/#app), so only skip straight to it when that hash is present
+       (avoids a flash of the welcome screen before the app JS loads). -->
+  <script>
+    if (location.hash === '#app') {
+      document.documentElement.classList.add('landing-seen');
+    }
   </script>
 
   <!-- NiiVue -->
@@ -39,24 +50,24 @@
   <!-- ==================================================================== -->
   <div class="landing-overlay" id="landingPage">
     <div class="landing-scroll">
-      <div class="landing-inner">
-        <nav class="landing-nav">
+      <nav class="landing-nav">
+        <div class="landing-nav-inner">
           <div class="landing-brand">
-            <img src="QSMbly.png" alt="QSMbly" width="28" height="28">
+            <img src="icon.svg" alt="QSMbly" width="26" height="26">
             <span>QSMbly</span>
           </div>
           <div class="landing-nav-links">
             <a href="https://github.com/astewartau/qsmbly" target="_blank" rel="noopener noreferrer">GitHub</a>
-            <a href="https://qsmxt.github.io/QSMxT/" target="_blank" rel="noopener noreferrer">QSMxT</a>
             <a href="#" id="landingNavLaunch" class="landing-nav-launch">Launch &rarr;</a>
           </div>
-        </nav>
+        </div>
+      </nav>
 
+      <div class="landing-inner">
         <header class="landing-hero">
-          <img src="QSMbly.png" alt="QSMbly" class="landing-hero-logo">
-          <h1><span class="grad">Quantitative Susceptibility Mapping</span><br>in your browser</h1>
-          <p class="landing-tagline">A complete QSM reconstruction pipeline that runs entirely on your machine.</p>
-          <p class="landing-sub">No installation. No servers. No data uploads. Load your MRI phase data, choose your algorithms, and generate susceptibility maps &mdash; all client-side using WebAssembly.</p>
+          <h1 class="grad">QSMbly</h1>
+          <p class="landing-tagline">Quantitative Susceptibility Mapping, in your browser.</p>
+          <p class="landing-sub">A complete QSM reconstruction pipeline that runs entirely on your machine. No installation, no servers, no data uploads &mdash; load your MRI phase data, choose your algorithms, and generate susceptibility maps, all client-side using WebAssembly.</p>
           <div class="landing-cta">
             <button class="landing-btn-primary" id="landingLaunch" type="button">
               Launch QSMbly

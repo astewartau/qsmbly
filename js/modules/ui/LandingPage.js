@@ -2,14 +2,15 @@
  * Landing Page Controller
  *
  * Manages the full-viewport welcome overlay (#landingPage) shown on top of the
- * app. On first visit the overlay is visible; once the user launches the app it
- * is hidden and a flag is stored so returning visitors go straight to the tool.
+ * app. The splash is always the front door: it shows on every plain visit. The
+ * app itself lives at the "#app" hash (e.g. /qsmbly/#app), so launching just
+ * navigates there and returning to the splash clears the hash.
  *
  * The overlay is hidden by toggling `landing-seen` on <html> (CSS handles the
  * actual display), which matches the FOUC-avoiding head script in index.html.
  */
 
-const STORAGE_KEY = 'qsmbly_seen_landing';
+const APP_HASH = '#app';
 
 export class LandingPage {
   /**
@@ -25,29 +26,20 @@ export class LandingPage {
     this._wire();
   }
 
-  /** True the first time this browser opens the app (nothing stored yet). */
-  isFirstVisit() {
-    try {
-      return localStorage.getItem(STORAGE_KEY) !== 'true';
-    } catch {
-      return true;
-    }
-  }
-
   /** Show the landing overlay (e.g. when the logo is clicked). */
   show() {
     document.documentElement.classList.remove('landing-seen');
+    if (location.hash === APP_HASH) {
+      // drop "#app" from the URL without adding a history entry
+      history.replaceState(null, '', location.pathname + location.search);
+    }
     if (this.overlay) this.overlay.scrollTop = 0;
   }
 
-  /** Hide the overlay and remember that the user has seen it. */
+  /** Hide the overlay and reveal the app (at the #app route). */
   hide() {
     document.documentElement.classList.add('landing-seen');
-    try {
-      localStorage.setItem(STORAGE_KEY, 'true');
-    } catch {
-      /* storage may be unavailable (private mode); non-fatal */
-    }
+    if (location.hash !== APP_HASH) location.hash = APP_HASH;
   }
 
   _wire() {
