@@ -339,22 +339,18 @@ pub fn tikhonov_wasm(
 // WASM Exports: Background Field Removal
 // ============================================================================
 
-/// Build `VsharpParams` from an explicit list of mm radii (the wasm API still
-/// takes radii; qsm-core now derives them from radius *factors*).
+/// Build `VsharpParams` from an explicit list of mm radii.
 ///
-/// qsm-core regenerates the radii as: `start = max_radius_factor * min_voxel`,
-/// stepping down by `step = min_radius_factor * max_voxel`. So we map the
-/// largest radius to `max_radius_factor` and the list's spacing (V-SHARP radii
-/// are uniformly spaced) to `min_radius_factor`.
+/// qsm-core takes absolute mm radii directly: `max_radius` is the largest
+/// radius and `min_radius` is the step between successive radii (V-SHARP radii
+/// are uniformly spaced), which is also the smallest kernel.
 fn vsharp_params_from_radii(
-    radii: &[f64], threshold: f64, vsx: f64, vsy: f64, vsz: f64,
+    radii: &[f64], threshold: f64, _vsx: f64, _vsy: f64, _vsz: f64,
 ) -> qsm_core::bgremove::VsharpParams {
     let d = qsm_core::bgremove::VsharpParams::default();
     if radii.is_empty() {
         return qsm_core::bgremove::VsharpParams { threshold, ..d };
     }
-    let min_v = vsx.min(vsy).min(vsz);
-    let max_v = vsx.max(vsy).max(vsz);
     let max_r = radii.iter().cloned().fold(f64::MIN, f64::max);
     // Recover the step from the two largest radii; a single-radius list has no
     // step, so fall back to the radius itself (one-shot SMV).
@@ -367,8 +363,8 @@ fn vsharp_params_from_radii(
     };
     qsm_core::bgremove::VsharpParams {
         threshold,
-        max_radius_factor: max_r / min_v,
-        min_radius_factor: step / max_v,
+        max_radius: max_r,
+        min_radius: step,
     }
 }
 
@@ -401,10 +397,9 @@ pub fn sharp_wasm(
 
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
     let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
-    let radius_factor = radius / vsx.min(vsy).min(vsz);
     let (local_field, eroded_mask) = qsm_core::bgremove::sharp(
         &field_norm, mask, &grid,
-        &qsm_core::bgremove::SharpParams { threshold, radius_factor },
+        &qsm_core::bgremove::SharpParams { threshold, radius },
     );
 
     // Convert back and combine into single output
@@ -1252,7 +1247,7 @@ pub fn ismv_wasm(
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
     let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
     let ismv_params = qsm_core::bgremove::IsmvParams {
-        tol, max_iter, radius_factor: radius / vsx.max(vsy).max(vsz),
+        tol, max_iter, radius,
     };
     let (local_field, eroded_mask) = qsm_core::bgremove::ismv(
         &field_norm, mask, &grid, &ismv_params, |_, _| {}
@@ -1286,7 +1281,7 @@ pub fn ismv_wasm_with_progress(
     let field_norm: Vec<f64> = field.iter().map(|&v| v * scale).collect();
     let callback = progress_callback.clone();
     let ismv_params = qsm_core::bgremove::IsmvParams {
-        tol, max_iter, radius_factor: radius / vsx.max(vsy).max(vsz),
+        tol, max_iter, radius,
     };
     let (local_field, eroded_mask) = qsm_core::bgremove::ismv(
         &field_norm, mask, &grid, &ismv_params,
