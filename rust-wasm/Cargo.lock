@@ -406,7 +406,7 @@ dependencies = [
 [[package]]
 name = "qsmxt-config"
 version = "0.0.0"
-source = "git+https://github.com/QSMxT/QSMxT.git?tag=v9.8.0#be37bacd814b3a151d5d91757b56b4bd869ee27a"
+source = "git+https://github.com/QSMxT/QSMxT.git?tag=v9.8.1#2821d309dc58ab836161e9963fad6537b4bf6c42"
 dependencies = [
  "qsm-core",
  "serde",
