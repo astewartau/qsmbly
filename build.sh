@@ -13,10 +13,12 @@ RUST_DIR="$SCRIPT_DIR/rust-wasm"
 WASM_DIR="$SCRIPT_DIR/wasm"
 
 # Parse arguments. We build TWO wasm bundles:
-#   - base (no onnx, ~2.3 MB): classical algorithms + chi-separation + relaxometry + the
+#   - base (no onnx, ~3.0 MB): classical algorithms + chi-separation + relaxometry + the
 #     deep-learning model registry. Loaded on page open.
-#   - DL   (onnx, ~10.7 MB): adds tract-based deep-learning inference. Lazy-loaded in the
+#   - DL   (onnx, ~22 MB): adds tract-based deep-learning inference. Lazy-loaded in the
 #     browser only when a deep-learning algorithm is selected (weights fetched in JS).
+#     (tract 0.23, from qsm-core v0.31.0, roughly doubled this bundle; it compresses to
+#     ~4.8 MB gzip / ~2.7 MB brotli, and only loads when a DL algorithm is picked.)
 # `--simd` adds SIMD acceleration to both.
 SIMD_FEAT=""
 BUILD_TYPE="standard"

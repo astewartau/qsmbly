@@ -42,7 +42,7 @@ export const BET_DEFAULTS = {
 };
 
 export const VSHARP_DEFAULTS = {
-  "threshold": 0.05,
+  "threshold": 0.2,
   "max_radius": 12,
   "min_radius": 1
 };
@@ -156,7 +156,7 @@ export const HDQSM_DEFAULTS = {
 };
 
 export const MEDI_DEFAULTS = {
-  "lambda": 0.000075,
+  "lambda": 0.001,
   "merit": false,
   "smv": true,
   "smv_radius": 5,
@@ -207,7 +207,13 @@ export const ROMEO_DEFAULTS = {
   "phase_linearity": true,
   "mag_coherence": true,
   "mag_weight": false,
-  "mag_weight2": false
+  "mag_weight2": false,
+  "bestpath": false,
+  "temporal_uncertain_unwrapping": 0.5,
+  "max_seeds": 1,
+  "merge_regions": false,
+  "correct_regions": false,
+  "wrap_addition": 0
 };
 
 export const MCPC3DS_DEFAULTS = {
