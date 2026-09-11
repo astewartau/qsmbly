@@ -1334,6 +1334,28 @@ function postBETError(message) {
   self.postMessage({ type: 'betError', message });
 }
 
+/**
+ * Signal-gated erosion of an existing mask (qsm-core / QSM-CI). Peels only low-signal boundary
+ * voxels — sinus and skull-base dropout — down to a depth cap, leaving dark interior structures
+ * (veins, iron-rich nuclei) alone. Pure Rust, so it lives in the base wasm bundle.
+ */
+async function runSignalErode(data) {
+  const { mask, magnitude, dims, voxelSize, params = {} } = data;
+  try {
+    const [nx, ny, nz] = dims;
+    const [vsx, vsy, vsz] = voxelSize;
+    const p = { ...QSMConfig.SIGNAL_ERODE_DEFAULTS, ...params };
+    const maskData = wasmModule.signal_erode_wasm(
+      new Uint8Array(mask), new Float64Array(magnitude),
+      nx, ny, nz, vsx, vsy, vsz,
+      p.threshold, p.depth_cap, p.global_erosions, p.bias_sigma, p.min_component,
+    );
+    self.postMessage({ type: 'signalErodeComplete', maskData }, [maskData.buffer]);
+  } catch (error) {
+    self.postMessage({ type: 'signalErodeError', message: error.message });
+  }
+}
+
 async function runBET(data) {
   const { magnitudeBuffer, fractionalIntensity, smoothnessFactor, gradientThreshold, iterations, subdivisions } = data;
   const betIterations = iterations || 1000;
@@ -2725,6 +2747,10 @@ self.onmessage = async function (e) {
 
       case 'runBET':
         await runBET(data);
+        break;
+
+      case 'signalErode':
+        await runSignalErode(data);
         break;
 
       case 'runSWI':

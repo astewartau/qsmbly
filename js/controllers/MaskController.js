@@ -725,6 +725,44 @@ export class MaskController {
     this.currentMaskData = dilateMask3D(this.currentMaskData, this.maskDims);
   }
 
+  /**
+   * Signal-gated erosion (qsm-core / QSM-CI): peel only low-signal boundary voxels — sinus and
+   * skull-base dropout — down to a depth cap, leaving dark interior structures alone. The wasm
+   * lives in the worker (as for BET), so this is a round-trip.
+   * @param {Object} params - overrides for QSMConfig.SIGNAL_ERODE_DEFAULTS
+   * @returns {Promise<boolean>} true if the mask was updated
+   */
+  async signalErodeMask3D(params = {}) {
+    if (!this.currentMaskData || !this.maskDims || !this.magnitudeData) return false;
+    const worker = this.getWorker();
+    const mask = Uint8Array.from(this.currentMaskData, (v) => (v > 0 ? 1 : 0));
+    const magnitude = Float64Array.from(this.magnitudeData);
+    return new Promise((resolve) => {
+      const handler = (e) => {
+        const { type, ...data } = e.data;
+        if (type === 'signalErodeComplete') {
+          worker.removeEventListener('message', handler);
+          this.currentMaskData = data.maskData;
+          resolve(true);
+        } else if (type === 'signalErodeError') {
+          worker.removeEventListener('message', handler);
+          this.updateOutput(`Signal-gated erosion failed: ${data.message}`);
+          resolve(false);
+        }
+      };
+      worker.addEventListener('message', handler);
+      worker.postMessage({
+        type: 'signalErode',
+        data: {
+          mask, magnitude,
+          dims: this.maskDims,
+          voxelSize: this.voxelSize || [1, 1, 1],
+          params,
+        },
+      }, [mask.buffer, magnitude.buffer]);
+    });
+  }
+
   // Fill holes in 3D mask - delegates to imported module
   fillHoles3D() {
     if (!this.currentMaskData || !this.maskDims) return;

@@ -736,6 +736,21 @@ class QSMApp {
       this.updateOutput("Mask dilated");
     });
 
+    document.getElementById('signalErodeMask')?.addEventListener('click', async () => {
+      // The gate divides out the receive-coil bias, so it assumes a magnitude image. If the mask
+      // was built from the phase-quality map that is what it will gate on — say so.
+      if ((this.maskPrepSettings?.source || 'phase_quality') === 'phase_quality') {
+        this.updateOutput("Note: signal-gated erosion is gating on the phase-quality map " +
+                          "(the mask input); it is designed for a magnitude image.");
+      }
+      this.updateOutput("Signal-gated erosion (removing low-signal boundary voxels)...");
+      if (await this.signalErodeMask3D()) {
+        this.maskOpsHistory.push('signal-erode');
+        await this.displayCurrentMask();
+        this.updateOutput("Low-signal boundary removed");
+      }
+    });
+
     document.getElementById('resetMask')?.addEventListener('click', async () => {
       this.updateOutput("Clearing mask...");
       this.maskOpsHistory = [];
@@ -2254,6 +2269,19 @@ class QSMApp {
 
     // Sync back
     this.currentMaskData = this.maskController.currentMaskData;
+  }
+
+  // Signal-gated erosion - delegates to MaskController (runs in the worker)
+  async signalErodeMask3D() {
+    this.maskController.currentMaskData = this.currentMaskData;
+    this.maskController.maskDims = this.maskDims;
+    this.maskController.magnitudeData = this.magnitudeData;
+    this.maskController.voxelSize = this.voxelSize || this.maskController.voxelSize;
+
+    const changed = await this.maskController.signalErodeMask3D();
+
+    this.currentMaskData = this.maskController.currentMaskData;
+    return changed;
   }
 
   // Fill holes in 3D mask - delegates to MaskController

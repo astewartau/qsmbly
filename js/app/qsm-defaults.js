@@ -233,3 +233,11 @@ export const HOMOGENEITY_DEFAULTS = {
   "sigma_mm": 7,
   "nbox": 3
 };
+
+export const SIGNAL_ERODE_DEFAULTS = {
+  "bias_sigma": 12,
+  "depth_cap": 5,
+  "global_erosions": 1,
+  "min_component": 1000,
+  "threshold": 0.8
+};

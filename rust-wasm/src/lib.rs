@@ -1742,6 +1742,48 @@ pub fn bet_wasm(
     mask
 }
 
+/// Signal-gated erosion of a mask (QSM-CI's harmonization masking refinement).
+///
+/// Peels only mask *boundary* voxels whose coil-debiased magnitude is low, iteratively and no
+/// deeper than `depth_cap`, so it eats inward through sinus / skull-base signal dropout and stops
+/// at real signal. Dark *interior* structures (veins, iron-rich nuclei) are never removed.
+///
+/// # Arguments
+/// * `mask` - binary mask (1 = inside), `nx * ny * nz`
+/// * `magnitude` - magnitude image on the same grid (e.g. the RSS over echoes)
+/// * `nx`, `ny`, `nz` - dimensions; `vsx`, `vsy`, `vsz` - voxel sizes in mm
+/// * `threshold` - signal gate as a fraction of the in-mask median (QSM-CI default 0.80)
+/// * `depth_cap` - never remove a voxel deeper than this many voxels below the surface (5; 0 = no cap)
+/// * `global_erosions` - plain erosions applied first (1)
+/// * `bias_sigma` - gaussian scale (voxels) of the receive-coil bias estimate divided out (12)
+/// * `min_component` - keep connected components of at least this many voxels (1000)
+///
+/// # Returns
+/// The refined binary mask as a Uint8Array.
+#[wasm_bindgen]
+pub fn signal_erode_wasm(
+    mask: &[u8],
+    magnitude: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    threshold: f64,
+    depth_cap: usize,
+    global_erosions: usize,
+    bias_sigma: f64,
+    min_component: usize,
+) -> Vec<u8> {
+    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
+    let params = qsm_core::utils::SignalErosionParams {
+        threshold, depth_cap, global_erosions, bias_sigma, min_component,
+    };
+    let before: usize = mask.iter().map(|&m| m as usize).sum();
+    let out = qsm_core::utils::signal_gated_erosion(mask, magnitude, &grid, &params);
+    let after: usize = out.iter().map(|&m| m as usize).sum();
+    console_log!("WASM signal-gated erosion (threshold {:.2}, depth cap {}): {} -> {} voxels ({:.1}%)",
+                 threshold, depth_cap, before, after, 100.0 * after as f64 / before.max(1) as f64);
+    out
+}
+
 /// Run BET with progress callback (aligned with FSL-BET2)
 ///
 /// The callback receives (current_iteration, total_iterations)
@@ -2951,6 +2993,21 @@ config_defaults!(get_romeo_defaults, qsmxt_config::config::RomeoConfig);
 config_defaults!(get_mcpc3ds_defaults, qsmxt_config::config::Mcpc3dsConfig);
 config_defaults!(get_linear_fit_defaults, qsmxt_config::config::LinearFitConfig);
 config_defaults!(get_homogeneity_defaults, qsmxt_config::config::HomogeneityConfig);
+
+/// Signal-gated erosion defaults. Its parameters live inline in qsmxt-config's `MaskOp` rather
+/// than in a `*Config` struct, so this reads them straight off qsm-core's defaults (the QSM-CI
+/// harmonization setting) instead of going through `config_defaults!`.
+#[wasm_bindgen]
+pub fn get_signal_erode_defaults() -> String {
+    let d = qsm_core::utils::SignalErosionParams::default();
+    serde_json::json!({
+        "threshold": d.threshold,
+        "depth_cap": d.depth_cap,
+        "global_erosions": d.global_erosions,
+        "bias_sigma": d.bias_sigma,
+        "min_component": d.min_component,
+    }).to_string()
+}
 
 // ============================================================================
 // Tests
