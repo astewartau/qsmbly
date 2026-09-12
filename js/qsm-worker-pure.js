@@ -67,6 +67,9 @@ async function initRayon(mod, label, threads) {
     const n = Math.max(1, Math.min(threads || hw, hw));
     await mod.initThreadPool(n);
     _rayonReady.add(mod);
+    // Let qsm-core use the pool for deep-learning inference too (tract dispatches on rayon's
+    // global pool on wasm). Per module instance: the DL bundle reports separately from the base.
+    mod.set_threads_ready_wasm?.(true);
     postLog(`Threadpool ready: ${n} threads [${label}]`);
   } catch (e) {
     console.warn(`initThreadPool [${label}] failed; continuing single-threaded:`, e);
@@ -1335,24 +1338,24 @@ function postBETError(message) {
 }
 
 /**
- * Signal-gated erosion of an existing mask (qsm-core / QSM-CI). Peels only low-signal boundary
- * voxels — sinus and skull-base dropout — down to a depth cap, leaving dark interior structures
- * (veins, iron-rich nuclei) alone. Pure Rust, so it lives in the base wasm bundle.
+ * Apply mask operations (`erode:2`, `fill-holes:0`, `signal-erode`, …) through qsm-core's masking
+ * pipeline — the same code the qsmxt pipeline runs, so an interactively refined mask matches the
+ * `--mask ...` section we print. Pure Rust, so it lives in the base wasm bundle.
  */
-async function runSignalErode(data) {
-  const { mask, magnitude, dims, voxelSize, params = {} } = data;
+async function runApplyMaskOps(data) {
+  const { mask, ops, inputData, magnitude, dims, voxelSize } = data;
   try {
     const [nx, ny, nz] = dims;
     const [vsx, vsy, vsz] = voxelSize;
-    const p = { ...QSMConfig.SIGNAL_ERODE_DEFAULTS, ...params };
-    const maskData = wasmModule.signal_erode_wasm(
-      new Uint8Array(mask), new Float64Array(magnitude),
+    const maskData = wasmModule.apply_mask_ops_wasm(
+      new Uint8Array(mask), ops,
+      new Float64Array(inputData || []),
+      new Float64Array(magnitude || []),
       nx, ny, nz, vsx, vsy, vsz,
-      p.threshold, p.depth_cap, p.global_erosions, p.bias_sigma, p.min_component,
     );
-    self.postMessage({ type: 'signalErodeComplete', maskData }, [maskData.buffer]);
+    self.postMessage({ type: 'applyMaskOpsComplete', maskData }, [maskData.buffer]);
   } catch (error) {
-    self.postMessage({ type: 'signalErodeError', message: error.message });
+    self.postMessage({ type: 'applyMaskOpsError', message: error.message || String(error) });
   }
 }
 
@@ -2749,8 +2752,8 @@ self.onmessage = async function (e) {
         await runBET(data);
         break;
 
-      case 'signalErode':
-        await runSignalErode(data);
+      case 'applyMaskOps':
+        await runApplyMaskOps(data);
         break;
 
       case 'runSWI':
