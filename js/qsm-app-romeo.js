@@ -546,13 +546,12 @@ class QSMApp {
       await this.previewMask();
       this.maskOpsHistory = ['threshold:otsu'];
       this.updateOutput("Applying robust refinement (dilate, fill holes, erode x2)...");
-      this.dilateMask3D();
+      await this.dilateMask3D();
       this._pushMaskOp('dilate');
-      this.fillHoles3D();
+      await this.fillHoles3D();
       this.maskOpsHistory.push('fill-holes:0');
-      this.erodeMask3D();
+      await this.erodeMask3D(2);
       this._pushMaskOp('erode');
-      this.erodeMask3D();
       this._pushMaskOp('erode');
       await this.displayCurrentMask();
       this.updateOutput("Robust mask complete");
@@ -714,7 +713,7 @@ class QSMApp {
     // Morphological operation buttons
     document.getElementById('fillHoles')?.addEventListener('click', async () => {
       this.updateOutput("Filling holes in mask...");
-      this.fillHoles3D();
+      await this.fillHoles3D();
       this.maskOpsHistory.push('fill-holes:0');
       await this.displayCurrentMask();
       this.updateOutput("Holes filled");
@@ -722,7 +721,7 @@ class QSMApp {
 
     document.getElementById('erodeMask')?.addEventListener('click', async () => {
       this.updateOutput("Eroding mask...");
-      this.erodeMask3D();
+      await this.erodeMask3D();
       this._pushMaskOp('erode');
       await this.displayCurrentMask();
       this.updateOutput("Mask eroded");
@@ -730,10 +729,19 @@ class QSMApp {
 
     document.getElementById('dilateMask')?.addEventListener('click', async () => {
       this.updateOutput("Dilating mask...");
-      this.dilateMask3D();
+      await this.dilateMask3D();
       this._pushMaskOp('dilate');
       await this.displayCurrentMask();
       this.updateOutput("Mask dilated");
+    });
+
+    document.getElementById('signalErodeMask')?.addEventListener('click', async () => {
+      this.updateOutput("Signal-gated erosion (removing low-signal boundary voxels)...");
+      if (await this.signalErodeMask3D()) {
+        this.maskOpsHistory.push('signal-erode');
+        await this.displayCurrentMask();
+        this.updateOutput("Low-signal boundary removed");
+      }
     });
 
     document.getElementById('resetMask')?.addEventListener('click', async () => {
@@ -2233,40 +2241,25 @@ class QSMApp {
     }
   }
 
-  erodeMask3D() {
-    // Sync mask to controller
+  /**
+   * Mask refinements — all delegate to MaskController, which runs them through qsm-core in the
+   * worker (one implementation shared with the qsmxt pipeline), so they are async now.
+   */
+  async applyMaskOps(ops) {
     this.maskController.currentMaskData = this.currentMaskData;
     this.maskController.maskDims = this.maskDims;
+    this.maskController.voxelSize = this.voxelSize || this.maskController.voxelSize;
 
-    this.maskController.erodeMask3D();
+    const changed = await this.maskController.applyMaskOps(ops);
 
-    // Sync back
     this.currentMaskData = this.maskController.currentMaskData;
+    return changed;
   }
 
-  // 3D morphological dilation - delegates to MaskController
-  dilateMask3D() {
-    // Sync mask to controller
-    this.maskController.currentMaskData = this.currentMaskData;
-    this.maskController.maskDims = this.maskDims;
-
-    this.maskController.dilateMask3D();
-
-    // Sync back
-    this.currentMaskData = this.maskController.currentMaskData;
-  }
-
-  // Fill holes in 3D mask - delegates to MaskController
-  fillHoles3D() {
-    // Sync mask to controller
-    this.maskController.currentMaskData = this.currentMaskData;
-    this.maskController.maskDims = this.maskDims;
-
-    this.maskController.fillHoles3D();
-
-    // Sync back
-    this.currentMaskData = this.maskController.currentMaskData;
-  }
+  async erodeMask3D(iterations = 1) { return this.applyMaskOps(`erode:${iterations}`); }
+  async dilateMask3D(iterations = 1) { return this.applyMaskOps(`dilate:${iterations}`); }
+  async fillHoles3D(maxSize = 0) { return this.applyMaskOps(`fill-holes:${maxSize}`); }
+  async signalErodeMask3D() { return this.applyMaskOps('signal-erode'); }
 
   // Clear mask completely - delegates to MaskController
   async clearMask() {
@@ -3183,9 +3176,7 @@ class QSMApp {
         const erosions = this.betSettings.erosions || 0;
         if (erosions > 0) {
           this.updateOutput(`Applying ${erosions} erosion step(s)...`);
-          for (let i = 0; i < erosions; i++) {
-            this.erodeMask3D();
-          }
+          await this.erodeMask3D(erosions);
           await this.displayCurrentMask();
           this.updateOutput(`BET mask complete with ${erosions} erosion(s)`);
         }

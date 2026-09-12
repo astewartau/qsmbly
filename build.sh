@@ -13,10 +13,12 @@ RUST_DIR="$SCRIPT_DIR/rust-wasm"
 WASM_DIR="$SCRIPT_DIR/wasm"
 
 # Parse arguments. We build TWO wasm bundles:
-#   - base (no onnx, ~2.3 MB): classical algorithms + chi-separation + relaxometry + the
+#   - base (no onnx, ~3.0 MB): classical algorithms + chi-separation + relaxometry + the
 #     deep-learning model registry. Loaded on page open.
-#   - DL   (onnx, ~10.7 MB): adds tract-based deep-learning inference. Lazy-loaded in the
+#   - DL   (onnx, ~22 MB): adds tract-based deep-learning inference. Lazy-loaded in the
 #     browser only when a deep-learning algorithm is selected (weights fetched in JS).
+#     (tract 0.23, from qsm-core v0.31.0, roughly doubled this bundle; it compresses to
+#     ~4.8 MB gzip / ~2.7 MB brotli, and only loads when a DL algorithm is picked.)
 # `--simd` adds SIMD acceleration to both.
 SIMD_FEAT=""
 BUILD_TYPE="standard"
@@ -79,6 +81,14 @@ join_feats() { local IFS=,; echo "$*"; }
 BASE_FEATS=$(join_feats ${SIMD_FEAT:+$SIMD_FEAT} ${PAR_FEAT:+$PAR_FEAT})
 DL_FEATS=$(join_feats onnx ${SIMD_FEAT:+$SIMD_FEAT} ${PAR_FEAT:+$PAR_FEAT})
 
+# The DL bundle additionally needs wasm SIMD128, always. Since tract 0.23 (qsm-core v0.31+),
+# tract-linalg registers its matmul kernels on wasm ONLY under `target_feature = "simd128"` —
+# tract 0.21 had a generic fallback, 0.23 does not. Without this the bundle builds and loads
+# fine, then every deep-learning model dies on its first convolution with "No matmul found".
+# (qsm-core has a compile_error guard for it; this keeps the build honest either way.)
+# simd128 is Chrome 91+ / Firefox 89+ / Safari 16.4+, and only this lazy-loaded bundle needs it.
+DL_RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C target-feature=+simd128"
+
 # Build WASM
 echo "[1/4] Building WASM with wasm-pack..."
 [[ -n "$SIMD_FEAT" ]] && echo "      SIMD acceleration enabled (Chrome 91+, Firefox 89+, Safari 16.4+)"
@@ -87,8 +97,8 @@ echo "[1/4] Building WASM with wasm-pack..."
 cd "$RUST_DIR"
 echo "      Base bundle (classical + separation + relaxometry + model registry)..."
 "${WP[@]}" build --target web --release --out-dir pkg ${BASE_FEATS:+--features "$BASE_FEATS"}
-echo "      DL bundle (deep-learning inference via tract; lazy-loaded)..."
-"${WP[@]}" build --target web --release --out-dir pkg-dl --out-name qsm_wasm_dl --features "$DL_FEATS"
+echo "      DL bundle (deep-learning inference via tract; lazy-loaded, SIMD128)..."
+RUSTFLAGS="$DL_RUSTFLAGS" "${WP[@]}" build --target web --release --out-dir pkg-dl --out-name qsm_wasm_dl --features "$DL_FEATS"
 
 echo ""
 echo "[2/4] Generating algorithm defaults from QSM.rs..."

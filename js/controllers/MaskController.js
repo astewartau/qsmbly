@@ -5,7 +5,6 @@
  * threshold detection, and BET integration.
  */
 
-import { erodeMask3D, dilateMask3D, fillHoles3D } from '../modules/mask/MorphologyOps.js';
 import { computeOtsuThreshold } from '../modules/mask/ThresholdUtils.js';
 import { createMaskNifti, createNiftiHeaderFromVolume } from '../modules/file-io/NiftiUtils.js';
 
@@ -173,6 +172,11 @@ export class MaskController {
       this.setProgress(0.7, 'Caching data...');
       this.preparedMagnitudeData = magnitudeData;
       this.magnitudeData = magnitudeData;
+      // Remember what the prepared image is, and keep the magnitude files, so the signal-dependent
+      // mask ops can get a real magnitude even when the mask was built from phase quality.
+      this.maskInputSource = maskPrepSettings.source;
+      this.magnitudeFilesForSignal = magnitudeFiles;
+      this.signalMagnitudeData = maskPrepSettings.source === 'phase_quality' ? null : magnitudeData;
 
       // Calculate max
       let max = -Infinity;
@@ -713,23 +717,81 @@ export class MaskController {
 
   // ==================== Morphological Operations ====================
 
-  // 3D morphological erosion - delegates to imported module
-  erodeMask3D() {
-    if (!this.currentMaskData || !this.maskDims) return;
-    this.currentMaskData = erodeMask3D(this.currentMaskData, this.maskDims);
+  /**
+   * The magnitude image the signal-dependent ops need (BET, HD-BET, signal-gated erosion).
+   *
+   * The *mask input* may be the phase-quality map, which those ops must not gate on — qsm-core
+   * keeps the two separate and qsmxt always hands it the magnitude, so we do the same: reuse the
+   * prepared image when it is a magnitude, otherwise combine the magnitude echoes (RSS) once and
+   * cache it. Returns null when no magnitude was loaded at all.
+   * @returns {Promise<Float64Array|null>}
+   */
+  async getSignalMagnitude() {
+    if (this.signalMagnitudeData) return this.signalMagnitudeData;
+    if (this.maskInputSource && this.maskInputSource !== 'phase_quality' && this.preparedMagnitudeData) {
+      this.signalMagnitudeData = this.preparedMagnitudeData;
+    } else if (this.magnitudeFilesForSignal?.length) {
+      this.updateOutput('Combining magnitude echoes (RSS) for the signal-dependent mask op...');
+      this.signalMagnitudeData = await this.combineMagnitudeRSS(this.magnitudeFilesForSignal);
+    } else {
+      return null;
+    }
+    return this.signalMagnitudeData;
   }
 
-  // 3D morphological dilation - delegates to imported module
-  dilateMask3D() {
-    if (!this.currentMaskData || !this.maskDims) return;
-    this.currentMaskData = dilateMask3D(this.currentMaskData, this.maskDims);
+  /**
+   * Apply mask operations through qsm-core (the same code the qsmxt pipeline runs), so a mask
+   * refined here matches the `--mask ...` section we print. The wasm lives in the worker (as for
+   * BET), so this is a round-trip.
+   * @param {string} ops - comma-separated qsmxt mask ops, e.g. "erode:2" or "signal-erode"
+   * @returns {Promise<boolean>} true if the mask was updated
+   */
+  async applyMaskOps(ops) {
+    if (!this.currentMaskData || !this.maskDims || !ops) return false;
+    // Only the signal-dependent ops need the magnitude; don't combine echoes otherwise.
+    let magnitude = [];
+    if (/(^|,)\s*(signal-erode|bet|hd-bet)/.test(ops)) {
+      const mag = await this.getSignalMagnitude();
+      if (!mag) {
+        this.updateOutput(`Cannot apply "${ops}": it needs the magnitude image, and none is loaded.`);
+        return false;
+      }
+      magnitude = mag;
+    }
+    const worker = this.getWorker();
+    const mask = Uint8Array.from(this.currentMaskData, (v) => (v > 0 ? 1 : 0));
+    const magnitudeArr = Float64Array.from(magnitude);
+    const inputData = Float64Array.from(this.preparedMagnitudeData || []);
+    return new Promise((resolve) => {
+      const handler = (e) => {
+        const { type, ...data } = e.data;
+        if (type === 'applyMaskOpsComplete') {
+          worker.removeEventListener('message', handler);
+          this.currentMaskData = data.maskData;
+          resolve(true);
+        } else if (type === 'applyMaskOpsError') {
+          worker.removeEventListener('message', handler);
+          this.updateOutput(`Mask op "${ops}" failed: ${data.message}`);
+          resolve(false);
+        }
+      };
+      worker.addEventListener('message', handler);
+      worker.postMessage({
+        type: 'applyMaskOps',
+        data: {
+          mask, ops, inputData, magnitude: magnitudeArr,
+          dims: this.maskDims,
+          voxelSize: this.voxelSize || [1, 1, 1],
+        },
+      }, [mask.buffer, magnitudeArr.buffer, inputData.buffer]);
+    });
   }
 
-  // Fill holes in 3D mask - delegates to imported module
-  fillHoles3D() {
-    if (!this.currentMaskData || !this.maskDims) return;
-    this.currentMaskData = fillHoles3D(this.currentMaskData, this.maskDims);
-  }
+  // Mask refinements — all go through qsm-core via applyMaskOps.
+  async erodeMask3D(iterations = 1) { return this.applyMaskOps(`erode:${iterations}`); }
+  async dilateMask3D(iterations = 1) { return this.applyMaskOps(`dilate:${iterations}`); }
+  async fillHoles3D(maxSize = 0) { return this.applyMaskOps(`fill-holes:${maxSize}`); }
+  async signalErodeMask3D() { return this.applyMaskOps('signal-erode'); }
 
   // Clear mask completely
   async clearMask() {

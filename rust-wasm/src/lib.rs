@@ -1742,6 +1742,68 @@ pub fn bet_wasm(
     mask
 }
 
+/// Tell qsm-core that this module's rayon thread pool is up, so deep-learning inference may use
+/// it (tract dispatches on rayon's global pool on wasm).
+///
+/// Call it right after `initThreadPool` resolves, on the same module — each wasm instance has its
+/// own flag, and the lazily-loaded DL bundle is a separate instance from the base one. Without it
+/// inference stays single-threaded, which is what a page that is not cross-origin isolated needs:
+/// there `initThreadPool` never runs and rayon's global pool cannot be built.
+///
+/// Only the DL bundle has it (the base bundle has no inference); JS calls it optionally.
+#[cfg(all(feature = "parallel", feature = "onnx"))]
+#[wasm_bindgen]
+pub fn set_threads_ready_wasm(ready: bool) {
+    qsm_core::models::onnx::set_wasm_threads_available(ready);
+}
+
+/// Apply mask operations to an existing mask, through qsm-core's masking pipeline.
+///
+/// One implementation for every host: this is the same `qsm_core::pipeline::apply_mask_ops` the
+/// qsmxt pipeline runs, so a mask refined here step-by-step matches the one the `--mask ...`
+/// section we print would produce.
+///
+/// # Arguments
+/// * `mask` - current binary mask (0/1), `nx * ny * nz`
+/// * `ops` - comma-separated qsmxt mask ops, e.g. `"erode:2"`, `"fill-holes:0"`, `"signal-erode"`
+/// * `input_data` - the image a generator thresholds (the mask input; may be a phase-quality map)
+/// * `magnitude` - the magnitude image, used by the ops that need real signal (BET, HD-BET,
+///   signal-gated erosion). Pass an empty array when there is none; those ops then error rather
+///   than silently gating on `input_data`.
+/// * `nx`, `ny`, `nz` - dimensions; `vsx`, `vsy`, `vsz` - voxel sizes in mm
+#[wasm_bindgen]
+pub fn apply_mask_ops_wasm(
+    mask: &[u8],
+    ops: &str,
+    input_data: &[f64],
+    magnitude: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+) -> Result<Vec<u8>, JsValue> {
+    let parsed: Vec<qsmxt_config::MaskOp> = ops
+        .split(',')
+        .map(|o| o.trim())
+        .filter(|o| !o.is_empty())
+        .map(qsmxt_config::parse_mask_op)
+        .collect::<Result<_, _>>()
+        .map_err(|e| JsValue::from_str(&format!("{e}")))?;
+    if parsed.is_empty() {
+        return Ok(mask.to_vec());
+    }
+    // `to_mask_sections` converts generator + refinements; all_ops() hands them back in order, so
+    // this works whether or not the first op happens to be a generator.
+    let section = qsmxt_config::MaskSection {
+        input: qsmxt_config::MaskingInput::Magnitude,
+        generator: parsed[0].clone(),
+        refinements: parsed[1..].to_vec(),
+    };
+    let core = qsmxt_config::to_mask_sections(std::slice::from_ref(&section));
+    let meta = qsmxt_config::to_scan_metadata((nx, ny, nz), (vsx, vsy, vsz), &[], 0.0, (0.0, 0.0, 1.0));
+    let magnitude = (!magnitude.is_empty()).then_some(magnitude);
+    qsm_core::pipeline::apply_mask_ops(mask.to_vec(), &core[0].all_ops(), input_data, magnitude, &meta)
+        .map_err(|e| JsValue::from_str(&format!("{e}")))
+}
+
 /// Run BET with progress callback (aligned with FSL-BET2)
 ///
 /// The callback receives (current_iteration, total_iterations)
@@ -2951,6 +3013,21 @@ config_defaults!(get_romeo_defaults, qsmxt_config::config::RomeoConfig);
 config_defaults!(get_mcpc3ds_defaults, qsmxt_config::config::Mcpc3dsConfig);
 config_defaults!(get_linear_fit_defaults, qsmxt_config::config::LinearFitConfig);
 config_defaults!(get_homogeneity_defaults, qsmxt_config::config::HomogeneityConfig);
+
+/// Signal-gated erosion defaults. Its parameters live inline in qsmxt-config's `MaskOp` rather
+/// than in a `*Config` struct, so this reads them straight off qsm-core's defaults (the QSM-CI
+/// harmonization setting) instead of going through `config_defaults!`.
+#[wasm_bindgen]
+pub fn get_signal_erode_defaults() -> String {
+    let d = qsm_core::utils::SignalErosionParams::default();
+    serde_json::json!({
+        "threshold": d.threshold,
+        "depth_cap": d.depth_cap,
+        "global_erosions": d.global_erosions,
+        "bias_sigma": d.bias_sigma,
+        "min_component": d.min_component,
+    }).to_string()
+}
 
 // ============================================================================
 // Tests

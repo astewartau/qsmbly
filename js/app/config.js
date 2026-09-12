@@ -17,7 +17,7 @@ const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined
 export const VERSION = '0.0.0'; // 0.0.0 in git; the release CI stamps the real version at deploy time
 
 // QSM.rs core library version (the pinned qsm-core dependency tag in rust-wasm/Cargo.toml)
-export const QSM_RS_VERSION = '0.28.0';
+export const QSM_RS_VERSION = '0.32.0';
 
 // Where deep-learning model weights are fetched from in the browser. The qsm-core model
 // registry points at OSF, which does NOT send CORS headers, so a browser fetch from it
@@ -92,7 +92,11 @@ import {
   MCPC3DS_DEFAULTS as _MCPC3DS,
   LINEAR_FIT_DEFAULTS as _LINEAR_FIT,
   HOMOGENEITY_DEFAULTS as _HOMOGENEITY,
+  SIGNAL_ERODE_DEFAULTS as _SIGNAL_ERODE,
 } from './qsm-defaults.js';
+
+// Signal-gated erosion (QSM-CI): qsm-core's defaults, used by the mask "Signal Erode" refinement.
+export const SIGNAL_ERODE_DEFAULTS = { ..._SIGNAL_ERODE };
 
 // Re-export with JS-convention field names (camelCase, matching existing usage)
 export const RTS_DEFAULTS = {
@@ -494,6 +498,7 @@ export const BOX_FILTER_DEFAULTS = {
 const QSMConfig = {
   VERSION,
   QSM_RS_VERSION,
+  SIGNAL_ERODE_DEFAULTS,
   PHYSICS,
   INPUT_MODES,
   FIELD_MAP_UNITS,

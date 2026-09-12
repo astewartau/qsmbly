@@ -21,16 +21,17 @@ parallel = ["qsm-core/parallel", "dep:wasm-bindgen-rayon"]
 [dependencies]
 # Core QSM algorithms. `parallel` (rayon) is enabled via our own `parallel` feature for
 # threaded wasm builds; plain builds stay single-threaded.
-qsm-core = { git = "https://github.com/astewartau/QSM.rs.git", tag = "v0.30.0" }
+qsm-core = { git = "https://github.com/astewartau/QSM.rs.git", tag = "v0.32.0" }
 
 # Pipeline configuration, command generation, methods text.
 # qsmxt-config's canonical home is the QSMxT/QSMxT workspace (the old
 # astewartau/qsmxt.rs repo is being retired).
-qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", tag = "v9.17.0" }
+qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", tag = "v9.18.1" }
 
 # WASM bindings
-# getrandom (pulled by tract-onnx) needs the "js" backend on wasm32 (browser crypto).
-getrandom = { version = "0.2", features = ["js"], optional = true }
+# getrandom (pulled by tract-onnx) needs an explicit browser-crypto backend on wasm32. Since
+# qsm-core v0.31.0 (tract 0.23) that is getrandom 0.4's "wasm_js" feature, not 0.2's "js".
+getrandom = { version = "0.4", features = ["wasm_js"], optional = true }
 wasm-bindgen = "0.2"
 # Rayon threadpool for wasm (spawns Web Workers); only linked with the `parallel` feature.
 wasm-bindgen-rayon = { version = "1.2", optional = true }
@@ -46,7 +47,8 @@ opt-level = 3
 lto = true
 
 # wasm-pack runs wasm-opt after the build; without --enable-threads it would strip the shared
-# memory / atomics back out of threaded builds. These flags keep them (harmless for
-# single-threaded builds).
+# memory / atomics back out of threaded builds, and the DL bundle is built with +simd128.
+# These flags keep them (harmless for builds that use neither).
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ['-O2', '--enable-threads', '--enable-bulk-memory', '--enable-mutable-globals']
+wasm-opt = ['-O2', '--enable-threads', '--enable-bulk-memory', '--enable-mutable-globals', '--enable-simd']
+

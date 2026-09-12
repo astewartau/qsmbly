@@ -67,6 +67,9 @@ async function initRayon(mod, label, threads) {
     const n = Math.max(1, Math.min(threads || hw, hw));
     await mod.initThreadPool(n);
     _rayonReady.add(mod);
+    // Let qsm-core use the pool for deep-learning inference too (tract dispatches on rayon's
+    // global pool on wasm). Per module instance: the DL bundle reports separately from the base.
+    mod.set_threads_ready_wasm?.(true);
     postLog(`Threadpool ready: ${n} threads [${label}]`);
   } catch (e) {
     console.warn(`initThreadPool [${label}] failed; continuing single-threaded:`, e);
@@ -1332,6 +1335,28 @@ function postBETComplete(maskData, coverage) {
 
 function postBETError(message) {
   self.postMessage({ type: 'betError', message });
+}
+
+/**
+ * Apply mask operations (`erode:2`, `fill-holes:0`, `signal-erode`, …) through qsm-core's masking
+ * pipeline — the same code the qsmxt pipeline runs, so an interactively refined mask matches the
+ * `--mask ...` section we print. Pure Rust, so it lives in the base wasm bundle.
+ */
+async function runApplyMaskOps(data) {
+  const { mask, ops, inputData, magnitude, dims, voxelSize } = data;
+  try {
+    const [nx, ny, nz] = dims;
+    const [vsx, vsy, vsz] = voxelSize;
+    const maskData = wasmModule.apply_mask_ops_wasm(
+      new Uint8Array(mask), ops,
+      new Float64Array(inputData || []),
+      new Float64Array(magnitude || []),
+      nx, ny, nz, vsx, vsy, vsz,
+    );
+    self.postMessage({ type: 'applyMaskOpsComplete', maskData }, [maskData.buffer]);
+  } catch (error) {
+    self.postMessage({ type: 'applyMaskOpsError', message: error.message || String(error) });
+  }
 }
 
 async function runBET(data) {
@@ -2725,6 +2750,10 @@ self.onmessage = async function (e) {
 
       case 'runBET':
         await runBET(data);
+        break;
+
+      case 'applyMaskOps':
+        await runApplyMaskOps(data);
         break;
 
       case 'runSWI':
