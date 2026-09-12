@@ -81,6 +81,14 @@ join_feats() { local IFS=,; echo "$*"; }
 BASE_FEATS=$(join_feats ${SIMD_FEAT:+$SIMD_FEAT} ${PAR_FEAT:+$PAR_FEAT})
 DL_FEATS=$(join_feats onnx ${SIMD_FEAT:+$SIMD_FEAT} ${PAR_FEAT:+$PAR_FEAT})
 
+# The DL bundle additionally needs wasm SIMD128, always. Since tract 0.23 (qsm-core v0.31+),
+# tract-linalg registers its matmul kernels on wasm ONLY under `target_feature = "simd128"` —
+# tract 0.21 had a generic fallback, 0.23 does not. Without this the bundle builds and loads
+# fine, then every deep-learning model dies on its first convolution with "No matmul found".
+# (qsm-core has a compile_error guard for it; this keeps the build honest either way.)
+# simd128 is Chrome 91+ / Firefox 89+ / Safari 16.4+, and only this lazy-loaded bundle needs it.
+DL_RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C target-feature=+simd128"
+
 # Build WASM
 echo "[1/4] Building WASM with wasm-pack..."
 [[ -n "$SIMD_FEAT" ]] && echo "      SIMD acceleration enabled (Chrome 91+, Firefox 89+, Safari 16.4+)"
@@ -89,8 +97,8 @@ echo "[1/4] Building WASM with wasm-pack..."
 cd "$RUST_DIR"
 echo "      Base bundle (classical + separation + relaxometry + model registry)..."
 "${WP[@]}" build --target web --release --out-dir pkg ${BASE_FEATS:+--features "$BASE_FEATS"}
-echo "      DL bundle (deep-learning inference via tract; lazy-loaded)..."
-"${WP[@]}" build --target web --release --out-dir pkg-dl --out-name qsm_wasm_dl --features "$DL_FEATS"
+echo "      DL bundle (deep-learning inference via tract; lazy-loaded, SIMD128)..."
+RUSTFLAGS="$DL_RUSTFLAGS" "${WP[@]}" build --target web --release --out-dir pkg-dl --out-name qsm_wasm_dl --features "$DL_FEATS"
 
 echo ""
 echo "[2/4] Generating algorithm defaults from QSM.rs..."
