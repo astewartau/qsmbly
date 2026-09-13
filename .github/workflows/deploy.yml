@@ -142,6 +142,10 @@ jobs:
           # Copy favicon/logo files if they exist
           cp QSMbly.png deploy/ 2>/dev/null || true
           cp favicon.ico deploy/ 2>/dev/null || true
+          cp icon.svg deploy/ 2>/dev/null || true
+
+          # Copy landing page imagery
+          cp -r assets deploy/ 2>/dev/null || true
 
           # Copy niivue and nifti-js
           cp -r niivue deploy/

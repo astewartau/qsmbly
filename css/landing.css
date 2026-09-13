@@ -113,9 +113,42 @@ html.landing-seen .landing-overlay {
 
 /* --- Hero ---------------------------------------------------------------- */
 
+/* Copy on the left, a screenshot of the app on the right. Stacks below 900px,
+   where the shot follows the buttons rather than pushing them off-screen. */
 .landing-hero {
   text-align: left;
   padding: var(--space-2xl) 0 var(--space-2xl);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-xl);
+  align-items: center;
+}
+
+@media (min-width: 900px) {
+  .landing-hero {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: var(--space-2xl);
+  }
+}
+
+.landing-shot {
+  margin: 0;
+}
+
+.landing-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-light);
+  box-shadow: var(--shadow-lg), 0 0 60px rgba(59, 130, 246, 0.18);
+}
+
+.landing-shot figcaption {
+  margin-top: var(--space-sm);
+  color: var(--color-text-dim);
+  font-size: 0.82rem;
+  line-height: 1.5;
 }
 
 .landing-hero-logo {
@@ -204,12 +237,6 @@ html.landing-seen .landing-overlay {
   border-color: var(--color-primary);
 }
 
-.landing-badges {
-  color: var(--color-text-dim);
-  font-size: 0.85rem;
-  letter-spacing: 0.01em;
-}
-
 /* --- Section shells ------------------------------------------------------ */
 
 .landing-section {
@@ -266,55 +293,6 @@ html.landing-seen .landing-overlay {
   color: var(--color-text-muted);
   font-size: 0.92rem;
   line-height: 1.55;
-  margin: 0;
-}
-
-/* --- How it works -------------------------------------------------------- */
-
-.landing-steps {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--space-lg);
-  counter-reset: landing-step;
-}
-
-.landing-step {
-  position: relative;
-  padding: var(--space-lg);
-  padding-top: var(--space-xl);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-}
-
-.landing-step::before {
-  counter-increment: landing-step;
-  content: counter(landing-step);
-  position: absolute;
-  top: calc(-1 * var(--space-md));
-  left: var(--space-lg);
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
-  box-shadow: var(--shadow-sm);
-}
-
-.landing-step h3 {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0 0 var(--space-xs);
-}
-
-.landing-step p {
-  color: var(--color-text-muted);
-  font-size: 0.9rem;
-  line-height: 1.5;
   margin: 0;
 }
 
