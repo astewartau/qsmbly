@@ -1376,7 +1376,7 @@ async function runHdBet(data) {
     self.postMessage({
       type: 'hdBetLog',
       message: `Running HD-BET on ${nx}x${ny}x${nz} @ ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm `
-             + `(${px}x${py}x${pz} patches, ${Math.round((1 - (tileStep ?? 0.5)) * 100)}% overlap`
+             + `(${px}x${py}x${pz} patches, step ${tileStep ?? 0.5}`
              + `${tta ? ', mirroring TTA' : ''}). This runs a 30 M-parameter `
              + `network over every overlapping patch and takes several minutes — progress below.`,
     });

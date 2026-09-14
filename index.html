@@ -1934,16 +1934,16 @@
           <h4>Inference Parameters</h4>
 
           <div class="param-group">
-            <label class="param-label" for="hdBetTileStep">Patch Overlap</label>
+            <label class="param-label" for="hdBetTileStep">Patch Step</label>
             <div class="param-hint">
-              Higher overlap blends patch seams better; lower overlap means fewer patches and a
-              shorter run. 50% is HD-BET's own default, and the only setting the exported qsmxt
-              command can express &mdash; its mask-op syntax has no field for the others.
+              How far the sliding window moves each time, as a fraction of the patch. Smaller
+              steps blend patch seams better; larger steps mean fewer patches and a shorter run.
+              0.5 is HD-BET's own default.
             </div>
             <select id="hdBetTileStep">
-              <option value="0.5">50% overlap — best quality (default)</option>
-              <option value="0.75">25% overlap — faster</option>
-              <option value="1">No overlap — fastest, visible seams possible</option>
+              <option value="0.5">0.5 — best quality (default)</option>
+              <option value="0.75">0.75 — faster</option>
+              <option value="1">1.0 — fastest, patches abut, seams possible</option>
             </select>
           </div>
 

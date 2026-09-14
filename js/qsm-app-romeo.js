@@ -3568,9 +3568,9 @@ class QSMApp {
       // letting the exported command quietly disagree with what just ran.
       if (tileStep !== 0.5) {
         this.updateOutput(
-          `Note: the exported qsmxt command runs HD-BET at its default 50% overlap, not the `
-          + `${Math.round((1 - tileStep) * 100)}% you chose — qsmxt's mask-op syntax has no field `
-          + `for it. The mask shown here is the one you asked for.`);
+          `Note: the exported qsmxt command runs HD-BET at its default step of 0.5, not the `
+          + `${tileStep} you chose — the pinned qsmxt-config has no field for it. The mask shown `
+          + `here is the one you asked for.`);
       }
       this.maskOpsHistory = [`hd-bet:${patch.join('x')}${tta ? ':tta' : ''}`];
       await this.displayCurrentMask();
