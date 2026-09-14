@@ -2147,122 +2147,6 @@ pub fn calculate_b0_weighted_wasm(
     b0
 }
 
-/// Full MCPC-3D-S + B0 calculation pipeline
-///
-/// Combines phase offset removal with weighted B0 calculation.
-/// This is the main entry point for multi-echo B0 mapping.
-///
-/// # Arguments
-/// * `phases_flat` - Flattened wrapped phases [echo0, echo1, ...]
-/// * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
-/// * `tes` - Echo times in seconds
-/// * `mask` - Binary mask
-/// * `nx`, `ny`, `nz` - Dimensions
-/// * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma for phase offset
-/// * `weight_type` - B0 weighting type
-///
-/// # Returns
-/// Flattened [b0, phase_offset, corrected_phases...]
-/// - First n_total elements: B0 in Hz
-/// - Next n_total elements: phase offset
-/// - Remaining n_echoes * n_total elements: corrected phases
-#[wasm_bindgen]
-#[allow(clippy::too_many_arguments)]
-pub fn mcpc3ds_b0_pipeline_wasm(
-    phases_flat: &[f64],
-    mags_flat: &[f64],
-    tes: &[f64],
-    mask: &[u8],
-    nx: usize, ny: usize, nz: usize,
-    vsx: f64, vsy: f64, vsz: f64,
-    sigma_x: f64, sigma_y: f64, sigma_z: f64,
-    weight_type: &str,
-    do_bipolar_correction: bool,
-    unwrap_method: &str,
-    romeo_individual: bool,
-    romeo_correct_global: bool,
-) -> Vec<f64> {
-    let n_echoes = tes.len();
-    let n_total = nx * ny * nz;
-
-    console_log!("WASM field_mapping: {}x{}x{}, {} echoes, unwrap={}, individual={}, correct_global={}, weight={}, bipolar={}",
-                 nx, ny, nz, n_echoes, unwrap_method, romeo_individual, romeo_correct_global, weight_type, do_bipolar_correction);
-
-    // Use slices into the flat input instead of cloning (~990 MB savings for large data)
-    let phases: Vec<&[f64]> = (0..n_echoes)
-        .map(|e| &phases_flat[e * n_total..(e + 1) * n_total])
-        .collect();
-    let mags: Vec<&[f64]> = (0..n_echoes)
-        .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
-        .collect();
-
-    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
-    let wt = qsm_core::utils::multi_echo::B0WeightType::from_str(weight_type);
-
-    // Step 1: Phase offset removal (always uses ROMEO internally for HIP unwrapping)
-    let (mut corrected_phases, phase_offset) = qsm_core::utils::multi_echo::phase_offset_removal(
-        &phases, &mags, tes, mask,
-        [sigma_x, sigma_y, sigma_z], [0, 1],
-        qsm_core::unwrap::UnwrapMethod::Romeo,
-        &grid,
-    );
-
-    // Step 2: Bipolar correction (after offset removal, before unwrapping — matches MriResearchTools.jl)
-    if do_bipolar_correction && n_echoes >= 3 {
-        console_log!("WASM bipolar correction (post-offset-removal)");
-        let mag_refs: Vec<&[f64]> = (0..n_echoes)
-            .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
-            .collect();
-        qsm_core::utils::multi_echo::bipolar_correction(
-            &mut corrected_phases, &mag_refs, tes, mask,
-            [sigma_x, sigma_y, sigma_z], &grid,
-        );
-    }
-
-    // Step 3: Multi-echo unwrapping (user-selected method)
-    let mag_refs: Vec<&[f64]> = (0..n_echoes)
-        .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
-        .collect();
-    let unwrapped: Vec<Vec<f64>> = match unwrap_method {
-        "laplacian" => {
-            // Per-echo Laplacian unwrapping (matching Julia's laplacian_combine)
-            // No inter-echo alignment — Laplacian removes harmonic component
-            // independently per echo, and calculate_b0_weighted handles
-            // the per-echo phase/TE division and averaging
-            corrected_phases.iter()
-                .map(|phase| qsm_core::unwrap::laplacian_unwrap(phase, mask, &grid))
-                .collect()
-        }
-        _ => {
-            let params = qsm_core::unwrap::romeo::RomeoParams {
-                individual: romeo_individual,
-                correct_global: romeo_correct_global,
-                ..Default::default()
-            };
-            qsm_core::unwrap::romeo::unwrap_romeo_multi_echo(
-                &corrected_phases, &mag_refs, tes, mask,
-                &params, &grid,
-            )
-        }
-    };
-
-    // Step 4: Weighted B0 averaging
-    let b0 = qsm_core::utils::multi_echo::calculate_b0_weighted(
-        &unwrapped, &mags, tes, mask, wt, &grid,
-    );
-
-    // Flatten output: b0, phase_offset, then all corrected phases
-    let mut result = Vec::with_capacity((2 + n_echoes) * n_total);
-    result.extend(b0);
-    result.extend(phase_offset);
-    for phase in &corrected_phases {
-        result.extend(phase);
-    }
-
-    console_log!("WASM mcpc3ds_b0_pipeline complete");
-    result
-}
-
 /// Multi-echo linear fit with magnitude weighting
 ///
 /// Fits a linear model: phase = slope * TE + intercept
@@ -3554,9 +3438,8 @@ pub fn run_dl_field_inversion_wasm(
     bx: f64, by: f64, bz: f64,
     weights: &[u8], weights2: &[u8], tiled: bool, tile_core: usize, tile_halo: usize,
     progress_callback: &js_sys::Function,
-) -> Vec<f64> {
+) -> Result<Vec<f64>, JsValue> {
     use qsm_core::inversion as inv;
-    let n = nx * ny * nz;
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
     let bdir = (bx, by, bz);
     // Per-tile progress → JS (done, total). Non-tiled nets never call it (bar just sits at start).
@@ -3601,15 +3484,13 @@ pub fn run_dl_field_inversion_wasm(
             "autoqsm" => inv::autoqsm(field_ppm, mask, &grid, weights),
             "nextqsm" => inv::nextqsm(field_ppm, mask, &grid, bdir, weights, weights2),
             other => {
-                console_log!("run_dl_field_inversion_wasm: unknown model '{}'", other);
-                return vec![0.0; n];
+                return Err(js_err(format!(
+                    "run_dl_field_inversion_wasm: unknown model '{other}'"
+                )));
             }
         },
     };
-    match res {
-        Ok(chi) => chi,
-        Err(e) => { console_log!("{} inference error: {}", model_id, e); vec![0.0; n] }
-    }
+    res.map_err(|e| js_err(format!("{model_id} inference failed: {e}")))
 }
 
 /// DL background removal (BFRnet): total field → local field (ppm). BFRnet preserves the
@@ -3621,20 +3502,15 @@ pub fn run_dl_bg_removal_wasm(
     model_id: &str, field_ppm: &[f64], mask: &[u8],
     nx: usize, ny: usize, nz: usize, vsx: f64, vsy: f64, vsz: f64,
     weights: &[u8],
-) -> Vec<f64> {
-    let n = nx * ny * nz;
+) -> Result<Vec<f64>, JsValue> {
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
     let res = match model_id {
         "bfrnet" => qsm_core::bgremove::bfrnet(field_ppm, mask, &grid, weights),
         other => {
-            console_log!("run_dl_bg_removal_wasm: unknown model '{}'", other);
-            return vec![0.0; n];
+            return Err(js_err(format!("run_dl_bg_removal_wasm: unknown model '{other}'")));
         }
     };
-    match res {
-        Ok(local) => local,
-        Err(e) => { console_log!("{} inference error: {}", model_id, e); vec![0.0; n] }
-    }
+    res.map_err(|e| js_err(format!("{model_id} inference failed: {e}")))
 }
 
 /// End-to-end DL reconstruction from wrapped **phase**: iqsm/iqsm-plus → susceptibility (ppm);
@@ -3648,7 +3524,7 @@ pub fn run_dl_phase_recon_wasm(
     nx: usize, ny: usize, nz: usize, vsx: f64, vsy: f64, vsz: f64,
     echo_times: &[f64], b0: f64, bx: f64, by: f64, bz: f64,
     weights: &[u8],
-) -> Vec<f64> {
+) -> Result<Vec<f64>, JsValue> {
     use qsm_core::inversion as inv;
     let n = nx * ny * nz;
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
@@ -3661,14 +3537,10 @@ pub fn run_dl_phase_recon_wasm(
         "iqsm-plus" => inv::iqsm_plus_multi_echo(&phases, &mags, mask, &grid, echo_times, b0, bdir, sign, erode, weights),
         "iqfm" => inv::iqfm_multi_echo(&phases, &mags, mask, &grid, echo_times, b0, sign, erode, weights),
         other => {
-            console_log!("run_dl_phase_recon_wasm: unknown model '{}'", other);
-            return vec![0.0; n];
+            return Err(js_err(format!("run_dl_phase_recon_wasm: unknown model '{other}'")));
         }
     };
-    match res {
-        Ok(v) => v,
-        Err(e) => { console_log!("{} inference error: {}", model_id, e); vec![0.0; n] }
-    }
+    res.map_err(|e| js_err(format!("{model_id} inference failed: {e}")))
 }
 
 /// DL χ-separation (susep-net / chi-sepnet) from local field + QSM + R2' → `[chi_pos ; chi_neg ;
@@ -3680,25 +3552,19 @@ pub fn run_dl_separation_wasm(
     model_id: &str, local_field_ppm: &[f64], qsm: &[f64], r2prime: &[f64], mask: &[u8],
     nx: usize, ny: usize, nz: usize, vsx: f64, vsy: f64, vsz: f64,
     weights: &[u8],
-) -> Vec<f64> {
+) -> Result<Vec<f64>, JsValue> {
     use qsm_core::separation as sep;
-    let n = nx * ny * nz;
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
     let res = match model_id {
         "susep-net" => sep::susep_net(local_field_ppm, qsm, r2prime, mask, &grid, weights, &sep::SusepNetNorm::default()),
         "chi-sepnet" => sep::chisepnet(local_field_ppm, qsm, r2prime, mask, &grid, weights, &sep::ChiSepNetNorm::default()),
         other => {
-            console_log!("run_dl_separation_wasm: unknown model '{}'", other);
-            return vec![0.0; 3 * n];
+            return Err(js_err(format!("run_dl_separation_wasm: unknown model '{other}'")));
         }
     };
-    match res {
-        Ok((pos, neg, tot)) => {
-            let mut out = pos;
-            out.extend(neg);
-            out.extend(tot);
-            out
-        }
-        Err(e) => { console_log!("{} inference error: {}", model_id, e); vec![0.0; 3 * n] }
-    }
+    let (pos, neg, tot) = res.map_err(|e| js_err(format!("{model_id} inference failed: {e}")))?;
+    let mut out = pos;
+    out.extend(neg);
+    out.extend(tot);
+    Ok(out)
 }

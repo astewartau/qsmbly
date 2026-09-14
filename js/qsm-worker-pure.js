@@ -6,10 +6,9 @@
  */
 
 // Import utilities - no fallbacks
-import { scalePhase, computeB0FromUnwrapped } from './worker/utils/PhaseUtils.js';
-import { createThresholdMask, findSeedPoint } from './worker/utils/MaskUtils.js';
+import { scalePhase, ppmFieldToPhase } from './worker/utils/PhaseUtils.js';
+import { createThresholdMask } from './worker/utils/MaskUtils.js';
 import { boxFilter3D, boxFilter3dSeparable } from './worker/utils/FilterUtils.js';
-import { computeFieldMap } from './worker/utils/FieldMapping.js';
 import { buildConfigJson } from './modules/ConfigBridge.js';
 import * as QSMConfig from './app/config.js';
 import { parseRegistry, fetchModelWeights, loadDlWasm } from './modules/ModelWeights.js';
@@ -776,23 +775,48 @@ async function runTgvPipeline(data) {
     const fieldstrength = magField || 3.0;
 
     if (nEchoes > 1) {
-      // Multi-echo: field mapping → B0 → convert to phase for TGV
+      // Multi-echo: field mapping → B0 → convert to phase for TGV.
+      // Same shared qsm-core stage the standard pipeline uses, so TGV honours the
+      // ROMEO coherence flags, the b0_estimation choice and the Laplacian handling
+      // that the config carries.
       postLog(`Multi-echo data detected (${nEchoes} echoes), computing B0 field map...`);
+      postProgress(0.15, 'Field mapping...');
 
-      const { b0Fieldmap } = computeFieldMap(wasmModule, {
-        phase4d, magnitude4d, echoTimes, mask,
-        dims, voxelSize, affine, settings: pipelineSettings,
-        postLog, postProgress, sendStageData,
-      });
+      const configToml = wasmModule.config_json_to_toml_wasm(buildConfigJson(pipelineSettings), '');
+      const echoTimesSec = echoTimes.map(t => t / 1000); // ms → seconds
 
-      sendStageData('B0', b0Fieldmap, dims, voxelSize, affine, 'B0 Field Map (Hz)');
-
-      // Convert B0 (Hz) to equivalent phase (radians) for TGV
-      te = echoTimes[0] / 1000;
-      tgvInputPhase = new Float64Array(voxelCount);
-      for (let i = 0; i < voxelCount; i++) {
-        tgvInputPhase[i] = 2 * Math.PI * b0Fieldmap[i] * te;
+      const phasesFlat = new Float64Array(nEchoes * voxelCount);
+      const magsFlat = new Float64Array(nEchoes * voxelCount);
+      for (let e = 0; e < nEchoes; e++) {
+        phasesFlat.set(phase4d[e], e * voxelCount);
+        magsFlat.set(magnitude4d[e], e * voxelCount);
       }
+
+      const fieldResult = wasmModule.run_field_mapping_wasm(
+        phasesFlat, magsFlat, mask,
+        new Float64Array(echoTimesSec),
+        nx, ny, nz, vsx, vsy, vsz,
+        fieldstrength, configToml,
+      );
+
+      // Result is [b0_field_ppm..., phase_offset...] or just [b0_field_ppm...]
+      const b0FieldmapPpm = new Float64Array(fieldResult.slice(0, voxelCount));
+      const phaseOffset = fieldResult.length > voxelCount
+        ? new Float64Array(fieldResult.slice(voxelCount, 2 * voxelCount))
+        : null;
+
+      if (phaseOffset) {
+        sendStageData('phaseOffset', phaseOffset, dims, voxelSize, affine, 'Phase Offset (rad)', false);
+      }
+      sendStageData('B0', b0FieldmapPpm, dims, voxelSize, affine, 'B0 Field Map (ppm)');
+      postProgress(0.40, 'Field mapping complete');
+
+      // TGV takes phase, so undo the stage's Hz→ppm with the same gamma qsm-core used,
+      // then convert with the first echo time. TGV divides this straight back out.
+      te = echoTimesSec[0];
+      tgvInputPhase = ppmFieldToPhase(
+        b0FieldmapPpm, fieldstrength, te, QSMConfig.PHYSICS.GYROMAGNETIC_RATIO,
+      );
       postLog(`Converted B0 to equivalent phase using TE=${(te * 1000).toFixed(2)}ms`);
 
     } else {
