@@ -1970,7 +1970,7 @@ pub fn hermitian_inner_product_wasm(
 /// # Arguments
 /// * `phases_flat` - Flattened phase data [echo0, echo1, ...], each echo is nx*ny*nz
 /// * `mags_flat` - Flattened magnitude data [echo0, echo1, ...], each echo is nx*ny*nz
-/// * `tes` - Echo times in ms
+/// * `tes` - Echo times (any consistent unit; only ratios are used)
 /// * `mask` - Binary mask (nx * ny * nz)
 /// * `nx`, `ny`, `nz` - Dimensions
 /// * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma for phase offset
@@ -2027,12 +2027,12 @@ pub fn mcpc3ds_single_coil_wasm(
 /// Calculate B0 field from unwrapped phase using weighted averaging
 ///
 /// Implements calculateB0_unwrapped from MriResearchTools.jl
-/// Formula: B0 = (1000 / 2pi) * sum(phase / TE * weight) / sum(weight)
+/// Formula: B0 = (1 / 2pi) * sum(phase / TE * weight) / sum(weight)
 ///
 /// # Arguments
 /// * `unwrapped_phases_flat` - Flattened unwrapped phases [echo0, echo1, ...]
 /// * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
-/// * `tes` - Echo times in ms
+/// * `tes` - Echo times in seconds
 /// * `mask` - Binary mask
 /// * `weight_type` - Weighting type: "phase_snr", "phase_var", "average", "tes", "mag"
 /// * `n_total` - Number of voxels per echo
@@ -2081,7 +2081,7 @@ pub fn calculate_b0_weighted_wasm(
 /// # Arguments
 /// * `phases_flat` - Flattened wrapped phases [echo0, echo1, ...]
 /// * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
-/// * `tes` - Echo times in ms
+/// * `tes` - Echo times in seconds
 /// * `mask` - Binary mask
 /// * `nx`, `ny`, `nz` - Dimensions
 /// * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma for phase offset
