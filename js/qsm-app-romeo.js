@@ -1,4 +1,5 @@
 // Import extracted utility modules
+import { estimateHdBetPatches } from './modules/HdBetEstimate.js';
 import { createThresholdMask } from './modules/mask/ThresholdUtils.js';
 import {
   parseNiftiHeader,
@@ -109,6 +110,7 @@ class QSMApp {
 
     // Modal managers (initialized in init() after DOM ready)
     this.betModal = null;
+    this.hdBetModal = null;
     this.aboutModal = null;
     this.citationsModal = null;
     this.privacyModal = null;
@@ -202,6 +204,7 @@ class QSMApp {
       updateOutput: (msg) => this.updateOutput(msg),
       setProgress: (val, text) => this.setProgress(val, text),
       initializeWorker: () => this.pipelineExecutor?.initialize(),
+      beginCancellableJob: (onCancel) => this.beginCancellableJob(onCancel),
       config: window.QSMConfig
     });
 
@@ -230,6 +233,7 @@ class QSMApp {
 
     // Initialize modal managers
     this.betModal = new ModalManager('betSettingsModal');
+    this.hdBetModal = new ModalManager('hdBetSettingsModal');
     this.commandPreviewModal = new ModalManager('commandPreviewModal');
     this.aboutModal = new ModalManager('aboutModal');
     this.citationsModal = new ModalManager('citationsModal');
@@ -570,6 +574,8 @@ class QSMApp {
     // BET brain extraction button - opens settings modal
     document.getElementById('runBET')?.addEventListener('click', () => this.openBetSettingsModal());
 
+    document.getElementById('runHdBet')?.addEventListener('click', () => this.openHdBetSettingsModal());
+
     // Auto threshold button (Otsu)
     document.getElementById('autoThreshold')?.addEventListener('click', () => this.autoDetectThreshold());
 
@@ -650,6 +656,12 @@ class QSMApp {
     document.getElementById('runT2starR2star')?.addEventListener('click', () => this.runT2starR2star());
 
     // BET settings modal
+    document.getElementById('closeHdBetSettings')?.addEventListener('click', () => this.hdBetModal?.close());
+    document.getElementById('resetHdBetSettings')?.addEventListener('click', () => this.resetHdBetSettings());
+    document.getElementById('runHdBetWithSettings')?.addEventListener('click', () => this.runHdBetWithSettings());
+    document.getElementById('hdBetTileStep')?.addEventListener('change', () => this.updateHdBetEstimate());
+    document.getElementById('hdBetTta')?.addEventListener('change', () => this.updateHdBetEstimate());
+
     document.getElementById('closeBetSettings')?.addEventListener('click', () => this.betModal?.close());
     document.getElementById('resetBetSettings')?.addEventListener('click', () => this.resetBetSettings());
     document.getElementById('runBetWithSettings')?.addEventListener('click', () => this.runBetWithSettings());
@@ -1807,6 +1819,7 @@ class QSMApp {
       if (generateButtons) generateButtons.style.opacity = '0.5';
       document.getElementById('previewMask')?.setAttribute('disabled', '');
       document.getElementById('runBET')?.setAttribute('disabled', '');
+      document.getElementById('runHdBet')?.setAttribute('disabled', '');
       document.getElementById('maskThreshold')?.setAttribute('disabled', '');
       if (maskOps) maskOps.style.display = 'none';
       // Show info note
@@ -1826,6 +1839,7 @@ class QSMApp {
         if (generateButtons) generateButtons.style.opacity = '1';
         document.getElementById('previewMask')?.removeAttribute('disabled');
         document.getElementById('runBET')?.removeAttribute('disabled');
+        document.getElementById('runHdBet')?.removeAttribute('disabled');
       }
     }
   }
@@ -2019,6 +2033,10 @@ class QSMApp {
     // BET button
     const betBtn = document.getElementById('runBET');
     if (betBtn) betBtn.disabled = !canGenerate;
+
+    // HD-BET button (same preconditions as BET: it needs the magnitude image)
+    const hdBetBtn = document.getElementById('runHdBet');
+    if (hdBetBtn) hdBetBtn.disabled = !canGenerate;
 
     // Threshold slider and auto-threshold button:
     // Only enabled when Threshold method is active (not BET)
@@ -2247,7 +2265,10 @@ class QSMApp {
    */
   async applyMaskOps(ops) {
     this.maskController.currentMaskData = this.currentMaskData;
-    this.maskController.maskDims = this.maskDims;
+    // Keep the controller's geometry when this side doesn't have it. Generators that derive it
+    // themselves (HD-BET) leave `this.maskDims` unset here, and overwriting it with null made
+    // every following refinement bail out.
+    this.maskController.maskDims = this.maskDims || this.maskController.maskDims;
     this.maskController.voxelSize = this.voxelSize || this.maskController.voxelSize;
 
     const changed = await this.maskController.applyMaskOps(ops);
@@ -2260,6 +2281,35 @@ class QSMApp {
   async dilateMask3D(iterations = 1) { return this.applyMaskOps(`dilate:${iterations}`); }
   async fillHoles3D(maxSize = 0) { return this.applyMaskOps(`fill-holes:${maxSize}`); }
   async signalErodeMask3D() { return this.applyMaskOps('signal-erode'); }
+
+  /**
+   * HD-BET deep-learning brain extraction — a mask *generator*, so it replaces the mask and
+   * resets the op history (as BET and Threshold do). Delegates to MaskController.
+   */
+  async runHdBetMask(options) {
+    this.maskController.maskDims = this.maskDims || this.maskController.maskDims;
+    this.maskController.voxelSize = this.voxelSize || this.maskController.voxelSize;
+
+    const ok = await this.maskController.runHdBetMask(options);
+    if (ok) {
+      this.currentMaskData = this.maskController.currentMaskData;
+      this.originalMaskData = this.maskController.originalMaskData;
+      // HD-BET derives the geometry itself from the prepared header, so publish it here too —
+      // the refinements that follow read it from this side.
+      this.maskDims = this.maskController.maskDims;
+      this.voxelSize = this.maskController.voxelSize;
+
+      // The same post-generation wiring the Threshold and BET generators do: reveal the
+      // Refine Mask panel (#maskOperations starts hidden), publish the mask to Results, and
+      // refresh the run button.
+      const opsPanel = document.getElementById('maskOperations');
+      if (opsPanel) opsPanel.style.display = 'block';
+      this.showStageButtons();
+      this.addStageButton('mask', 'Brain Mask');
+      this.updateEchoInfo();
+    }
+    return ok;
+  }
 
   // Clear mask completely - delegates to MaskController
   async clearMask() {
@@ -2613,6 +2663,31 @@ class QSMApp {
       this.updateEchoInfo();
       console.error(error);
     }
+  }
+
+  /**
+   * Mark a worker job cancellable: flip the shared run state, light up the Stop button, and
+   * register `onCancel` so a hard `worker.terminate()` can settle the job instead of leaving it
+   * hanging. Same state the pipeline and SWI runs use, so one Stop button covers them all.
+   *
+   * @param {Function} onCancel - settle/clean up the job (the worker will not reply)
+   * @returns {Function} call when the job finishes normally
+   */
+  beginCancellableJob(onCancel) {
+    const ex = this.pipelineExecutor;
+    if (!ex) return () => {};
+    ex.pipelineRunning = true;
+    const unregister = ex.onCancel(onCancel);
+    const btn = document.getElementById('cancelPipeline');
+    if (btn) btn.disabled = false;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      unregister();
+      ex.pipelineRunning = false;
+      if (btn) btn.disabled = true;
+    };
   }
 
   cancelPipeline() {
@@ -3417,6 +3492,92 @@ class QSMApp {
   }
 
   // BET Settings Modal
+  // HD-BET's patch is pinned by the 4 GB wasm address space; see the modal copy.
+  static HD_BET_PATCH = [128, 128, 64];
+
+  /** Patch count for the loaded volume, or null if the geometry isn't known yet. */
+  estimateHdBetPatches(tileStep) {
+    const mc = this.maskController;
+    if (!mc?.ensureGeometry?.()) return null;
+    return estimateHdBetPatches(mc.maskDims, mc.voxelSize, QSMApp.HD_BET_PATCH, tileStep);
+  }
+
+  updateHdBetEstimate() {
+    const el = document.getElementById('hdBetEstimate');
+    if (!el) return;
+    const tileStep = parseFloat(document.getElementById('hdBetTileStep')?.value) || 0.5;
+    const tta = !!document.getElementById('hdBetTta')?.checked;
+    const patches = this.estimateHdBetPatches(tileStep);
+
+    if (patches === null) {
+      el.textContent = 'Run Prepare first to estimate.';
+      return;
+    }
+    const passes = patches * (tta ? 8 : 1);
+    el.innerHTML = `About <strong>${patches}</strong> patch${patches === 1 ? '' : 'es'}`
+      + (tta ? ` &times; 8 mirrored passes = <strong>${passes}</strong> network runs` : '')
+      + `. At roughly 10-15 s per run in the browser that is on the order of `
+      + `<strong>${this.formatHdBetDuration(passes)}</strong> — an upper bound, since the volume `
+      + `is cropped to its non-zero region first.`;
+  }
+
+  /** Rough minutes for `passes` network runs, as a range rather than false precision. */
+  formatHdBetDuration(passes) {
+    const lo = Math.round((passes * 10) / 60);
+    const hi = Math.round((passes * 15) / 60);
+    if (hi < 1) return 'under a minute';
+    return lo === hi ? `${hi} minutes` : `${lo}-${hi} minutes`;
+  }
+
+  openHdBetSettingsModal() {
+    if (!this.maskPrepSettings.prepared) {
+      this.updateOutput('Prepare the mask input first — HD-BET needs the magnitude image.');
+      return;
+    }
+    document.getElementById('hdBetTileStep').value = String(this.hdBetSettings?.tileStep ?? 0.5);
+    document.getElementById('hdBetTta').checked = !!this.hdBetSettings?.tta;
+
+    // The weight note is always shown: whether they are already cached is only known to the
+    // worker (it owns the model registry), and "first run" already says it happens once.
+    const note = document.getElementById('hdBetWeightsNote');
+    if (note) note.style.display = '';
+
+    this.updateHdBetEstimate();
+    this.hdBetModal?.open();
+  }
+
+  resetHdBetSettings() {
+    document.getElementById('hdBetTileStep').value = '0.5';
+    document.getElementById('hdBetTta').checked = false;
+    this.updateHdBetEstimate();
+  }
+
+  async runHdBetWithSettings() {
+    this.hdBetSettings = {
+      tileStep: parseFloat(document.getElementById('hdBetTileStep').value) || 0.5,
+      tta: !!document.getElementById('hdBetTta').checked,
+    };
+    this.hdBetModal?.close();
+
+    const patch = QSMApp.HD_BET_PATCH;
+    const { tileStep, tta } = this.hdBetSettings;
+    this.updateOutput('Starting HD-BET brain extraction...');
+    if (await this.runHdBetMask({ patch, tileStep, tta })) {
+      // qsmxt's `hd-bet` op encodes the patch and `:tta`, but has no field for the tile step —
+      // so a non-default overlap cannot be expressed in the command we print. Say so rather than
+      // letting the exported command quietly disagree with what just ran.
+      if (tileStep !== 0.5) {
+        this.updateOutput(
+          `Note: the exported qsmxt command runs HD-BET at its default step of 0.5, not the `
+          + `${tileStep} you chose — the pinned qsmxt-config has no field for it. The mask shown `
+          + `here is the one you asked for.`);
+      }
+      this.maskOpsHistory = [`hd-bet:${patch.join('x')}${tta ? ':tta' : ''}`];
+      await this.displayCurrentMask();
+      this.updateOutput('HD-BET mask created');
+    }
+  }
+
   openBetSettingsModal() {
     const hasMag = this.fileIOController.buckets.magnitude.length > 0;
 

@@ -1628,6 +1628,30 @@ select {
   font-size: 0.7rem;
 }
 
+/* Explanatory note inside a modal — prose, not a one-line pill like .validation-message.
+   Used where a setting needs a sentence or two of context before the controls. */
+.modal-note {
+  display: block;
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--color-text-secondary, inherit);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.modal-note strong {
+  color: var(--color-text, inherit);
+  font-weight: 600;
+}
+
+.modal-note + .modal-note {
+  margin-top: calc(var(--space-md) * -0.5);
+}
+
 /* Slice Type Buttons */
 .slice-buttons {
   display: flex;

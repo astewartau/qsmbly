@@ -16,6 +16,8 @@ export class MaskController {
    * @param {Function} options.updateOutput - Logging callback
    * @param {Function} options.setProgress - Progress callback
    * @param {Function} options.initializeWorker - Worker initialization function
+   * @param {Function} options.beginCancellableJob - Marks a worker job cancellable; takes an
+   *   onCancel callback and returns a release function to call when the job finishes
    * @param {Object} options.config - Reference to QSMConfig
    */
   constructor(options) {
@@ -24,6 +26,7 @@ export class MaskController {
     this.updateOutput = options.updateOutput;
     this.setProgress = options.setProgress;
     this.initializeWorker = options.initializeWorker;
+    this.beginCancellableJob = options.beginCancellableJob;
     this.config = options.config;
 
     // Mask state
@@ -75,6 +78,33 @@ export class MaskController {
 
   getVoxelSize() {
     return this.voxelSize;
+  }
+
+  /**
+   * Derive `maskDims` / `voxelSize` from the prepared NIfTI header.
+   *
+   * Prepare stores the header bytes but does not parse the geometry — only the threshold
+   * preview did, inline. Anything that runs before a preview exists (HD-BET, which generates a
+   * mask from scratch) needs the same numbers, so both read them from here.
+   *
+   * @returns {boolean} true if geometry is available
+   */
+  ensureGeometry() {
+    if (this.maskDims && this.voxelSize) return true;
+    if (!this.magnitudeFileBytes || this.magnitudeFileBytes.byteLength < 348) return false;
+    const h = new DataView(this.magnitudeFileBytes);
+    const nx = h.getInt16(42, true);   // dim[1..3]
+    const ny = h.getInt16(44, true);
+    const nz = h.getInt16(46, true);
+    if (!(nx > 0 && ny > 0 && nz > 0)) return false;
+    this.maskDims = [nx, ny, nz];
+    // pixdim[1..3]; a zero pixdim means "unset" in NIfTI, so fall back to isotropic 1 mm.
+    this.voxelSize = [
+      h.getFloat32(80, true) || 1,
+      h.getFloat32(84, true) || 1,
+      h.getFloat32(88, true) || 1,
+    ];
+    return true;
   }
 
   getMaskThreshold() {
@@ -589,18 +619,10 @@ export class MaskController {
       const threshold = (this.maskThreshold / 100) * this.magnitudeMax;
       const totalVoxels = this.magnitudeData.length;
 
-      // Extract dimensions from NIfTI header
-      const srcView = new DataView(this.magnitudeFileBytes);
-      const nx = srcView.getInt16(42, true);  // dim[1]
-      const ny = srcView.getInt16(44, true);  // dim[2]
-      const nz = srcView.getInt16(46, true);  // dim[3]
-      this.maskDims = [nx, ny, nz];
-
-      // Extract voxel size from NIfTI header (pixdim[1-3] at offsets 80, 84, 88)
-      const dx = srcView.getFloat32(80, true) || 1;
-      const dy = srcView.getFloat32(84, true) || 1;
-      const dz = srcView.getFloat32(88, true) || 1;
-      this.voxelSize = [dx, dy, dz];
+      // Geometry from the NIfTI header (shared with HD-BET, which runs before any preview).
+      this.maskDims = null;
+      this.voxelSize = null;
+      this.ensureGeometry();
 
       // Create mask data from threshold
       const maskData = new Float32Array(totalVoxels);
@@ -747,7 +769,17 @@ export class MaskController {
    * @returns {Promise<boolean>} true if the mask was updated
    */
   async applyMaskOps(ops) {
-    if (!this.currentMaskData || !this.maskDims || !ops) return false;
+    // Say which precondition failed. These used to return false in silence, so a refinement that
+    // quietly did nothing was indistinguishable from one that ran.
+    if (!ops) return false;
+    if (!this.currentMaskData) {
+      this.updateOutput(`Cannot apply "${ops}": no mask yet — create one with Threshold, BET or HD-BET first.`);
+      return false;
+    }
+    if (!this.maskDims) {
+      this.updateOutput(`Cannot apply "${ops}": the image geometry is unknown — run Prepare first.`);
+      return false;
+    }
     // Only the signal-dependent ops need the magnitude; don't combine echoes otherwise.
     let magnitude = [];
     if (/(^|,)\s*(signal-erode|bet|hd-bet)/.test(ops)) {
@@ -784,6 +816,98 @@ export class MaskController {
           voxelSize: this.voxelSize || [1, 1, 1],
         },
       }, [mask.buffer, magnitudeArr.buffer, inputData.buffer]);
+    });
+  }
+
+  /**
+   * HD-BET deep-learning brain extraction. A mask *generator*: it replaces the current mask,
+   * and refinements applied afterwards go through {@link applyMaskOps} as usual.
+   *
+   * Runs in the lazily-loaded DL wasm bundle, so the first call downloads 123 MB of weights
+   * (IndexedDB-cached afterwards).
+   *
+   * @param {{patch?: number[], tileStep?: number, tta?: boolean}} [options] - patch defaults to
+   *   the browser-safe 128x128x64 (see the settings modal for why the native 192x192x96 will not
+   *   fit); `tileStep` is the sliding-window stride as a fraction of the patch, in (0, 1].
+   * @returns {Promise<boolean>} true if the mask was created
+   */
+  async runHdBetMask(options = {}) {
+    const patch = options.patch || [128, 128, 64];
+    const tileStep = options.tileStep ?? 0.5;
+    const tta = !!options.tta;
+
+    if (!this.ensureGeometry()) {
+      this.updateOutput('HD-BET needs the image geometry — run Prepare first.');
+      return false;
+    }
+    const magnitude = await this.getSignalMagnitude();
+    if (!magnitude) {
+      this.updateOutput('HD-BET needs the magnitude image, and none is loaded.');
+      return false;
+    }
+
+    // BET and HD-BET are alternative generators; neither uses the threshold slider.
+    this.setThresholdSliderEnabled(false);
+
+    // A previous cancel terminates and nulls the worker, so make sure there is a live one.
+    await this.initializeWorker?.();
+
+    const worker = this.getWorker();
+    const magnitudeArr = Float64Array.from(magnitude);
+    return new Promise((resolve) => {
+      let release = () => {};
+      let settled = false;
+      // Declared before `settle` so it can detach the listener; assigned just below.
+      let handler;
+      const settle = (value) => {
+        if (settled) return;
+        settled = true;
+        worker.removeEventListener('message', handler);
+        release();
+        resolve(value);
+      };
+
+      handler = (e) => {
+        const { type, ...data } = e.data;
+        switch (type) {
+          case 'hdBetProgress':
+            this.setProgress(data.value, data.text);
+            break;
+          case 'hdBetLog':
+            this.updateOutput(data.message);
+            break;
+          case 'hdBetComplete':
+            this.currentMaskData = data.maskData;
+            this.originalMaskData = data.maskData.slice();
+            settle(true);
+            break;
+          case 'hdBetError':
+            this.updateOutput(`HD-BET failed: ${data.message}`);
+            this.setProgress(0, 'HD-BET failed');
+            settle(false);
+            break;
+        }
+      };
+
+      // Cancelling terminates the worker, so no reply ever comes — settle from here instead.
+      release = this.beginCancellableJob?.(() => {
+        this.updateOutput('HD-BET cancelled.');
+        this.setProgress(0, 'Cancelled');
+        settle(false);
+      }) || (() => {});
+
+      worker.addEventListener('message', handler);
+      worker.postMessage({
+        type: 'hdBet',
+        data: {
+          magnitude: magnitudeArr,
+          dims: this.maskDims,
+          voxelSize: this.voxelSize,
+          patch,
+          tileStep,
+          tta,
+        },
+      }, [magnitudeArr.buffer]);
     });
   }
 

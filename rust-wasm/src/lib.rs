@@ -1757,6 +1757,70 @@ pub fn set_threads_ready_wasm(ready: bool) {
     qsm_core::models::onnx::set_wasm_threads_available(ready);
 }
 
+/// HD-BET deep-learning brain extraction: magnitude → brain mask.
+///
+/// A mask **generator** (it replaces the mask rather than refining one), so JS runs this and
+/// then hands the result to [`apply_mask_ops_wasm`] for any refinements that follow — the same
+/// generator-then-refinements split `build_mask_section` makes natively.
+///
+/// Weights are not bundled: JS fetches `hd-bet.onnx` from the model registry (123 MB,
+/// IndexedDB-cached) and passes the bytes, exactly as for the DL inversion models. Only the DL
+/// bundle has this; the base bundle has no inference.
+///
+/// `patch_x/y/z` must be multiples of 32×32×16. **The browser wants 128×128×64**
+/// (`HdBetParams::low_memory`, peak ≈1.9 GB): HD-BET's native 192×192×96 peaks at ≈4.5 GB, over
+/// wasm32's 4 GB address space. Below roughly 128×128×64, patches that fall wholly inside the
+/// brain start being labelled background.
+///
+/// `tile_step` is the sliding-window stride as a fraction of the patch, in `(0, 1]`. nnU-Net's
+/// 0.5 (50 % overlap) is the quality default; larger strides mean fewer patches and a
+/// proportionally shorter run, at softer patch seams.
+///
+/// `progress_callback(done, total)` reports completed sliding-window patches.
+#[cfg(feature = "onnx")]
+#[wasm_bindgen]
+pub fn hd_bet_wasm(
+    magnitude: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    weights: &[u8],
+    patch_x: usize, patch_y: usize, patch_z: usize,
+    tile_step: f64,
+    tta: bool,
+    progress_callback: &js_sys::Function,
+) -> Result<Vec<u8>, JsValue> {
+    let n = nx * ny * nz;
+    if magnitude.len() != n {
+        return Err(JsValue::from_str(&format!(
+            "HD-BET: magnitude has {} voxels, expected {n} for {nx}x{ny}x{nz}",
+            magnitude.len()
+        )));
+    }
+    console_log!(
+        "WASM HD-BET: {}x{}x{} @ {:.2}x{:.2}x{:.2}mm, patch {}x{}x{}, step {:.2}, tta={}",
+        nx, ny, nz, vsx, vsy, vsz, patch_x, patch_y, patch_z, tile_step, tta
+    );
+
+    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
+    // qsm-core validates `tile_step` in (0, 1] and the patch divisibility, so a bad value comes
+    // back as a readable error rather than a panic.
+    let params = qsm_core::bet::HdBetParams {
+        patch: (patch_x, patch_y, patch_z),
+        tile_step,
+        mirror_tta: tta,
+    };
+
+    let callback = progress_callback.clone();
+    qsm_core::bet::hd_bet(magnitude, &grid, weights, &params, move |done, total| {
+        let _ = callback.call2(
+            &JsValue::NULL,
+            &JsValue::from_f64(done as f64),
+            &JsValue::from_f64(total as f64),
+        );
+    })
+    .map_err(|e| JsValue::from_str(&format!("HD-BET: {e}")))
+}
+
 /// Apply mask operations to an existing mask, through qsm-core's masking pipeline.
 ///
 /// One implementation for every host: this is the same `qsm_core::pipeline::apply_mask_ops` the
