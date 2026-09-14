@@ -1,4 +1,5 @@
 // Import extracted utility modules
+import { estimateHdBetPatches } from './modules/HdBetEstimate.js';
 import { createThresholdMask } from './modules/mask/ThresholdUtils.js';
 import {
   parseNiftiHeader,
@@ -109,6 +110,7 @@ class QSMApp {
 
     // Modal managers (initialized in init() after DOM ready)
     this.betModal = null;
+    this.hdBetModal = null;
     this.aboutModal = null;
     this.citationsModal = null;
     this.privacyModal = null;
@@ -231,6 +233,7 @@ class QSMApp {
 
     // Initialize modal managers
     this.betModal = new ModalManager('betSettingsModal');
+    this.hdBetModal = new ModalManager('hdBetSettingsModal');
     this.commandPreviewModal = new ModalManager('commandPreviewModal');
     this.aboutModal = new ModalManager('aboutModal');
     this.citationsModal = new ModalManager('citationsModal');
@@ -571,18 +574,7 @@ class QSMApp {
     // BET brain extraction button - opens settings modal
     document.getElementById('runBET')?.addEventListener('click', () => this.openBetSettingsModal());
 
-    document.getElementById('runHdBet')?.addEventListener('click', async () => {
-      // HD-BET's native 192x192x96 patches peak at ~4.5 GB, over wasm32's 4 GB address space,
-      // so the browser runs qsm-core's `HdBetParams::low_memory` 128x128x64 (~1.9 GB). Going
-      // smaller would start labelling wholly-interior patches as background.
-      const patch = [128, 128, 64];
-      this.updateOutput('Running HD-BET brain extraction (first run downloads 123 MB of weights)...');
-      if (await this.runHdBetMask({ patch, tta: false })) {
-        this.maskOpsHistory = [`hd-bet:${patch.join('x')}`];
-        await this.displayCurrentMask();
-        this.updateOutput('HD-BET mask created');
-      }
-    });
+    document.getElementById('runHdBet')?.addEventListener('click', () => this.openHdBetSettingsModal());
 
     // Auto threshold button (Otsu)
     document.getElementById('autoThreshold')?.addEventListener('click', () => this.autoDetectThreshold());
@@ -664,6 +656,12 @@ class QSMApp {
     document.getElementById('runT2starR2star')?.addEventListener('click', () => this.runT2starR2star());
 
     // BET settings modal
+    document.getElementById('closeHdBetSettings')?.addEventListener('click', () => this.hdBetModal?.close());
+    document.getElementById('resetHdBetSettings')?.addEventListener('click', () => this.resetHdBetSettings());
+    document.getElementById('runHdBetWithSettings')?.addEventListener('click', () => this.runHdBetWithSettings());
+    document.getElementById('hdBetTileStep')?.addEventListener('change', () => this.updateHdBetEstimate());
+    document.getElementById('hdBetTta')?.addEventListener('change', () => this.updateHdBetEstimate());
+
     document.getElementById('closeBetSettings')?.addEventListener('click', () => this.betModal?.close());
     document.getElementById('resetBetSettings')?.addEventListener('click', () => this.resetBetSettings());
     document.getElementById('runBetWithSettings')?.addEventListener('click', () => this.runBetWithSettings());
@@ -2267,7 +2265,10 @@ class QSMApp {
    */
   async applyMaskOps(ops) {
     this.maskController.currentMaskData = this.currentMaskData;
-    this.maskController.maskDims = this.maskDims;
+    // Keep the controller's geometry when this side doesn't have it. Generators that derive it
+    // themselves (HD-BET) leave `this.maskDims` unset here, and overwriting it with null made
+    // every following refinement bail out.
+    this.maskController.maskDims = this.maskDims || this.maskController.maskDims;
     this.maskController.voxelSize = this.voxelSize || this.maskController.voxelSize;
 
     const changed = await this.maskController.applyMaskOps(ops);
@@ -2293,6 +2294,19 @@ class QSMApp {
     if (ok) {
       this.currentMaskData = this.maskController.currentMaskData;
       this.originalMaskData = this.maskController.originalMaskData;
+      // HD-BET derives the geometry itself from the prepared header, so publish it here too —
+      // the refinements that follow read it from this side.
+      this.maskDims = this.maskController.maskDims;
+      this.voxelSize = this.maskController.voxelSize;
+
+      // The same post-generation wiring the Threshold and BET generators do: reveal the
+      // Refine Mask panel (#maskOperations starts hidden), publish the mask to Results, and
+      // refresh the run button.
+      const opsPanel = document.getElementById('maskOperations');
+      if (opsPanel) opsPanel.style.display = 'block';
+      this.showStageButtons();
+      this.addStageButton('mask', 'Brain Mask');
+      this.updateEchoInfo();
     }
     return ok;
   }
@@ -3478,6 +3492,92 @@ class QSMApp {
   }
 
   // BET Settings Modal
+  // HD-BET's patch is pinned by the 4 GB wasm address space; see the modal copy.
+  static HD_BET_PATCH = [128, 128, 64];
+
+  /** Patch count for the loaded volume, or null if the geometry isn't known yet. */
+  estimateHdBetPatches(tileStep) {
+    const mc = this.maskController;
+    if (!mc?.ensureGeometry?.()) return null;
+    return estimateHdBetPatches(mc.maskDims, mc.voxelSize, QSMApp.HD_BET_PATCH, tileStep);
+  }
+
+  updateHdBetEstimate() {
+    const el = document.getElementById('hdBetEstimate');
+    if (!el) return;
+    const tileStep = parseFloat(document.getElementById('hdBetTileStep')?.value) || 0.5;
+    const tta = !!document.getElementById('hdBetTta')?.checked;
+    const patches = this.estimateHdBetPatches(tileStep);
+
+    if (patches === null) {
+      el.textContent = 'Run Prepare first to estimate.';
+      return;
+    }
+    const passes = patches * (tta ? 8 : 1);
+    el.innerHTML = `About <strong>${patches}</strong> patch${patches === 1 ? '' : 'es'}`
+      + (tta ? ` &times; 8 mirrored passes = <strong>${passes}</strong> network runs` : '')
+      + `. At roughly 10-15 s per run in the browser that is on the order of `
+      + `<strong>${this.formatHdBetDuration(passes)}</strong> — an upper bound, since the volume `
+      + `is cropped to its non-zero region first.`;
+  }
+
+  /** Rough minutes for `passes` network runs, as a range rather than false precision. */
+  formatHdBetDuration(passes) {
+    const lo = Math.round((passes * 10) / 60);
+    const hi = Math.round((passes * 15) / 60);
+    if (hi < 1) return 'under a minute';
+    return lo === hi ? `${hi} minutes` : `${lo}-${hi} minutes`;
+  }
+
+  openHdBetSettingsModal() {
+    if (!this.maskPrepSettings.prepared) {
+      this.updateOutput('Prepare the mask input first — HD-BET needs the magnitude image.');
+      return;
+    }
+    document.getElementById('hdBetTileStep').value = String(this.hdBetSettings?.tileStep ?? 0.5);
+    document.getElementById('hdBetTta').checked = !!this.hdBetSettings?.tta;
+
+    // The weight note is always shown: whether they are already cached is only known to the
+    // worker (it owns the model registry), and "first run" already says it happens once.
+    const note = document.getElementById('hdBetWeightsNote');
+    if (note) note.style.display = '';
+
+    this.updateHdBetEstimate();
+    this.hdBetModal?.open();
+  }
+
+  resetHdBetSettings() {
+    document.getElementById('hdBetTileStep').value = '0.5';
+    document.getElementById('hdBetTta').checked = false;
+    this.updateHdBetEstimate();
+  }
+
+  async runHdBetWithSettings() {
+    this.hdBetSettings = {
+      tileStep: parseFloat(document.getElementById('hdBetTileStep').value) || 0.5,
+      tta: !!document.getElementById('hdBetTta').checked,
+    };
+    this.hdBetModal?.close();
+
+    const patch = QSMApp.HD_BET_PATCH;
+    const { tileStep, tta } = this.hdBetSettings;
+    this.updateOutput('Starting HD-BET brain extraction...');
+    if (await this.runHdBetMask({ patch, tileStep, tta })) {
+      // qsmxt's `hd-bet` op encodes the patch and `:tta`, but has no field for the tile step —
+      // so a non-default overlap cannot be expressed in the command we print. Say so rather than
+      // letting the exported command quietly disagree with what just ran.
+      if (tileStep !== 0.5) {
+        this.updateOutput(
+          `Note: the exported qsmxt command runs HD-BET at its default 50% overlap, not the `
+          + `${Math.round((1 - tileStep) * 100)}% you chose — qsmxt's mask-op syntax has no field `
+          + `for it. The mask shown here is the one you asked for.`);
+      }
+      this.maskOpsHistory = [`hd-bet:${patch.join('x')}${tta ? ':tta' : ''}`];
+      await this.displayCurrentMask();
+      this.updateOutput('HD-BET mask created');
+    }
+  }
+
   openBetSettingsModal() {
     const hasMag = this.fileIOController.buckets.magnitude.length > 0;
 

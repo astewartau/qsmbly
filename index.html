@@ -1911,6 +1911,76 @@
     </div>
   </div>
 
+  <!-- HD-BET Settings Modal -->
+  <div class="modal-overlay" id="hdBetSettingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>HD-BET Settings</h3>
+        <button class="modal-close" id="closeHdBetSettings">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section">
+          <div class="validation-message info inline-warning" style="margin-bottom: var(--space-md);">
+            <span>
+              HD-BET runs a 30-million-parameter neural network over every overlapping patch of the
+              volume. It is the most accurate option here, and by far the slowest — expect
+              <strong>several minutes</strong>. Progress is reported per patch, and
+              <strong>Stop</strong> cancels it at any point.
+            </span>
+          </div>
+          <div class="validation-message info inline-warning" id="hdBetWeightsNote" style="margin-bottom: var(--space-md); display: none;">
+            <span>First run downloads <strong>123 MB</strong> of model weights (CC-BY-NC-4.0). They are cached in your browser afterwards.</span>
+          </div>
+
+          <h4>Inference Parameters</h4>
+
+          <div class="param-group">
+            <label class="param-label" for="hdBetTileStep">Patch Overlap</label>
+            <div class="param-hint">
+              Higher overlap blends patch seams better; lower overlap means fewer patches and a
+              shorter run. 50% is HD-BET's own default, and the only setting the exported qsmxt
+              command can express &mdash; its mask-op syntax has no field for the others.
+            </div>
+            <select id="hdBetTileStep">
+              <option value="0.5">50% overlap — best quality (default)</option>
+              <option value="0.75">25% overlap — faster</option>
+              <option value="1">No overlap — fastest, visible seams possible</option>
+            </select>
+          </div>
+
+          <div class="param-group">
+            <label class="param-label">
+              <input type="checkbox" id="hdBetTta"> Mirroring augmentation (TTA)
+            </label>
+            <div class="param-hint">
+              Averages the network over 8 mirrored versions of every patch. Roughly
+              <strong>8&times; the runtime</strong> for a marginal gain — off in HD-BET's own QSM-CI
+              configuration, and rarely worth it here.
+            </div>
+          </div>
+
+          <div class="param-group">
+            <label class="param-label">Patch Size</label>
+            <div class="param-hint">
+              Fixed at 128&times;128&times;64 (~1.9 GB peak). HD-BET's native 192&times;192&times;96
+              needs ~4.5 GB, past the 4 GB a 32-bit WebAssembly page can address; smaller patches
+              start labelling tissue deep inside the brain as background.
+            </div>
+          </div>
+
+          <div class="param-group">
+            <label class="param-label">Estimated Work</label>
+            <div class="param-hint" id="hdBetEstimate">—</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="resetHdBetSettings">Reset Defaults</button>
+        <button class="btn btn-primary" id="runHdBetWithSettings">Run HD-BET</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Privacy Modal -->
   <!-- About Modal -->
   <!-- Command Preview Modal -->

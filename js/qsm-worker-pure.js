@@ -1351,7 +1351,7 @@ function postBETError(message) {
  *  Lives in the lazily-loaded DL bundle (it needs onnx), so this downloads the 123 MB weights
  *  (IndexedDB-cached after the first run) and boots that bundle's own rayon pool. */
 async function runHdBet(data) {
-  const { magnitude, dims, voxelSize, patch, tta } = data;
+  const { magnitude, dims, voxelSize, patch, tileStep, tta } = data;
   try {
     const [nx, ny, nz] = dims;
     const [vsx, vsy, vsz] = voxelSize;
@@ -1376,22 +1376,33 @@ async function runHdBet(data) {
     self.postMessage({
       type: 'hdBetLog',
       message: `Running HD-BET on ${nx}x${ny}x${nz} @ ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm `
-             + `(${px}x${py}x${pz} patches${tta ? ', mirroring TTA' : ''}). This runs a 30 M-parameter `
+             + `(${px}x${py}x${pz} patches, ${Math.round((1 - (tileStep ?? 0.5)) * 100)}% overlap`
+             + `${tta ? ', mirroring TTA' : ''}). This runs a 30 M-parameter `
              + `network over every overlapping patch and takes several minutes — progress below.`,
     });
 
+    // Once patches start landing we can report a real ETA from measured throughput, rather than
+    // the modal's up-front guess.
+    const startedAt = performance.now();
     const onProgress = (done, total) => {
       const frac = total ? done / total : 0;
+      let eta = '';
+      if (done > 0 && done < total) {
+        const secsLeft = ((performance.now() - startedAt) / done) * (total - done) / 1000;
+        eta = secsLeft < 60
+          ? ` — ${Math.ceil(secsLeft)}s left`
+          : ` — ~${Math.round(secsLeft / 60)} min left`;
+      }
       self.postMessage({
         type: 'hdBetProgress',
         value: 0.2 + frac * 0.75,
-        text: `HD-BET patch ${done}/${total}`,
+        text: `HD-BET patch ${done}/${total}${eta}`,
       });
     };
 
     const maskData = dl.hd_bet_wasm(
       new Float64Array(magnitude), nx, ny, nz, vsx, vsy, vsz,
-      weights[0], px, py, pz, !!tta, onProgress,
+      weights[0], px, py, pz, tileStep ?? 0.5, !!tta, onProgress,
     );
 
     let count = 0;

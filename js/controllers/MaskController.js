@@ -769,7 +769,17 @@ export class MaskController {
    * @returns {Promise<boolean>} true if the mask was updated
    */
   async applyMaskOps(ops) {
-    if (!this.currentMaskData || !this.maskDims || !ops) return false;
+    // Say which precondition failed. These used to return false in silence, so a refinement that
+    // quietly did nothing was indistinguishable from one that ran.
+    if (!ops) return false;
+    if (!this.currentMaskData) {
+      this.updateOutput(`Cannot apply "${ops}": no mask yet — create one with Threshold, BET or HD-BET first.`);
+      return false;
+    }
+    if (!this.maskDims) {
+      this.updateOutput(`Cannot apply "${ops}": the image geometry is unknown — run Prepare first.`);
+      return false;
+    }
     // Only the signal-dependent ops need the magnitude; don't combine echoes otherwise.
     let magnitude = [];
     if (/(^|,)\s*(signal-erode|bet|hd-bet)/.test(ops)) {
@@ -816,12 +826,14 @@ export class MaskController {
    * Runs in the lazily-loaded DL wasm bundle, so the first call downloads 123 MB of weights
    * (IndexedDB-cached afterwards).
    *
-   * @param {{patch?: number[], tta?: boolean}} [options] - patch defaults to the browser-safe
-   *   128x128x64 (see the button handler for why the native 192x192x96 will not fit).
+   * @param {{patch?: number[], tileStep?: number, tta?: boolean}} [options] - patch defaults to
+   *   the browser-safe 128x128x64 (see the settings modal for why the native 192x192x96 will not
+   *   fit); `tileStep` is the sliding-window stride as a fraction of the patch, in (0, 1].
    * @returns {Promise<boolean>} true if the mask was created
    */
   async runHdBetMask(options = {}) {
     const patch = options.patch || [128, 128, 64];
+    const tileStep = options.tileStep ?? 0.5;
     const tta = !!options.tta;
 
     if (!this.ensureGeometry()) {
@@ -892,6 +904,7 @@ export class MaskController {
           dims: this.maskDims,
           voxelSize: this.voxelSize,
           patch,
+          tileStep,
           tta,
         },
       }, [magnitudeArr.buffer]);

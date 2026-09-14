@@ -1772,6 +1772,10 @@ pub fn set_threads_ready_wasm(ready: bool) {
 /// wasm32's 4 GB address space. Below roughly 128×128×64, patches that fall wholly inside the
 /// brain start being labelled background.
 ///
+/// `tile_step` is the sliding-window stride as a fraction of the patch, in `(0, 1]`. nnU-Net's
+/// 0.5 (50 % overlap) is the quality default; larger strides mean fewer patches and a
+/// proportionally shorter run, at softer patch seams.
+///
 /// `progress_callback(done, total)` reports completed sliding-window patches.
 #[cfg(feature = "onnx")]
 #[wasm_bindgen]
@@ -1781,6 +1785,7 @@ pub fn hd_bet_wasm(
     vsx: f64, vsy: f64, vsz: f64,
     weights: &[u8],
     patch_x: usize, patch_y: usize, patch_z: usize,
+    tile_step: f64,
     tta: bool,
     progress_callback: &js_sys::Function,
 ) -> Result<Vec<u8>, JsValue> {
@@ -1792,15 +1797,17 @@ pub fn hd_bet_wasm(
         )));
     }
     console_log!(
-        "WASM HD-BET: {}x{}x{} @ {:.2}x{:.2}x{:.2}mm, patch {}x{}x{}, tta={}",
-        nx, ny, nz, vsx, vsy, vsz, patch_x, patch_y, patch_z, tta
+        "WASM HD-BET: {}x{}x{} @ {:.2}x{:.2}x{:.2}mm, patch {}x{}x{}, step {:.2}, tta={}",
+        nx, ny, nz, vsx, vsy, vsz, patch_x, patch_y, patch_z, tile_step, tta
     );
 
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
+    // qsm-core validates `tile_step` in (0, 1] and the patch divisibility, so a bad value comes
+    // back as a readable error rather than a panic.
     let params = qsm_core::bet::HdBetParams {
         patch: (patch_x, patch_y, patch_z),
+        tile_step,
         mirror_tta: tta,
-        ..qsm_core::bet::HdBetParams::default()
     };
 
     let callback = progress_callback.clone();
