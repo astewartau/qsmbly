@@ -16,6 +16,8 @@ export class MaskController {
    * @param {Function} options.updateOutput - Logging callback
    * @param {Function} options.setProgress - Progress callback
    * @param {Function} options.initializeWorker - Worker initialization function
+   * @param {Function} options.beginCancellableJob - Marks a worker job cancellable; takes an
+   *   onCancel callback and returns a release function to call when the job finishes
    * @param {Object} options.config - Reference to QSMConfig
    */
   constructor(options) {
@@ -24,6 +26,7 @@ export class MaskController {
     this.updateOutput = options.updateOutput;
     this.setProgress = options.setProgress;
     this.initializeWorker = options.initializeWorker;
+    this.beginCancellableJob = options.beginCancellableJob;
     this.config = options.config;
 
     // Mask state
@@ -834,10 +837,25 @@ export class MaskController {
     // BET and HD-BET are alternative generators; neither uses the threshold slider.
     this.setThresholdSliderEnabled(false);
 
+    // A previous cancel terminates and nulls the worker, so make sure there is a live one.
+    await this.initializeWorker?.();
+
     const worker = this.getWorker();
     const magnitudeArr = Float64Array.from(magnitude);
     return new Promise((resolve) => {
-      const handler = (e) => {
+      let release = () => {};
+      let settled = false;
+      // Declared before `settle` so it can detach the listener; assigned just below.
+      let handler;
+      const settle = (value) => {
+        if (settled) return;
+        settled = true;
+        worker.removeEventListener('message', handler);
+        release();
+        resolve(value);
+      };
+
+      handler = (e) => {
         const { type, ...data } = e.data;
         switch (type) {
           case 'hdBetProgress':
@@ -847,19 +865,25 @@ export class MaskController {
             this.updateOutput(data.message);
             break;
           case 'hdBetComplete':
-            worker.removeEventListener('message', handler);
             this.currentMaskData = data.maskData;
             this.originalMaskData = data.maskData.slice();
-            resolve(true);
+            settle(true);
             break;
           case 'hdBetError':
-            worker.removeEventListener('message', handler);
             this.updateOutput(`HD-BET failed: ${data.message}`);
             this.setProgress(0, 'HD-BET failed');
-            resolve(false);
+            settle(false);
             break;
         }
       };
+
+      // Cancelling terminates the worker, so no reply ever comes — settle from here instead.
+      release = this.beginCancellableJob?.(() => {
+        this.updateOutput('HD-BET cancelled.');
+        this.setProgress(0, 'Cancelled');
+        settle(false);
+      }) || (() => {});
+
       worker.addEventListener('message', handler);
       worker.postMessage({
         type: 'hdBet',

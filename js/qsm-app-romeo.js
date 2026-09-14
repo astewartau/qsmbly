@@ -202,6 +202,7 @@ class QSMApp {
       updateOutput: (msg) => this.updateOutput(msg),
       setProgress: (val, text) => this.setProgress(val, text),
       initializeWorker: () => this.pipelineExecutor?.initialize(),
+      beginCancellableJob: (onCancel) => this.beginCancellableJob(onCancel),
       config: window.QSMConfig
     });
 
@@ -2648,6 +2649,31 @@ class QSMApp {
       this.updateEchoInfo();
       console.error(error);
     }
+  }
+
+  /**
+   * Mark a worker job cancellable: flip the shared run state, light up the Stop button, and
+   * register `onCancel` so a hard `worker.terminate()` can settle the job instead of leaving it
+   * hanging. Same state the pipeline and SWI runs use, so one Stop button covers them all.
+   *
+   * @param {Function} onCancel - settle/clean up the job (the worker will not reply)
+   * @returns {Function} call when the job finishes normally
+   */
+  beginCancellableJob(onCancel) {
+    const ex = this.pipelineExecutor;
+    if (!ex) return () => {};
+    ex.pipelineRunning = true;
+    const unregister = ex.onCancel(onCancel);
+    const btn = document.getElementById('cancelPipeline');
+    if (btn) btn.disabled = false;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      unregister();
+      ex.pipelineRunning = false;
+      if (btn) btn.disabled = true;
+    };
   }
 
   cancelPipeline() {
