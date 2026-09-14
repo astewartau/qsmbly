@@ -787,6 +787,74 @@ export class MaskController {
     });
   }
 
+  /**
+   * HD-BET deep-learning brain extraction. A mask *generator*: it replaces the current mask,
+   * and refinements applied afterwards go through {@link applyMaskOps} as usual.
+   *
+   * Runs in the lazily-loaded DL wasm bundle, so the first call downloads 123 MB of weights
+   * (IndexedDB-cached afterwards).
+   *
+   * @param {{patch?: number[], tta?: boolean}} [options] - patch defaults to the browser-safe
+   *   128x128x64 (see the button handler for why the native 192x192x96 will not fit).
+   * @returns {Promise<boolean>} true if the mask was created
+   */
+  async runHdBetMask(options = {}) {
+    const patch = options.patch || [128, 128, 64];
+    const tta = !!options.tta;
+
+    if (!this.maskDims || !this.voxelSize) {
+      this.updateOutput('HD-BET needs the image geometry — run Prepare first.');
+      return false;
+    }
+    const magnitude = await this.getSignalMagnitude();
+    if (!magnitude) {
+      this.updateOutput('HD-BET needs the magnitude image, and none is loaded.');
+      return false;
+    }
+
+    // BET and HD-BET are alternative generators; neither uses the threshold slider.
+    this.setThresholdSliderEnabled(false);
+
+    const worker = this.getWorker();
+    const magnitudeArr = Float64Array.from(magnitude);
+    return new Promise((resolve) => {
+      const handler = (e) => {
+        const { type, ...data } = e.data;
+        switch (type) {
+          case 'hdBetProgress':
+            this.setProgress(data.value, data.text);
+            break;
+          case 'hdBetLog':
+            this.updateOutput(data.message);
+            break;
+          case 'hdBetComplete':
+            worker.removeEventListener('message', handler);
+            this.currentMaskData = data.maskData;
+            this.originalMaskData = data.maskData.slice();
+            resolve(true);
+            break;
+          case 'hdBetError':
+            worker.removeEventListener('message', handler);
+            this.updateOutput(`HD-BET failed: ${data.message}`);
+            this.setProgress(0, 'HD-BET failed');
+            resolve(false);
+            break;
+        }
+      };
+      worker.addEventListener('message', handler);
+      worker.postMessage({
+        type: 'hdBet',
+        data: {
+          magnitude: magnitudeArr,
+          dims: this.maskDims,
+          voxelSize: this.voxelSize,
+          patch,
+          tta,
+        },
+      }, [magnitudeArr.buffer]);
+    });
+  }
+
   // Mask refinements — all go through qsm-core via applyMaskOps.
   async erodeMask3D(iterations = 1) { return this.applyMaskOps(`erode:${iterations}`); }
   async dilateMask3D(iterations = 1) { return this.applyMaskOps(`dilate:${iterations}`); }

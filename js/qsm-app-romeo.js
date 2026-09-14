@@ -570,6 +570,19 @@ class QSMApp {
     // BET brain extraction button - opens settings modal
     document.getElementById('runBET')?.addEventListener('click', () => this.openBetSettingsModal());
 
+    document.getElementById('runHdBet')?.addEventListener('click', async () => {
+      // HD-BET's native 192x192x96 patches peak at ~4.5 GB, over wasm32's 4 GB address space,
+      // so the browser runs qsm-core's `HdBetParams::low_memory` 128x128x64 (~1.9 GB). Going
+      // smaller would start labelling wholly-interior patches as background.
+      const patch = [128, 128, 64];
+      this.updateOutput('Running HD-BET brain extraction (first run downloads 123 MB of weights)...');
+      if (await this.runHdBetMask({ patch, tta: false })) {
+        this.maskOpsHistory = [`hd-bet:${patch.join('x')}`];
+        await this.displayCurrentMask();
+        this.updateOutput('HD-BET mask created');
+      }
+    });
+
     // Auto threshold button (Otsu)
     document.getElementById('autoThreshold')?.addEventListener('click', () => this.autoDetectThreshold());
 
@@ -1807,6 +1820,7 @@ class QSMApp {
       if (generateButtons) generateButtons.style.opacity = '0.5';
       document.getElementById('previewMask')?.setAttribute('disabled', '');
       document.getElementById('runBET')?.setAttribute('disabled', '');
+      document.getElementById('runHdBet')?.setAttribute('disabled', '');
       document.getElementById('maskThreshold')?.setAttribute('disabled', '');
       if (maskOps) maskOps.style.display = 'none';
       // Show info note
@@ -1826,6 +1840,7 @@ class QSMApp {
         if (generateButtons) generateButtons.style.opacity = '1';
         document.getElementById('previewMask')?.removeAttribute('disabled');
         document.getElementById('runBET')?.removeAttribute('disabled');
+        document.getElementById('runHdBet')?.removeAttribute('disabled');
       }
     }
   }
@@ -2019,6 +2034,10 @@ class QSMApp {
     // BET button
     const betBtn = document.getElementById('runBET');
     if (betBtn) betBtn.disabled = !canGenerate;
+
+    // HD-BET button (same preconditions as BET: it needs the magnitude image)
+    const hdBetBtn = document.getElementById('runHdBet');
+    if (hdBetBtn) hdBetBtn.disabled = !canGenerate;
 
     // Threshold slider and auto-threshold button:
     // Only enabled when Threshold method is active (not BET)
@@ -2260,6 +2279,22 @@ class QSMApp {
   async dilateMask3D(iterations = 1) { return this.applyMaskOps(`dilate:${iterations}`); }
   async fillHoles3D(maxSize = 0) { return this.applyMaskOps(`fill-holes:${maxSize}`); }
   async signalErodeMask3D() { return this.applyMaskOps('signal-erode'); }
+
+  /**
+   * HD-BET deep-learning brain extraction — a mask *generator*, so it replaces the mask and
+   * resets the op history (as BET and Threshold do). Delegates to MaskController.
+   */
+  async runHdBetMask(options) {
+    this.maskController.maskDims = this.maskDims || this.maskController.maskDims;
+    this.maskController.voxelSize = this.voxelSize || this.maskController.voxelSize;
+
+    const ok = await this.maskController.runHdBetMask(options);
+    if (ok) {
+      this.currentMaskData = this.maskController.currentMaskData;
+      this.originalMaskData = this.maskController.originalMaskData;
+    }
+    return ok;
+  }
 
   // Clear mask completely - delegates to MaskController
   async clearMask() {

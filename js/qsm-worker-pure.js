@@ -1342,6 +1342,71 @@ function postBETError(message) {
  * pipeline — the same code the qsmxt pipeline runs, so an interactively refined mask matches the
  * `--mask ...` section we print. Pure Rust, so it lives in the base wasm bundle.
  */
+/** HD-BET deep-learning brain extraction (magnitude -> brain mask).
+ *
+ *  A mask *generator*: the result replaces the mask, and any refinements the user adds
+ *  afterwards go through `applyMaskOps` as usual — the same generator-then-refinements split
+ *  qsm-core's `build_mask_section` makes natively.
+ *
+ *  Lives in the lazily-loaded DL bundle (it needs onnx), so this downloads the 123 MB weights
+ *  (IndexedDB-cached after the first run) and boots that bundle's own rayon pool. */
+async function runHdBet(data) {
+  const { magnitude, dims, voxelSize, patch, tta } = data;
+  try {
+    const [nx, ny, nz] = dims;
+    const [vsx, vsy, vsz] = voxelSize;
+
+    const model = dlRegistry['hd-bet'];
+    if (!model) throw new Error('hd-bet is not in the model registry');
+
+    self.postMessage({ type: 'hdBetProgress', value: 0.05, text: 'Fetching HD-BET weights...' });
+    const weights = await downloadWeights(model);
+
+    self.postMessage({ type: 'hdBetProgress', value: 0.15, text: 'Loading inference bundle...' });
+    const dl = await loadDlWasm(wasmBaseUrl, QSMConfig.VERSION);
+    // Same bound as the tiled inversions (4), and for their sake rather than HD-BET's: the DL
+    // bundle has ONE pool, whoever boots it first sets the size, and `xqsm_tiled` & co. batch
+    // tiles by `rayon::current_num_threads()` — so a 14-thread pool booted here would later run
+    // 14 concurrent tiles, each holding its own activations, and exhaust the 32-bit heap.
+    // HD-BET parallelises *inside* a patch (tract's matmuls), so a small pool costs it time, not
+    // correctness.
+    await initRayon(dl, 'dl', 4);
+
+    const [px, py, pz] = patch;
+    self.postMessage({
+      type: 'hdBetLog',
+      message: `Running HD-BET on ${nx}x${ny}x${nz} @ ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm `
+             + `(${px}x${py}x${pz} patches${tta ? ', mirroring TTA' : ''}). This runs a 30 M-parameter `
+             + `network over every overlapping patch and takes several minutes — progress below.`,
+    });
+
+    const onProgress = (done, total) => {
+      const frac = total ? done / total : 0;
+      self.postMessage({
+        type: 'hdBetProgress',
+        value: 0.2 + frac * 0.75,
+        text: `HD-BET patch ${done}/${total}`,
+      });
+    };
+
+    const maskData = dl.hd_bet_wasm(
+      new Float64Array(magnitude), nx, ny, nz, vsx, vsy, vsz,
+      weights[0], px, py, pz, !!tta, onProgress,
+    );
+
+    let count = 0;
+    for (let i = 0; i < maskData.length; i++) if (maskData[i]) count++;
+    self.postMessage({
+      type: 'hdBetLog',
+      message: `HD-BET mask: ${count}/${maskData.length} voxels (${(100 * count / maskData.length).toFixed(1)}%)`,
+    });
+    self.postMessage({ type: 'hdBetProgress', value: 1.0, text: 'Complete' });
+    self.postMessage({ type: 'hdBetComplete', maskData }, [maskData.buffer]);
+  } catch (error) {
+    self.postMessage({ type: 'hdBetError', message: error.message || String(error) });
+  }
+}
+
 async function runApplyMaskOps(data) {
   const { mask, ops, inputData, magnitude, dims, voxelSize } = data;
   try {
@@ -2752,6 +2817,9 @@ self.onmessage = async function (e) {
         await runBET(data);
         break;
 
+      case 'hdBet':
+        await runHdBet(data);
+        break;
       case 'applyMaskOps':
         await runApplyMaskOps(data);
         break;
