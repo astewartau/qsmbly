@@ -183,7 +183,7 @@ export class PipelineSettingsController {
     this._setEl('sharpThreshold', SHARP_DEFAULTS.threshold);
     this._setEl('ismv_radius', defaults.ismv_radius);
     this._setEl('ismvTol', ISMV_DEFAULTS.tol);
-    this._setEl('ismvMaxit', ISMV_DEFAULTS.maxit);
+    this._setEl('ismvMaxit', ISMV_DEFAULTS.max_iter);
     this._setEl('pdfTol', PDF_DEFAULTS.tol);
     this._setEl('pdfMaxit', defaults.pdfMaxit);
     this._setEl('lbvTol', LBV_DEFAULTS.tol);
@@ -421,7 +421,7 @@ export class PipelineSettingsController {
       ismv: {
         radius: parseFloat(this._getEl('ismv_radius')),
         tol: parseFloat(this._getEl('ismvTol')),
-        maxit: parseInt(this._getEl('ismvMaxit'))
+        max_iter: parseInt(this._getEl('ismvMaxit'))
       },
       pdf: {
         tol: parseFloat(this._getEl('pdfTol')),
@@ -828,7 +828,7 @@ export class PipelineSettingsController {
     // iSMV settings
     this._setEl('ismv_radius', settings.ismv.radius ?? defaults.ismv_radius);
     this._setEl('ismvTol', settings.ismv.tol);
-    this._setEl('ismvMaxit', settings.ismv.maxit);
+    this._setEl('ismvMaxit', settings.ismv.max_iter);
 
     // PDF settings
     this._setEl('pdfTol', settings.pdf.tol);

@@ -135,8 +135,8 @@ export const LBV_DEFAULTS = {
 
 export const ISMV_DEFAULTS = {
   tol: _ISMV.tol,
-  maxit: _ISMV.max_iter,
-  radius_factor: _ISMV.radius_factor,
+  max_iter: _ISMV.max_iter,
+  radius: _ISMV.radius,
 };
 
 // Adapted re-exports (field name mapping from snake_case to camelCase)
@@ -231,7 +231,7 @@ export const HOMOGENEITY_DEFAULTS = {
 
 export const SHARP_DEFAULTS = {
   threshold: _SHARP.threshold,
-  radius_factor: _SHARP.radius_factor,
+  radius: _SHARP.radius,
 };
 
 export const RESHARP_DEFAULTS = {
@@ -420,7 +420,7 @@ export const PIPELINE_DEFAULTS = {
   romeo: { ...ROMEO_DEFAULTS },
   bf_algorithm: 'vsharp',
   vsharp: { ...VSHARP_DEFAULTS, max_radius: null, min_radius: null },
-  sharp: { radius: 6, ...SHARP_DEFAULTS },
+  sharp: { ...SHARP_DEFAULTS },
   resharp: { ...RESHARP_DEFAULTS },
   ismv: { ...ISMV_DEFAULTS, radius: null },
   pdf: { ...PDF_DEFAULTS, maxit: null },

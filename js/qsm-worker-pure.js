@@ -2322,19 +2322,19 @@ async function runBackgroundRemoval(
   } else if (backgroundMethod === 'ismv') {
     postProgress(0.42, 'Preparing iSMV background removal...');
     postLog(`Removing background field using iSMV...`);
-    const ismvSettings = pipelineSettings?.ismv || { radius: 5, tol: 0.001, maxit: 500 };
+    const ismvSettings = pipelineSettings?.ismv || { radius: 5, tol: 0.001, max_iter: 500 };
     // Compute default radius from voxel size if not set (matches QSM.jl: 2 * max(vsz))
     if (ismvSettings.radius == null || isNaN(ismvSettings.radius) || ismvSettings.radius <= 0) {
       ismvSettings.radius = Math.round(Math.max(2, 2 * Math.max(vsx, vsy, vsz)));
       postLog(`  iSMV: computed default radius=${ismvSettings.radius}mm from voxel size`);
     }
-    postLog(`  iSMV params: radius=${ismvSettings.radius}, tol=${ismvSettings.tol}, maxit=${ismvSettings.maxit}`);
+    postLog(`  iSMV params: radius=${ismvSettings.radius}, tol=${ismvSettings.tol}, max_iter=${ismvSettings.max_iter}`);
     const ismvProgress = (current, total) => {
       postProgress(0.42 + (current / total) * 0.20, `iSMV: Iteration ${current}/${total}`);
     };
     const result = wasmModule.ismv_wasm_with_progress(
       b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-      ismvSettings.radius, ismvSettings.tol, ismvSettings.maxit,
+      ismvSettings.radius, ismvSettings.tol, ismvSettings.max_iter,
       magField || 3.0, ismvProgress
     );
     localField = new Float64Array(result.slice(0, voxelCount));
