@@ -60,9 +60,12 @@ export function computeFieldMap(wasmModule, {
 
     const { phasesFlat, magsFlat } = flattenEchoes(phase4d, magnitude4d, nEchoes, voxelCount);
 
+    // qsm-core's B0 averaging takes echo times in seconds; echoTimes is in ms.
+    const echoTimesSec = echoTimes.map(t => t / 1000);
+
     const result = wasmModule.mcpc3ds_b0_pipeline_wasm(
       phasesFlat, magsFlat,
-      new Float64Array(echoTimes),
+      new Float64Array(echoTimesSec),
       mask,
       nx, ny, nz, vsx, vsy, vsz,
       mcpc3dsSettings.sigma[0], mcpc3dsSettings.sigma[1], mcpc3dsSettings.sigma[2],
