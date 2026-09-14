@@ -77,6 +77,33 @@ export class MaskController {
     return this.voxelSize;
   }
 
+  /**
+   * Derive `maskDims` / `voxelSize` from the prepared NIfTI header.
+   *
+   * Prepare stores the header bytes but does not parse the geometry — only the threshold
+   * preview did, inline. Anything that runs before a preview exists (HD-BET, which generates a
+   * mask from scratch) needs the same numbers, so both read them from here.
+   *
+   * @returns {boolean} true if geometry is available
+   */
+  ensureGeometry() {
+    if (this.maskDims && this.voxelSize) return true;
+    if (!this.magnitudeFileBytes || this.magnitudeFileBytes.byteLength < 348) return false;
+    const h = new DataView(this.magnitudeFileBytes);
+    const nx = h.getInt16(42, true);   // dim[1..3]
+    const ny = h.getInt16(44, true);
+    const nz = h.getInt16(46, true);
+    if (!(nx > 0 && ny > 0 && nz > 0)) return false;
+    this.maskDims = [nx, ny, nz];
+    // pixdim[1..3]; a zero pixdim means "unset" in NIfTI, so fall back to isotropic 1 mm.
+    this.voxelSize = [
+      h.getFloat32(80, true) || 1,
+      h.getFloat32(84, true) || 1,
+      h.getFloat32(88, true) || 1,
+    ];
+    return true;
+  }
+
   getMaskThreshold() {
     return this.maskThreshold;
   }
@@ -589,18 +616,10 @@ export class MaskController {
       const threshold = (this.maskThreshold / 100) * this.magnitudeMax;
       const totalVoxels = this.magnitudeData.length;
 
-      // Extract dimensions from NIfTI header
-      const srcView = new DataView(this.magnitudeFileBytes);
-      const nx = srcView.getInt16(42, true);  // dim[1]
-      const ny = srcView.getInt16(44, true);  // dim[2]
-      const nz = srcView.getInt16(46, true);  // dim[3]
-      this.maskDims = [nx, ny, nz];
-
-      // Extract voxel size from NIfTI header (pixdim[1-3] at offsets 80, 84, 88)
-      const dx = srcView.getFloat32(80, true) || 1;
-      const dy = srcView.getFloat32(84, true) || 1;
-      const dz = srcView.getFloat32(88, true) || 1;
-      this.voxelSize = [dx, dy, dz];
+      // Geometry from the NIfTI header (shared with HD-BET, which runs before any preview).
+      this.maskDims = null;
+      this.voxelSize = null;
+      this.ensureGeometry();
 
       // Create mask data from threshold
       const maskData = new Float32Array(totalVoxels);
@@ -802,7 +821,7 @@ export class MaskController {
     const patch = options.patch || [128, 128, 64];
     const tta = !!options.tta;
 
-    if (!this.maskDims || !this.voxelSize) {
+    if (!this.ensureGeometry()) {
       this.updateOutput('HD-BET needs the image geometry — run Prepare first.');
       return false;
     }
