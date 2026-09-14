@@ -3490,9 +3490,8 @@ pub fn run_dl_field_inversion_wasm(
     bx: f64, by: f64, bz: f64,
     weights: &[u8], weights2: &[u8], tiled: bool, tile_core: usize, tile_halo: usize,
     progress_callback: &js_sys::Function,
-) -> Vec<f64> {
+) -> Result<Vec<f64>, JsValue> {
     use qsm_core::inversion as inv;
-    let n = nx * ny * nz;
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
     let bdir = (bx, by, bz);
     // Per-tile progress → JS (done, total). Non-tiled nets never call it (bar just sits at start).
@@ -3537,15 +3536,13 @@ pub fn run_dl_field_inversion_wasm(
             "autoqsm" => inv::autoqsm(field_ppm, mask, &grid, weights),
             "nextqsm" => inv::nextqsm(field_ppm, mask, &grid, bdir, weights, weights2),
             other => {
-                console_log!("run_dl_field_inversion_wasm: unknown model '{}'", other);
-                return vec![0.0; n];
+                return Err(js_err(format!(
+                    "run_dl_field_inversion_wasm: unknown model '{other}'"
+                )));
             }
         },
     };
-    match res {
-        Ok(chi) => chi,
-        Err(e) => { console_log!("{} inference error: {}", model_id, e); vec![0.0; n] }
-    }
+    res.map_err(|e| js_err(format!("{model_id} inference failed: {e}")))
 }
 
 /// DL background removal (BFRnet): total field → local field (ppm). BFRnet preserves the
@@ -3557,20 +3554,15 @@ pub fn run_dl_bg_removal_wasm(
     model_id: &str, field_ppm: &[f64], mask: &[u8],
     nx: usize, ny: usize, nz: usize, vsx: f64, vsy: f64, vsz: f64,
     weights: &[u8],
-) -> Vec<f64> {
-    let n = nx * ny * nz;
+) -> Result<Vec<f64>, JsValue> {
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
     let res = match model_id {
         "bfrnet" => qsm_core::bgremove::bfrnet(field_ppm, mask, &grid, weights),
         other => {
-            console_log!("run_dl_bg_removal_wasm: unknown model '{}'", other);
-            return vec![0.0; n];
+            return Err(js_err(format!("run_dl_bg_removal_wasm: unknown model '{other}'")));
         }
     };
-    match res {
-        Ok(local) => local,
-        Err(e) => { console_log!("{} inference error: {}", model_id, e); vec![0.0; n] }
-    }
+    res.map_err(|e| js_err(format!("{model_id} inference failed: {e}")))
 }
 
 /// End-to-end DL reconstruction from wrapped **phase**: iqsm/iqsm-plus → susceptibility (ppm);
@@ -3584,7 +3576,7 @@ pub fn run_dl_phase_recon_wasm(
     nx: usize, ny: usize, nz: usize, vsx: f64, vsy: f64, vsz: f64,
     echo_times: &[f64], b0: f64, bx: f64, by: f64, bz: f64,
     weights: &[u8],
-) -> Vec<f64> {
+) -> Result<Vec<f64>, JsValue> {
     use qsm_core::inversion as inv;
     let n = nx * ny * nz;
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
@@ -3597,14 +3589,10 @@ pub fn run_dl_phase_recon_wasm(
         "iqsm-plus" => inv::iqsm_plus_multi_echo(&phases, &mags, mask, &grid, echo_times, b0, bdir, sign, erode, weights),
         "iqfm" => inv::iqfm_multi_echo(&phases, &mags, mask, &grid, echo_times, b0, sign, erode, weights),
         other => {
-            console_log!("run_dl_phase_recon_wasm: unknown model '{}'", other);
-            return vec![0.0; n];
+            return Err(js_err(format!("run_dl_phase_recon_wasm: unknown model '{other}'")));
         }
     };
-    match res {
-        Ok(v) => v,
-        Err(e) => { console_log!("{} inference error: {}", model_id, e); vec![0.0; n] }
-    }
+    res.map_err(|e| js_err(format!("{model_id} inference failed: {e}")))
 }
 
 /// DL χ-separation (susep-net / chi-sepnet) from local field + QSM + R2' → `[chi_pos ; chi_neg ;
@@ -3616,25 +3604,19 @@ pub fn run_dl_separation_wasm(
     model_id: &str, local_field_ppm: &[f64], qsm: &[f64], r2prime: &[f64], mask: &[u8],
     nx: usize, ny: usize, nz: usize, vsx: f64, vsy: f64, vsz: f64,
     weights: &[u8],
-) -> Vec<f64> {
+) -> Result<Vec<f64>, JsValue> {
     use qsm_core::separation as sep;
-    let n = nx * ny * nz;
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
     let res = match model_id {
         "susep-net" => sep::susep_net(local_field_ppm, qsm, r2prime, mask, &grid, weights, &sep::SusepNetNorm::default()),
         "chi-sepnet" => sep::chisepnet(local_field_ppm, qsm, r2prime, mask, &grid, weights, &sep::ChiSepNetNorm::default()),
         other => {
-            console_log!("run_dl_separation_wasm: unknown model '{}'", other);
-            return vec![0.0; 3 * n];
+            return Err(js_err(format!("run_dl_separation_wasm: unknown model '{other}'")));
         }
     };
-    match res {
-        Ok((pos, neg, tot)) => {
-            let mut out = pos;
-            out.extend(neg);
-            out.extend(tot);
-            out
-        }
-        Err(e) => { console_log!("{} inference error: {}", model_id, e); vec![0.0; 3 * n] }
-    }
+    let (pos, neg, tot) = res.map_err(|e| js_err(format!("{model_id} inference failed: {e}")))?;
+    let mut out = pos;
+    out.extend(neg);
+    out.extend(tot);
+    Ok(out)
 }
