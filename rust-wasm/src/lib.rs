@@ -29,6 +29,16 @@ pub fn init() {
 #[cfg(feature = "parallel")]
 pub use wasm_bindgen_rayon::init_thread_pool;
 
+/// Build a JS `Error` to throw across the wasm_bindgen boundary.
+///
+/// `JsValue::from_str` throws a bare string, which leaves `error.message`
+/// undefined in the worker's `catch (error) { postError(error.message) }` —
+/// so the user sees "undefined" instead of the failure. A real `Error` carries
+/// the message through unchanged.
+fn js_err(e: impl std::fmt::Display) -> JsValue {
+    js_sys::Error::new(&e.to_string()).into()
+}
+
 /// Gyromagnetic ratio of hydrogen protons (Hz/T)
 const GYROMAGNETIC_RATIO: f64 = 42.576e6;
 
@@ -3042,6 +3052,36 @@ mod tests {
         let version = get_version();
         assert!(!version.is_empty());
     }
+
+    // A stage used to parse its config with `.unwrap_or_default()`, so a config that
+    // failed to parse ran qsm-core's default algorithms and parameters instead of the
+    // user's — silently, and indistinguishably from a successful run.
+
+    #[test]
+    fn parse_pipeline_config_rejects_malformed_toml() {
+        let err = parse_pipeline_config("this is not toml {{{").unwrap_err();
+        assert!(err.contains("failed to parse"), "unexpected message: {err}");
+    }
+
+    #[test]
+    fn parse_pipeline_config_rejects_the_error_string_a_failed_serializer_used_to_return() {
+        // config_json_to_toml_wasm used to hand back "ERROR: ..." as though it were TOML,
+        // and no caller checked for it. It now throws, but the parse must reject it too.
+        assert!(parse_pipeline_config("ERROR: bad config").is_err());
+    }
+
+    #[test]
+    fn parse_pipeline_config_keeps_the_users_algorithm() {
+        let toml = "[bg_removal]\nalgorithm = \"pdf\"\n";
+        let config = parse_pipeline_config(toml).expect("valid config should parse");
+        let default = qsmxt_config::PipelineConfig::default();
+
+        assert_eq!(config.bg_removal.algorithm, qsmxt_config::BfAlgorithm::Pdf);
+        assert_ne!(
+            config.bg_removal.algorithm, default.bg_removal.algorithm,
+            "fixture must differ from the default, or it cannot detect a silent fallback",
+        );
+    }
 }
 
 // ============================================================================
@@ -3057,53 +3097,69 @@ mod tests {
 fn config_from_json(
     config_json: &str,
     mask_section: &str,
-) -> Result<qsmxt_config::PipelineConfig, String> {
-    let mut config: qsmxt_config::PipelineConfig =
-        serde_json::from_str(config_json).map_err(|e| format!("ERROR: {}", e))?;
+) -> Result<qsmxt_config::PipelineConfig, JsValue> {
+    let mut config: qsmxt_config::PipelineConfig = serde_json::from_str(config_json)
+        .map_err(|e| js_err(format!("config JSON is not a valid PipelineConfig: {e}")))?;
     apply_mask_section(&mut config, mask_section);
     Ok(config)
 }
 
+/// Parse the pipeline config a stage runs under.
+///
+/// This must never fall back to a default. The config carries the user's chosen
+/// algorithms and parameters; substituting qsm-core's defaults for it produces a
+/// complete, plausible result from a pipeline the user did not ask for.
+///
+/// Split from `config_from_toml` so it is testable off-wasm — `js_sys` values cannot
+/// be constructed on the host target.
+fn parse_pipeline_config(config_toml: &str) -> Result<qsmxt_config::PipelineConfig, String> {
+    qsmxt_config::PipelineConfig::from_toml(config_toml)
+        .map_err(|e| format!("pipeline config failed to parse: {e}"))
+}
+
+fn config_from_toml(config_toml: &str) -> Result<qsmxt_config::PipelineConfig, JsValue> {
+    parse_pipeline_config(config_toml).map_err(js_err)
+}
+
 /// Serialize a config (JSON, plus CLI-style mask string) to canonical TOML —
-/// identical to what the qsmxt.rs CLI writes (all algorithms). Returns "ERROR: ..." on failure.
+/// identical to what the qsmxt.rs CLI writes (all algorithms). Throws on failure.
 #[wasm_bindgen]
-pub fn config_json_to_toml_wasm(config_json: &str, mask_section: &str) -> String {
-    match config_from_json(config_json, mask_section) {
-        Ok(config) => config.to_toml().unwrap_or_else(|e| format!("ERROR: {}", e)),
-        Err(e) => e,
-    }
+pub fn config_json_to_toml_wasm(config_json: &str, mask_section: &str) -> Result<String, JsValue> {
+    config_from_json(config_json, mask_section)?
+        .to_toml()
+        .map_err(|e| js_err(format!("could not serialize config to TOML: {e}")))
 }
 
 /// Like config_json_to_toml_wasm, but prunes inversion/bg_removal to the selected
 /// algorithm only (the omitted ones round-trip as defaults). For the downloadable
-/// settings file. Returns "ERROR: ..." on failure.
+/// settings file. Throws on failure.
 #[wasm_bindgen]
-pub fn config_json_to_toml_selected_wasm(config_json: &str, mask_section: &str) -> String {
-    match config_from_json(config_json, mask_section) {
-        Ok(config) => config.to_toml_selected().unwrap_or_else(|e| format!("ERROR: {}", e)),
-        Err(e) => e,
-    }
+pub fn config_json_to_toml_selected_wasm(
+    config_json: &str,
+    mask_section: &str,
+) -> Result<String, JsValue> {
+    config_from_json(config_json, mask_section)?
+        .to_toml_selected()
+        .map_err(|e| js_err(format!("could not serialize config to TOML: {e}")))
 }
 
-/// Generate a qsmxt CLI command from a config (JSON + mask string).
-/// Returns the command string, or an error message prefixed with "ERROR: ".
+/// Generate a qsmxt CLI command from a config (JSON + mask string). Throws on failure.
 #[wasm_bindgen]
-pub fn generate_command_wasm(config_json: &str, mask_section: &str) -> String {
-    match config_from_json(config_json, mask_section) {
-        Ok(config) => qsmxt_config::generate_command(&config),
-        Err(e) => e,
-    }
+pub fn generate_command_wasm(config_json: &str, mask_section: &str) -> Result<String, JsValue> {
+    Ok(qsmxt_config::generate_command(&config_from_json(config_json, mask_section)?))
 }
 
 /// Generate a methods section with citations from a config (JSON + mask string).
 /// `tool` should be "qsmxt.rs" or "QSMbly" to credit the correct tool.
-/// Returns markdown text, or an error message prefixed with "ERROR: ".
+/// Returns markdown text. Throws on failure.
 #[wasm_bindgen]
-pub fn generate_methods_wasm(config_json: &str, tool: &str, mask_section: &str) -> String {
-    match config_from_json(config_json, mask_section) {
-        Ok(config) => qsmxt_config::methods::generate_methods_for(&config, tool),
-        Err(e) => e,
-    }
+pub fn generate_methods_wasm(
+    config_json: &str,
+    tool: &str,
+    mask_section: &str,
+) -> Result<String, JsValue> {
+    let config = config_from_json(config_json, mask_section)?;
+    Ok(qsmxt_config::methods::generate_methods_for(&config, tool))
 }
 
 /// Parse a CLI-style mask string ("input,gen,refine,...") into the config's mask
@@ -3138,20 +3194,20 @@ fn apply_mask_section(config: &mut qsmxt_config::PipelineConfig, mask_section: &
     }];
 }
 
-/// Return the default PipelineConfig as a TOML string.
+/// Return the default PipelineConfig as a TOML string. Throws on failure.
 #[wasm_bindgen]
-pub fn get_default_config_toml_wasm() -> String {
+pub fn get_default_config_toml_wasm() -> Result<String, JsValue> {
     qsmxt_config::PipelineConfig::default()
         .to_toml()
-        .unwrap_or_else(|e| format!("ERROR: {}", e))
+        .map_err(|e| js_err(format!("could not serialize the default config to TOML: {e}")))
 }
 
-/// Return the default PipelineConfig as a JSON string.
+/// Return the default PipelineConfig as a JSON string. Throws on failure.
 #[wasm_bindgen]
-pub fn get_default_config_json_wasm() -> String {
+pub fn get_default_config_json_wasm() -> Result<String, JsValue> {
     qsmxt_config::PipelineConfig::default()
         .to_json()
-        .unwrap_or_else(|e| format!("ERROR: {}", e))
+        .map_err(|e| js_err(format!("could not serialize the default config to JSON: {e}")))
 }
 
 /// Validate a TOML config string. Returns empty string on success, error message on failure.
@@ -3181,7 +3237,7 @@ pub fn run_field_mapping_wasm(
     vsx: f64, vsy: f64, vsz: f64,
     field_strength: f64,
     config_toml: &str,
-) -> Vec<f64> {
+) -> Result<Vec<f64>, JsValue> {
     let n_echoes = echo_times.len();
     let n_total = nx * ny * nz;
 
@@ -3195,8 +3251,7 @@ pub fn run_field_mapping_wasm(
     };
     let mag_opt: Option<&[&[f64]]> = if mags.is_empty() { None } else { Some(&mags) };
 
-    let config = qsmxt_config::PipelineConfig::from_toml(config_toml)
-        .unwrap_or_default();
+    let config = config_from_toml(config_toml)?;
     let (fm_config, _, _, _) = qsmxt_config::to_pipeline_stages(&config);
     let meta = qsmxt_config::to_scan_metadata(
         (nx, ny, nz), (vsx, vsy, vsz), echo_times, field_strength, (0.0, 0.0, 1.0),
@@ -3206,19 +3261,12 @@ pub fn run_field_mapping_wasm(
         &phases, mag_opt, mask, &meta, &fm_config, &mut |_, _| {},
     );
 
-    match result {
-        Ok(r) => {
-            let mut out = r.b0_field_ppm;
-            if let Some(offset) = r.phase_offset {
-                out.extend(offset);
-            }
-            out
-        }
-        Err(e) => {
-            console_log!("run_field_mapping_wasm error: {}", e);
-            vec![0.0; n_total]
-        }
+    let r = result.map_err(|e| js_err(format!("field mapping failed: {e}")))?;
+    let mut out = r.b0_field_ppm;
+    if let Some(offset) = r.phase_offset {
+        out.extend(offset);
     }
+    Ok(out)
 }
 
 /// Run background removal: total field → local field (ppm).
@@ -3233,10 +3281,8 @@ pub fn run_bg_removal_wasm(
     field_strength: f64,
     config_toml: &str,
     progress_callback: &js_sys::Function,
-) -> Vec<f64> {
-    let n_total = nx * ny * nz;
-    let config = qsmxt_config::PipelineConfig::from_toml(config_toml)
-        .unwrap_or_default();
+) -> Result<Vec<f64>, JsValue> {
+    let config = config_from_toml(config_toml)?;
     let (_, bg_config, _, _) = qsmxt_config::to_pipeline_stages(&config);
     let meta = qsmxt_config::to_scan_metadata(
         (nx, ny, nz), (vsx, vsy, vsz), &[], field_strength, (0.0, 0.0, 1.0),
@@ -3252,18 +3298,10 @@ pub fn run_bg_removal_wasm(
         },
     );
 
-    match result {
-        Ok(r) => {
-            let mut out = r.local_field_ppm;
-            let mask_f64: Vec<f64> = r.eroded_mask.iter().map(|&m| m as f64).collect();
-            out.extend(mask_f64);
-            out
-        }
-        Err(e) => {
-            console_log!("run_bg_removal_wasm error: {}", e);
-            vec![0.0; n_total * 2]
-        }
-    }
+    let r = result.map_err(|e| js_err(format!("background removal failed: {e}")))?;
+    let mut out = r.local_field_ppm;
+    out.extend(r.eroded_mask.iter().map(|&m| m as f64));
+    Ok(out)
 }
 
 /// Run dipole inversion: local field → susceptibility (ppm).
@@ -3281,10 +3319,8 @@ pub fn run_dipole_inversion_wasm(
     magnitude: &[f64],
     config_toml: &str,
     progress_callback: &js_sys::Function,
-) -> Vec<f64> {
-    let n_total = nx * ny * nz;
-    let config = qsmxt_config::PipelineConfig::from_toml(config_toml)
-        .unwrap_or_default();
+) -> Result<Vec<f64>, JsValue> {
+    let config = config_from_toml(config_toml)?;
     let (_, _, inv_config, _) = qsmxt_config::to_pipeline_stages(&config);
     let meta = qsmxt_config::to_scan_metadata(
         (nx, ny, nz), (vsx, vsy, vsz), echo_times, field_strength, (bx, by, bz),
@@ -3302,13 +3338,7 @@ pub fn run_dipole_inversion_wasm(
         },
     );
 
-    match result {
-        Ok(chi) => chi,
-        Err(e) => {
-            console_log!("run_dipole_inversion_wasm error: {}", e);
-            vec![0.0; n_total]
-        }
-    }
+    result.map_err(|e| js_err(format!("dipole inversion failed: {e}")))
 }
 
 /// Apply QSM referencing (mean subtraction or none).
@@ -3367,9 +3397,8 @@ pub fn run_separation_wasm(
     echo_times: &[f64], field_strength: f64,
     bx: f64, by: f64, bz: f64,
     config_toml: &str,
-) -> Vec<f64> {
-    let n = nx * ny * nz;
-    let config = qsmxt_config::PipelineConfig::from_toml(config_toml).unwrap_or_default();
+) -> Result<Vec<f64>, JsValue> {
+    let config = config_from_toml(config_toml)?;
     let sep_config = qsmxt_config::bridge::to_separation_config(&config);
     let meta = qsmxt_config::to_scan_metadata(
         (nx, ny, nz), (vsx, vsy, vsz), echo_times, field_strength, (bx, by, bz),
@@ -3380,18 +3409,12 @@ pub fn run_separation_wasm(
         magnitude_rss: opt_slice(magnitude_rss), magnitude_multi: opt_slice(magnitude_multi),
         se_magnitude_multi: None,
     };
-    match qsm_core::pipeline::run_separation(inputs, &meta, &sep_config, &mut |_, _| {}) {
-        Ok(r) => {
-            let mut out = r.chi_pos;
-            out.extend(r.chi_neg);
-            out.extend(r.chi_total);
-            out
-        }
-        Err(e) => {
-            console_log!("run_separation_wasm error: {}", e);
-            vec![0.0; 3 * n]
-        }
-    }
+    let r = qsm_core::pipeline::run_separation(inputs, &meta, &sep_config, &mut |_, _| {})
+        .map_err(|e| js_err(format!("susceptibility separation failed: {e}")))?;
+    let mut out = r.chi_pos;
+    out.extend(r.chi_neg);
+    out.extend(r.chi_total);
+    Ok(out)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
