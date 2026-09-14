@@ -3656,13 +3656,19 @@ class QSMApp {
     const maskSection = maskSectionString(this.maskOpsHistory, maskSource);
     const handler = (e) => {
       if (e.data.type === 'commandResult') {
-        if (cmdEl) cmdEl.textContent = e.data.result;
+        if (cmdEl) cmdEl.textContent = e.data.error ? `ERROR: ${e.data.error}` : e.data.result;
       } else if (e.data.type === 'methodsResult') {
-        const raw = e.data.result;
-        if (methodsRaw) methodsRaw.textContent = raw;
-        if (methodsRendered) methodsRendered.innerHTML = renderMarkdown(raw);
+        if (e.data.error) {
+          if (methodsRaw) methodsRaw.textContent = `ERROR: ${e.data.error}`;
+          if (methodsRendered) methodsRendered.innerHTML = '<em>Could not generate the methods section.</em>';
+        } else {
+          const raw = e.data.result;
+          if (methodsRaw) methodsRaw.textContent = raw;
+          if (methodsRendered) methodsRendered.innerHTML = renderMarkdown(raw);
+        }
       } else if (e.data.type === 'configTomlResult') {
-        this._lastToml = e.data.result; // last message back — safe to detach
+        // Last message back — safe to detach. A null _lastToml disables the download.
+        this._lastToml = e.data.error ? null : e.data.result;
         worker.removeEventListener('message', handler);
       }
     };

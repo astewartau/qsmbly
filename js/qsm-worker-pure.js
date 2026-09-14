@@ -2810,6 +2810,22 @@ async function runSWIPipeline(data) {
 }
 
 // Handle messages from main thread
+/**
+ * Run an export serializer and reply under `type` either way.
+ *
+ * These three replies are awaited by a one-shot listener in the export modal, and
+ * `configTomlResult` is what detaches it. Letting the throw escape to the generic
+ * postError would leave the modal on "Generating..." with the listener still attached,
+ * so a failure is reported as `{ type, error }` on the same channel instead.
+ */
+function exportReply(type, serialize) {
+  try {
+    return { type, result: serialize() };
+  } catch (err) {
+    return { type, error: err?.message || String(err) };
+  }
+}
+
 self.onmessage = async function (e) {
   const { type, data } = e.data;
 
@@ -2856,16 +2872,19 @@ self.onmessage = async function (e) {
         break;
 
       case 'generateCommand':
-        self.postMessage({ type: 'commandResult', result: wasmModule.generate_command_wasm(data.configJson, data.maskSection || '') });
+        self.postMessage(exportReply('commandResult', () =>
+          wasmModule.generate_command_wasm(data.configJson, data.maskSection || '')));
         break;
 
       case 'generateMethods':
-        self.postMessage({ type: 'methodsResult', result: wasmModule.generate_methods_wasm(data.configJson, 'QSMbly', data.maskSection || '') });
+        self.postMessage(exportReply('methodsResult', () =>
+          wasmModule.generate_methods_wasm(data.configJson, 'QSMbly', data.maskSection || '')));
         break;
 
       case 'generateConfigToml':
         // Download path: pruned to the selected algorithm (still loads in qsmxt.rs).
-        self.postMessage({ type: 'configTomlResult', result: wasmModule.config_json_to_toml_selected_wasm(data.configJson, data.maskSection || '') });
+        self.postMessage(exportReply('configTomlResult', () =>
+          wasmModule.config_json_to_toml_selected_wasm(data.configJson, data.maskSection || '')));
         break;
 
       default:
