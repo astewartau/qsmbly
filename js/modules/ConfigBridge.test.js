@@ -16,13 +16,14 @@ describe('maskSectionString', () => {
     expect(maskSectionString(['bet:0.50'], 'first_echo')).toBe('magnitude-first,bet:0.50');
   });
 
-  test('passes HD-BET through with its patch size', () => {
-    // The browser runs qsm-core's low-memory patch; qsmxt parses `hd-bet:128x128x64` back to
-    // exactly those HdBetParams, so the printed command reproduces what the UI just did.
-    expect(maskSectionString(['hd-bet:128x128x64'], 'combined'))
-      .toBe('magnitude,hd-bet:128x128x64');
-    expect(maskSectionString(['hd-bet:128x128x64', 'signal-erode', 'erode:2'], 'combined'))
-      .toBe('magnitude,hd-bet:128x128x64,signal-erode,erode:2');
+  test('passes HD-BET through with its patch size and step', () => {
+    // The browser runs qsm-core's low-memory patch; qsmxt parses the whole op back to exactly
+    // those HdBetParams — step included since qsmxt-config v9.19.1 — so the printed command
+    // reproduces what the UI just did.
+    expect(maskSectionString(['hd-bet:128x128x64:step=0.5'], 'combined'))
+      .toBe('magnitude,hd-bet:128x128x64:step=0.5');
+    expect(maskSectionString(['hd-bet:128x128x64:step=0.75', 'signal-erode', 'erode:2'], 'combined'))
+      .toBe('magnitude,hd-bet:128x128x64:step=0.75,signal-erode,erode:2');
   });
 
   test('passes signal-gated erosion through in order', () => {

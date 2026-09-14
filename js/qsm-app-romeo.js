@@ -3563,16 +3563,9 @@ class QSMApp {
     const { tileStep, tta } = this.hdBetSettings;
     this.updateOutput('Starting HD-BET brain extraction...');
     if (await this.runHdBetMask({ patch, tileStep, tta })) {
-      // qsmxt's `hd-bet` op encodes the patch and `:tta`, but has no field for the tile step —
-      // so a non-default overlap cannot be expressed in the command we print. Say so rather than
-      // letting the exported command quietly disagree with what just ran.
-      if (tileStep !== 0.5) {
-        this.updateOutput(
-          `Note: the exported qsmxt command runs HD-BET at its default step of 0.5, not the `
-          + `${tileStep} you chose — the pinned qsmxt-config has no field for it. The mask shown `
-          + `here is the one you asked for.`);
-      }
-      this.maskOpsHistory = [`hd-bet:${patch.join('x')}${tta ? ':tta' : ''}`];
+      // qsmxt parses this back to exactly the HdBetParams we just ran, step included
+      // (qsmxt-config v9.19.1 added the field).
+      this.maskOpsHistory = [`hd-bet:${patch.join('x')}${tta ? ':tta' : ''}:step=${tileStep}`];
       await this.displayCurrentMask();
       this.updateOutput('HD-BET mask created');
     }
