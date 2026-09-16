@@ -26,7 +26,7 @@ qsm-core = { git = "https://github.com/astewartau/QSM.rs.git", tag = "v0.35.0" }
 # Pipeline configuration, command generation, methods text.
 # qsmxt-config's canonical home is the QSMxT/QSMxT workspace (the old
 # astewartau/qsmxt.rs repo is being retired).
-qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", tag = "v9.20.0" }
+qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", tag = "v9.21.0" }
 
 # WASM bindings
 # getrandom (pulled by tract-onnx) needs an explicit browser-crypto backend on wasm32. Since
