@@ -131,6 +131,18 @@ html.landing-seen .landing-overlay {
   }
 }
 
+.landing-art {
+  margin: 0;
+}
+.landing-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.landing-screenshot {
+  padding: 0 0 var(--space-2xl);
+}
+
 .landing-shot {
   margin: 0;
 }
