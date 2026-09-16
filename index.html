@@ -93,10 +93,64 @@
               </button>
             </div>
           </div>
-          <figure class="landing-shot">
-            <img src="assets/qsmbly-app.png" alt="The QSMbly interface showing a reconstructed susceptibility map in axial, coronal and sagittal views" width="1440" height="820" loading="eager" decoding="async">
-            <figcaption>A susceptibility map reconstructed from the example data, in the browser.</figcaption>
-          </figure>
+          <div class="landing-art">
+            <svg viewBox="0 0 400 310" xmlns="http://www.w3.org/2000/svg" role="img"
+                 aria-label="A laptop running QSMbly in a browser, with a susceptibility map on screen">
+              <defs>
+                <linearGradient id="qbly-g" x1="0" y1="0" x2="1" y2="1">
+                  <stop stop-color="#60a5fa"/><stop offset="1" stop-color="#2563eb"/>
+                </linearGradient>
+                <linearGradient id="qbly-tint" x1="0" y1="0" x2="0" y2="1">
+                  <stop stop-color="#60a5fa" stop-opacity=".18"/><stop offset="1" stop-color="#2563eb" stop-opacity=".05"/>
+                </linearGradient>
+                <radialGradient id="qbly-glow" cx=".5" cy=".5" r=".5">
+                  <stop stop-color="#3b82f6" stop-opacity=".3"/><stop offset="1" stop-color="#3b82f6" stop-opacity="0"/>
+                </radialGradient>
+                <radialGradient id="qbly-void" cx=".5" cy=".42" r=".55">
+                  <stop stop-color="#1c2533"/><stop offset=".7" stop-color="#0f141b"/><stop offset="1" stop-color="#0b0e14"/>
+                </radialGradient>
+              </defs>
+              <ellipse cx="200" cy="150" rx="215" ry="145" fill="url(#qbly-glow)"/>
+              <ellipse cx="200" cy="262" rx="168" ry="12" fill="#3b82f6" fill-opacity=".08"/>
+              <!-- deck: matches the screen at the hinge, widens slightly toward the viewer -->
+              <polygon points="68,222 332,222 332,232 68,232" fill="#2563eb" fill-opacity=".35"
+                       stroke="url(#qbly-g)" stroke-width="2.5" stroke-linejoin="round"/>
+              <polygon points="88,176 312,176 332,222 68,222" fill="url(#qbly-tint)"
+                       stroke="url(#qbly-g)" stroke-width="2.5" stroke-linejoin="round"/>
+              <line x1="100" y1="186" x2="300" y2="186" stroke="#60a5fa" stroke-opacity=".22" stroke-width="2" stroke-dasharray="6 5"/>
+              <line x1="96" y1="195" x2="304" y2="195" stroke="#60a5fa" stroke-opacity=".22" stroke-width="2" stroke-dasharray="6 5"/>
+              <line x1="92" y1="204" x2="308" y2="204" stroke="#60a5fa" stroke-opacity=".22" stroke-width="2" stroke-dasharray="6 5"/>
+              <rect x="176" y="209" width="48" height="8" rx="3" fill="#60a5fa" fill-opacity=".25"/>
+              <!-- lid and screen -->
+              <polygon points="96,44 304,44 312,176 88,176" fill="url(#qbly-tint)"
+                       stroke="url(#qbly-g)" stroke-width="3" stroke-linejoin="round"/>
+              <rect x="104" y="52" width="192" height="116" rx="4" fill="url(#qbly-void)"/>
+              <!-- browser chrome, with the padlock: it runs locally -->
+              <rect x="104" y="52" width="192" height="20" fill="#60a5fa" fill-opacity=".10"/>
+              <line x1="104" y1="72" x2="296" y2="72" stroke="#60a5fa" stroke-opacity=".35" stroke-width="1.5"/>
+              <circle cx="120" cy="62" r="3.5" fill="#60a5fa" fill-opacity=".55"/>
+              <circle cx="133" cy="62" r="3.5" fill="#60a5fa" fill-opacity=".55"/>
+              <circle cx="146" cy="62" r="3.5" fill="#60a5fa" fill-opacity=".55"/>
+              <rect x="166" y="58" width="116" height="8" rx="4" fill="#60a5fa" fill-opacity=".12"
+                    stroke="#60a5fa" stroke-opacity=".4" stroke-width="1.5"/>
+              <rect x="174" y="61" width="8" height="6" rx="1.2" fill="#60a5fa" fill-opacity=".9"/>
+              <path d="M175.5 61 v-2.2 a2.5 2.5 0 0 1 5 0 v2.2" fill="none" stroke="#60a5fa" stroke-width="1.4"/>
+              <!-- the map on screen -->
+              <ellipse cx="200" cy="120" rx="49" ry="40" fill="#60a5fa" fill-opacity=".06"/>
+              <ellipse cx="200" cy="120" rx="49" ry="40" fill="none" stroke="#60a5fa" stroke-opacity=".5" stroke-width="2"/>
+              <ellipse cx="200" cy="120" rx="36" ry="29" fill="none" stroke="#60a5fa" stroke-opacity=".35" stroke-width="2"/>
+              <ellipse cx="200" cy="120" rx="22" ry="16" fill="none" stroke="#60a5fa" stroke-opacity=".25" stroke-width="2"/>
+              <line x1="200" y1="91" x2="200" y2="149" stroke="#60a5fa" stroke-opacity=".3" stroke-width="1.5"/>
+              <circle cx="188" cy="124" r="4" fill="#60a5fa" fill-opacity=".55"/>
+              <circle cx="213" cy="117" r="3" fill="#60a5fa" fill-opacity=".4"/>
+              <path d="M272 92 C 290 72, 306 56, 322 46" fill="none" stroke="#60a5fa" stroke-opacity=".6"
+                    stroke-width="2" stroke-dasharray="3 5" stroke-linecap="round"/>
+              <g transform="translate(318 6)">
+                <rect width="64" height="64" rx="16" fill="url(#qbly-g)"/>
+                <g transform="matrix(0.05572,0,0,-0.05572,19.5728,38.5758)"><path d="M265 -28 252 95 498 431H406L240 203L227 332C222 375 219 441 158 441C90 441 64 356 60 303L81 296C88 339 109 361 149 361C192 361 193 314 197 282L210 164L-52 -195H40L222 57L236 -62C241 -103 246 -205 307 -205C363 -205 398 -133 402 -73L381 -66C374 -86 370 -130 319 -130C279 -130 268 -59 265 -28Z" fill="#fff"/></g>
+              </g>
+            </svg>
+          </div>
         </header>
 
         <section class="landing-section">
