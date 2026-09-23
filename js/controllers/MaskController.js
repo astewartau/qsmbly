@@ -691,6 +691,89 @@ export class MaskController {
     this.showOverlayControl(true);
   }
 
+  // ==================== Custom Mask Upload ====================
+
+  /**
+   * Read dim[1..3] out of a NIfTI header buffer.
+   */
+  _dimsFromHeader(headerBuffer) {
+    if (!headerBuffer || headerBuffer.byteLength < 348) return null;
+    const h = new DataView(headerBuffer);
+    const dims = [h.getInt16(42, true), h.getInt16(44, true), h.getInt16(46, true)];
+    return dims.every(d => d > 0) ? dims : null;
+  }
+
+  /**
+   * Adopt a user-supplied mask file as the current mask.
+   *
+   * An uploaded mask is a mask *generator*, like Threshold/BET/HD-BET: everything downstream —
+   * the run-button gate, the `customMaskBuffer` handed to the worker, the Results stage button —
+   * reads `currentMaskData`, so the file has to be parsed and published here. Left sitting in the
+   * file list it has no effect on anything.
+   *
+   * @param {File} file - Uploaded mask NIfTI (.nii/.nii.gz)
+   * @param {File} [headerSourceFile] - An image the pipeline runs on, whose grid the mask must
+   *   match. Its header also becomes the template for the mask NIfTI handed to the worker, so the
+   *   mask travels on the pipeline's grid rather than on whatever the mask file happened to carry.
+   * @returns {Promise<{ok: boolean, message: string}>}
+   */
+  async loadMaskFromFile(file, headerSourceFile = null) {
+    if (!file) return { ok: false, message: 'No mask file selected' };
+
+    const maskHeader = await this.readNiftiHeader(file);
+    const maskDims = this._dimsFromHeader(maskHeader);
+    if (!maskDims) {
+      return { ok: false, message: `Could not read NIfTI dimensions from ${file.name}` };
+    }
+
+    // Establish the reference grid. Prefer a header already set by Prepare; otherwise read one
+    // from the image the pipeline runs on. With neither (field-map mode with no magnitude), the
+    // mask's own header is the only grid available.
+    if (!this.magnitudeFileBytes && headerSourceFile) {
+      this.magnitudeFileBytes = await this.readNiftiHeader(headerSourceFile);
+    }
+    const refDims = this._dimsFromHeader(this.magnitudeFileBytes);
+
+    if (refDims) {
+      if (refDims[0] !== maskDims[0] || refDims[1] !== maskDims[1] || refDims[2] !== maskDims[2]) {
+        return {
+          ok: false,
+          message: `Mask is ${maskDims.join('x')} but the image is ${refDims.join('x')}. `
+            + `Upload a mask on the same grid.`
+        };
+      }
+    } else {
+      this.magnitudeFileBytes = maskHeader;
+    }
+
+    // Binarise: masks arrive as uint8/uint16/float, and everything downstream assumes 0/1.
+    const raw = await this.readNiftiData(file);
+    const maskData = new Float32Array(raw.length);
+    let voxelCount = 0;
+    for (let i = 0; i < raw.length; i++) {
+      if (raw[i] > 0.5) {
+        maskData[i] = 1;
+        voxelCount++;
+      }
+    }
+
+    if (voxelCount === 0) {
+      return { ok: false, message: `${file.name} contains no non-zero voxels` };
+    }
+
+    this.currentMaskData = maskData;
+    this.originalMaskData = new Float32Array(maskData);
+
+    // Re-derive geometry from the reference header now that it is known.
+    this.maskDims = null;
+    this.voxelSize = null;
+    this.ensureGeometry();
+
+    await this.displayCurrentMask();
+
+    return { ok: true, message: `Loaded mask ${file.name} (${voxelCount} voxels)` };
+  }
+
   // ==================== Threshold ====================
 
   /**
