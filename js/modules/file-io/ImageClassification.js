@@ -12,6 +12,14 @@ export function classifyImage(name, metadata) {
 
   // Match output suffixes, never "phaseimage" embedded in a protocol name.
   const base = name.replace(/\.nii(\.gz)?$/i, '');
+  // The BIDS part- entity is unambiguous, even when the sidecar omits a component.
+  const part = base.match(/(?:^|_)part-(mag|phase|real|imag)(?:_|$)/i);
+  if (part) {
+    const value = part[1].toLowerCase();
+    if (value === 'mag') return 'magnitude';
+    if (value === 'phase') return 'phase';
+    return 'extra';
+  }
   if (/_ph(?:_[a-z0-9]+)?$/i.test(base)) return 'phase';
   // Bruker enhanced magnitude omits MAGNITUDE in dcm2niix's sidecar.
   if (metadata?.Manufacturer?.toLowerCase() === 'bruker' &&

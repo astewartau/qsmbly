@@ -56,6 +56,26 @@ test('explicit metadata wins, while unrelated images stay uncategorized', async 
   expect(io.buckets.extra.map(e => e.name)).toEqual(['localizer.nii']);
 });
 
+test('BIDS part- entities classify Bruker echoes whose sidecar has no component', async () => {
+  const files = [];
+  for (let echo = 1; echo <= 3; echo++) {
+    for (const part of ['mag', 'phase']) {
+      const name = `sub-1_acq-3dmgeqsm_run-01_echo-0${echo}_part-${part}_MEGRE`;
+      files.push({ name: name + '.nii' });
+      files.push({ name: name + '.json', text: async () => JSON.stringify({
+        Manufacturer: 'Bruker', ImageType: ['ORIGINAL', 'PRIMARY', 'OTHER'],
+        EchoNumber: echo, EchoTime: 0.002 * echo, MagneticFieldStrength: 16.419
+      }) });
+    }
+  }
+  const io = new FileIOController({});
+  await io.addFiles(files);
+  expect(io.buckets.magnitude).toHaveLength(3);
+  expect(io.buckets.phase).toHaveLength(3);
+  expect(io.buckets.extra).toHaveLength(0);
+  expect(io.buckets.phase.map(e => e.echoNumber)).toEqual([1, 2, 3]);
+});
+
 test('native file pickers allow the final gzip extension', () => {
   const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
   for (const id of ['maskFiles', 'unifiedFiles']) {
