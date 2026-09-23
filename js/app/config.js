@@ -221,6 +221,7 @@ export const MCPC3DS_DEFAULTS = {
 // Linear fit B0 calculation defaults
 export const LINEAR_FIT_DEFAULTS = {
   estimate_offset: _LINEAR_FIT.estimate_offset,
+  reliability_threshold_percentile: _LINEAR_FIT.reliability_threshold_percentile,
 };
 
 // Homogeneity correction defaults

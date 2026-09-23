@@ -1310,6 +1310,11 @@
 
           <!-- Linear Fit Settings -->
           <div id="linear_fit_settings" class="method-settings" style="display: none;">
+            <div class="param-group">
+              <label class="param-label" for="linear_fit_reliability_percentile">Reliability threshold (percentile)</label>
+              <input type="number" id="linear_fit_reliability_percentile" value="90" min="0" max="100" step="5">
+              <div class="param-hint">Voxels whose echo-fit residual lands above this percentile are flagged unreliable and excluded. Set to 0 to keep every voxel.</div>
+            </div>
           </div>
         </div>
 

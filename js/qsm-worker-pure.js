@@ -693,7 +693,6 @@ async function runTgvPipeline(data) {
   const b0_estimation = pipelineSettings?.b0_estimation || 'weighted_avg';
   const mcpc3dsSettings = pipelineSettings?.mcpc3ds || { sigma: [10, 10, 5] };
   const b0_weight_type = pipelineSettings?.b0_weight_type || 'phase_snr';
-  const linearFitSettings = pipelineSettings?.linearFit || { estimate_offset: true };
   const romeoSettings = pipelineSettings?.romeo || {
     phase_gradient_coherence: true,
     mag_coherence: true,
