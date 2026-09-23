@@ -2712,23 +2712,40 @@ pub fn calculate_swi_wasm(
 /// # Arguments
 /// * `data` - 3D volume (nx * ny * nz, Fortran order)
 /// * `nx`, `ny`, `nz` - Array dimensions
+/// * `affine` - Row-major 4x4 voxel->world affine of the source volume (16 values)
 /// * `window` - Number of slices in the projection window
 ///
 /// # Returns
-/// MIP volume with dimensions nx × ny × (nz - window + 1)
+/// JS object with: data (Float64Array, nx × ny × (nz - window + 1)), dims (array),
+/// affine (Float64Array). Each output slice stands for a slab, so the projection's origin
+/// sits (window - 1) / 2 slices along the source affine's third column — reusing the source
+/// affine would place the mIP half a slab off.
 #[wasm_bindgen]
 pub fn create_mip_wasm(
     data: &[f64],
     nx: usize, ny: usize, nz: usize,
+    affine: &[f64],
     window: usize,
-) -> Vec<f64> {
+) -> Result<js_sys::Object, JsValue> {
     console_log!("WASM MIP: {}x{}x{}, window={}", nx, ny, nz, window);
 
+    let affine_arr: [f64; 16] = affine.try_into()
+        .map_err(|_| js_err(format!("create_mip_wasm: affine must have 16 values, got {}", affine.len())))?;
     let grid = qsm_core::Grid::new(nx, ny, nz, 1.0, 1.0, 1.0);
-    let result = qsm_core::swi::create_mip(data, &grid, window);
+    let mip = qsm_core::swi::create_mip(data, &grid, &affine_arr, window)
+        .map_err(js_err)?;
 
-    console_log!("WASM MIP complete: output nz={}", if window <= nz { nz - window + 1 } else { 0 });
-    result
+    let result = js_sys::Object::new();
+    js_sys::Reflect::set(&result, &"data".into(), &js_sys::Float64Array::from(mip.data.as_slice()))?;
+    let dims = js_sys::Array::new();
+    dims.push(&JsValue::from(mip.grid.dims.0 as u32));
+    dims.push(&JsValue::from(mip.grid.dims.1 as u32));
+    dims.push(&JsValue::from(mip.grid.dims.2 as u32));
+    js_sys::Reflect::set(&result, &"dims".into(), &dims)?;
+    js_sys::Reflect::set(&result, &"affine".into(), &js_sys::Float64Array::from(mip.affine.as_slice()))?;
+
+    console_log!("WASM MIP complete: output nz={}", mip.grid.dims.2);
+    Ok(result)
 }
 
 // ============================================================================
@@ -3556,8 +3573,19 @@ pub fn run_dl_separation_wasm(
     use qsm_core::separation as sep;
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
     let res = match model_id {
-        "susep-net" => sep::susep_net(local_field_ppm, qsm, r2prime, mask, &grid, weights, &sep::SusepNetNorm::default()),
-        "chi-sepnet" => sep::chisepnet(local_field_ppm, qsm, r2prime, mask, &grid, weights, &sep::ChiSepNetNorm::default()),
+        // Both nets run a sliding window rather than the authors' whole-volume pass: at their
+        // patch size the intermediate tensors are ~1.2 GB, past what a 4 GB wasm heap can hold.
+        "susep-net" => sep::susep_net(
+            local_field_ppm, qsm, r2prime, mask, &grid, weights,
+            &sep::SusepNetNorm::default(),
+            &sep::SusepNetParams { patch: Some(qsm_core::separation::susep_net::WASM_PATCH) },
+            |_, _| {},
+        ),
+        "chi-sepnet" => sep::chisepnet(
+            local_field_ppm, qsm, r2prime, mask, &grid, weights,
+            &sep::ChiSepNetNorm::default(),
+            &sep::ChiSepNetParams { patch: qsm_core::separation::chisepnet::WASM_PATCH },
+        ),
         other => {
             return Err(js_err(format!("run_dl_separation_wasm: unknown model '{other}'")));
         }
