@@ -752,6 +752,7 @@ export class MaskController {
     if (!sameNiftiGrid(maskHeader, referenceHeader)) {
       return {
         ok: false,
+        alignmentMismatch: true,
         message: 'Mask orientation, origin, or voxel spacing differs from the input image. '
           + 'Use Repair mask alignment to review axis flips or a header correction. '
           + 'Other grid differences require resampling.'

@@ -1819,6 +1819,11 @@ class QSMApp {
     const hasMaskFile = this.fileIOController.hasMask();
     const hasPrepared = this.maskPrepSettings.prepared;
     const isCustom = this.maskPrepSettings.source === 'custom';
+    const uploadStatus = document.getElementById('maskUploadStatus');
+    if (uploadStatus) {
+      uploadStatus.hidden = !hasMaskFile;
+      uploadStatus.textContent = hasMaskFile ? (this.maskUploadMessage || 'Checking uploaded mask...') : '';
+    }
     const repairButton = document.getElementById('repairMaskAlignment');
     if (repairButton) repairButton.disabled = !hasMaskFile || !this.getMaskReferenceFile() || this.pipelineRunning || !!this.maskAlignmentActive;
 
@@ -2470,6 +2475,8 @@ class QSMApp {
     this.resetMaskAlignmentRepair();
     const file = this.fileIOController.getMaskFile();
     if (!file) return false;
+    this.maskUploadMessage = 'Checking uploaded mask...';
+    this.updateMaskSectionState();
 
     // The mask has to sit on the grid the pipeline runs on, so validate it against that image.
     const headerSource = this.getMaskReferenceFile();
@@ -2494,13 +2501,20 @@ class QSMApp {
     }
 
     if (!result.ok) {
+      this.maskUploadMessage = `Mask not accepted for processing. ${result.message} Its header may place the overlay outside the visible brain image.`;
       this.updateOutput(result.message);
+      if (result.alignmentMismatch && headerSource) {
+        this.maskUploadMessage = 'Alignment required. The repair preview uses the image header; it is not an accepted mask. Inspect the overlay, choose flips if needed, then Apply alignment.';
+        this.updateMaskSectionState();
+        await this.startMaskAlignmentRepair();
+        return false;
+      }
       if (headerSource) {
         try {
           await this.maskController.previewUploadedMask(file, () =>
             this.loadAndVisualizeFile(headerSource, 'Mask reference image'));
           this.hideEchoNavigation();
-          this.updateOutput('Preview only: uploaded mask shown in its original coordinates. Alignment must be repaired before processing.');
+          this.updateOutput('Preview only: using the uploaded mask\'s original coordinates, which may put it outside the visible brain image. Use Repair mask alignment to inspect a candidate on the image grid.');
         } catch (error) {
           this.updateOutput(`Could not preview mask: ${error.message}`);
         }
@@ -2515,6 +2529,7 @@ class QSMApp {
     this.voxelSize = this.maskController.voxelSize;
     this.magnitudeFileBytes = this.maskController.magnitudeFileBytes;
     this.applyVoxelDefaults();
+    this.maskUploadMessage = 'Mask loaded for processing and displayed over the brain image.';
 
     // Always restore the anatomy after decoding the mask, including compressed uploads.
     if (headerSource) await this.loadAndVisualizeFile(headerSource, 'Mask reference image');
