@@ -645,19 +645,10 @@ class QSMApp {
     });
 
     document.getElementById('runSWI')?.addEventListener('click', () => {
-      // Sync sidebar SWI settings to pipeline settings before running
-      const scaling = document.getElementById('sidebarSwiScaling')?.value || 'tanh';
-      const strength = parseFloat(document.getElementById('sidebarSwiStrength')?.value) || 4;
-      const mip_window = parseInt(document.getElementById('sidebarSwiMipWindow')?.value) || 7;
-      const hp_sigmaX = parseFloat(document.getElementById('sidebarSwiHpSigmaX')?.value) || 4;
-      const hp_sigmaY = parseFloat(document.getElementById('sidebarSwiHpSigmaY')?.value) || 4;
-      const hp_sigmaZ = parseFloat(document.getElementById('sidebarSwiHpSigmaZ')?.value) || 0;
-      if (this.pipelineSettings.swi) {
-        this.pipelineSettings.swi.scaling = scaling;
-        this.pipelineSettings.swi.strength = strength;
-        this.pipelineSettings.swi.mip_window = mip_window;
-        this.pipelineSettings.swi.hp_sigma = [hp_sigmaX, hp_sigmaY, hp_sigmaZ];
-      }
+      // Sync the SWI modal's settings before running. The settings controller reads the
+      // same controls and defaults each field individually, so a deliberate 0 survives
+      // (a `|| 4` fallback would quietly turn it into 4).
+      this._syncSwiSettings();
       this.runSWI();
     });
     document.getElementById('runT2starR2star')?.addEventListener('click', () => this.runT2starR2star());
@@ -3697,18 +3688,15 @@ class QSMApp {
 
   // --- Command Preview ---
 
+  /** Pull the SWI modal's controls into pipelineSettings (the modal owns them). */
+  _syncSwiSettings() {
+    const swi = this.pipelineSettingsController?.swiSettings();
+    if (swi) this.pipelineSettings.swi = swi;
+  }
+
   showCommandPreview() {
     // Sync sidebar SWI settings to pipeline settings before generating command
-    if (this.pipelineSettings.swi) {
-      this.pipelineSettings.swi.scaling = document.getElementById('sidebarSwiScaling')?.value || 'tanh';
-      this.pipelineSettings.swi.strength = parseFloat(document.getElementById('sidebarSwiStrength')?.value) || 4;
-      this.pipelineSettings.swi.mip_window = parseInt(document.getElementById('sidebarSwiMipWindow')?.value) || 7;
-      this.pipelineSettings.swi.hp_sigma = [
-        parseFloat(document.getElementById('sidebarSwiHpSigmaX')?.value) || 4,
-        parseFloat(document.getElementById('sidebarSwiHpSigmaY')?.value) || 4,
-        parseFloat(document.getElementById('sidebarSwiHpSigmaZ')?.value) || 0,
-      ];
-    }
+    this._syncSwiSettings();
     const configJson = buildConfigJson(this.pipelineSettings, {
       doSwi: !!this.results?.swi?.file,
       doT2star: !!this.results?.t2star?.file,
