@@ -157,6 +157,7 @@ describe('MaskController.loadMaskFromFile', () => {
     header.setFloat32(264, 1, true); // qform: 180-degree rotation around Z
     const result = await controller.loadMaskFromFile(mask, referenceImage());
     expect(result.ok).toBe(false);
+    expect(result.alignmentMismatch).toBe(true);
     expect(controller.currentMaskData).toBeNull();
   });
 
