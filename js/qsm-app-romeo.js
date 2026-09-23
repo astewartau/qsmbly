@@ -963,7 +963,7 @@ class QSMApp {
 
     // Route NIfTI/JSON files to auto-categorized buckets
     if (niftiJsonFiles.length > 0) {
-      this.fileIOController.addFiles(niftiJsonFiles);
+      await this.fileIOController.addFiles(niftiJsonFiles);
 
       // Process JSON sidecars
       const jsonFiles = niftiJsonFiles.filter(f => f.name.toLowerCase().endsWith('.json'));

@@ -1,3 +1,5 @@
+import { classifyImage } from '../modules/file-io/ImageClassification.js';
+
 /**
  * DicomController - Handles DICOM to NIfTI conversion and classification.
  * Uses vendored @niivue/dcm2niix (WASM) for in-browser conversion.
@@ -157,7 +159,7 @@ export class DicomController {
    * Returns only this batch's results (no internal accumulation).
    *
    * Strategy:
-   * 1. Primary: Check ImageType array in JSON sidecar for "P"/"PHASE" (phase) or absence (magnitude)
+   * 1. Primary: Use component metadata, including Bruker enhanced multi-echo metadata
    * 2. Fallback: Check filename for "_ph" suffix (dcm2niix convention)
    * 3. Default: Assume magnitude
    */
@@ -185,28 +187,11 @@ export class DicomController {
       const baseName = niftiFile.name.replace(/\.nii(\.gz)?$/, '');
       const jsonEntry = jsonMap.get(baseName + '.json');
 
-      let category = 'magnitude'; // default
       let echoTime = null;
       let echoNumber = null;
 
       if (jsonEntry) {
         const json = jsonEntry.data;
-
-        // Classify by ImageType (three-way: magnitude / phase / extras)
-        const imageType = json.ImageType;
-        if (Array.isArray(imageType)) {
-          const hasPhase = imageType.some(t => t === 'P' || t === 'PHASE');
-          const hasMagnitude = imageType.some(t => t === 'M' || t === 'MAGNITUDE');
-
-          if (hasPhase) {
-            category = 'phase';
-          } else if (hasMagnitude) {
-            category = 'magnitude';
-          } else {
-            // ImageType present but not clearly mag or phase (e.g. SWI, localizer)
-            category = 'extras';
-          }
-        }
 
         // Extract echo info
         if (json.EchoTime != null) {
@@ -225,12 +210,9 @@ export class DicomController {
         }
 
         batchJsonFiles.push(jsonEntry.file);
-      } else {
-        // No JSON sidecar — fallback to filename convention
-        if (niftiFile.name.includes('_ph')) {
-          category = 'phase';
-        }
       }
+      const detected = classifyImage(niftiFile.name, jsonEntry?.data);
+      const category = detected === 'extra' ? 'extras' : (detected || 'magnitude');
 
       const entry = {
         file: niftiFile,

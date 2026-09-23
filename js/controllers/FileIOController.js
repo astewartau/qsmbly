@@ -1,3 +1,5 @@
+import { classifyImage } from '../modules/file-io/ImageClassification.js';
+
 /**
  * FileIOController
  *
@@ -51,11 +53,11 @@ export class FileIOController {
   // ==================== Auto-Categorization ====================
 
   /**
-   * Determine which bucket a file belongs to based on filename.
+   * Determine the bucket from component metadata, then filename conventions.
    * @param {File} file
    * @returns {string} bucket key
    */
-  categorizeFile(file) {
+  categorizeFile(file, metadata) {
     const name = file.name.toLowerCase();
 
     // JSON sidecar files
@@ -63,7 +65,9 @@ export class FileIOController {
 
     // NIfTI files: apply filename heuristics
     if (name.endsWith('.nii') || name.endsWith('.nii.gz')) {
-      if (/phase|_ph[\._]/.test(name)) return 'phase';
+      const component = classifyImage(name, metadata);
+      if (component) return component;
+      if (/(^|[_\-.])phase([_\-.]|$)|_ph[\._]/.test(name)) return 'phase';
       if (/total|b0|fieldmap|field_map/.test(name)) return 'totalField';
       if (/local|chi/.test(name)) return 'localField';
       if (/mag/.test(name)) return 'magnitude';
@@ -82,12 +86,25 @@ export class FileIOController {
    * @param {File[]} files - Array of File objects
    * @returns {Object} categorization results {added: [{entry, bucket}]}
    */
-  addFiles(files) {
+  async addFiles(files) {
+    const metadata = new Map();
+    const sidecars = [...this.buckets.json.map(entry => entry.file), ...files]
+      .filter(file => file.name.toLowerCase().endsWith('.json'));
+    for (const file of sidecars) {
+      try {
+        metadata.set(file.name.replace(/\.json$/i, ''), JSON.parse(await file.text()));
+      } catch (error) {
+        this.updateOutput(`Could not read sidecar ${file.name}: ${error.message}`);
+      }
+    }
     const results = { added: [] };
 
     for (const file of files) {
-      const bucket = this.categorizeFile(file);
+      const json = metadata.get(file.name.replace(/\.nii(\.gz)?$/i, ''));
+      const bucket = this.categorizeFile(file, json);
       const entry = { file, name: file.name };
+      if (json?.EchoTime != null) entry.echoTime = json.EchoTime * 1000;
+      if (json?.EchoNumber != null) entry.echoNumber = json.EchoNumber;
 
       this._addToBucket(bucket, entry);
       results.added.push({ entry, bucket });
@@ -449,7 +466,7 @@ export class FileIOController {
 
     // Sort by echo time and populate inputs
     echoTimes.sort((a, b) => a.echoTime - b.echoTime);
-    this.populateEchoTimeInputs(echoTimes.map(et => et.echoTime));
+    this.populateEchoTimeInputs([...new Set(echoTimes.map(et => et.echoTime))]);
 
     // Populate field strength if found
     if (fieldStrength !== null) {
