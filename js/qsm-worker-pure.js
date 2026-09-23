@@ -356,12 +356,15 @@ function computeSWI(pipelineSettings, unwrappedPhase, magnitude, mask, dims, vox
   // Minimum intensity projection
   const mip_window = swiSettings.mip_window || 0;
   if (mip_window > 0 && mip_window <= nz) {
-    const mipResult = new Float64Array(wasmModule.create_mip_wasm(
-      swiResult, nx, ny, nz, mip_window
-    ));
-    const mipNz = nz - mip_window + 1;
-    sendStageData('mip', mipResult, [nx, ny, mipNz], voxelSize, affine, 'SWI mIP');
-    postLog(`mIP complete (window=${mip_window}, output nz=${mipNz})`);
+    // Each mIP slice stands for a slab, so the projection carries its own grid and affine
+    // (origin shifted (window - 1) / 2 slices) rather than reusing the source ones.
+    const mip = wasmModule.create_mip_wasm(
+      swiResult, nx, ny, nz, affine, mip_window
+    );
+    const mipResult = new Float64Array(mip.data);
+    const mipDims = Array.from(mip.dims);
+    sendStageData('mip', mipResult, mipDims, voxelSize, Array.from(mip.affine), 'SWI mIP');
+    postLog(`mIP complete (window=${mip_window}, output nz=${mipDims[2]})`);
   }
 }
 

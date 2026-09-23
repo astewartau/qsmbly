@@ -21,7 +21,7 @@ parallel = ["qsm-core/parallel", "dep:wasm-bindgen-rayon"]
 [dependencies]
 # Core QSM algorithms. `parallel` (rayon) is enabled via our own `parallel` feature for
 # threaded wasm builds; plain builds stay single-threaded.
-qsm-core = { git = "https://github.com/astewartau/QSM.rs.git", tag = "v0.35.0" }
+qsm-core = { git = "https://github.com/astewartau/QSM.rs.git", tag = "v0.38.0" }
 
 # Pipeline configuration, command generation, methods text.
 # qsmxt-config's canonical home is the QSMxT/QSMxT workspace (the old
