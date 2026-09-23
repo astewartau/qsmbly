@@ -929,21 +929,51 @@ export class MaskController {
    * @returns {Promise<boolean>} true if the mask was created
    */
   async runHdBetMask(options = {}) {
-    const patch = options.patch || [128, 128, 64];
-    const tileStep = options.tileStep ?? 0.5;
-    const tta = !!options.tta;
+    return this.runDlMaskGenerator('HD-BET', 'hdBet', {
+      patch: options.patch || [128, 128, 64],
+      tileStep: options.tileStep ?? 0.5,
+      tta: !!options.tta,
+    });
+  }
 
+  /**
+   * RS2-Net deep-learning rodent brain extraction — a mask *generator*, like HD-BET.
+   *
+   * Runs in the lazily-loaded DL wasm bundle, so the first call downloads 63 MB of weights
+   * (IndexedDB-cached afterwards). The patch is fixed by the exported graph (128x96x128).
+   *
+   * @param {{tileStep?: number, tta?: boolean}} [options] - `tileStep` is the sliding-window
+   *   stride as a fraction of the patch, in (0, 1]; `tta` turns on 8-fold mirroring.
+   * @returns {Promise<boolean>} true if the mask was created
+   */
+  async runRs2NetMask(options = {}) {
+    return this.runDlMaskGenerator('RS2-Net', 'rs2Net', {
+      tileStep: options.tileStep ?? 0.5,
+      tta: !!options.tta,
+    });
+  }
+
+  /**
+   * Run a deep-learning mask generator in the worker on the signal magnitude, and make its
+   * result the current (and original) mask.
+   *
+   * @param {string} name - display name, for messages
+   * @param {string} msg - worker message type; replies are `${msg}Progress|Log|Complete|Error`
+   * @param {object} params - model parameters, sent alongside the magnitude and geometry
+   * @returns {Promise<boolean>} true if the mask was created
+   */
+  async runDlMaskGenerator(name, msg, params) {
     if (!this.ensureGeometry()) {
-      this.updateOutput('HD-BET needs the image geometry — run Prepare first.');
+      this.updateOutput(`${name} needs the image geometry — run Prepare first.`);
       return false;
     }
     const magnitude = await this.getSignalMagnitude();
     if (!magnitude) {
-      this.updateOutput('HD-BET needs the magnitude image, and none is loaded.');
+      this.updateOutput(`${name} needs the magnitude image, and none is loaded.`);
       return false;
     }
 
-    // BET and HD-BET are alternative generators; neither uses the threshold slider.
+    // The BET-style generators don't use the threshold slider.
     this.setThresholdSliderEnabled(false);
 
     // A previous cancel terminates and nulls the worker, so make sure there is a live one.
@@ -967,20 +997,20 @@ export class MaskController {
       handler = (e) => {
         const { type, ...data } = e.data;
         switch (type) {
-          case 'hdBetProgress':
+          case `${msg}Progress`:
             this.setProgress(data.value, data.text);
             break;
-          case 'hdBetLog':
+          case `${msg}Log`:
             this.updateOutput(data.message);
             break;
-          case 'hdBetComplete':
+          case `${msg}Complete`:
             this.currentMaskData = data.maskData;
             this.originalMaskData = data.maskData.slice();
             settle(true);
             break;
-          case 'hdBetError':
-            this.updateOutput(`HD-BET failed: ${data.message}`);
-            this.setProgress(0, 'HD-BET failed');
+          case `${msg}Error`:
+            this.updateOutput(`${name} failed: ${data.message}`);
+            this.setProgress(0, `${name} failed`);
             settle(false);
             break;
         }
@@ -988,22 +1018,15 @@ export class MaskController {
 
       // Cancelling terminates the worker, so no reply ever comes — settle from here instead.
       release = this.beginCancellableJob?.(() => {
-        this.updateOutput('HD-BET cancelled.');
+        this.updateOutput(`${name} cancelled.`);
         this.setProgress(0, 'Cancelled');
         settle(false);
       }) || (() => {});
 
       worker.addEventListener('message', handler);
       worker.postMessage({
-        type: 'hdBet',
-        data: {
-          magnitude: magnitudeArr,
-          dims: this.maskDims,
-          voxelSize: this.voxelSize,
-          patch,
-          tileStep,
-          tta,
-        },
+        type: msg,
+        data: { magnitude: magnitudeArr, dims: this.maskDims, voxelSize: this.voxelSize, ...params },
       }, [magnitudeArr.buffer]);
     });
   }
@@ -1612,7 +1635,8 @@ export class MaskController {
           voxelSize: voxelSize,
           fractionalIntensity: betSettings.fractionalIntensity,
           iterations: betSettings.iterations,
-          subdivisions: betSettings.subdivisions
+          subdivisions: betSettings.subdivisions,
+          voxelScale: betSettings.voxelScale || 1
         }
       });
 

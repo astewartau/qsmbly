@@ -5,3 +5,4 @@
  */
 
 export * from './ThresholdUtils.js';
+export * from './RodentMask.js';
