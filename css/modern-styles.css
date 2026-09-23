@@ -2342,3 +2342,16 @@ select {
 .dicompare-unchecked-content {
   border-top: 1px solid var(--color-border);
 }
+
+
+.mask-alignment-panel {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+.mask-alignment-panel p { margin: 0 0 0.75rem; line-height: 1.5; }
+.mask-alignment-axes, .mask-alignment-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 0.75rem; }
+.mask-alignment-axes label { display: flex; align-items: center; gap: 0.3rem; }
+.mask-alignment-status { color: var(--text-secondary, #94a3b8); }

@@ -8,7 +8,7 @@
 import { MaskController } from './MaskController.js';
 
 /** Build a NIfTI-1 file (header + data) as a File-like object. */
-function makeNiftiFile(name, dims, datatype, values, pixDims = [1, 1, 1, 1]) {
+function makeNiftiFile(name, dims, datatype, values, pixDims = [1, 0.5, 0.5, 2]) {
   const bytesPerVoxel = { 2: 1, 4: 2, 16: 4, 512: 2 }[datatype];
   const n = dims[0] * dims[1] * dims[2];
   const buffer = new ArrayBuffer(352 + n * bytesPerVoxel);
@@ -79,6 +79,32 @@ describe('MaskController.loadMaskFromFile', () => {
     return makeNiftiFile('mag.nii', dims, 16, new Float32Array(n).fill(100), [1, 0.5, 0.5, 2]);
   }
 
+  it('previews an unaccepted mask over restored anatomy using its original header', async () => {
+    const file = makeNiftiFile('different-grid.nii', DIMS, 16, [0, 0.4, 1, 2]);
+    const header = await file.arrayBuffer();
+    new DataView(header).setFloat32(280, 20, true);
+    const calls = [];
+    controller.readNiftiHeader = async () => header;
+    controller.readNiftiData = async () => {
+      calls.push('decode');
+      controller.nv.volumes = [{ name: 'temporary mask' }];
+      return [0, 0.4, 1, 2];
+    };
+    controller.displayCurrentMask = async (data, previewHeader) => {
+      calls.push('overlay');
+      expect(controller.nv.volumes[0].name).toBe('anatomy');
+      expect(previewHeader).toBe(header);
+      expect(Array.from(data)).toEqual([0, 0, 1, 1]);
+    };
+    await controller.previewUploadedMask(file, async () => {
+      calls.push('reference');
+      controller.nv.volumes = [{ name: 'anatomy' }];
+    });
+    expect(calls).toEqual(['decode', 'reference', 'overlay']);
+    expect(controller.currentMaskData).toBeFalsy();
+    expect(controller.originalMaskData).toBeFalsy();
+  });
+
   it('adopts a matching mask and binarises it', async () => {
     // uint16, as FSL/BET masks and the Bruker mouse mask come out
     const values = new Uint16Array(N);
@@ -100,14 +126,15 @@ describe('MaskController.loadMaskFromFile', () => {
     expect(Array.from(controller.originalMaskData)).toEqual(Array.from(controller.currentMaskData));
   });
 
-  it('takes its geometry from the reference image, not the mask file', async () => {
+  it('rejects matching dimensions with different voxel spacing', async () => {
     const values = new Uint16Array(N).fill(1);
     const mask = makeNiftiFile('brain_mask.nii', DIMS, 512, values, [1, 9, 9, 9]);
 
-    await controller.loadMaskFromFile(mask, referenceImage());
+    const result = await controller.loadMaskFromFile(mask, referenceImage());
 
-    expect(controller.getMaskDims()).toEqual(DIMS);
-    expect(controller.getVoxelSize()).toEqual([0.5, 0.5, 2]);
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/orientation|origin|spacing/);
+    expect(controller.currentMaskData).toBeNull();
   });
 
   it('rejects a mask on a different grid', async () => {
@@ -120,6 +147,33 @@ describe('MaskController.loadMaskFromFile', () => {
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/4x4x3.*4x4x2/);
     expect(controller.currentMaskData).toBeNull();
+  });
+
+
+  it('rejects a flipped mask even when dimensions and spacing match', async () => {
+    const mask = makeNiftiFile('flipped.nii', DIMS, 512, new Uint16Array(N).fill(1));
+    const header = new DataView(await mask.arrayBuffer());
+    header.setInt16(252, 1, true);
+    header.setFloat32(264, 1, true); // qform: 180-degree rotation around Z
+    const result = await controller.loadMaskFromFile(mask, referenceImage());
+    expect(result.ok).toBe(false);
+    expect(controller.currentMaskData).toBeNull();
+  });
+
+  it('clears a previously accepted mask when a replacement has incompatible geometry', async () => {
+    const valid = makeNiftiFile('valid.nii', DIMS, 512, new Uint16Array(N).fill(1));
+    expect((await controller.loadMaskFromFile(valid, referenceImage())).ok).toBe(true);
+    const invalid = makeNiftiFile('invalid.nii', DIMS, 512, new Uint16Array(N).fill(1), [1, 9, 9, 9]);
+    expect((await controller.loadMaskFromFile(invalid, referenceImage())).ok).toBe(false);
+    expect(controller.currentMaskData).toBeNull();
+    expect(controller.originalMaskData).toBeNull();
+  });
+
+  it('checks the current reference file even when an old header is cached', async () => {
+    const mask = makeNiftiFile('mask.nii', DIMS, 512, new Uint16Array(N).fill(1));
+    controller.magnitudeFileBytes = (await mask.arrayBuffer()).slice(0, 352);
+    const other = makeNiftiFile('other.nii', DIMS, 16, new Float32Array(N), [1, 1, 1, 1]);
+    expect((await controller.loadMaskFromFile(mask, other)).ok).toBe(false);
   });
 
   it('rejects an empty mask', async () => {

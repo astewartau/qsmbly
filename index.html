@@ -420,6 +420,22 @@
             </div>
             <div class="file-list" id="maskList"></div>
           </div>
+          <button class="btn btn-secondary btn-sm" id="repairMaskAlignment" disabled>Repair mask alignment</button>
+          <div id="maskAlignmentPanel" class="mask-alignment-panel" hidden>
+            <p>Preview the mask on the input image. Flip voxel axes if needed, then inspect all slices before applying.</p>
+            <p>This replaces the mask's orientation and origin with the image's. It cannot correct different anatomy, cropping, or a shifted mask.</p>
+            <div class="mask-alignment-axes">
+              <label><input type="checkbox" id="maskFlipX"> Flip X</label>
+              <label><input type="checkbox" id="maskFlipY"> Flip Y</label>
+              <label><input type="checkbox" id="maskFlipZ"> Flip Z</label>
+            </div>
+            <p class="mask-alignment-status" id="maskAlignmentStatus" role="status" aria-live="polite"></p>
+            <div class="mask-alignment-actions">
+              <button class="btn btn-secondary btn-sm" id="previewMaskAlignment">Preview alignment</button>
+              <button class="btn btn-primary btn-sm" id="applyMaskAlignment" disabled>Apply alignment</button>
+              <button class="btn btn-secondary btn-sm" id="cancelMaskAlignment">Cancel</button>
+            </div>
+          </div>
         </div>
 
         <div class="mask-preview-buttons" id="maskGenerateButtons">
