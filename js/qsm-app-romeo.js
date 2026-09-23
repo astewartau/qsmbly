@@ -1,3 +1,4 @@
+import { MaskAlignmentSession } from './modules/mask/MaskAlignment.js';
 // Import extracted utility modules
 import { estimateHdBetPatches } from './modules/HdBetEstimate.js';
 import { createThresholdMask } from './modules/mask/ThresholdUtils.js';
@@ -157,7 +158,7 @@ class QSMApp {
     // Initialize FileIOController first (other controllers depend on it)
     this.fileIOController = new FileIOController({
       updateOutput: (msg) => this.updateOutput(msg),
-      onFilesChanged: () => this._onBucketsChanged(),
+      onFilesChanged: (type) => this._onBucketsChanged(type),
       onMagnitudeFilesChanged: (files) => this._onMagnitudeFilesChanged(files),
       onPhaseFilesChanged: (files) => this._onPhaseFilesChanged(files)
     });
@@ -504,6 +505,17 @@ class QSMApp {
 
     // Preview buttons (mask only - magnitude/phase/fieldmap previews now in triage)
     document.getElementById('vis_mask')?.addEventListener('click', () => this.visualizeMaskFile());
+    document.getElementById('repairMaskAlignment')?.addEventListener('click', () => this.startMaskAlignmentRepair());
+    document.getElementById('previewMaskAlignment')?.addEventListener('click', () => this.previewMaskAlignmentRepair());
+    document.getElementById('applyMaskAlignment')?.addEventListener('click', () => this.applyMaskAlignmentRepair());
+    document.getElementById('cancelMaskAlignment')?.addEventListener('click', () => this.cancelMaskAlignmentRepair());
+    for (const axis of ['X', 'Y', 'Z']) {
+      document.getElementById(`maskFlip${axis}`)?.addEventListener('change', () => {
+        this.maskAlignmentSession?.invalidate();
+        document.getElementById('applyMaskAlignment').disabled = true;
+        document.getElementById('maskAlignmentStatus').textContent = 'Selection changed. Preview it before applying.';
+      });
+    }
 
     // Sidebar pipeline dropdowns
     this.setupSidebarDropdownListeners();
@@ -582,6 +594,7 @@ class QSMApp {
 
     // Mask Input Preparation
     document.getElementById('maskInputSource')?.addEventListener('change', async (e) => {
+      this.resetMaskAlignmentRepair();
       const isCustom = e.target.value === 'custom';
       this.maskPrepSettings.source = e.target.value;
       this.maskPrepSettings.prepared = false;
@@ -1064,7 +1077,9 @@ class QSMApp {
    * Central state handler — called whenever bucket contents change.
    * Replaces scattered switchInputMode/updateEchoInfo calls.
    */
-  _onBucketsChanged() {
+  _onBucketsChanged(changeType) {
+    if (this.maskAlignmentActive && (this.maskAlignmentSession?.reference !== this.getMaskReferenceFile()
+        || this.maskAlignmentSession?.file !== this.fileIOController.getMaskFile())) this.resetMaskAlignmentRepair();
     // Render file triage UI
     this._renderFileTriage();
 
@@ -1089,7 +1104,7 @@ class QSMApp {
 
     // A mask uploaded before the images is dropped when the magnitude files change, and the
     // grid it has to be validated against only exists once they are loaded — so adopt it here.
-    if (this.maskPrepSettings.source === 'custom' && this.fileIOController.hasMask() && !this.currentMaskData) {
+    if (changeType !== 'mask' && !this.maskAlignmentActive && this.maskPrepSettings.source === 'custom' && this.fileIOController.hasMask() && !this.currentMaskData) {
       this.loadCustomMaskFile().then(() => this.updateEchoInfo());
     }
 
@@ -1804,6 +1819,8 @@ class QSMApp {
     const hasMaskFile = this.fileIOController.hasMask();
     const hasPrepared = this.maskPrepSettings.prepared;
     const isCustom = this.maskPrepSettings.source === 'custom';
+    const repairButton = document.getElementById('repairMaskAlignment');
+    if (repairButton) repairButton.disabled = !hasMaskFile || !this.getMaskReferenceFile() || this.pipelineRunning || !!this.maskAlignmentActive;
 
     const generateButtons = document.getElementById('maskGenerateButtons');
     const thresholdModeButtons = document.getElementById('thresholdModeButtons');
@@ -1914,7 +1931,13 @@ class QSMApp {
     const file = this.fileIOController.getMaskFile();
     if (!file) return;
 
-    await this.loadAndVisualizeFile(file, 'Mask');
+    if (!this.currentMaskData) {
+      await this.loadCustomMaskFile();
+      return;
+    }
+    const reference = this.getMaskReferenceFile();
+    if (reference) await this.loadAndVisualizeFile(reference, 'Mask reference image');
+    await this.displayCurrentMask();
     this.hideEchoNavigation();
   }
 
@@ -1940,9 +1963,8 @@ class QSMApp {
         const hasFieldStrength = !needsFieldStrength || (this.fileIOController.getFieldStrength() > 0);
         // Mask can come from: UI editing, mask file upload, or magnitude (for threshold generation)
         const hasMaskSource = this.currentMaskData !== null
-          || this.fileIOController.hasMask()
-          || this.fileIOController.hasFieldMapMagnitude()
-          || this.preparedMagnitudeData !== null;
+          || (this.maskPrepSettings.source !== 'custom'
+            && (this.fileIOController.hasFieldMapMagnitude() || this.preparedMagnitudeData !== null));
         // QSMART and MEDI require magnitude
         const dipoleMethod = this.pipelineSettings?.dipole_inversion || 'rts';
         const needsMagnitude = combined_method === 'qsmart' || dipoleMethod === 'medi';
@@ -1956,7 +1978,7 @@ class QSMApp {
 
     const runButton = document.getElementById('runPipelineSidebar');
     if (runButton) {
-      runButton.disabled = !canRun || this.pipelineRunning;
+      runButton.disabled = !canRun || this.pipelineRunning || !!this.maskAlignmentActive;
     }
   }
 
@@ -2331,14 +2353,126 @@ class QSMApp {
    * the same post-generation wiring: without it the file is listed but never parsed, so no
    * overlay appears, no `customMaskBuffer` reaches the worker, and Start QSM stays disabled.
    */
+  getMaskReferenceFile() {
+    return this.fileIOController.buckets.totalField[0]?.file
+      || this.fileIOController.buckets.localField[0]?.file
+      || this.fileIOController.buckets.magnitude[0]?.file
+      || this.fileIOController.buckets.phase[0]?.file || null;
+  }
+
+  resetMaskAlignmentRepair() {
+    this.maskAlignmentRevision = (this.maskAlignmentRevision || 0) + 1;
+    this.maskAlignmentActive = false;
+    this.maskAlignmentSession = null;
+    const panel = document.getElementById('maskAlignmentPanel');
+    if (panel) panel.hidden = true;
+  }
+
+  setMaskAlignmentBusy(busy) {
+    for (const id of ['maskFlipX', 'maskFlipY', 'maskFlipZ', 'previewMaskAlignment', 'cancelMaskAlignment']) {
+      document.getElementById(id).disabled = busy;
+    }
+    document.getElementById('applyMaskAlignment').disabled = busy || !this.maskAlignmentSession?.candidate;
+  }
+
+  async startMaskAlignmentRepair() {
+    if (this.pipelineRunning || this.maskAlignmentActive) return;
+    const file = this.fileIOController.getMaskFile();
+    const reference = this.getMaskReferenceFile();
+    if (!file || !reference) return;
+    this.resetMaskAlignmentRepair();
+    const revision = this.maskAlignmentRevision;
+    this.maskAlignmentActive = true;
+    document.getElementById('maskAlignmentPanel').hidden = false;
+    for (const axis of ['X', 'Y', 'Z']) document.getElementById(`maskFlip${axis}`).checked = false;
+    const status = document.getElementById('maskAlignmentStatus');
+    status.textContent = 'Loading mask and reference image...';
+    this.setMaskAlignmentBusy(true);
+    this.updateMaskSectionState();
+    this.updateEchoInfo();
+    try {
+      const maskHeader = await this.maskController.readNiftiHeader(file);
+      const referenceHeader = await this.maskController.readNiftiHeader(reference);
+      const raw = await this.maskController.readNiftiData(file);
+      if (revision !== this.maskAlignmentRevision) return;
+      this.maskAlignmentSession = new MaskAlignmentSession(file, reference, raw, maskHeader, referenceHeader);
+      await this.previewMaskAlignmentRepair();
+    } catch (error) {
+      if (revision === this.maskAlignmentRevision) status.textContent = error.message;
+    } finally {
+      if (revision === this.maskAlignmentRevision) this.setMaskAlignmentBusy(false);
+    }
+  }
+
+  async previewMaskAlignmentRepair() {
+    const session = this.maskAlignmentSession;
+    if (!session) return;
+    const revision = this.maskAlignmentRevision;
+    const status = document.getElementById('maskAlignmentStatus');
+    this.setMaskAlignmentBusy(true);
+    session.invalidate();
+    try {
+      if (session.file !== this.fileIOController.getMaskFile() || session.reference !== this.getMaskReferenceFile()) {
+        throw new Error('Inputs changed. Cancel and start alignment repair again.');
+      }
+      const flips = ['X', 'Y', 'Z'].map(axis => document.getElementById(`maskFlip${axis}`).checked);
+      const candidate = session.preview(flips);
+      await this.loadAndVisualizeFile(session.reference, 'Mask alignment reference');
+      if (revision !== this.maskAlignmentRevision) return;
+      await this.maskController.displayCurrentMask(candidate.data, candidate.header);
+      if (revision !== this.maskAlignmentRevision) return;
+      this.hideEchoNavigation();
+      this.updateDataUnits(null);
+      const axes = ['X', 'Y', 'Z'].filter((_, i) => flips[i]).join(', ');
+      status.textContent = `Preview only: ${axes ? `flip ${axes}` : 'replace header without flips'}. `
+        + `${candidate.count} mask voxels. Inspect the red overlay in all three planes and across slices. Apply only when aligned.`;
+    } catch (error) {
+      session.invalidate();
+      if (revision === this.maskAlignmentRevision) status.textContent = error.message;
+    } finally {
+      if (revision === this.maskAlignmentRevision) this.setMaskAlignmentBusy(false);
+    }
+  }
+
+  async applyMaskAlignmentRepair() {
+    const session = this.maskAlignmentSession;
+    if (!session?.candidate) return;
+    this.setMaskAlignmentBusy(true);
+    try {
+      const aligned = session.accept(this.fileIOController.getMaskFile(), this.getMaskReferenceFile());
+      this.resetMaskAlignmentRepair();
+      this.fileIOController.maskFile = [{ file: aligned, name: aligned.name }];
+      this.fileIOController.updateFileList('mask', this.fileIOController.maskFile);
+      if (await this.loadCustomMaskFile()) {
+        this.updateOutput(`Applied mask alignment: ${aligned.name}. The original file was not changed.`);
+      }
+      this.updateMaskSectionState();
+      this.updateEchoInfo();
+    } catch (error) {
+      document.getElementById('maskAlignmentStatus').textContent = error.message;
+      this.setMaskAlignmentBusy(false);
+    }
+  }
+
+  async cancelMaskAlignmentRepair() {
+    const reference = this.getMaskReferenceFile();
+    this.resetMaskAlignmentRepair();
+    try {
+      if (reference) await this.loadAndVisualizeFile(reference, 'Mask reference image');
+      if (this.currentMaskData) await this.displayCurrentMask();
+    } finally {
+      this.updateMaskSectionState();
+      this.updateEchoInfo();
+    }
+  }
+
   async loadCustomMaskFile() {
+    this.resetMaskAlignmentRepair();
     const file = this.fileIOController.getMaskFile();
     if (!file) return false;
 
     // The mask has to sit on the grid the pipeline runs on, so validate it against that image.
-    const headerSource = this.fileIOController.buckets.magnitude[0]?.file
-      || this.fileIOController.buckets.phase[0]?.file
-      || null;
+    const headerSource = this.getMaskReferenceFile();
 
     // Give the overlay a base volume to sit on when nothing has been displayed yet.
     if (this.nv.volumes.length === 0 && this.fileIOController.buckets.magnitude.length > 0) {
@@ -2346,6 +2480,10 @@ class QSMApp {
     }
 
     this.maskController.magnitudeFileBytes = this.magnitudeFileBytes || this.maskController.magnitudeFileBytes;
+    // A replacement must not leave a previously accepted mask available to the pipeline.
+    this.currentMaskData = null;
+    this.originalMaskData = null;
+    this.updateEchoInfo();
 
     let result;
     try {
@@ -2357,6 +2495,17 @@ class QSMApp {
 
     if (!result.ok) {
       this.updateOutput(result.message);
+      if (headerSource) {
+        try {
+          await this.maskController.previewUploadedMask(file, () =>
+            this.loadAndVisualizeFile(headerSource, 'Mask reference image'));
+          this.hideEchoNavigation();
+          this.updateOutput('Preview only: uploaded mask shown in its original coordinates. Alignment must be repaired before processing.');
+        } catch (error) {
+          this.updateOutput(`Could not preview mask: ${error.message}`);
+        }
+      }
+      this.updateMaskSectionState();
       return false;
     }
 
@@ -2366,6 +2515,11 @@ class QSMApp {
     this.voxelSize = this.maskController.voxelSize;
     this.magnitudeFileBytes = this.maskController.magnitudeFileBytes;
     this.applyVoxelDefaults();
+
+    // Always restore the anatomy after decoding the mask, including compressed uploads.
+    if (headerSource) await this.loadAndVisualizeFile(headerSource, 'Mask reference image');
+    await this.displayCurrentMask();
+    this.hideEchoNavigation();
 
     // An uploaded mask is used as given, so the op history starts empty rather than naming a
     // generator — the methods prose reports it as a supplied mask.
@@ -2381,6 +2535,7 @@ class QSMApp {
 
   // Clear mask completely - delegates to MaskController
   async clearMask() {
+    this.resetMaskAlignmentRepair();
     await this.maskController.clearMask();
 
     // Sync state
@@ -2455,6 +2610,12 @@ class QSMApp {
   }
 
   async runRomeoQSM() {
+    if (this.maskAlignmentActive) {
+      this.updateOutput('Apply or cancel the mask alignment preview before running.');
+      return;
+    }
+    if (this.fileIOController.hasMask() && !this.currentMaskData
+        && !(await this.loadCustomMaskFile())) return;
     const mode = this.fileIOController.getInputMode();
 
     if (mode === 'raw') {
@@ -2979,6 +3140,11 @@ class QSMApp {
 
       // Handle mask (local data, not from pipeline)
       if (stage === 'mask') {
+        if (this.maskPrepSettings.source === 'custom' && this.fileIOController.hasMask()) {
+          await this.visualizeMaskFile();
+          this.updateDataUnits(null);
+          return;
+        }
         if (this.currentMaskData || this.maskController.currentMaskData) {
           if (!this.currentMaskData) {
             this.currentMaskData = this.maskController.currentMaskData;
@@ -3436,6 +3602,12 @@ class QSMApp {
   }
 
   async runSWI() {
+    if (this.maskAlignmentActive) {
+      this.updateOutput('Apply or cancel the mask alignment preview before running.');
+      return;
+    }
+    if (this.fileIOController.hasMask() && !this.currentMaskData
+        && !(await this.loadCustomMaskFile())) return;
     const mode = this.fileIOController.getInputMode();
     if (mode !== 'raw') {
       this.updateOutput("SWI requires raw magnitude + phase data");
@@ -3499,6 +3671,12 @@ class QSMApp {
   }
 
   async runT2starR2star() {
+    if (this.maskAlignmentActive) {
+      this.updateOutput('Apply or cancel the mask alignment preview before running.');
+      return;
+    }
+    if (this.fileIOController.hasMask() && !this.currentMaskData
+        && !(await this.loadCustomMaskFile())) return;
     const mode = this.fileIOController.getInputMode();
     if (mode !== 'raw') {
       this.updateOutput("T2*/R2* requires raw magnitude data (current mode: " + mode + ")");

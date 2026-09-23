@@ -6,8 +6,9 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import Module from '../dcm2niix/dcm2niix.js';
 import { DicomController } from '../js/controllers/DicomController.js';
+import { MaskController } from '../js/controllers/MaskController.js';
 import { FileIOController } from '../js/controllers/FileIOController.js';
-import { parseNiftiHeader, readNiftiImageData } from '../js/modules/file-io/NiftiUtils.js';
+import { parseNiftiHeader, readNiftiImageData, sameNiftiGrid } from '../js/modules/file-io/NiftiUtils.js';
 
 const directory = process.argv[2];
 assert.ok(directory, 'Pass the local troubleshoot directory');
@@ -60,4 +61,11 @@ assert.ok(mask, 'Expected compressed mask');
 const maskBytes = await new Response(mask.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
 assert.deepEqual(parseNiftiHeader(maskBytes).dims.slice(1, 4), [96, 82, 18]);
 assert.ok(readNiftiImageData(new Uint8Array(maskBytes)).some(value => value > 0));
-console.log('PASS: both import paths have six magnitude/phase echoes and correct timings; all converted voxels and spatial headers match offline conversion; gzip mask decodes.');
+assert.equal(sameNiftiGrid(maskBytes, await io.buckets.magnitude[0].file.arrayBuffer()), false,
+  'The supplied mask has different orientation/origin and must not be silently relabelled');
+const masks = new MaskController({ nv: { volumes: [] } });
+const adoption = await masks.loadMaskFromFile(new File([maskBytes], 'mask.nii'), io.buckets.magnitude[0].file);
+assert.equal(adoption.ok, false);
+assert.equal(masks.currentMaskData, null);
+assert.match(adoption.message, /orientation, origin/);
+console.log('PASS: both import paths have six magnitude/phase echoes and correct timings; all converted voxels and spatial headers match offline conversion; gzip mask decodes and its incompatible spatial grid is detected.');

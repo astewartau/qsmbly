@@ -269,3 +269,54 @@ export function createFloat64Nifti(imageData, sourceHeader) {
 
   return buffer;
 }
+
+/** NIfTI-1 voxel-to-world transform, using sform before qform. */
+export function niftiAffine(header) {
+  const h = new DataView(header);
+  if (h.getInt16(254, true) > 0) {
+    return Array.from({ length: 3 }, (_, r) =>
+      Array.from({ length: 4 }, (_, c) => h.getFloat32(280 + 16 * r + 4 * c, true)));
+  }
+  const spacing = [80, 84, 88].map(offset => Math.abs(h.getFloat32(offset, true)));
+  if (h.getInt16(252, true) <= 0) {
+    return spacing.map((value, r) => [0, 0, 0, 0].map((_, c) => c === r ? value : 0));
+  }
+  let [b, c, d] = [256, 260, 264].map(offset => h.getFloat32(offset, true));
+  const norm = b * b + c * c + d * d;
+  const a = norm < 1 ? Math.sqrt(1 - norm) : 0;
+  if (norm >= 1) {
+    const length = Math.sqrt(norm);
+    b /= length; c /= length; d /= length;
+  }
+  spacing[2] *= h.getFloat32(76, true) < 0 ? -1 : 1;
+  const rotation = [
+    [a*a+b*b-c*c-d*d, 2*(b*c-a*d), 2*(b*d+a*c)],
+    [2*(b*c+a*d), a*a+c*c-b*b-d*d, 2*(c*d-a*b)],
+    [2*(b*d-a*c), 2*(c*d+a*b), a*a+d*d-c*c-b*b]
+  ];
+  return rotation.map((row, r) => [
+    ...row.map((value, col) => value * spacing[col]), h.getFloat32(268 + r * 4, true)
+  ]);
+}
+
+/** Compare physical voxel locations, allowing float32 header rounding (0.001 mm). */
+export function sameNiftiGrid(first, second) {
+  const a = parseNiftiHeader(first);
+  const b = parseNiftiHeader(second);
+  if (a.dims.slice(1, 4).some((dim, i) => dim !== b.dims[i + 1])) return false;
+  const affineA = niftiAffine(first);
+  const affineB = niftiAffine(second);
+  // NIfTI spatial units: metres, millimetres, micrometres. Unspecified is treated as mm.
+  const unitScale = header => ({ 1: 1000, 2: 1, 3: 0.001 }[new DataView(header).getUint8(123) & 7] || 1);
+  const scaleA = unitScale(first), scaleB = unitScale(second);
+  for (let corner = 0; corner < 8; corner++) {
+    const voxel = a.dims.slice(1, 4).map((dim, axis) => corner & (1 << axis) ? dim - 1 : 0);
+    voxel.push(1);
+    for (let row = 0; row < 3; row++) {
+      const delta = voxel.reduce((sum, value, col) =>
+        sum + value * (affineA[row][col] * scaleA - affineB[row][col] * scaleB), 0);
+      if (!Number.isFinite(delta) || Math.abs(delta) > 0.001) return false;
+    }
+  }
+  return true;
+}

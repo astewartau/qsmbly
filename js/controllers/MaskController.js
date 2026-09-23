@@ -6,7 +6,7 @@
  */
 
 import { computeOtsuThreshold } from '../modules/mask/ThresholdUtils.js';
-import { createMaskNifti, createNiftiHeaderFromVolume } from '../modules/file-io/NiftiUtils.js';
+import { createMaskNifti, createNiftiHeaderFromVolume, sameNiftiGrid } from '../modules/file-io/NiftiUtils.js';
 
 export class MaskController {
   /**
@@ -648,8 +648,18 @@ export class MaskController {
     }
   }
 
-  async displayCurrentMask() {
-    if (!this.currentMaskData) return;
+  // Preview in the uploaded file's physical coordinates without accepting it for processing.
+  async previewUploadedMask(file, loadReference) {
+    const header = await this.readNiftiHeader(file);
+    const raw = await this.readNiftiData(file);
+    const data = Float32Array.from(raw, value => value > 0.5 ? 1 : 0);
+    // Gzip decoding can temporarily load the mask into NiiVue. Restore the anatomy afterwards.
+    await loadReference();
+    await this.displayCurrentMask(data, header);
+  }
+
+  async displayCurrentMask(maskData = this.currentMaskData, header = this.magnitudeFileBytes) {
+    if (!maskData) return;
 
     // Close any existing drawing layer
     if (this.nv.drawBitmap) {
@@ -662,7 +672,7 @@ export class MaskController {
     }
 
     // Create mask NIfTI by copying header from original file
-    const maskNifti = createMaskNifti(this.currentMaskData, this.magnitudeFileBytes);
+    const maskNifti = createMaskNifti(maskData, header);
     const maskBlob = new Blob([maskNifti], { type: 'application/octet-stream' });
     const maskUrl = URL.createObjectURL(maskBlob);
 
@@ -718,6 +728,7 @@ export class MaskController {
    * @returns {Promise<{ok: boolean, message: string}>}
    */
   async loadMaskFromFile(file, headerSourceFile = null) {
+    await this.clearMask();
     if (!file) return { ok: false, message: 'No mask file selected' };
 
     const maskHeader = await this.readNiftiHeader(file);
@@ -726,24 +737,25 @@ export class MaskController {
       return { ok: false, message: `Could not read NIfTI dimensions from ${file.name}` };
     }
 
-    // Establish the reference grid. Prefer a header already set by Prepare; otherwise read one
-    // from the image the pipeline runs on. With neither (field-map mode with no magnitude), the
-    // mask's own header is the only grid available.
-    if (!this.magnitudeFileBytes && headerSourceFile) {
-      this.magnitudeFileBytes = await this.readNiftiHeader(headerSourceFile);
+    // Validate against the actual pipeline input, not a cached previous magnitude header.
+    const referenceHeader = headerSourceFile
+      ? await this.readNiftiHeader(headerSourceFile)
+      : (this.magnitudeFileBytes || maskHeader);
+    const refDims = this._dimsFromHeader(referenceHeader);
+    if (!refDims || refDims.some((dim, axis) => dim !== maskDims[axis])) {
+      return {
+        ok: false,
+        message: `Mask is ${maskDims.join('x')} but the image is ${refDims?.join('x') || 'unknown'}. `
+          + 'Upload a mask on the same grid.'
+      };
     }
-    const refDims = this._dimsFromHeader(this.magnitudeFileBytes);
-
-    if (refDims) {
-      if (refDims[0] !== maskDims[0] || refDims[1] !== maskDims[1] || refDims[2] !== maskDims[2]) {
-        return {
-          ok: false,
-          message: `Mask is ${maskDims.join('x')} but the image is ${refDims.join('x')}. `
-            + `Upload a mask on the same grid.`
-        };
-      }
-    } else {
-      this.magnitudeFileBytes = maskHeader;
+    if (!sameNiftiGrid(maskHeader, referenceHeader)) {
+      return {
+        ok: false,
+        message: 'Mask orientation, origin, or voxel spacing differs from the input image. '
+          + 'Use Repair mask alignment to review axis flips or a header correction. '
+          + 'Other grid differences require resampling.'
+      };
     }
 
     // Binarise: masks arrive as uint8/uint16/float, and everything downstream assumes 0/1.
@@ -761,6 +773,7 @@ export class MaskController {
       return { ok: false, message: `${file.name} contains no non-zero voxels` };
     }
 
+    this.magnitudeFileBytes = referenceHeader;
     this.currentMaskData = maskData;
     this.originalMaskData = new Float32Array(maskData);
 
