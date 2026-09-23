@@ -489,9 +489,10 @@ class QSMApp {
     });
 
     // Centralized mask file input (in Masking section)
-    document.getElementById('maskFiles')?.addEventListener('change', (e) => {
-      this.fileIOController.handleMaskInput(e);
+    document.getElementById('maskFiles')?.addEventListener('change', async (e) => {
+      await this.fileIOController.handleMaskInput(e);
       this.updateMaskSectionState();
+      await this.loadCustomMaskFile();
       this.updateEchoInfo();
     });
 
@@ -580,7 +581,7 @@ class QSMApp {
     document.getElementById('autoThreshold')?.addEventListener('click', () => this.autoDetectThreshold());
 
     // Mask Input Preparation
-    document.getElementById('maskInputSource')?.addEventListener('change', (e) => {
+    document.getElementById('maskInputSource')?.addEventListener('change', async (e) => {
       const isCustom = e.target.value === 'custom';
       this.maskPrepSettings.source = e.target.value;
       this.maskPrepSettings.prepared = false;
@@ -600,6 +601,12 @@ class QSMApp {
       }
 
       this.updateMaskSectionState();
+
+      // Switching to custom with a file already uploaded should adopt it, not wait for a re-upload.
+      if (isCustom && this.fileIOController.hasMask() && !this.currentMaskData) {
+        await this.loadCustomMaskFile();
+      }
+      this.updateEchoInfo();
     });
 
     document.getElementById('applyBiasCorrection')?.addEventListener('change', (e) => {
@@ -805,6 +812,12 @@ class QSMApp {
   // Passthrough for backward compatibility (HTML onclick uses app.removeFile)
   removeFile(type, index) {
     this.fileIOController.removeFile(type, index);
+
+    // Removing the uploaded mask has to drop the mask it produced, or the overlay and the run
+    // button keep reporting a mask that is no longer there.
+    if (type === 'mask' && !this.fileIOController.hasMask() && this.maskPrepSettings.source === 'custom') {
+      this.clearMask();
+    }
   }
 
   // ==================== Unified File Input ====================
@@ -1082,6 +1095,12 @@ class QSMApp {
 
     // Update run button state
     this.updateEchoInfo();
+
+    // A mask uploaded before the images is dropped when the magnitude files change, and the
+    // grid it has to be validated against only exists once they are loaded — so adopt it here.
+    if (this.maskPrepSettings.source === 'custom' && this.fileIOController.hasMask() && !this.currentMaskData) {
+      this.loadCustomMaskFile().then(() => this.updateEchoInfo());
+    }
 
     // Update drop zone label
     const hasFiles = Object.values(this.fileIOController.buckets).some(b => b.length > 0);
@@ -1808,6 +1827,9 @@ class QSMApp {
       if (maskOps) maskOps.style.display = 'none';
       const maskFileNote = document.getElementById('maskFileUploadedNote');
       if (maskFileNote) maskFileNote.style.display = 'none';
+      // The preview button starts disabled in the markup and nothing else enables it.
+      const visMask = document.getElementById('vis_mask');
+      if (visMask) visMask.disabled = !hasMaskFile;
       return;
     }
 
@@ -2311,6 +2333,61 @@ class QSMApp {
     return ok;
   }
 
+  /**
+   * Load the uploaded custom mask and adopt it as the current mask.
+   *
+   * "Custom mask" is the fourth mask generator, alongside Threshold, BET and HD-BET, and needs
+   * the same post-generation wiring: without it the file is listed but never parsed, so no
+   * overlay appears, no `customMaskBuffer` reaches the worker, and Start QSM stays disabled.
+   */
+  async loadCustomMaskFile() {
+    const file = this.fileIOController.getMaskFile();
+    if (!file) return false;
+
+    // The mask has to sit on the grid the pipeline runs on, so validate it against that image.
+    const headerSource = this.fileIOController.buckets.magnitude[0]?.file
+      || this.fileIOController.buckets.phase[0]?.file
+      || null;
+
+    // Give the overlay a base volume to sit on when nothing has been displayed yet.
+    if (this.nv.volumes.length === 0 && this.fileIOController.buckets.magnitude.length > 0) {
+      await this.visualizeMagnitude();
+    }
+
+    this.maskController.magnitudeFileBytes = this.magnitudeFileBytes || this.maskController.magnitudeFileBytes;
+
+    let result;
+    try {
+      result = await this.maskController.loadMaskFromFile(file, headerSource);
+    } catch (error) {
+      console.error('Custom mask load failed:', error);
+      result = { ok: false, message: `Could not read ${file.name}: ${error.message}` };
+    }
+
+    if (!result.ok) {
+      this.updateOutput(result.message);
+      return false;
+    }
+
+    this.currentMaskData = this.maskController.currentMaskData;
+    this.originalMaskData = this.maskController.originalMaskData;
+    this.maskDims = this.maskController.maskDims;
+    this.voxelSize = this.maskController.voxelSize;
+    this.magnitudeFileBytes = this.maskController.magnitudeFileBytes;
+    this.applyVoxelDefaults();
+
+    // An uploaded mask is used as given, so the op history starts empty rather than naming a
+    // generator — the methods prose reports it as a supplied mask.
+    this.maskOpsHistory = [];
+
+    this.showStageButtons();
+    this.addStageButton('mask', 'Brain Mask');
+    this.updateMaskSectionState();
+    this.updateEchoInfo();
+    this.updateOutput(result.message);
+    return true;
+  }
+
   // Clear mask completely - delegates to MaskController
   async clearMask() {
     await this.maskController.clearMask();
@@ -2448,7 +2525,7 @@ class QSMApp {
       if (this.currentMaskData && this.magnitudeFileBytes) {
         const maskNifti = this.createMaskNifti(this.currentMaskData);
         customMaskBuffer = maskNifti;
-        this.updateOutput("Using edited mask");
+        this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
 
       // Determine which stages can be skipped based on settings changes
@@ -2547,7 +2624,7 @@ class QSMApp {
       if (this.currentMaskData && this.magnitudeFileBytes) {
         const maskNifti = this.createMaskNifti(this.currentMaskData);
         customMaskBuffer = maskNifti;
-        this.updateOutput("Using edited mask");
+        this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
 
       // Preview the field map
@@ -2628,7 +2705,7 @@ class QSMApp {
       if (this.currentMaskData && this.magnitudeFileBytes) {
         const maskNifti = this.createMaskNifti(this.currentMaskData);
         customMaskBuffer = maskNifti;
-        this.updateOutput("Using edited mask");
+        this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
 
       if (!maskBuffer && !customMaskBuffer && combined_method === 'none') {
