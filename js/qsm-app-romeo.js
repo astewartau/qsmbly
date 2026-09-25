@@ -2,6 +2,7 @@ import { MaskAlignmentSession } from './modules/mask/MaskAlignment.js';
 // Import extracted utility modules
 import { estimateHdBetPatches } from './modules/HdBetEstimate.js';
 import { createThresholdMask } from './modules/mask/ThresholdUtils.js';
+import { MOUSE_BET_DEFAULTS, looksLikeRodentFov, fieldOfViewMm, voxelScaleMethodsNote, insertBetMethodsNote, replaceMaskingSentence, RS2_NET_METHODS } from './modules/mask/RodentMask.js';
 import {
   parseNiftiHeader,
   isGzipped,
@@ -94,6 +95,10 @@ class QSMApp {
 
     // BET settings from config
     this.betSettings = { ...cfg.BET_DEFAULTS };
+    // Mouse BET: the same BET, run on voxel sizes scaled up to human brain dimensions
+    this.mouseBetSettings = { ...MOUSE_BET_DEFAULTS };
+    this.betMode = 'human';     // which settings the shared BET modal is editing
+    this.maskVoxelScale = 1;    // voxel scale the current BET mask was generated with
 
     // Mask preparation settings from config
     this.maskPrepSettings = { ...cfg.MASK_PREP_DEFAULTS, prepared: false };
@@ -112,6 +117,7 @@ class QSMApp {
     // Modal managers (initialized in init() after DOM ready)
     this.betModal = null;
     this.hdBetModal = null;
+    this.mouseBrainModal = null;
     this.aboutModal = null;
     this.citationsModal = null;
     this.privacyModal = null;
@@ -235,6 +241,7 @@ class QSMApp {
     // Initialize modal managers
     this.betModal = new ModalManager('betSettingsModal');
     this.hdBetModal = new ModalManager('hdBetSettingsModal');
+    this.mouseBrainModal = new ModalManager('mouseBrainModal');
     this.commandPreviewModal = new ModalManager('commandPreviewModal');
     this.aboutModal = new ModalManager('aboutModal');
     this.citationsModal = new ModalManager('citationsModal');
@@ -588,6 +595,14 @@ class QSMApp {
     document.getElementById('runBET')?.addEventListener('click', () => this.openBetSettingsModal());
 
     document.getElementById('runHdBet')?.addEventListener('click', () => this.openHdBetSettingsModal());
+    // Mouse brain extraction - RS2-Net, with voxel-scaled BET as the fallback
+    document.getElementById('runMouseBet')?.addEventListener('click', () => this.openMouseBrainModal());
+    document.getElementById('closeMouseBrain')?.addEventListener('click', () => this.mouseBrainModal?.close());
+    document.getElementById('runRs2Net')?.addEventListener('click', () => this.runRs2NetWithSettings());
+    document.getElementById('runMouseScaledBet')?.addEventListener('click', () => {
+      this.mouseBrainModal?.close();
+      this.openBetSettingsModal('mouse');
+    });
 
     // Auto threshold button (Otsu)
     document.getElementById('autoThreshold')?.addEventListener('click', () => this.autoDetectThreshold());
@@ -1855,6 +1870,7 @@ class QSMApp {
       document.getElementById('previewMask')?.setAttribute('disabled', '');
       document.getElementById('runBET')?.setAttribute('disabled', '');
       document.getElementById('runHdBet')?.setAttribute('disabled', '');
+      document.getElementById('runMouseBet')?.setAttribute('disabled', '');
       document.getElementById('maskThreshold')?.setAttribute('disabled', '');
       if (maskOps) maskOps.style.display = 'none';
       // Show info note
@@ -1875,6 +1891,7 @@ class QSMApp {
         document.getElementById('previewMask')?.removeAttribute('disabled');
         document.getElementById('runBET')?.removeAttribute('disabled');
         document.getElementById('runHdBet')?.removeAttribute('disabled');
+        document.getElementById('runMouseBet')?.removeAttribute('disabled');
       }
     }
   }
@@ -2077,6 +2094,10 @@ class QSMApp {
     // HD-BET button (same preconditions as BET: it needs the magnitude image)
     const hdBetBtn = document.getElementById('runHdBet');
     if (hdBetBtn) hdBetBtn.disabled = !canGenerate;
+
+    // Mouse BET button (BET with scaled voxel sizes, same preconditions)
+    const mouseBetBtn = document.getElementById('runMouseBet');
+    if (mouseBetBtn) mouseBetBtn.disabled = !canGenerate;
 
     // Threshold slider and auto-threshold button:
     // Only enabled when Threshold method is active (not BET)
@@ -2327,14 +2348,24 @@ class QSMApp {
    * resets the op history (as BET and Threshold do). Delegates to MaskController.
    */
   async runHdBetMask(options) {
+    return this.runDlMaskGenerator((mc) => mc.runHdBetMask(options));
+  }
+
+  /** RS2-Net rodent brain extraction — a mask generator, like HD-BET. Delegates to MaskController. */
+  async runRs2NetMask(options) {
+    return this.runDlMaskGenerator((mc) => mc.runRs2NetMask(options));
+  }
+
+  /** Run a deep-learning mask generator on the controller and adopt its mask. */
+  async runDlMaskGenerator(run) {
     this.maskController.maskDims = this.maskDims || this.maskController.maskDims;
     this.maskController.voxelSize = this.voxelSize || this.maskController.voxelSize;
 
-    const ok = await this.maskController.runHdBetMask(options);
+    const ok = await run(this.maskController);
     if (ok) {
       this.currentMaskData = this.maskController.currentMaskData;
       this.originalMaskData = this.maskController.originalMaskData;
-      // HD-BET derives the geometry itself from the prepared header, so publish it here too —
+      // The DL generators derive the geometry from the prepared header, so publish it here too —
       // the refinements that follow read it from this side.
       this.maskDims = this.maskController.maskDims;
       this.voxelSize = this.maskController.voxelSize;
@@ -3463,10 +3494,12 @@ class QSMApp {
    * Run BET brain extraction
    * Delegates to MaskController
    */
-  async runBET() {
-    // Track BET as mask generator
-    const fi = this.betSettings?.fractionalIntensity ?? 0.5;
+  async runBET(betSettings = this.betSettings) {
+    // Track BET as mask generator. The qsmxt op has no voxel scaling, so Mouse BET records the
+    // same `bet:<fi>` and the scale is noted separately (see showCommandPreview).
+    const fi = betSettings?.fractionalIntensity ?? 0.5;
     this.maskOpsHistory = [`bet:${fi}`];
+    this.maskVoxelScale = betSettings?.voxelScale || 1;
 
     // Disable threshold slider since user chose BET-based masking
     this.setThresholdSliderEnabled(false);
@@ -3484,7 +3517,7 @@ class QSMApp {
 
     await this.maskController.runBET({
       magnitudeFiles: magnitudeFilesForBET,
-      betSettings: this.betSettings,
+      betSettings,
       createNiftiHeaderFromVolume: (vol) => this.createNiftiHeaderFromVolume(vol),
       onComplete: async () => {
         // Sync state from controller
@@ -3497,7 +3530,7 @@ class QSMApp {
         this.magnitudeFileBytes = this.maskController.magnitudeFileBytes;
 
         // Apply post-BET erosions
-        const erosions = this.betSettings.erosions || 0;
+        const erosions = betSettings.erosions || 0;
         if (erosions > 0) {
           this.updateOutput(`Applying ${erosions} erosion step(s)...`);
           await this.erodeMask3D(erosions);
@@ -3839,7 +3872,37 @@ class QSMApp {
     }
   }
 
-  openBetSettingsModal() {
+  openMouseBrainModal() {
+    if (!this.maskPrepSettings.prepared) {
+      this.updateOutput('Prepare the mask input first — mouse brain extraction needs the magnitude image.');
+      return;
+    }
+    document.getElementById('rs2NetTta').checked = !!this.rs2NetSettings?.tta;
+    this.mouseBrainModal?.open();
+  }
+
+  async runRs2NetWithSettings() {
+    this.rs2NetSettings = { tta: !!document.getElementById('rs2NetTta').checked };
+    this.mouseBrainModal?.close();
+
+    this.updateOutput('Starting RS2-Net mouse brain extraction...');
+    if (await this.runRs2NetMask(this.rs2NetSettings)) {
+      // qsmxt has no RS2-Net op, so — like an uploaded mask — the history starts empty and the
+      // command preview flags the mask as made here. `dlMaskGenerator` is only honoured while
+      // this exact history array is current: every generator assigns a fresh one, refinements
+      // push onto it.
+      this.maskOpsHistory = [];
+      this.dlMaskGenerator = { id: 'rs2-net', history: this.maskOpsHistory };
+      await this.displayCurrentMask();
+      this.updateOutput('RS2-Net mask created');
+    }
+  }
+
+  /**
+   * Open the BET settings modal. `mode` is 'human' (plain BET) or 'mouse' (BET on voxel sizes
+   * scaled up to human brain dimensions); each mode keeps its own settings.
+   */
+  openBetSettingsModal(mode = 'human') {
     const hasMag = this.fileIOController.buckets.magnitude.length > 0;
 
     if (!hasMag) {
@@ -3847,36 +3910,63 @@ class QSMApp {
       return;
     }
 
-    // Populate form with current settings
-    document.getElementById('betFractionalIntensity').value = this.betSettings.fractionalIntensity;
-    document.getElementById('betFractionalIntensityValue').textContent = this.betSettings.fractionalIntensity;
-    document.getElementById('betIterations').value = this.betSettings.iterations;
-    document.getElementById('betSubdivisions').value = this.betSettings.subdivisions;
-    document.getElementById('betErosions').value = this.betSettings.erosions ?? 2;
+    this.betMode = mode;
+    const isMouse = mode === 'mouse';
+    const settings = isMouse ? this.mouseBetSettings : this.betSettings;
+
+    document.getElementById('betSettingsTitle').textContent = isMouse ? 'Mouse BET Settings' : 'BET Settings';
+    document.getElementById('runBetWithSettings').textContent = isMouse ? 'Run Mouse BET' : 'Run BET';
+    document.getElementById('mouseBetNote').style.display = isMouse ? '' : 'none';
+    document.getElementById('betVoxelScaleGroup').style.display = isMouse ? '' : 'none';
+    this.populateBetForm(settings);
+
+    // BET's defaults assume a human-sized head; point out the mismatch either way.
+    const mc = this.maskController;
+    if (!mc.magnitudeFileBytes) mc.magnitudeFileBytes = this.magnitudeFileBytes;
+    if (mc.ensureGeometry?.()) {
+      const rodent = looksLikeRodentFov(mc.maskDims, mc.voxelSize);
+      const fov = fieldOfViewMm(mc.maskDims, mc.voxelSize).map(v => v.toFixed(0)).join('x');
+      if (rodent && !isMouse) {
+        this.updateOutput(`The field of view (${fov} mm) is too small for a human head — for rodent data use Mouse BET instead.`);
+      } else if (!rodent && isMouse) {
+        this.updateOutput(`The field of view (${fov} mm) looks human-sized — Mouse BET is meant for rodent data. Check the voxel sizes in the header.`);
+      }
+    }
 
     this.betModal?.open();
   }
 
+  populateBetForm(settings) {
+    document.getElementById('betFractionalIntensity').value = settings.fractionalIntensity;
+    document.getElementById('betFractionalIntensityValue').textContent = settings.fractionalIntensity;
+    document.getElementById('betIterations').value = settings.iterations;
+    document.getElementById('betSubdivisions').value = settings.subdivisions;
+    document.getElementById('betErosions').value = settings.erosions ?? 2;
+    document.getElementById('betVoxelScale').value = settings.voxelScale ?? 1;
+  }
+
   resetBetSettings() {
-    // Reset to defaults
-    document.getElementById('betFractionalIntensity').value = 0.5;
-    document.getElementById('betFractionalIntensityValue').textContent = '0.5';
-    document.getElementById('betIterations').value = 1000;
-    document.getElementById('betSubdivisions').value = 4;
-    document.getElementById('betErosions').value = 2;
+    this.populateBetForm(this.betMode === 'mouse' ? MOUSE_BET_DEFAULTS : QSMConfig.BET_DEFAULTS);
   }
 
   runBetWithSettings() {
     // Save settings from form
-    this.betSettings = {
+    const settings = {
       fractionalIntensity: parseFloat(document.getElementById('betFractionalIntensity').value),
       iterations: parseInt(document.getElementById('betIterations').value),
       subdivisions: parseInt(document.getElementById('betSubdivisions').value),
       erosions: parseInt(document.getElementById('betErosions').value) || 0
     };
+    if (this.betMode === 'mouse') {
+      const scale = parseFloat(document.getElementById('betVoxelScale').value);
+      settings.voxelScale = scale > 0 ? scale : MOUSE_BET_DEFAULTS.voxelScale;
+      this.mouseBetSettings = settings;
+    } else {
+      this.betSettings = settings;
+    }
 
     this.betModal?.close();
-    this.runBET();
+    this.runBET(settings);
   }
 
   // --- Command Preview ---
@@ -3912,15 +4002,31 @@ class QSMApp {
     if (!worker) { if (cmdEl) cmdEl.textContent = 'ERROR: Worker not available'; return; }
 
     const maskSection = maskSectionString(this.maskOpsHistory, maskSource);
+    // Mouse BET's voxel scaling has no qsmxt equivalent: flag it in the command, and describe it
+    // in the methods text.
+    const scaled = this.maskOpsHistory[0]?.startsWith('bet:') && this.maskVoxelScale !== 1;
+    const rs2 = this.dlMaskGenerator?.id === 'rs2-net' && this.dlMaskGenerator.history === this.maskOpsHistory;
+    let scaleNote = '';
+    let scaleComment = '';
+    if (scaled) {
+      scaleNote = voxelScaleMethodsNote(this.maskVoxelScale);
+      scaleComment = `# Note: the mask was made with Mouse BET (voxel sizes x${this.maskVoxelScale}), which qsmxt\n`
+        + `# cannot reproduce; scale the header voxel sizes (e.g. fslchpixdim) or pass the mask instead.\n`;
+    } else if (rs2) {
+      scaleComment = `# Note: the mask was made with RS2-Net in QSMbly, which qsmxt cannot run;\n`
+        + `# download it from Results and pass it to qsmxt as an existing mask.\n`;
+    }
     const handler = (e) => {
       if (e.data.type === 'commandResult') {
-        if (cmdEl) cmdEl.textContent = e.data.error ? `ERROR: ${e.data.error}` : e.data.result;
+        if (cmdEl) cmdEl.textContent = e.data.error ? `ERROR: ${e.data.error}` : scaleComment + e.data.result;
       } else if (e.data.type === 'methodsResult') {
         if (e.data.error) {
           if (methodsRaw) methodsRaw.textContent = `ERROR: ${e.data.error}`;
           if (methodsRendered) methodsRendered.innerHTML = '<em>Could not generate the methods section.</em>';
         } else {
-          const raw = e.data.result;
+          const raw = rs2
+            ? replaceMaskingSentence(e.data.result, RS2_NET_METHODS.sentence, RS2_NET_METHODS.reference)
+            : insertBetMethodsNote(e.data.result, scaleNote);
           if (methodsRaw) methodsRaw.textContent = raw;
           if (methodsRendered) methodsRendered.innerHTML = renderMarkdown(raw);
         }

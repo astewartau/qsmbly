@@ -462,6 +462,14 @@
             </svg>
             HD-BET
           </button>
+          <button class="btn btn-secondary btn-sm" id="runMouseBet" title="Mouse brain extraction with RS2-Net, a deep-learning model trained on rodent MRI (voxel-scaled BET is available as a fallback)" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <ellipse cx="12" cy="14" rx="7" ry="6"/>
+              <circle cx="6" cy="6" r="3"/>
+              <circle cx="18" cy="6" r="3"/>
+            </svg>
+            Mouse
+          </button>
         </div>
 
         <div class="mask-preview-buttons" id="thresholdModeButtons" style="display: none;">
@@ -1951,12 +1959,23 @@
   <div class="modal-overlay" id="betSettingsModal">
     <div class="modal">
       <div class="modal-header">
-        <h3>BET Settings</h3>
+        <h3 id="betSettingsTitle">BET Settings</h3>
         <button class="modal-close" id="closeBetSettings">&times;</button>
       </div>
       <div class="modal-body">
         <div class="settings-section">
           <h4>Brain Extraction Parameters</h4>
+          <p class="modal-note" id="mouseBetNote" style="display: none;">
+            BET's surface model is tuned for the human brain in millimetres, so on a mouse brain its
+            search distances span the whole head. Mouse BET multiplies the voxel sizes by the scale
+            factor below before running BET, which brings the brain to roughly human size; the mask
+            comes back on the original grid.
+          </p>
+          <div class="param-group" id="betVoxelScaleGroup" style="display: none;">
+            <label class="param-label" for="betVoxelScale">Voxel Size Scale Factor</label>
+            <div class="param-hint">Multiplier applied to the voxel sizes for BET (10 for mouse and rat)</div>
+            <input type="number" id="betVoxelScale" value="10" min="1" max="50" step="1">
+          </div>
           <div class="param-group">
             <label class="param-label" for="betFractionalIntensity">Fractional Intensity</label>
             <div class="param-hint">Smaller values give larger brain estimate (0.0-1.0)</div>
@@ -1983,6 +2002,64 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" id="resetBetSettings">Reset Defaults</button>
         <button class="btn btn-primary" id="runBetWithSettings">Run BET</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mouse Brain Extraction Modal -->
+  <div class="modal-overlay" id="mouseBrainModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Mouse Brain Extraction</h3>
+        <button class="modal-close" id="closeMouseBrain">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section">
+          <p class="modal-note">
+            <strong>RS2-Net</strong> is a deep-learning brain extractor trained on 1,142 rat and mouse
+            MRIs from 89 centres. It handles thick slices and the thin rodent skull, where BET leaks
+            into the surrounding muscle. A mouse head usually fits in a single patch, which takes
+            <strong>one to two minutes</strong>; <strong>Stop</strong> cancels it at any point.
+          </p>
+          <p class="modal-note">
+            First run downloads <strong>63 MB</strong> of model weights (GPL-3.0). They are cached in
+            your browser afterwards.
+          </p>
+
+          <h4>Inference Parameters</h4>
+
+          <div class="param-group">
+            <label class="param-label">
+              <input type="checkbox" id="rs2NetTta"> Mirroring augmentation (TTA)
+            </label>
+            <div class="param-hint">
+              Averages the network over 8 mirrored versions of every patch: <strong>8&times; the
+              runtime</strong>, and on in-vivo mouse data the mask barely changes (Dice 0.99).
+            </div>
+          </div>
+
+          <div class="param-group">
+            <label class="param-label">Patch Size</label>
+            <div class="param-hint">
+              Fixed at 128&times;96&times;128 (~2.7 GB peak). RS2-Net's native 128&times;128&times;160
+              needs ~4.5 GB, past the 4 GB a 32-bit WebAssembly page can address; the two agree at
+              Dice 0.99 on mouse data. Larger volumes are covered by overlapping patches.
+            </div>
+          </div>
+
+          <div class="param-group">
+            <label class="param-label">Fallback</label>
+            <div class="param-hint">
+              <strong>Scaled BET</strong> runs BET on voxel sizes multiplied by 10, so its human-tuned
+              surface model fits the mouse brain. It is instant and needs no download, but on
+              thick-slice data it tends to leak into the skull base.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="runMouseScaledBet">Scaled BET&hellip;</button>
+        <button class="btn btn-primary" id="runRs2Net">Run RS2-Net</button>
       </div>
     </div>
   </div>
@@ -2259,6 +2336,12 @@
             <p>Smith, S.M. (2002). "Fast robust automated brain extraction." <em>Human Brain Mapping</em>, 17(3):143-155.</p>
             <a href="https://doi.org/10.1002/hbm.10062" target="_blank" rel="noopener">DOI: 10.1002/hbm.10062</a>
           </div>
+          <div class="citation-item">
+            <strong>RS2-Net (rodent brain extraction)</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/VitoLin21/Rodent-Skull-Stripping" target="_blank" rel="noopener">Rodent-Skull-Stripping</a></span>
+            <p>Lin, Y., Ding, Y., Chang, S., Ge, X., Sui, X., Jiang, Y. (2024). "RS2-Net: An end-to-end deep learning framework for rodent skull stripping in multi-center brain MRI." <em>NeuroImage</em>, 298:120769.</p>
+            <a href="https://doi.org/10.1016/j.neuroimage.2024.120769" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2024.120769</a>
+          </div>
         </div>
 
         <div class="citation-section">
@@ -2452,6 +2535,9 @@
           <p class="citations-intro" style="margin-bottom: var(--space-sm);">The following repositories were used as references:</p>
           <div class="ref-list">
             <a href="https://github.com/Bostrix/FSL-BET2" target="_blank" rel="noopener">FSL-BET2</a> - BET brain extraction
+          </div>
+          <div class="ref-list">
+            <a href="https://github.com/VitoLin21/Rodent-Skull-Stripping" target="_blank" rel="noopener">Rodent-Skull-Stripping</a> - RS2-Net rodent brain extraction
           </div>
           <div class="ref-list">
             <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener">MriResearchTools.jl</a> - ROMEO, MCPC-3D-S, Bias correction
