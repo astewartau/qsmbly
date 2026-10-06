@@ -204,3 +204,70 @@ describe('MaskController.loadMaskFromFile', () => {
     expect(controller.currentMaskData).toBeNull();
   });
 });
+
+/**
+ * RSS echo combination has to reject echoes that disagree on matrix size.
+ *
+ * Reading past a shorter echo yields `undefined`, and `undefined * undefined` is
+ * NaN, which poisons the whole volume while leaving its length correct — so bias
+ * correction accepts it, qsm-core's robust_mask finds no finite samples, and the
+ * user gets an empty mask with no error anywhere. See issue #117.
+ */
+describe('MaskController.combineMagnitudeRSS', () => {
+  const DIMS = [4, 4, 2];
+  const N = DIMS[0] * DIMS[1] * DIMS[2];
+  let controller;
+
+  beforeEach(() => {
+    controller = new MaskController({
+      nv: { volumes: [{}] },
+      updateOutput: () => {},
+      setProgress: () => {},
+      config: {},
+    });
+  });
+
+  /** A magnitude echo of `dims`, every voxel `value`. */
+  function echo(name, value, dims = DIMS) {
+    const n = dims[0] * dims[1] * dims[2];
+    return { file: makeNiftiFile(name, dims, 16, new Float32Array(n).fill(value)) };
+  }
+
+  it('combines echoes that agree on matrix size', async () => {
+    // sqrt(3^2 + 4^2) = 5, so a correct combination is exactly 5 everywhere.
+    const result = await controller.combineMagnitudeRSS([
+      echo('e1.nii', 3),
+      echo('e2.nii', 4),
+    ]);
+    expect(result.length).toBe(N);
+    for (const v of result) expect(v).toBeCloseTo(5, 6);
+  });
+
+  it('rejects a shorter later echo instead of returning NaN', async () => {
+    await expect(controller.combineMagnitudeRSS([
+      echo('e1.nii', 3),
+      echo('e2.nii', 4, [4, 4, 1]),   // half the slices
+    ])).rejects.toThrow(/Echo 2 \(e2\.nii\) has 16 voxels but echo 1 \(e1\.nii\) has 32/);
+  });
+
+  it('rejects a longer later echo too', async () => {
+    await expect(controller.combineMagnitudeRSS([
+      echo('e1.nii', 3, [4, 4, 1]),
+      echo('e2.nii', 4),
+    ])).rejects.toThrow(/Echo 2 \(e2\.nii\) has 32 voxels but echo 1 \(e1\.nii\) has 16/);
+  });
+
+  it('names the first offending echo when several disagree', async () => {
+    await expect(controller.combineMagnitudeRSS([
+      echo('e1.nii', 1),
+      echo('e2.nii', 2),
+      echo('e3.nii', 3, [2, 2, 2]),
+    ])).rejects.toThrow(/Echo 3 \(e3\.nii\)/);
+  });
+
+  it('passes a single echo through untouched', async () => {
+    const result = await controller.combineMagnitudeRSS([echo('e1.nii', 7)]);
+    expect(result.length).toBe(N);
+    for (const v of result) expect(v).toBeCloseTo(7, 6);
+  });
+});

@@ -447,6 +447,16 @@ export class MaskController {
       this.updateOutput(`Combining echo ${e + 1}/${nEchoes}...`);
       const file = magnitudeFiles[e].file;
       const echoData = await this.readNiftiData(file);
+      // Every echo must match echo 1. Reading past a shorter echo yields
+      // undefined, and undefined * undefined is NaN, which would poison the
+      // whole volume while keeping its length correct - so nothing downstream
+      // would notice and the user would just get an empty mask.
+      if (echoData.length !== nTotal) {
+        throw new Error(
+          `Echo ${e + 1} (${file.name}) has ${echoData.length} voxels but echo 1 ` +
+          `(${firstFile.name}) has ${nTotal} - all echoes must come from the same acquisition`
+        );
+      }
       for (let i = 0; i < nTotal; i++) {
         rssData[i] += echoData[i] * echoData[i];
       }
