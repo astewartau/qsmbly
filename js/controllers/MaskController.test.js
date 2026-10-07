@@ -204,3 +204,169 @@ describe('MaskController.loadMaskFromFile', () => {
     expect(controller.currentMaskData).toBeNull();
   });
 });
+
+
+/**
+ * Every volume one run combines has to sit on the same voxel grid.
+ *
+ * The failures are quiet rather than loud. Reading past a shorter echo yields `undefined`, and
+ * `undefined * undefined` is NaN, which poisons the whole volume while leaving its length correct
+ * — so bias correction accepts it, qsm-core's robust_mask finds no finite samples, and the user
+ * gets an empty mask with no error anywhere. A transposed echo of the same voxel count is quieter
+ * still: it passes a length check and is then combined across mismatched axes. See issue #117.
+ */
+describe('MaskController.combineMagnitudeRSS', () => {
+  const DIMS = [4, 4, 2];
+  const N = DIMS[0] * DIMS[1] * DIMS[2];
+  let controller;
+  let messages;
+
+  beforeEach(() => {
+    messages = [];
+    controller = new MaskController({
+      nv: { volumes: [{}] },
+      updateOutput: (message) => messages.push(message),
+      setProgress: () => {},
+      config: {},
+    });
+  });
+
+  /** A magnitude echo of `dims`, every voxel `value`. */
+  function echo(name, value, dims = DIMS, pixDims = [1, 0.5, 0.5, 2]) {
+    const n = dims[0] * dims[1] * dims[2];
+    return { file: makeNiftiFile(name, dims, 16, new Float32Array(n).fill(value), pixDims) };
+  }
+
+  it('combines echoes that agree on matrix size', async () => {
+    // sqrt(3^2 + 4^2) = 5, so a correct combination is exactly 5 everywhere.
+    const result = await controller.combineMagnitudeRSS([
+      echo('e1.nii', 3),
+      echo('e2.nii', 4),
+    ]);
+    expect(result.length).toBe(N);
+    for (const v of result) expect(v).toBeCloseTo(5, 6);
+  });
+
+  it('rejects a shorter later echo instead of returning NaN', async () => {
+    await expect(controller.combineMagnitudeRSS([
+      echo('e1.nii', 3),
+      echo('e2.nii', 4, [4, 4, 1]),   // half the slices
+    ])).rejects.toThrow(/Echo 2 \(e2\.nii\) is 4x4x1 but echo 1 \(e1\.nii\) is 4x4x2/);
+  });
+
+  it('rejects a longer later echo too', async () => {
+    await expect(controller.combineMagnitudeRSS([
+      echo('e1.nii', 3, [4, 4, 1]),
+      echo('e2.nii', 4),
+    ])).rejects.toThrow(/Echo 2 \(e2\.nii\) is 4x4x2 but echo 1 \(e1\.nii\) is 4x4x1/);
+  });
+
+  it('rejects a transposed echo that a voxel count alone would accept', async () => {
+    // 4x4x2 and 2x4x4 are both 32 voxels: a length check passes and the voxels are then summed
+    // across mismatched axes, which is wrong without ever being undefined.
+    await expect(controller.combineMagnitudeRSS([
+      echo('e1.nii', 3),
+      echo('e2.nii', 4, [2, 4, 4]),
+    ])).rejects.toThrow(/Echo 2 \(e2\.nii\) is 2x4x4 but echo 1 \(e1\.nii\) is 4x4x2/);
+  });
+
+  it('names the first offending echo when several disagree', async () => {
+    await expect(controller.combineMagnitudeRSS([
+      echo('e1.nii', 1),
+      echo('e2.nii', 2),
+      echo('e3.nii', 3, [2, 2, 2]),
+    ])).rejects.toThrow(/Echo 3 \(e3\.nii\)/);
+  });
+
+  it('warns but still combines when only the voxel spacing disagrees', async () => {
+    // Same matrix size, thicker slices: the combination is coherent voxel-for-voxel, so refusing
+    // it would reject headers that converters disagree about today. Say so instead.
+    const result = await controller.combineMagnitudeRSS([
+      echo('e1.nii', 3),
+      echo('e2.nii', 4, DIMS, [1, 0.5, 0.5, 4]),
+    ]);
+    for (const v of result) expect(v).toBeCloseTo(5, 6);
+    expect(messages.some(m => /^Warning: Echo 2 \(e2\.nii\) has the same matrix size as echo 1 \(e1\.nii\) but a different orientation, origin, or voxel spacing/.test(m))).toBe(true);
+  });
+
+  it('passes a single echo through untouched', async () => {
+    const result = await controller.combineMagnitudeRSS([echo('e1.nii', 7)]);
+    expect(result.length).toBe(N);
+    for (const v of result) expect(v).toBeCloseTo(7, 6);
+  });
+
+  it('names a file whose data is shorter than its header claims', async () => {
+    // Without this the reads below index past the end of the DataView, which raises a bare
+    // offset-out-of-bounds naming nothing.
+    const full = await echo('e1.nii', 3).file.arrayBuffer();
+    const short = { name: 'short.nii', arrayBuffer: async () => full.slice(0, 352 + 16 * 4) };
+    await expect(controller.readNiftiData(short)).rejects.toThrow(
+      /short\.nii is truncated: its header describes 4x4x2 voxels of 32-bit data, which needs 480 bytes, but the file has 416/
+    );
+  });
+});
+
+/**
+ * The ROMEO quality map indexes the magnitude and the second phase echo to the *first phase
+ * echo's* dimensions inside qsm-core, with no length check on either side of the WASM boundary.
+ * A magnitude smaller than the phase indexes out of bounds there and surfaces as a panic naming
+ * nothing — the mismatch QSM.rs#70 reported.
+ */
+describe('MaskController.computeVoxelQualityMap', () => {
+  const DIMS = [4, 4, 2];
+  let controller;
+  let posted;
+
+  beforeEach(() => {
+    posted = [];
+    controller = new MaskController({
+      nv: { volumes: [{}] },
+      initializeWorker: async () => {},
+      getWorker: () => ({
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        postMessage: (message) => posted.push(message),
+      }),
+      updateOutput: () => {},
+      setProgress: () => {},
+      config: {},
+    });
+  });
+
+  function volume(name, dims = DIMS) {
+    const n = dims[0] * dims[1] * dims[2];
+    return { file: makeNiftiFile(name, dims, 16, new Float32Array(n).fill(1)) };
+  }
+
+  it('rejects a magnitude that is not on the phase grid', async () => {
+    await expect(controller.computeVoxelQualityMap(
+      [volume('ph1.nii')], [volume('mag1.nii', [2, 4, 4])], [10, 20]
+    )).rejects.toThrow(
+      /Magnitude echo 1 \(mag1\.nii\) is 2x4x4 but phase echo 1 \(ph1\.nii\) is 4x4x2/
+    );
+    expect(posted).toHaveLength(0);
+  });
+
+  it('rejects a second phase echo that is not on the first echo grid', async () => {
+    await expect(controller.computeVoxelQualityMap(
+      [volume('ph1.nii'), volume('ph2.nii', [4, 4, 1])], [volume('mag1.nii')], [10, 20]
+    )).rejects.toThrow(
+      /Phase echo 2 \(ph2\.nii\) is 4x4x1 but phase echo 1 \(ph1\.nii\) is 4x4x2/
+    );
+    expect(posted).toHaveLength(0);
+  });
+
+  it('sends voxel data, not volume objects, when every input shares the grid', async () => {
+    controller.computeVoxelQualityMap(
+      [volume('ph1.nii'), volume('ph2.nii')], [volume('mag1.nii')], [10, 20]
+    ).catch(() => {});                       // no worker reply in this test; the job is the assertion
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(posted).toHaveLength(1);
+    expect(posted[0].type).toBe('voxelQuality');
+    expect(posted[0].data.phase).toHaveLength(32);
+    expect(posted[0].data.phase2).toHaveLength(32);
+    expect(posted[0].data.mag).toHaveLength(32);
+    expect([posted[0].data.nx, posted[0].data.ny, posted[0].data.nz]).toEqual(DIMS);
+  });
+});

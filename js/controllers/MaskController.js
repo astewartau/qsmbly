@@ -7,6 +7,7 @@
 
 import { computeOtsuThreshold } from '../modules/mask/ThresholdUtils.js';
 import { createMaskNifti, createNiftiHeaderFromVolume, sameNiftiGrid } from '../modules/file-io/NiftiUtils.js';
+import { gridMismatch } from '../modules/file-io/GridAgreement.js';
 
 export class MaskController {
   /**
@@ -328,6 +329,21 @@ export class MaskController {
    * @returns {Promise<Float64Array>} Image data as Float64Array
    */
   async readNiftiData(file) {
+    return (await this.readNiftiVolume(file)).data;
+  }
+
+  /**
+   * Decode a NIfTI file, returning its image data together with the header it was read from.
+   *
+   * A caller that combines several files needs the grid, not just the voxels: two echoes can
+   * agree on voxel count and still disagree on matrix size or orientation. Reading the header
+   * back through `readNiftiHeader` would mean decompressing every file a second time, so the
+   * decode that produced the data hands its header over with it.
+   *
+   * @param {File} file - The NIfTI file to read
+   * @returns {Promise<{data: Float64Array, header: ArrayBuffer}>} First volume and its header
+   */
+  async readNiftiVolume(file) {
     // Read file as ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
     let data = new Uint8Array(arrayBuffer);
@@ -339,12 +355,18 @@ export class MaskController {
       if (fflate && fflate.gunzipSync) {
         data = fflate.gunzipSync(data);
       } else {
-        // Fallback: use NiiVue's decompression
+        // Fallback: use NiiVue's decompression. Its `img` holds every volume of a 4D file, so
+        // trim to the first one: the path below returns dim[1..3] alone, and the grid everything
+        // downstream indexes to comes from dim[1..3] either way.
         const blob = new Blob([data]);
         const url = URL.createObjectURL(blob);
         await this.nv.loadVolumes([{ url, name: file.name }]);
         URL.revokeObjectURL(url);
-        return new Float64Array(this.nv.volumes[0].img);
+        const header = createNiftiHeaderFromVolume(this.nv.volumes[0]);
+        const dims = this._dimsFromHeader(header);
+        const img = this.nv.volumes[0].img;
+        const nTotal = dims ? dims[0] * dims[1] * dims[2] : img.length;
+        return { data: new Float64Array(img.slice(0, nTotal)), header };
       }
     }
 
@@ -376,6 +398,24 @@ export class MaskController {
 
     // Read image data starting at vox_offset
     const dataStart = Math.ceil(voxOffset);
+
+    // A header that disagrees with the file it sits on is the same class of problem as two echoes
+    // that disagree with each other, and it has to be caught before the reads below index past the
+    // end - DataView raises a bare offset-out-of-bounds with nothing in it naming the file. A file
+    // longer than this is normal: 4D volumes past the first are simply not read.
+    const bytesPerVoxel = { 2: 1, 4: 2, 8: 4, 16: 4, 64: 8, 512: 2 }[datatype];
+    if (!bytesPerVoxel) {
+      throw new Error(`Unsupported NIfTI datatype: ${datatype}`);
+    }
+    const bytesNeeded = dataStart + nTotal * bytesPerVoxel;
+    if (data.byteLength < bytesNeeded) {
+      throw new Error(
+        `${file.name} is truncated: its header describes ${dims[1]}x${dims[2]}x${dims[3]} voxels ` +
+        `of ${bytesPerVoxel * 8}-bit data, which needs ${bytesNeeded} bytes, but the file has ` +
+        `${data.byteLength}`
+      );
+    }
+
     const result = new Float64Array(nTotal);
 
     // Parse based on datatype
@@ -411,10 +451,11 @@ export class MaskController {
         }
         break;
       default:
+        // Unreachable: the bytesPerVoxel lookup above gates the same set of datatypes.
         throw new Error(`Unsupported NIfTI datatype: ${datatype}`);
     }
 
-    return result;
+    return { data: result, header: data.slice(0, 352).buffer };
   }
 
   /**
@@ -427,9 +468,12 @@ export class MaskController {
     const nEchoes = magnitudeFiles.length;
     if (nEchoes === 0) throw new Error("No magnitude files");
 
-    // Read first echo to get dimensions and initialize RSS
+    // Read first echo to get dimensions and initialize RSS. Its grid is the one every later echo
+    // has to match, so keep its header rather than just its voxels.
     const firstFile = magnitudeFiles[0].file;
-    const firstData = await this.readNiftiData(firstFile);
+    const first = await this.readNiftiVolume(firstFile);
+    const firstData = first.data;
+    const firstLabel = `echo 1 (${firstFile.name})`;
     const nTotal = firstData.length;
 
     if (nEchoes === 1) {
@@ -446,7 +490,14 @@ export class MaskController {
     for (let e = 1; e < nEchoes; e++) {
       this.updateOutput(`Combining echo ${e + 1}/${nEchoes}...`);
       const file = magnitudeFiles[e].file;
-      const echoData = await this.readNiftiData(file);
+      const echo = await this.readNiftiVolume(file);
+      // Every echo must sit on echo 1's grid. Reading past a shorter echo yields undefined, and
+      // undefined * undefined is NaN, which would poison the whole volume while keeping its
+      // length correct - so nothing downstream would notice and the user would just get an empty
+      // mask. A transposed echo of the same voxel count combines across mismatched axes instead,
+      // which is quieter still.
+      this._requireSameGrid(echo, `Echo ${e + 1} (${file.name})`, first, firstLabel);
+      const echoData = echo.data;
       for (let i = 0; i < nTotal; i++) {
         rssData[i] += echoData[i] * echoData[i];
       }
@@ -520,23 +571,34 @@ export class MaskController {
 
     const worker = this.getWorker();
 
-    // Read first echo phase
-    const phase1 = await this.readNiftiData(phaseFiles[0].file);
+    // Read first echo phase. ROMEO indexes everything else to this volume's grid, so it is both
+    // the geometry source and the reference the other inputs are checked against.
+    const phaseFile = phaseFiles[0].file;
+    const phase1 = await this.readNiftiVolume(phaseFile);
+    const phaseLabel = `phase echo 1 (${phaseFile.name})`;
 
     // Read second echo phase if available (for gradient coherence)
     let phase2 = null;
     if (phaseFiles.length > 1 && phaseFiles[1]?.file) {
-      phase2 = await this.readNiftiData(phaseFiles[1].file);
+      const file = phaseFiles[1].file;
+      const volume = await this.readNiftiVolume(file);
+      this._requireSameGrid(volume, `Phase echo 2 (${file.name})`, phase1, phaseLabel);
+      phase2 = volume.data;
     }
 
-    // Read first echo magnitude if available (for magnitude weighting)
+    // Read first echo magnitude if available (for magnitude weighting). A magnitude shorter than
+    // the phase would be indexed past its end inside the WASM module, which surfaces as a bare
+    // panic rather than anything naming the file - this is the mismatch QSM.rs#70 reported.
     let mag = null;
     if (magnitudeFiles && magnitudeFiles.length > 0 && magnitudeFiles[0]?.file) {
-      mag = await this.readNiftiData(magnitudeFiles[0].file);
+      const file = magnitudeFiles[0].file;
+      const volume = await this.readNiftiVolume(file);
+      this._requireSameGrid(volume, `Magnitude echo 1 (${file.name})`, phase1, phaseLabel);
+      mag = volume.data;
     }
 
-    // Get dimensions from phase header
-    const headerBytes = await this.readNiftiHeader(phaseFiles[0].file);
+    // Get dimensions from the phase header the decode above already returned
+    const headerBytes = phase1.header;
     const srcView = new DataView(headerBytes);
     const nx = srcView.getInt16(42, true);
     const ny = srcView.getInt16(44, true);
@@ -569,7 +631,7 @@ export class MaskController {
       worker.postMessage({
         type: 'voxelQuality',
         data: {
-          phase: phase1,
+          phase: phase1.data,
           mag: mag,
           phase2: phase2,
           te1, te2,
@@ -711,6 +773,41 @@ export class MaskController {
     const h = new DataView(headerBuffer);
     const dims = [h.getInt16(42, true), h.getInt16(44, true), h.getInt16(46, true)];
     return dims.every(d => d > 0) ? dims : null;
+  }
+
+  /**
+   * Require a decoded volume to sit on the grid of the volume the caller is combining it with.
+   *
+   * Throws on a matrix-size disagreement and warns on a header-only one, per `gridMismatch`. The
+   * voxel-count comparison is a backstop: `readNiftiVolume` sizes its output from dim[1..3], so a
+   * length that disagreed once the dimensions already matched would mean the decode itself went
+   * wrong, and accumulating across that is exactly what produces an all-NaN volume of the right
+   * length.
+   *
+   * @param {{data: Float64Array, header: ArrayBuffer}} volume - the volume being checked
+   * @param {string} label - how to name it to the user, e.g. "Echo 2 (e2.nii)"
+   * @param {{data: Float64Array, header: ArrayBuffer}} reference - the grid to match
+   * @param {string} referenceLabel - how to name the reference, e.g. "echo 1 (e1.nii)"
+   */
+  _requireSameGrid(volume, label, reference, referenceLabel) {
+    const dims = this._dimsFromHeader(volume.header);
+    const refDims = this._dimsFromHeader(reference.header);
+    // Only ask about alignment once both headers have readable dimensions: sameNiftiGrid reads
+    // fixed offsets and raises on a header too short to hold them.
+    const aligned = Boolean(dims && refDims) && sameNiftiGrid(volume.header, reference.header);
+
+    let problem = gridMismatch({ label, dims }, { label: referenceLabel, dims: refDims }, aligned);
+    if (!problem && volume.data.length !== reference.data.length) {
+      problem = {
+        fatal: true,
+        message: `${label} has ${volume.data.length} voxels but ${referenceLabel} has `
+          + `${reference.data.length} - every image in one run must come from the same acquisition`
+      };
+    }
+
+    if (!problem) return;
+    if (problem.fatal) throw new Error(problem.message);
+    this.updateOutput(`Warning: ${problem.message}`);
   }
 
   /**
