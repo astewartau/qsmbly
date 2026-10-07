@@ -14,5 +14,6 @@ int main(void) {
     for (long i = 1; i < 400000000L; i++) s += 1.0 / (double)i;
     clock_gettime(CLOCK_MONOTONIC, &b);
     printf("%.2f\n", (b.tv_sec - a.tv_sec) + (b.tv_nsec - a.tv_nsec) / 1e9);
-    return (int)(s > 0);
+    /* `s` is volatile, so the loop cannot be optimized away; exit 0 so `set -e` callers survive. */
+    return 0;
 }

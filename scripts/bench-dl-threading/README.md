@@ -28,6 +28,15 @@ scripts/bench-dl-threading/run_bench.sh '[{"threads":14,"weightsUrl":"/xqsm.onnx
 
 Or open `http://localhost:8099/scripts/bench-dl-threading/index.html` and press the button.
 
+`run_bench.sh` launches `google-chrome-stable`; set `CHROME` to use another binary, e.g. a
+[Chrome for Testing](https://googlechromelabs.github.io/chrome-for-testing/) download on a host
+with no system Chrome:
+
+```bash
+CHROME=~/.cache/chrome-for-testing/chrome/linux-155.0.8059.39/chrome-linux64/chrome \
+  scripts/bench-dl-threading/run_bench.sh '[{"threads":14}]'
+```
+
 **Firefox cannot run this.** It hangs in `initThreadPool` inside a nested module worker, which is
 exactly how QSMbly's pipeline worker calls it. Use Chrome.
 
@@ -87,5 +96,18 @@ for i in $(seq 8); do /tmp/ctl; done
 
 On the laptop used for #89 it ranged 1.03 s to 11.18 s, with cores clamped at 400 MHz of 4800
 while the package was 90% busy. That is larger than the 1.8x slowdown the issue set out to
-explain, so the timing half of #89 is still open. **If this spread is comparable to the effect you
-are chasing, the effect is not measured.** Heap figures are unaffected by load.
+explain. **If this spread is comparable to the effect you are chasing, the effect is not
+measured.** Heap figures are unaffected by load.
+
+On a machine where it holds still, the sweep is decisive:
+[`results/2026-10-07-neurodesk-epyc.md`](results/2026-10-07-neurodesk-epyc.md) has a 1.3% floor
+over 8 runs, and the pool-size differences it resolves range from 20% to 670%.
+
+Note `ctl.c` exits **1** on a successful run (`return (int)(s > 0)`, which also stops the loop
+being optimized away). A `set -e` harness has to tolerate that status.
+
+## results/
+
+Completed sweeps, one file per machine and date, each recording the exact commands, the bundle
+commit, the qsm-core revision, the Chrome and rustc versions, every repetition, and the noise
+floor measured in the same window.
