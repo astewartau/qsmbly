@@ -1,0 +1,51 @@
+name: Deploy staging
+
+# Publishes the staging branch to qsmbly.neurodesk.org/staging on every push, so what is on the
+# branch is what is on the staging site. The released site at the root is untouched: it still only
+# moves when a release is published (deploy.yml).
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Shared with deploy.yml: both rewrite the same branch, so they must not run at once.
+concurrency:
+  group: "pages-branch"
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      VERSION: ${{ steps.version.outputs.VERSION }}
+    steps:
+      - name: Build a version string for this commit
+        id: version
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          # Unique per commit, because the wasm fetch is cache-busted by this string: a fixed
+          # staging version would serve a previously cached bundle against new JavaScript, which
+          # is how you get "<fn> is not a function" from a stale module.
+          #
+          # The `g` prefix keeps the identifier alphanumeric. A semver pre-release identifier made
+          # only of digits may not have a leading zero, and an all-digit short sha starting with 0
+          # would otherwise fail Cargo's version parse a few times in a thousand builds.
+          VERSION="0.0.0-staging.g${SHA:0:7}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Staging version: $VERSION"
+
+  deploy:
+    needs: version
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-pages.yml
+    with:
+      ref: ${{ github.sha }}
+      version: ${{ needs.version.outputs.VERSION }}
+      subtree: staging
+      message: Deploy staging ${{ needs.version.outputs.VERSION }} (${{ github.sha }})
