@@ -18,9 +18,11 @@ on:
 permissions:
   contents: read
 
-# One deploy at a time: the released site and staging share a branch, and each deploy rewrites it.
+# Never cancellable: a release deploy is the one thing here nobody wants superseded halfway.
+# Staging has its own group, and publish-pages.sh pushes under a lease, so an overlap costs a
+# rebuild rather than a lost subtree.
 concurrency:
-  group: "pages-branch"
+  group: "pages-release"
   cancel-in-progress: false
 
 jobs:
