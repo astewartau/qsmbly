@@ -1447,6 +1447,9 @@ async function runHdBet(data) {
   try {
     const [nx, ny, nz] = dims;
     const [vsx, vsy, vsz] = voxelSize;
+    // Before the weight download, not after: the inference indexes the magnitude to this grid, and
+    // the download plus a run is minutes of work to spend on a volume that cannot fit it.
+    requireVoxelCount(magnitude, 'The magnitude', dims);
 
     const model = dlRegistry['hd-bet'];
     if (!model) throw new Error('hd-bet is not in the model registry');
@@ -1520,6 +1523,9 @@ async function runRs2Net(data) {
   try {
     const [nx, ny, nz] = dims;
     const [vsx, vsy, vsz] = voxelSize;
+    // Before the weight download, not after: the inference indexes the magnitude to this grid, and
+    // the download plus a run is minutes of work to spend on a volume that cannot fit it.
+    requireVoxelCount(magnitude, 'The magnitude', dims);
 
     const model = dlRegistry['rs2-net'];
     if (!model) throw new Error('rs2-net is not in the model registry');
