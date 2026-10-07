@@ -1,0 +1,162 @@
+name: Build and publish a site subtree
+
+# Builds the app from a given ref and publishes it into one subtree of the Pages branch.
+#
+# Both the released site and the staging build go through here, so there is one definition of what
+# a deployable site contains. The two differ only in their inputs: which ref, which version string,
+# and which subtree they own. See scripts/publish-pages.sh for how the subtrees stay independent.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to build'
+        required: true
+        type: string
+      version:
+        description: 'Version to stamp into the build'
+        required: true
+        type: string
+      subtree:
+        description: 'Subtree of the site to replace; empty means the site root'
+        required: false
+        type: string
+        default: ''
+      keep:
+        description: 'Top-level entries a root deploy must preserve, space separated'
+        required: false
+        type: string
+        default: ''
+      release-tag:
+        description: 'Release to upload the wasm bundles to; empty to skip'
+        required: false
+        type: string
+        default: ''
+      message:
+        description: 'Commit message for the Pages branch'
+        required: true
+        type: string
+
+permissions:
+  contents: write  # push to the Pages branch, and upload build artifacts to a release
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Stamp version into the build (working tree only — never committed)
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: VERSION is empty"
+            exit 1
+          fi
+
+          # These files ship 0.0.0 placeholders in git; the real version is injected here at build
+          # time only (no commit, no tag move). It also cache-busts the wasm fetch, which keys off
+          # QSMConfig.VERSION — so it has to be unique per build, not just per release.
+          sed -i "s/^export const VERSION = '[^']*'/export const VERSION = '$VERSION'/" js/app/config.js
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
+          sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" rust-wasm/Cargo.toml
+
+          # QSM.rs core version comes from the pinned qsm-core dependency tag.
+          QSM_RS_VERSION=$(grep 'qsm-core' rust-wasm/Cargo.toml | grep -oP 'tag = "v\K[^"]+' || echo "")
+          if [ -n "$QSM_RS_VERSION" ]; then
+            sed -i "s/^export const QSM_RS_VERSION = '[^']*'/export const QSM_RS_VERSION = '$QSM_RS_VERSION'/" js/app/config.js
+            echo "Stamped QSM.rs version $QSM_RS_VERSION"
+          fi
+
+          echo "Stamped app version $VERSION into the build"
+
+      - name: Setup Rust (nightly + rust-src for wasm threads build-std)
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+          components: rust-src
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build WASM (threaded base + DL bundles; runs generate-defaults, copies to wasm/)
+        run: ./build.sh --simd
+
+      - name: Upload WASM to release
+        if: inputs.release-tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            wasm/qsm_wasm.js wasm/qsm_wasm_bg.wasm \
+            wasm/qsm_wasm_dl.js wasm/qsm_wasm_dl_bg.wasm \
+            --clobber
+
+      - name: Prepare deployment directory
+        run: |
+          mkdir -p deploy/wasm
+
+          # Copy static files
+          cp index.html deploy/
+          cp -r js deploy/
+          cp -r css deploy/
+
+          # Copy favicon/logo files if they exist
+          cp QSMbly.png deploy/ 2>/dev/null || true
+          cp favicon.ico deploy/ 2>/dev/null || true
+          cp icon.svg deploy/ 2>/dev/null || true
+
+          # Copy landing page imagery
+          cp -r assets deploy/ 2>/dev/null || true
+
+          # Copy niivue and nifti-js
+          cp -r niivue deploy/
+          cp -r nifti-js deploy/
+
+          # Copy dcm2niix WASM module (DICOM conversion)
+          cp -r dcm2niix deploy/
+
+          # Copy the built WASM bundles (base + DL + romeo) plus the
+          # wasm-bindgen-rayon worker snippets that build.sh emitted into wasm/.
+          cp -r wasm/. deploy/wasm/
+
+          # coi-serviceworker installs COOP/COEP client-side so SharedArrayBuffer
+          # (wasm threads) works on GitHub Pages, which can't set those headers. Loaded
+          # relatively by index.html, so under a subtree it registers with that scope.
+          cp coi-serviceworker.js deploy/
+
+      - name: Publish to the Pages branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SUBTREE: ${{ inputs.subtree }}
+          KEEP: ${{ inputs.keep }}
+          MESSAGE: ${{ inputs.message }}
+        run: |
+          ARGS=()
+          if [ -n "$SUBTREE" ]; then
+            ARGS+=(--subtree "$SUBTREE")
+          fi
+          for name in $KEEP; do
+            ARGS+=(--keep "$name")
+          done
+
+          chmod +x scripts/publish-pages.sh
+          ./scripts/publish-pages.sh \
+            --source deploy \
+            --remote "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" \
+            --domain qsmbly.neurodesk.org \
+            --noindex staging \
+            --message "$MESSAGE" \
+            ${ARGS[@]+"${ARGS[@]}"}

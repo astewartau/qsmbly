@@ -75,6 +75,35 @@ npm install
 npm test
 ```
 
+## Deployment
+
+Two environments, both served from GitHub Pages out of the `gh-pages` branch, which holds each as
+an independent subtree:
+
+| | URL | Deployed from | When |
+|---|---|---|---|
+| Release | [qsmbly.neurodesk.org](https://qsmbly.neurodesk.org/) | `main` | a GitHub release is published |
+| Staging | [qsmbly.neurodesk.org/staging](https://qsmbly.neurodesk.org/staging/) | `staging` | every push to the branch |
+
+The intended flow is: open feature PRs against `staging`, look at the result on the staging site,
+then PR `staging` into `main` and cut a release from there. A staging deploy never touches the
+released site, and publishing a release never rolls staging back.
+
+Both go through `.github/workflows/build-pages.yml`, so there is one definition of what a
+deployable site contains; `deploy.yml` and `deploy-staging.yml` differ only in which ref they
+build, which version they stamp, and which subtree they own. `scripts/publish-pages.sh` does the
+publishing and will refuse to replace the site root if that would delete a subtree it was not told
+to keep.
+
+Notes:
+
+- The staging build is stamped `0.0.0-staging.g<sha>`. That string is not decoration: the wasm
+  fetch is cache-busted by the app version, so a fixed staging version would serve a cached
+  bundle against new JavaScript.
+- Staging is excluded from search engines via `robots.txt` at the site root.
+- Pushing to `staging` deploys regardless of whether the test suite passes — it is a place to look
+  at work in progress. CI still runs on the branch and on PRs into it.
+
 ## Repository Structure
 
 ```
