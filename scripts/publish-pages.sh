@@ -121,6 +121,11 @@ fi
 
 # Branch-level files, rewritten on every deploy so they survive a root replacement and exist even
 # if the first deploy to a fresh branch is a staging one.
+
+# Branch-served Pages runs the site through Jekyll unless told not to, which costs a build step
+# this site has no use for and silently drops any path whose name begins with an underscore. The
+# deployed tree has none today, but nothing guarantees a future dependency won't.
+touch .nojekyll
 if [ -n "$DOMAIN" ]; then
     echo "$DOMAIN" > CNAME
 fi
