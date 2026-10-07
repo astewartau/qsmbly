@@ -12,10 +12,13 @@ on:
 permissions:
   contents: read
 
-# Shared with deploy.yml: both rewrite the same branch, so they must not run at once.
+# Its own group, and cancellable: only the newest staging commit is worth deploying, and a burst
+# of pushes should not queue a full wasm build each. Overlapping with a release deploy is no longer
+# a correctness problem - publish-pages.sh pushes under a lease and rebuilds if it loses the race -
+# so this is purely about not spending ten minutes per superseded commit.
 concurrency:
-  group: "pages-branch"
-  cancel-in-progress: false
+  group: "pages-staging"
+  cancel-in-progress: true
 
 jobs:
   version:
