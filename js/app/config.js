@@ -175,11 +175,6 @@ export const MASK_PREP_DEFAULTS = {
   biasCorrection: true
 };
 
-// Progress animation settings
-export const PROGRESS_CONFIG = {
-  animationSpeed: 0.5           // 50% per second - catches up quickly
-};
-
 // (TGV_DEFAULTS and SWI_DEFAULTS are now sourced from QSM.rs — see imports above)
 
 // QSMART pipeline defaults (from QSM.rs QsmartParams)
@@ -499,61 +494,4 @@ export function getVoxelBasedDefaults(voxelSize = [1, 1, 1], maskDims = null) {
     // LBV: maxit = max(dims) - matches QSM.jl lbv.jl
     lbvMaxit: maxDim
   };
-}
-
-// Make config available globally for non-module scripts and workers
-const QSMConfig = {
-  VERSION,
-  QSM_RS_VERSION,
-  SIGNAL_ERODE_DEFAULTS,
-  PHYSICS,
-  INPUT_MODES,
-  FIELD_MAP_UNITS,
-  INPUT_DEFAULTS,
-  VIEWER_CONFIG,
-  MASK_CONFIG,
-  BET_DEFAULTS,
-  MASK_PREP_DEFAULTS,
-  PROGRESS_CONFIG,
-  SWI_DEFAULTS,
-  TGV_DEFAULTS,
-  QSMART_DEFAULTS,
-  TFI_DEFAULTS,
-  ROMEO_DEFAULTS,
-  MCPC3DS_DEFAULTS,
-  LINEAR_FIT_DEFAULTS,
-  VSHARP_DEFAULTS,
-  SHARP_DEFAULTS,
-  RESHARP_DEFAULTS,
-  HARPERELLA_DEFAULTS,
-  ISMV_DEFAULTS,
-  PDF_DEFAULTS,
-  LBV_DEFAULTS,
-  TKD_DEFAULTS,
-  TSVD_DEFAULTS,
-  ILSQR_DEFAULTS,
-  TIKHONOV_DEFAULTS,
-  TV_DEFAULTS,
-  RTS_DEFAULTS,
-  NLTV_DEFAULTS,
-  NDI_DEFAULTS,
-  FANSI_DEFAULTS,
-  L1QSM_DEFAULTS,
-  WHQSM_DEFAULTS,
-  HDQSM_DEFAULTS,
-  MEDI_DEFAULTS,
-  EXAMPLE_DATA,
-  STAGE_DISPLAY_NAMES,
-  PIPELINE_METHODS,
-  PIPELINE_DEFAULTS,
-  getVoxelBasedDefaults
-};
-
-// Export for different environments
-if (typeof self !== 'undefined' && typeof WorkerGlobalScope !== 'undefined') {
-  // Web Worker context
-  self.QSMConfig = QSMConfig;
-} else if (typeof window !== 'undefined') {
-  // Browser context
-  window.QSMConfig = QSMConfig;
 }

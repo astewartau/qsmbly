@@ -91,10 +91,6 @@ export class MaskController {
     return true;
   }
 
-  setMaskThreshold(value) {
-    this.maskThreshold = value;
-  }
-
   // ==================== Mask Preparation ====================
 
   /**

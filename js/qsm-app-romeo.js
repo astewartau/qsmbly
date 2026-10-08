@@ -6,7 +6,6 @@ import {
   parseNiftiHeader,
   gunzipNifti,
   createMaskNifti,
-  createNiftiHeaderFromVolume,
   createFloat64Nifti
 } from './modules/file-io/NiftiUtils.js';
 import { ModalManager } from './modules/ui/ModalManager.js';
@@ -2123,11 +2122,6 @@ class QSMApp {
     this.updateDownloadVolumeButton();
   }
 
-  // Create NIfTI header from NiiVue volume - delegates to imported module
-  createNiftiHeaderFromVolume(vol) {
-    return createNiftiHeaderFromVolume(vol);
-  }
-
   /**
    * Preview mask based on threshold
    * Delegates to MaskController
@@ -2502,11 +2496,6 @@ class QSMApp {
     this.updateEchoInfo();
   }
 
-  // Create mask NIfTI using source header as template - delegates to imported module
-  createMaskNifti(maskData) {
-    return createMaskNifti(maskData, this.maskController.magnitudeFileBytes);
-  }
-
   async runRomeoQSM() {
     if (this.maskAlignmentActive) {
       this.updateOutput('Apply or cancel the mask alignment preview before running.');
@@ -2573,7 +2562,7 @@ class QSMApp {
       // Prepare custom mask if available
       let customMaskBuffer = null;
       if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
-        const maskNifti = this.createMaskNifti(this.maskController.currentMaskData);
+        const maskNifti = this.maskController.createMaskNifti(this.maskController.currentMaskData);
         customMaskBuffer = maskNifti;
         this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
@@ -2663,7 +2652,7 @@ class QSMApp {
       // Use custom edited mask if available
       let customMaskBuffer = null;
       if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
-        const maskNifti = this.createMaskNifti(this.maskController.currentMaskData);
+        const maskNifti = this.maskController.createMaskNifti(this.maskController.currentMaskData);
         customMaskBuffer = maskNifti;
         this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
@@ -2745,7 +2734,7 @@ class QSMApp {
 
       let customMaskBuffer = null;
       if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
-        const maskNifti = this.createMaskNifti(this.maskController.currentMaskData);
+        const maskNifti = this.maskController.createMaskNifti(this.maskController.currentMaskData);
         customMaskBuffer = maskNifti;
         this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
@@ -3307,7 +3296,6 @@ class QSMApp {
     await this.maskController.runBET({
       magnitudeFiles: magnitudeFilesForBET,
       betSettings,
-      createNiftiHeaderFromVolume: (vol) => this.createNiftiHeaderFromVolume(vol),
       onComplete: async () => {
         // Track BET as mask generator. The qsmxt op has no voxel scaling, so Mouse BET records the
         // same `bet:<fi>` and the scale is noted separately (see showCommandPreview).
@@ -3450,7 +3438,7 @@ class QSMApp {
 
       let customMaskBuffer = null;
       if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
-        customMaskBuffer = this.createMaskNifti(this.maskController.currentMaskData);
+        customMaskBuffer = this.maskController.createMaskNifti(this.maskController.currentMaskData);
       }
 
       const preparedMagnitude = this.maskController.preparedMagnitudeData
@@ -3513,7 +3501,7 @@ class QSMApp {
 
       let customMaskBuffer = null;
       if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
-        customMaskBuffer = this.createMaskNifti(this.maskController.currentMaskData);
+        customMaskBuffer = this.maskController.createMaskNifti(this.maskController.currentMaskData);
       }
 
       const preparedMagnitude = this.maskController.preparedMagnitudeData
