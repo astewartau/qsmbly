@@ -11,7 +11,7 @@ import {
   ROMEO_DEFAULTS, LINEAR_FIT_DEFAULTS,
   VSHARP_DEFAULTS, SHARP_DEFAULTS, RESHARP_DEFAULTS, HARPERELLA_DEFAULTS,
   ISMV_DEFAULTS, PDF_DEFAULTS, LBV_DEFAULTS,
-  TKD_DEFAULTS, TSVD_DEFAULTS, TIKHONOV_DEFAULTS,
+  TKD_DEFAULTS, TSVD_DEFAULTS, ILSQR_DEFAULTS, TIKHONOV_DEFAULTS,
   TV_DEFAULTS, RTS_DEFAULTS, NLTV_DEFAULTS, MEDI_DEFAULTS, TFI_DEFAULTS,
   NDI_DEFAULTS, FANSI_DEFAULTS, L1QSM_DEFAULTS, WHQSM_DEFAULTS, HDQSM_DEFAULTS,
 } from '../app/config.js';
@@ -286,8 +286,8 @@ export class PipelineSettingsController {
     this._showEl('mediSmvRadiusGroup', MEDI_DEFAULTS.smv);
     this._setChecked('mediMerit', MEDI_DEFAULTS.merit);
 
-    this._setEl('ilsqrTol', QSMART_DEFAULTS.ilsqr_tol);
-    this._setEl('ilsqrMaxIter', QSMART_DEFAULTS.ilsqr_max_iter);
+    this._setEl('ilsqrTol', ILSQR_DEFAULTS.tol);
+    this._setEl('ilsqrMaxIter', ILSQR_DEFAULTS.max_iter);
   }
 
   /**
@@ -978,8 +978,8 @@ export class PipelineSettingsController {
     this._setChecked('mediMerit', settings.medi.merit);
 
     // iLSQR settings
-    this._setEl('ilsqrTol', settings.ilsqr?.tol || 0.01);
-    this._setEl('ilsqrMaxIter', settings.ilsqr?.max_iter || 50);
+    this._setEl('ilsqrTol', settings.ilsqr?.tol || ILSQR_DEFAULTS.tol);
+    this._setEl('ilsqrMaxIter', settings.ilsqr?.max_iter || ILSQR_DEFAULTS.max_iter);
   }
 
   _setupEventListeners() {

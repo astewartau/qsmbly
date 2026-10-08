@@ -2560,7 +2560,7 @@ async function runDipoleInversionByMethod(
     lambda: 7.5e-5, percentage: 0.3, max_iter: 30, cg_max_iter: 10, cg_tol: 0.01, tol: 0.1,
     smv: false, smv_radius: 5, merit: false, data_weighting: 1
   };
-  const ilsqrSettings = pipelineSettings?.ilsqr || { tol: 0.01, max_iter: 50 };
+  const ilsqrSettings = pipelineSettings?.ilsqr || QSMConfig.ILSQR_DEFAULTS;
   const ndiSettings = pipelineSettings?.ndi || { tau: 2, alpha: 1e-5, max_iter: 200 };
   const fansiSettings = pipelineSettings?.fansi || {
     alpha1: 0.0002, mu1: 0.02, mu2: 1, alpha0: 0.0004, mu0: 0.04, max_iter: 150, tol_update: 0.1

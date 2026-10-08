@@ -241,3 +241,8 @@ export const SIGNAL_ERODE_DEFAULTS = {
   "min_component": 1000,
   "threshold": 0.8
 };
+
+export const ILSQR_DEFAULTS = {
+  "tol": 0.01,
+  "max_iter": 50
+};

@@ -3037,6 +3037,7 @@ config_defaults!(get_romeo_defaults, qsmxt_config::config::RomeoConfig);
 config_defaults!(get_mcpc3ds_defaults, qsmxt_config::config::Mcpc3dsConfig);
 config_defaults!(get_linear_fit_defaults, qsmxt_config::config::LinearFitConfig);
 config_defaults!(get_homogeneity_defaults, qsmxt_config::config::HomogeneityConfig);
+config_defaults!(get_ilsqr_defaults, qsmxt_config::config::IlsqrConfig);
 
 /// Signal-gated erosion defaults. Its parameters live inline in qsmxt-config's `MaskOp` rather
 /// than in a `*Config` struct, so this reads them straight off qsm-core's defaults (the QSM-CI
