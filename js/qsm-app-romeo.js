@@ -672,11 +672,6 @@ class QSMApp {
     document.getElementById('openPrivacy')?.addEventListener('click', () => this.privacyModal?.open());
     document.getElementById('closePrivacy')?.addEventListener('click', () => this.privacyModal?.close());
 
-    // BET fractional intensity slider value display
-    document.getElementById('betFractionalIntensity')?.addEventListener('input', (e) => {
-      document.getElementById('betFractionalIntensityValue').textContent = e.target.value;
-    });
-
     // Overlay opacity slider
     const opacitySlider = document.getElementById('overlayOpacity');
     if (opacitySlider) {
@@ -1046,6 +1041,8 @@ class QSMApp {
       console.error('Example data load failed:', err);
     } finally {
       btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Load example data';
+      // Same rule as _onBucketsChanged, which a failed download never reaches
+      btn.disabled = Object.values(this.fileIOController.buckets).some(b => b.length > 0);
     }
   }
 
@@ -3178,7 +3175,7 @@ class QSMApp {
   // Display stage data as it arrives during pipeline processing
   async displayLiveStageData(data) {
     try {
-      const { stage, data: stageBytes, description, displayRange } = data;
+      const { stage, description, displayRange } = data;
 
       // Show the stage buttons section as soon as first result arrives
       this.showStageButtons();
@@ -3189,9 +3186,10 @@ class QSMApp {
       // Hide echo navigation - pipeline results are single 3D volumes, not multi-echo
       this.hideEchoNavigation();
 
-      // Create file from bytes
-      const blob = new Blob([stageBytes], { type: 'application/octet-stream' });
-      const file = new File([blob], `${stage}.nii`, { type: 'application/octet-stream' });
+      // PipelineExecutor has already cached the bytes as a File; keep the display range with it
+      const result = this.results[stage];
+      result.displayRange = displayRange;
+      const file = result.file;
 
       // Load in viewer
       await this.loadAndVisualizeFile(file, description);
@@ -3204,9 +3202,6 @@ class QSMApp {
         this.nv.updateGLVolume();
       }
 
-      // Cache the result with description and display range
-      this.results[stage] = { file: file, path: `${stage}.nii`, description: description, displayRange: displayRange };
-
       this.updateOutput(`Displaying: ${description}`);
     } catch (error) {
       this.updateOutput(`Error displaying live data: ${error.message}`);
@@ -3216,7 +3211,7 @@ class QSMApp {
   // Cache stage data without displaying (for auxiliary outputs like vasculature mask)
   cacheStageData(data) {
     try {
-      const { stage, data: stageBytes, description } = data;
+      const { stage, description } = data;
 
       // Show the stage buttons section
       this.showStageButtons();
@@ -3224,14 +3219,7 @@ class QSMApp {
       // Add/enable the button for this stage (with description for display name)
       this.addStageButton(stage, description);
 
-      // Create file from bytes
-      const blob = new Blob([stageBytes], { type: 'application/octet-stream' });
-      const file = new File([blob], `${stage}.nii`, { type: 'application/octet-stream' });
-
-      // Cache the result (but don't display)
-      this.results[stage] = { file: file, path: `${stage}.nii`, description: description };
-
-      // Silently cached — no console message needed
+      // PipelineExecutor has already cached the result as a File — no console message needed
     } catch (error) {
       this.updateOutput(`Error caching data: ${error.message}`);
     }
@@ -3924,7 +3912,21 @@ class QSMApp {
       scaleComment = `# Note: the mask was made with RS2-Net in QSMbly, which qsmxt cannot run;\n`
         + `# download it from Results and pass it to qsmxt as an existing mask.\n`;
     }
+    // The worker answers each request with commandResult, methodsResult, configTomlResult, in
+    // request order. Keep one listener: drop the previous click's, and skip the replies still owed
+    // to earlier clicks so their configTomlResult does not detach this one early.
+    if (this._exportWorker !== worker) this._exportPending = 0;
+    if (this._exportHandler) this._exportWorker.removeEventListener('message', this._exportHandler);
+    let skip = this._exportPending;
+    this._exportPending++;
     const handler = (e) => {
+      const type = e.data.type;
+      if (type !== 'commandResult' && type !== 'methodsResult' && type !== 'configTomlResult') return;
+      if (type === 'configTomlResult') this._exportPending--;
+      if (skip > 0) {
+        if (type === 'configTomlResult') skip--;
+        return;
+      }
       if (e.data.type === 'commandResult') {
         if (cmdEl) cmdEl.textContent = e.data.error ? `ERROR: ${e.data.error}` : scaleComment + e.data.result;
       } else if (e.data.type === 'methodsResult') {
@@ -3942,8 +3944,11 @@ class QSMApp {
         // Last message back — safe to detach. A null _lastToml disables the download.
         this._lastToml = e.data.error ? null : e.data.result;
         worker.removeEventListener('message', handler);
+        this._exportHandler = null;
       }
     };
+    this._exportWorker = worker;
+    this._exportHandler = handler;
     worker.addEventListener('message', handler);
     worker.postMessage({ type: 'generateCommand', data: { configJson, maskSection } });
     worker.postMessage({ type: 'generateMethods', data: { configJson, maskSection } });
