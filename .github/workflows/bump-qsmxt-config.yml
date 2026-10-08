@@ -22,19 +22,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Inputs reach the shell only through env vars, never by ${{ }} interpolation into the
+      # script, and must look like a release tag before they are used anywhere.
       - name: Resolve target version
         id: ver
+        env:
+          V: ${{ github.event.client_payload.version || github.event.inputs.version }}
         run: |
-          V="${{ github.event.client_payload.version || github.event.inputs.version }}"
           if [ -z "$V" ]; then echo "no version provided" >&2; exit 1; fi
+          if ! [[ "$V" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "version '$V' is not a release tag (expected e.g. v9.3.0)" >&2; exit 1
+          fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
       - name: Pin qsmxt-config to the release tag in Cargo.toml
+        env:
+          V: ${{ steps.ver.outputs.version }}
         run: |
-          V="${{ steps.ver.outputs.version }}"
           # qsmxt-config lives in the QSMxT/QSMxT workspace; replace whatever
           # git ref is pinned (rev or tag) with the new release tag.
-          sed -i -E "s#(qsmxt-config = \{ git = \"https://github.com/QSMxT/QSMxT.git\", )(rev|tag) = \"[^\"]+\"#\1tag = \"${V}\"#" rust-wasm/Cargo.toml
+          sed -i -E 's#(qsmxt-config = \{ git = "https://github.com/QSMxT/QSMxT.git", )(rev|tag) = "[^"]+"#\1tag = "'"${V}"'"#' rust-wasm/Cargo.toml
+          grep -F 'qsmxt-config' rust-wasm/Cargo.toml | grep -qF "tag = \"${V}\"" \
+            || { echo "qsmxt-config pin was not updated" >&2; exit 1; }
           grep qsmxt-config rust-wasm/Cargo.toml
 
       - name: Setup Rust
@@ -42,7 +51,9 @@ jobs:
 
       - name: Update Cargo.lock
         working-directory: rust-wasm
-        run: cargo update -p qsmxt-config || cargo update
+        # Update only qsmxt-config; a failure here should stop the bump, not silently
+        # update every other dependency instead.
+        run: cargo update -p qsmxt-config
 
       - name: Open pull request
         uses: peter-evans/create-pull-request@v6

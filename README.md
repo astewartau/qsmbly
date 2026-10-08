@@ -45,18 +45,35 @@ cd qsmbly
    ```bash
    cargo install wasm-pack
    ```
+3. **Install the nightly toolchain** (the default threaded build rebuilds `std` with atomics):
+   ```bash
+   rustup toolchain install nightly --component rust-src
+   ```
+   Not needed with `--no-threads`.
+4. **Node.js** (generates the algorithm defaults) and **Python 3** (patches the threaded
+   worker helper, and runs the development server).
 
 ### Build and Run
 ```bash
-# Standard build (maximum browser compatibility)
+# Standard threaded build
 ./build.sh
 
 # SIMD-accelerated build (faster, requires modern browsers)
 ./build.sh --simd
 
-# Start development server
+# Single-threaded build (stable toolchain; runs on any static host)
+./build.sh --no-threads
+
+# Flags combine in any order, e.g.
+./build.sh --no-threads --simd
+
+# Start the development server on http://localhost:8080
 ./run.sh
 ```
+
+`run.sh` runs `serve.py`, which sends the cross-origin-isolation (COOP/COEP) headers that
+threaded WASM needs and disables caching so a rebuilt bundle is always picked up. It listens
+on `127.0.0.1` only; pass a host to expose it, e.g. `./run.sh 8080 0.0.0.0`.
 
 ### SIMD Acceleration
 
@@ -110,7 +127,8 @@ Notes:
 qsmbly/
 ├── index.html              # Main application interface
 ├── build.sh                # WASM build script
-├── run.sh                  # Development server
+├── run.sh                  # Development server (wraps serve.py)
+├── serve.py                # Static server with COOP/COEP + no-cache headers
 ├── test.sh                 # Rust test runner
 ├── js/
 │   ├── qsm-app-romeo.js    # Main application logic
