@@ -1,13 +1,10 @@
 import { MaskAlignmentSession } from './modules/mask/MaskAlignment.js';
 // Import extracted utility modules
 import { estimateHdBetPatches } from './modules/HdBetEstimate.js';
-import { createThresholdMask } from './modules/mask/ThresholdUtils.js';
 import { MOUSE_BET_DEFAULTS, looksLikeRodentFov, fieldOfViewMm, voxelScaleMethodsNote, insertBetMethodsNote, replaceMaskingSentence, RS2_NET_METHODS } from './modules/mask/RodentMask.js';
 import {
   parseNiftiHeader,
   isGzipped,
-  isValidNifti1,
-  readNiftiImageData,
   createMaskNifti,
   createNiftiHeaderFromVolume,
   createFloat64Nifti
@@ -57,12 +54,8 @@ class QSMApp {
     this.threshold = 75;
     this.progress = 0;
 
-    // Smooth progress animation state
-    this.targetProgress = 0;
+    // Progress shown in the bar (0-1)
     this.animatedProgress = 0;
-    this.progressAnimationId = null;
-    this.lastAnimationTime = 0;
-    this.progressAnimationSpeed = cfg.PROGRESS_CONFIG.animationSpeed;
 
     // Controllers (initialized in init() after DOM ready)
     this.fileIOController = null;
@@ -163,8 +156,7 @@ class QSMApp {
     this.fileIOController = new FileIOController({
       updateOutput: (msg) => this.updateOutput(msg),
       onFilesChanged: (type) => this._onBucketsChanged(type),
-      onMagnitudeFilesChanged: (files) => this._onMagnitudeFilesChanged(files),
-      onPhaseFilesChanged: (files) => this._onPhaseFilesChanged(files)
+      onMagnitudeFilesChanged: (files) => this._onMagnitudeFilesChanged(files)
     });
     this.fileIOController.setupEchoTagify();
 
@@ -172,7 +164,6 @@ class QSMApp {
     this.setupUIControls();
     this.setupEventListeners();
     this.syncSidebarFromSettings();
-    this.updateDownloadButtons();
 
     // Initialize mask file list via controller
     this.fileIOController.updateFileList('mask', []);
@@ -216,7 +207,7 @@ class QSMApp {
     // Initialize viewer controller
     this.viewerController = new ViewerController({
       nv: this.nv,
-      getMultiEchoFiles: () => this.fileIOController?.getMultiEchoFiles() || { magnitude: [], phase: [], json: [], combinedMagnitude: null, combinedPhase: null },
+      getMultiEchoFiles: () => this.fileIOController?.getMultiEchoFiles() || { magnitude: [], phase: [], json: [] },
       updateOutput: (msg) => this.updateOutput(msg),
       showOverlayControl: (show) => this.showOverlayControl(show),
       updateDownloadVolumeButton: () => this.updateDownloadVolumeButton()
@@ -424,7 +415,6 @@ class QSMApp {
 
   setProgress(value, text = null) {
     this.progress = value;
-    this.targetProgress = value;
 
     const textEl = document.getElementById('progressText');
     if (textEl) textEl.textContent = text || `${Math.round(value * 100)}%`;
@@ -432,32 +422,6 @@ class QSMApp {
     // Update progress bar immediately for accurate feedback
     this.animatedProgress = value;
     this.updateProgressBar();
-
-    // Stop any running animation since we update immediately
-    this.stopProgressAnimation();
-  }
-
-  animateProgress() {
-    const now = performance.now();
-    const deltaTime = (now - this.lastAnimationTime) / 1000; // Convert to seconds
-    this.lastAnimationTime = now;
-
-    // Move animated progress toward target, but don't exceed it
-    if (this.animatedProgress < this.targetProgress) {
-      // Calculate how much to move based on time elapsed
-      const increment = this.progressAnimationSpeed * deltaTime;
-      this.animatedProgress = Math.min(this.animatedProgress + increment, this.targetProgress);
-      this.updateProgressBar();
-    }
-    // If animated progress has caught up to target, we just wait (pause)
-    // The bar will resume moving when a new setProgress call increases targetProgress
-
-    // Continue animation loop if not complete
-    if (this.targetProgress < 1 && this.targetProgress > 0) {
-      this.progressAnimationId = requestAnimationFrame(() => this.animateProgress());
-    } else {
-      this.progressAnimationId = null;
-    }
   }
 
   updateProgressBar() {
@@ -466,13 +430,6 @@ class QSMApp {
     if (fill) fill.style.width = pct;
     const mobileFill = document.getElementById('mobileProgressFill');
     if (mobileFill) mobileFill.style.width = pct;
-  }
-
-  stopProgressAnimation() {
-    if (this.progressAnimationId) {
-      cancelAnimationFrame(this.progressAnimationId);
-      this.progressAnimationId = null;
-    }
   }
 
   setupEventListeners() {
@@ -553,7 +510,7 @@ class QSMApp {
           clearTimeout(this.maskUpdateTimeout);
         }
         this.maskUpdateTimeout = setTimeout(() => {
-          if (this.magnitudeData && !this.maskUpdating) {
+          if (this.magnitudeData) {
             this.updateMaskPreview();
           }
         }, 150);
@@ -1368,10 +1325,6 @@ class QSMApp {
     }
   }
 
-  _onPhaseFilesChanged(files) {
-    // Phase files changed — triage UI handles preview buttons
-  }
-
   // ==================== DICOM Handling ====================
 
   /**
@@ -1944,14 +1897,6 @@ class QSMApp {
 
     const label = type === 'totalField' ? 'Total Field Map' : 'Local Field Map';
     await this.loadAndVisualizeFile(file, label);
-    this.hideEchoNavigation();
-  }
-
-  async visualizeFieldMapMagnitude(type) {
-    const file = this.fileIOController.getFieldMapMagnitudeFile();
-    if (!file) return;
-
-    await this.loadAndVisualizeFile(file, 'Magnitude');
     this.hideEchoNavigation();
   }
 
@@ -3157,10 +3102,6 @@ class QSMApp {
     this.updateOutput("Results cleared");
   }
 
-  updateDownloadButtons() {
-    // Legacy method - now handled by enableStageButtons
-  }
-
   async showStage(stage) {
     try {
       // For magnitude and phase, use the multi-echo viewer with echo navigation
@@ -3473,7 +3414,7 @@ class QSMApp {
 
     // Only trigger mask preview if threshold slider is enabled (user has clicked Threshold button)
     const thresholdSlider = document.getElementById('maskThreshold');
-    if (thresholdSlider && !thresholdSlider.disabled && this.magnitudeData && !this.maskUpdating) {
+    if (thresholdSlider && !thresholdSlider.disabled && this.magnitudeData) {
       this.updateMaskPreview();
     }
   }
@@ -3541,28 +3482,6 @@ class QSMApp {
       onError: () => {
         this.updateEchoInfo();
       }
-    });
-  }
-
-  /**
-   * Handle BET completion - delegates to MaskController
-   */
-  async handleBETComplete(data) {
-    await this.maskController.handleBETComplete(data, () => {
-      // Sync state from controller
-      this.currentMaskData = this.maskController.currentMaskData;
-      this.originalMaskData = this.maskController.originalMaskData;
-
-      // Show morphological operations panel
-      const opsPanel = document.getElementById('maskOperations');
-      if (opsPanel) opsPanel.style.display = 'block';
-
-      // Add mask to Results section
-      this.showStageButtons();
-      this.addStageButton('mask', 'Brain Mask');
-
-      // Update run button state
-      this.updateEchoInfo();
     });
   }
 

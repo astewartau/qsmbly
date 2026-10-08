@@ -64,22 +64,6 @@ export class MaskController {
 
   // ==================== State Accessors ====================
 
-  hasMask() {
-    return this.currentMaskData !== null;
-  }
-
-  hasPreparedMagnitude() {
-    return this.preparedMagnitudeData !== null;
-  }
-
-  getMaskDims() {
-    return this.maskDims;
-  }
-
-  getVoxelSize() {
-    return this.voxelSize;
-  }
-
   /**
    * Derive `maskDims` / `voxelSize` from the prepared NIfTI header.
    *
@@ -105,10 +89,6 @@ export class MaskController {
       h.getFloat32(88, true) || 1,
     ];
     return true;
-  }
-
-  getMaskThreshold() {
-    return this.maskThreshold;
   }
 
   setMaskThreshold(value) {
@@ -832,16 +812,6 @@ export class MaskController {
     return result;
   }
 
-  /**
-   * Update mask preview if conditions are met
-   */
-  async triggerMaskPreviewIfReady() {
-    const thresholdSlider = document.getElementById('maskThreshold');
-    if (thresholdSlider && !thresholdSlider.disabled && this.magnitudeData && !this.maskUpdating) {
-      await this.updateMaskPreview();
-    }
-  }
-
   // ==================== Morphological Operations ====================
 
   /**
@@ -1038,12 +1008,6 @@ export class MaskController {
       }, [magnitudeArr.buffer]);
     });
   }
-
-  // Mask refinements — all go through qsm-core via applyMaskOps.
-  async erodeMask3D(iterations = 1) { return this.applyMaskOps(`erode:${iterations}`); }
-  async dilateMask3D(iterations = 1) { return this.applyMaskOps(`dilate:${iterations}`); }
-  async fillHoles3D(maxSize = 0) { return this.applyMaskOps(`fill-holes:${maxSize}`); }
-  async signalErodeMask3D() { return this.applyMaskOps('signal-erode'); }
 
   // Clear mask completely
   async clearMask() {
@@ -1575,7 +1539,6 @@ export class MaskController {
       const dx = srcView.getFloat32(80, true);
       const dy = srcView.getFloat32(84, true);
       const dz = srcView.getFloat32(88, true);
-      const voxelSize = [dz || 1, dy || 1, dx || 1]; // z, y, x order for Python
 
       this.updateOutput(`Image dimensions: ${nx}x${ny}x${nz}, voxel size: ${dx.toFixed(2)}x${dy.toFixed(2)}x${dz.toFixed(2)}mm`);
 
@@ -1645,7 +1608,6 @@ export class MaskController {
         type: 'runBET',
         data: {
           magnitudeBuffer: magnitudeNifti,
-          voxelSize: voxelSize,
           fractionalIntensity: betSettings.fractionalIntensity,
           iterations: betSettings.iterations,
           subdivisions: betSettings.subdivisions,
@@ -1703,26 +1665,6 @@ export class MaskController {
   }
 
   /**
-   * Get prepared magnitude as array for pipeline
-   */
-  getPreparedMagnitudeArray() {
-    return this.preparedMagnitudeData ? Array.from(this.preparedMagnitudeData) : null;
-  }
-
-  /**
-   * Update the opacity of all overlay volumes
-   */
-  updateOverlayOpacity(opacity) {
-    if (this.nv.volumes.length <= 1) return;
-
-    // Update all overlays (volumes after the first one)
-    for (let i = 1; i < this.nv.volumes.length; i++) {
-      this.nv.setOpacity(i, opacity);
-    }
-    this.nv.updateGLVolume();
-  }
-
-  /**
    * Show or hide the overlay opacity control
    */
   showOverlayControl(show) {
@@ -1751,15 +1693,5 @@ export class MaskController {
 
     const autoThresholdBtn = document.getElementById('autoThreshold');
     if (autoThresholdBtn) autoThresholdBtn.disabled = !enabled;
-  }
-
-  /**
-   * Clear all prepared data (for reset)
-   */
-  clearPreparedData() {
-    this.preparedMagnitudeData = null;
-    this.preparedMagnitudeMax = 0;
-    this.currentMaskData = null;
-    this.originalMaskData = null;
   }
 }

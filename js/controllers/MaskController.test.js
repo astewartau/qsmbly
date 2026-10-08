@@ -195,8 +195,8 @@ describe('MaskController.loadMaskFromFile', () => {
     const result = await controller.loadMaskFromFile(mask, null);
 
     expect(result.ok).toBe(true);
-    expect(controller.getMaskDims()).toEqual(DIMS);
-    expect(controller.getVoxelSize()).toEqual([0.25, 0.25, 1]);
+    expect(controller.maskDims).toEqual(DIMS);
+    expect(controller.voxelSize).toEqual([0.25, 0.25, 1]);
   });
 
   it('reports a missing file rather than throwing', async () => {
