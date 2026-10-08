@@ -22,8 +22,8 @@ let wasmBaseUrl = '';
 const DL_TOTAL_FIELD_MODELS = new Set(['autoqsm', 'nextqsm']); // take the total field (own BFR)
 // Whole-volume nets that would OOM the 32-bit WASM heap on clinical data but have an
 // overlap-tiled variant in qsm-core → run tiled (bounded memory, ~approximate). qsmgan/autoqsm
-// already tile natively (no flag needed); lpcnn/modl-qsm/nextqsm can't tile.
-const DL_TILEABLE = new Set(['xqsm', 'qsmnet', 'qsmnet-plus', 'ir2qsm', 'lpcnn', 'modl-qsm', 'nextqsm']);
+// already tile natively (no flag needed).
+const DL_TILEABLE = new Set(QSMConfig.DL_TILING_DEFAULTS.tileable);
 const isDlModel = (id) => Object.prototype.hasOwnProperty.call(dlRegistry, id);
 
 /** Resolve the configured weight-host base to an absolute URL (or '' to use registry URLs). */
@@ -95,8 +95,9 @@ async function runDlFieldInversion(model, field, mask, nx, ny, nz, vsx, vsy, vsz
   const tiled = t.enabled !== undefined ? t.enabled !== false : DL_TILEABLE.has(model.id);
   // Browser-safe default 64³ patch (core 56 + halo 4): the size the natively-patch-based nets use,
   // proven not to OOM the 32-bit wasm heap; large core + thin halo minimizes overlap recompute.
-  const requestedCore = Number(t.tile_size) || 56;
-  const requestedHalo = Number.isFinite(Number(t.tile_halo)) ? Number(t.tile_halo) : 4;
+  const { tile_core: defaultCore, tile_halo: defaultHalo } = QSMConfig.DL_TILING_DEFAULTS;
+  const requestedCore = Number(t.tile_size) || defaultCore;
+  const requestedHalo = Number.isFinite(Number(t.tile_halo)) ? Number(t.tile_halo) : defaultHalo;
   // One patch has to fit the wasm heap on its own; past that the run stalls rather than failing.
   const { core: tileCore, halo: tileHalo, clamped } = clampTileConfig(requestedCore, requestedHalo);
   if (tiled && clamped) {
@@ -207,8 +208,8 @@ async function initializeWasm() {
       console.warn('DL model registry unavailable:', e);
     }
 
-    if (wasmModule.wasm_health_check()) {
-      postLog(`QSMbly v${wasmModule.get_version()} ready`);
+    if (wasmModule.health_check_wasm()) {
+      postLog(`QSMbly v${wasmModule.get_version_wasm()} ready`);
     }
   } catch (e) {
     // Reported once, by whichever handler called us (onmessage, or a request's own error reply).
@@ -385,11 +386,9 @@ async function runPipeline(data) {
     magField || 3.0, configToml,
   );
 
-  // Result is [b0_field_ppm..., phase_offset...] or just [b0_field_ppm...]
-  let b0Fieldmap = new Float64Array(fieldResult.slice(0, voxelCount));
-  const phaseOffset = fieldResult.length > voxelCount
-    ? new Float64Array(fieldResult.slice(voxelCount, 2 * voxelCount))
-    : null;
+  // phaseOffset is null when the field-mapping method estimates none
+  let b0Fieldmap = fieldResult.b0FieldPpm;
+  const phaseOffset = fieldResult.phaseOffset;
 
   if (phaseOffset) {
     sendStageData('phaseOffset', phaseOffset, dims, voxelSize, affine, 'Phase Offset (rad)', false);
@@ -509,8 +508,8 @@ async function runTgvCore({
   const step_size = 3.0;
   const { alpha0, alpha1, iterations } = resolveTgvParams(
     tgvSettings,
-    (level) => wasmModule.tgv_get_default_alpha(level),
-    () => wasmModule.tgv_get_default_iterations(vsx, vsy, vsz, step_size),
+    (level) => wasmModule.tgv_get_default_alpha_wasm(level),
+    () => wasmModule.tgv_get_default_iterations_wasm(vsx, vsy, vsz, step_size),
   );
 
   postProgress(progressStart, 'Starting TGV reconstruction...');
@@ -664,11 +663,9 @@ async function runTgvPipeline(data) {
       fieldstrength, configToml,
     );
 
-    // Result is [b0_field_ppm..., phase_offset...] or just [b0_field_ppm...]
-    const b0FieldmapPpm = new Float64Array(fieldResult.slice(0, voxelCount));
-    const phaseOffset = fieldResult.length > voxelCount
-      ? new Float64Array(fieldResult.slice(voxelCount, 2 * voxelCount))
-      : null;
+    // phaseOffset is null when the field-mapping method estimates none
+    const b0FieldmapPpm = fieldResult.b0FieldPpm;
+    const phaseOffset = fieldResult.phaseOffset;
 
     if (phaseOffset) {
       sendStageData('phaseOffset', phaseOffset, dims, voxelSize, affine, 'Phase Offset (rad)', false);

@@ -64,6 +64,10 @@ const DERIVED = {
     keys: ['bias_sigma', 'depth_cap', 'global_erosions', 'min_component', 'threshold'],
   },
   TIKHONOV_DEFAULTS: { from: 'TIKHONOV_DEFAULTS', keys: ['lambda', 'reg'] },
+  DL_TILING_DEFAULTS: {
+    from: 'DL_TILING_DEFAULTS',
+    keys: ['tile_core', 'tile_halo', 'tileable', 'off_design', 'native'],
+  },
   NLTV_DEFAULTS: { from: 'NLTV_DEFAULTS', keys: ['lambda', 'mu', 'max_iter', 'tol', 'newton_max_iter:newton_iter'] },
   NDI_DEFAULTS: { from: 'NDI_DEFAULTS', keys: ['tau', 'alpha', 'max_iter'] },
   FANSI_DEFAULTS: { from: 'FANSI_DEFAULTS', keys: ['alpha1', 'mu1', 'mu2', 'alpha0', 'mu0', 'max_iter', 'tol_update'] },
@@ -90,7 +94,7 @@ const splitKey = (k) => {
 // A generated value is whatever serde_json emits for a qsmxt-config field.
 const isJsonScalarOrArray = (v) =>
   ['number', 'boolean', 'string'].includes(typeof v) ||
-  (Array.isArray(v) && v.every(x => typeof x === 'number'));
+  (Array.isArray(v) && v.every(x => ['number', 'string'].includes(typeof x)));
 
 describe('Config Module', () => {
   describe('PHYSICS', () => {

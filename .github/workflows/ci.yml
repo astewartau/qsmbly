@@ -35,16 +35,12 @@ jobs:
         working-directory: rust-wasm
         run: cargo test
 
-      # rustfmt and clippy report but do not gate yet: the crate has existing findings, and the
-      # clippy cleanup (#79) is in progress. Drop continue-on-error from both once it lands.
       - name: rustfmt
         working-directory: rust-wasm
-        continue-on-error: true
         run: cargo fmt --check
 
       - name: clippy
         working-directory: rust-wasm
-        continue-on-error: true
         run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
 
   deploy-build:

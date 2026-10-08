@@ -3,6 +3,7 @@
  */
 
 import { maskSectionString, buildConfigJson } from './ConfigBridge.js';
+import { DL_TILING_DEFAULTS } from '../app/config.js';
 
 describe('maskSectionString', () => {
   test('returns empty for no ops', () => {
@@ -183,5 +184,27 @@ describe('buildConfigJson linear-fit parameters', () => {
     )).field_mapping;
 
     expect(fm.linear_fit).toEqual({});
+  });
+});
+
+describe('buildConfigJson deep-learning tiling', () => {
+  const inversion = (overrides) => JSON.parse(buildConfigJson(settingsFixture(overrides))).inversion;
+
+  test('reports the default tile for every model the worker runs tiled', () => {
+    for (const id of DL_TILING_DEFAULTS.tileable) {
+      const inv = inversion({ dipole_inversion: id });
+      expect([id, inv.tile_size, inv.tile_halo])
+        .toEqual([id, DL_TILING_DEFAULTS.tile_core, DL_TILING_DEFAULTS.tile_halo]);
+    }
+  });
+
+  test('includes the off-design nets the worker also tiles', () => {
+    expect(inversion({ dipole_inversion: 'lpcnn' }).tile_size).toBe(DL_TILING_DEFAULTS.tile_core);
+  });
+
+  test('omits tiling for natively patch-based nets and when tiling is off', () => {
+    expect(inversion({ dipole_inversion: 'qsmgan' }).tile_size).toBeUndefined();
+    expect(inversion({ dipole_inversion: 'xqsm', dl_tiling: { enabled: false } }).tile_size)
+      .toBeUndefined();
   });
 });
