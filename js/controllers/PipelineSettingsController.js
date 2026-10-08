@@ -11,7 +11,7 @@ import {
   ROMEO_DEFAULTS, LINEAR_FIT_DEFAULTS,
   VSHARP_DEFAULTS, SHARP_DEFAULTS, RESHARP_DEFAULTS, HARPERELLA_DEFAULTS,
   ISMV_DEFAULTS, PDF_DEFAULTS, LBV_DEFAULTS,
-  TKD_DEFAULTS, TSVD_DEFAULTS, TIKHONOV_DEFAULTS,
+  TKD_DEFAULTS, TSVD_DEFAULTS, ILSQR_DEFAULTS, TIKHONOV_DEFAULTS,
   TV_DEFAULTS, RTS_DEFAULTS, NLTV_DEFAULTS, MEDI_DEFAULTS, TFI_DEFAULTS,
   NDI_DEFAULTS, FANSI_DEFAULTS, L1QSM_DEFAULTS, WHQSM_DEFAULTS, HDQSM_DEFAULTS,
 } from '../app/config.js';
@@ -28,7 +28,7 @@ const DL_INVERSION_METHODS = new Set([...DL_TILEABLE, ...DL_NATIVE_TILE, ...DL_O
 export class PipelineSettingsController {
   constructor(modalElement) {
     this.modal = modalElement;
-    this.inputMode = 'dicom'; // 'dicom', 'raw', 'totalField', or 'localField'
+    this.inputMode = 'raw'; // 'raw', 'totalField', or 'localField'
     this._setupTabs();
     this._setupEventListeners();
   }
@@ -286,8 +286,8 @@ export class PipelineSettingsController {
     this._showEl('mediSmvRadiusGroup', MEDI_DEFAULTS.smv);
     this._setChecked('mediMerit', MEDI_DEFAULTS.merit);
 
-    this._setEl('ilsqrTol', QSMART_DEFAULTS.ilsqr_tol);
-    this._setEl('ilsqrMaxIter', QSMART_DEFAULTS.ilsqr_max_iter);
+    this._setEl('ilsqrTol', ILSQR_DEFAULTS.tol);
+    this._setEl('ilsqrMaxIter', ILSQR_DEFAULTS.max_iter);
   }
 
   /**
@@ -574,7 +574,7 @@ export class PipelineSettingsController {
    * @param {number} nEchoes - Number of echo files loaded
    */
   updateVisibility(nEchoes) {
-    const isRawMode = this.inputMode === 'raw' || this.inputMode === 'dicom';
+    const isRawMode = this.inputMode === 'raw';
     const isTotalFieldMode = this.inputMode === 'totalField';
     const isLocalFieldMode = this.inputMode === 'localField';
     const isFieldMapMode = isTotalFieldMode || isLocalFieldMode;
@@ -978,8 +978,8 @@ export class PipelineSettingsController {
     this._setChecked('mediMerit', settings.medi.merit);
 
     // iLSQR settings
-    this._setEl('ilsqrTol', settings.ilsqr?.tol || 0.01);
-    this._setEl('ilsqrMaxIter', settings.ilsqr?.max_iter || 50);
+    this._setEl('ilsqrTol', settings.ilsqr?.tol || ILSQR_DEFAULTS.tol);
+    this._setEl('ilsqrMaxIter', settings.ilsqr?.max_iter || ILSQR_DEFAULTS.max_iter);
   }
 
   _setupEventListeners() {
@@ -1168,40 +1168,6 @@ export class PipelineSettingsController {
         warning.querySelector('span').textContent = message;
         warning.style.display = '';
       }
-    } else if (warning) {
-      warning.style.display = 'none';
-    }
-  }
-
-  /**
-   * Show/hide a warning banner at the top of a section (replaces _disableSection)
-   * All inputs remain interactive.
-   * @param {string} id - Section element ID
-   * @param {boolean} hasWarning - Whether to show the warning
-   * @param {string} [warningText] - Warning text
-   */
-  _showSectionWarning(id, hasWarning, warningText) {
-    const section = document.getElementById(id);
-    if (!section) return;
-
-    const warningId = id + 'Warning';
-    let warning = document.getElementById(warningId);
-
-    if (hasWarning && warningText) {
-      if (!warning) {
-        warning = document.createElement('div');
-        warning.id = warningId;
-        warning.className = 'validation-message error inline-warning';
-        warning.innerHTML = '<span></span>';
-        const heading = section.querySelector('h4');
-        if (heading) {
-          heading.after(warning);
-        } else {
-          section.prepend(warning);
-        }
-      }
-      warning.querySelector('span').textContent = warningText;
-      warning.style.display = 'flex';
     } else if (warning) {
       warning.style.display = 'none';
     }

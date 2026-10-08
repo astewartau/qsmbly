@@ -196,8 +196,8 @@ describe('MaskController.loadMaskFromFile', () => {
     const result = await controller.loadMaskFromFile(mask, null);
 
     expect(result.ok).toBe(true);
-    expect(controller.getMaskDims()).toEqual(DIMS);
-    expect(controller.getVoxelSize()).toEqual([0.25, 0.25, 1]);
+    expect(controller.maskDims).toEqual(DIMS);
+    expect(controller.voxelSize).toEqual([0.25, 0.25, 1]);
   });
 
   it('reports a missing file rather than throwing', async () => {
@@ -286,6 +286,39 @@ describe('MaskController error paths', () => {
       await controller.handleBETComplete({ maskData: new Float32Array(N), coverage: '0%' }, onComplete, onError);
       expect(onComplete).not.toHaveBeenCalled();
       expect(onError).toHaveBeenCalledWith('display failed');
+    });
+  });
+
+  describe('applyMaskOps', () => {
+    beforeEach(() => {
+      controller.currentMaskData = new Float32Array(N).fill(1);
+      controller.maskDims = DIMS;
+    });
+
+    it('starts a fresh worker when a cancel has nulled the old one', async () => {
+      // Stands in for PipelineExecutor: cancel() leaves no worker until initialize() runs.
+      let worker = null;
+      const listeners = new Set();
+      controller.getWorker = () => worker;
+      controller.initializeWorker = async () => {
+        worker = {
+          addEventListener: (_, fn) => listeners.add(fn),
+          removeEventListener: (_, fn) => listeners.delete(fn),
+          postMessage: (msg) => {
+            const reply = { type: 'applyMaskOpsComplete', maskData: msg.data.mask };
+            queueMicrotask(() => listeners.forEach(fn => fn({ data: reply })));
+          },
+        };
+      };
+
+      await expect(controller.applyMaskOps('erode:1')).resolves.toBe(true);
+      expect(listeners.size).toBe(0);
+    });
+
+    it('rejects with the init error instead of dereferencing a null worker', async () => {
+      controller.getWorker = () => null;
+      controller.initializeWorker = async () => { throw new Error('WASM init failed'); };
+      await expect(controller.applyMaskOps('erode:1')).rejects.toThrow('WASM init failed');
     });
   });
 });

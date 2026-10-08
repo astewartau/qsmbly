@@ -1,16 +1,28 @@
 {
-  "name": "qsm-wasm",
+  "name": "qsmbly",
   "version": "0.0.0",
   "description": "Quantitative Susceptibility Mapping in WebAssembly",
+  "homepage": "https://qsmbly.neurodesk.org",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/astewartau/qsmbly.git"
+  },
+  "bugs": {
+    "url": "https://github.com/astewartau/qsmbly/issues"
+  },
   "type": "module",
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
-    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "lint": "eslint ."
   },
   "devDependencies": {
-    "jest": "^29.7.0",
-    "@types/jest": "^29.5.12"
+    "@eslint/js": "^9.39.5",
+    "@types/jest": "^29.5.12",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
+    "jest": "^29.7.0"
   },
   "keywords": [
     "qsm",
@@ -19,5 +31,8 @@
     "wasm",
     "medical-imaging"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.9"
+  }
 }

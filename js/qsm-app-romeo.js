@@ -1,18 +1,16 @@
 import { MaskAlignmentSession } from './modules/mask/MaskAlignment.js';
 // Import extracted utility modules
 import { estimateHdBetPatches } from './modules/HdBetEstimate.js';
-import { createThresholdMask } from './modules/mask/ThresholdUtils.js';
 import { MOUSE_BET_DEFAULTS, looksLikeRodentFov, fieldOfViewMm, voxelScaleMethodsNote, insertBetMethodsNote, replaceMaskingSentence, RS2_NET_METHODS } from './modules/mask/RodentMask.js';
 import {
   parseNiftiHeader,
   gunzipNifti,
-  isValidNifti1,
-  readNiftiImageData,
   createMaskNifti,
   createNiftiHeaderFromVolume,
   createFloat64Nifti
 } from './modules/file-io/NiftiUtils.js';
 import { ModalManager } from './modules/ui/ModalManager.js';
+import { escapeHtml } from './modules/ui/escapeHtml.js';
 import { LandingPage } from './modules/ui/LandingPage.js';
 import { Tutorial, WelcomePrompt } from './modules/ui/Tutorial.js';
 import { FileIOController, PipelineExecutor, PipelineSettingsController, MaskController, ViewerController } from './controllers/index.js';
@@ -47,19 +45,15 @@ class QSMApp {
     this.nv = new window.Niivue({
       ...cfg.VIEWER_CONFIG,
       onLocationChange: (data) => {
-        document.getElementById("intensity").innerHTML = data.string;
+        document.getElementById("intensity").textContent = data.string;
       }
     });
     this.currentFile = null;
     this.threshold = 75;
     this.progress = 0;
 
-    // Smooth progress animation state
-    this.targetProgress = 0;
+    // Progress shown in the bar (0-1)
     this.animatedProgress = 0;
-    this.progressAnimationId = null;
-    this.lastAnimationTime = 0;
-    this.progressAnimationSpeed = cfg.PROGRESS_CONFIG.animationSpeed;
 
     // Controllers (initialized in init() after DOM ready)
     this.fileIOController = null;
@@ -160,8 +154,7 @@ class QSMApp {
     this.fileIOController = new FileIOController({
       updateOutput: (msg) => this.updateOutput(msg),
       onFilesChanged: (type) => this._onBucketsChanged(type),
-      onMagnitudeFilesChanged: (files) => this._onMagnitudeFilesChanged(files),
-      onPhaseFilesChanged: (files) => this._onPhaseFilesChanged(files)
+      onMagnitudeFilesChanged: (files) => this._onMagnitudeFilesChanged(files)
     });
     this.fileIOController.setupEchoTagify();
 
@@ -169,7 +162,6 @@ class QSMApp {
     this.setupUIControls();
     this.setupEventListeners();
     this.syncSidebarFromSettings();
-    this.updateDownloadButtons();
 
     // Initialize mask file list via controller
     this.fileIOController.updateFileList('mask', []);
@@ -213,7 +205,7 @@ class QSMApp {
     // Initialize viewer controller
     this.viewerController = new ViewerController({
       nv: this.nv,
-      getMultiEchoFiles: () => this.fileIOController?.getMultiEchoFiles() || { magnitude: [], phase: [], json: [], combinedMagnitude: null, combinedPhase: null },
+      getMultiEchoFiles: () => this.fileIOController?.getMultiEchoFiles() || { magnitude: [], phase: [], json: [] },
       updateOutput: (msg) => this.updateOutput(msg),
       showOverlayControl: (show) => this.showOverlayControl(show),
       updateDownloadVolumeButton: () => this.updateDownloadVolumeButton()
@@ -240,8 +232,9 @@ class QSMApp {
     this.privacyModal = new ModalManager('privacyModal');
     this.dicompareModal = new ModalManager('dicompareModal');
 
-    // Start loading WASM in the background immediately
-    this.pipelineExecutor.initialize();
+    // Start loading WASM in the background immediately. A failure here is reported, and the
+    // next action that needs the worker retries the load.
+    this.pipelineExecutor.initialize().catch((e) => this.updateOutput(`Error: ${e.message}`));
   }
 
   /**
@@ -418,7 +411,6 @@ class QSMApp {
 
   setProgress(value, text = null) {
     this.progress = value;
-    this.targetProgress = value;
 
     const textEl = document.getElementById('progressText');
     if (textEl) textEl.textContent = text || `${Math.round(value * 100)}%`;
@@ -426,32 +418,6 @@ class QSMApp {
     // Update progress bar immediately for accurate feedback
     this.animatedProgress = value;
     this.updateProgressBar();
-
-    // Stop any running animation since we update immediately
-    this.stopProgressAnimation();
-  }
-
-  animateProgress() {
-    const now = performance.now();
-    const deltaTime = (now - this.lastAnimationTime) / 1000; // Convert to seconds
-    this.lastAnimationTime = now;
-
-    // Move animated progress toward target, but don't exceed it
-    if (this.animatedProgress < this.targetProgress) {
-      // Calculate how much to move based on time elapsed
-      const increment = this.progressAnimationSpeed * deltaTime;
-      this.animatedProgress = Math.min(this.animatedProgress + increment, this.targetProgress);
-      this.updateProgressBar();
-    }
-    // If animated progress has caught up to target, we just wait (pause)
-    // The bar will resume moving when a new setProgress call increases targetProgress
-
-    // Continue animation loop if not complete
-    if (this.targetProgress < 1 && this.targetProgress > 0) {
-      this.progressAnimationId = requestAnimationFrame(() => this.animateProgress());
-    } else {
-      this.progressAnimationId = null;
-    }
   }
 
   updateProgressBar() {
@@ -462,14 +428,17 @@ class QSMApp {
     if (mobileFill) mobileFill.style.width = pct;
   }
 
-  stopProgressAnimation() {
-    if (this.progressAnimationId) {
-      cancelAnimationFrame(this.progressAnimationId);
-      this.progressAnimationId = null;
-    }
-  }
-
   setupEventListeners() {
+    // Async handlers that reach the worker can reject (e.g. the WASM fails to load); report it.
+    const reportErrors = (fn) => async (...args) => {
+      try {
+        await fn(...args);
+      } catch (e) {
+        this.updateOutput(`Error: ${e.message}`);
+        console.error(e);
+      }
+    };
+
     // Mobile tab bar
     this._setupMobileTabs();
 
@@ -494,6 +463,12 @@ class QSMApp {
       this.updateMaskSectionState();
       await this.loadCustomMaskFile();
       this.updateEchoInfo();
+    });
+
+    // Remove buttons in the mask file list, which FileIOController.updateFileList rebuilds
+    document.getElementById('maskList')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.file-remove');
+      if (btn) this.removeFile(btn.dataset.type, Number(btn.dataset.index));
     });
 
     // dicompare report
@@ -541,7 +516,7 @@ class QSMApp {
           clearTimeout(this.maskUpdateTimeout);
         }
         this.maskUpdateTimeout = setTimeout(() => {
-          if (this.magnitudeData && !this.maskUpdating) {
+          if (this.magnitudeData) {
             this.updateMaskPreview();
           }
         }, 150);
@@ -557,7 +532,7 @@ class QSMApp {
     }
 
     // Threshold Robust button - Otsu + auto-refinement
-    document.getElementById('thresholdRobust')?.addEventListener('click', async () => {
+    document.getElementById('thresholdRobust')?.addEventListener('click', reportErrors(async () => {
       document.getElementById('thresholdModeButtons').style.display = 'none';
       await this.previewMask();
       this.maskOpsHistory = ['threshold:otsu'];
@@ -571,7 +546,7 @@ class QSMApp {
       this._pushMaskOp('erode');
       await this.displayCurrentMask();
       this.updateOutput("Robust mask complete");
-    });
+    }));
 
     // Threshold Manual button - Otsu + slider
     document.getElementById('thresholdManual')?.addEventListener('click', async () => {
@@ -590,7 +565,7 @@ class QSMApp {
     // Mouse brain extraction - RS2-Net, with voxel-scaled BET as the fallback
     document.getElementById('runMouseBet')?.addEventListener('click', () => this.openMouseBrainModal());
     document.getElementById('closeMouseBrain')?.addEventListener('click', () => this.mouseBrainModal?.close());
-    document.getElementById('runRs2Net')?.addEventListener('click', () => this.runRs2NetWithSettings());
+    document.getElementById('runRs2Net')?.addEventListener('click', reportErrors(() => this.runRs2NetWithSettings()));
     document.getElementById('runMouseScaledBet')?.addEventListener('click', () => {
       this.mouseBrainModal?.close();
       this.openBetSettingsModal('mouse');
@@ -676,7 +651,7 @@ class QSMApp {
     // BET settings modal
     document.getElementById('closeHdBetSettings')?.addEventListener('click', () => this.hdBetModal?.close());
     document.getElementById('resetHdBetSettings')?.addEventListener('click', () => this.resetHdBetSettings());
-    document.getElementById('runHdBetWithSettings')?.addEventListener('click', () => this.runHdBetWithSettings());
+    document.getElementById('runHdBetWithSettings')?.addEventListener('click', reportErrors(() => this.runHdBetWithSettings()));
     document.getElementById('hdBetTileStep')?.addEventListener('change', () => this.updateHdBetEstimate());
     document.getElementById('hdBetTta')?.addEventListener('change', () => this.updateHdBetEstimate());
 
@@ -702,11 +677,6 @@ class QSMApp {
     // Privacy modal
     document.getElementById('openPrivacy')?.addEventListener('click', () => this.privacyModal?.open());
     document.getElementById('closePrivacy')?.addEventListener('click', () => this.privacyModal?.close());
-
-    // BET fractional intensity slider value display
-    document.getElementById('betFractionalIntensity')?.addEventListener('input', (e) => {
-      document.getElementById('betFractionalIntensityValue').textContent = e.target.value;
-    });
 
     // Overlay opacity slider
     const opacitySlider = document.getElementById('overlayOpacity');
@@ -741,38 +711,38 @@ class QSMApp {
     // Note: Pipeline settings form event listeners are now handled by PipelineSettingsController
 
     // Morphological operation buttons
-    document.getElementById('fillHoles')?.addEventListener('click', async () => {
+    document.getElementById('fillHoles')?.addEventListener('click', reportErrors(async () => {
       this.updateOutput("Filling holes in mask...");
       await this.fillHoles3D();
       this.maskOpsHistory.push('fill-holes:0');
       await this.displayCurrentMask();
       this.updateOutput("Holes filled");
-    });
+    }));
 
-    document.getElementById('erodeMask')?.addEventListener('click', async () => {
+    document.getElementById('erodeMask')?.addEventListener('click', reportErrors(async () => {
       this.updateOutput("Eroding mask...");
       await this.erodeMask3D();
       this._pushMaskOp('erode');
       await this.displayCurrentMask();
       this.updateOutput("Mask eroded");
-    });
+    }));
 
-    document.getElementById('dilateMask')?.addEventListener('click', async () => {
+    document.getElementById('dilateMask')?.addEventListener('click', reportErrors(async () => {
       this.updateOutput("Dilating mask...");
       await this.dilateMask3D();
       this._pushMaskOp('dilate');
       await this.displayCurrentMask();
       this.updateOutput("Mask dilated");
-    });
+    }));
 
-    document.getElementById('signalErodeMask')?.addEventListener('click', async () => {
+    document.getElementById('signalErodeMask')?.addEventListener('click', reportErrors(async () => {
       this.updateOutput("Signal-gated erosion (removing low-signal boundary voxels)...");
       if (await this.signalErodeMask3D()) {
         this.maskOpsHistory.push('signal-erode');
         await this.displayCurrentMask();
         this.updateOutput("Low-signal boundary removed");
       }
-    });
+    }));
 
     document.getElementById('resetMask')?.addEventListener('click', async () => {
       this.updateOutput("Clearing mask...");
@@ -820,7 +790,7 @@ class QSMApp {
     });
   }
 
-  // Passthrough for backward compatibility (HTML onclick uses app.removeFile)
+  // Remove a file and drop state that depended on it (mask list remove buttons call this)
   removeFile(type, index) {
     this.fileIOController.removeFile(type, index);
 
@@ -1077,6 +1047,8 @@ class QSMApp {
       console.error('Example data load failed:', err);
     } finally {
       btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Load example data';
+      // Same rule as _onBucketsChanged, which a failed download never reaches
+      btn.disabled = Object.values(this.fileIOController.buckets).some(b => b.length > 0);
     }
   }
 
@@ -1272,7 +1244,8 @@ class QSMApp {
 
       html += `<div class="file-triage-card" draggable="true" data-category="${key}" data-index="${i}">`;
       html += `<span class="file-triage-card-grip" aria-hidden="true">${gripSvg}</span>`;
-      html += `<span class="file-triage-card-name" title="${item.name}">${item.name}</span>`;
+      const name = escapeHtml(item.name);
+      html += `<span class="file-triage-card-name" title="${name}">${name}</span>`;
       if (teLabel) {
         html += `<span class="file-triage-card-te">${teLabel}</span>`;
       }
@@ -1353,10 +1326,6 @@ class QSMApp {
     if (files.length > 0) {
       this.visualizeMagnitude();
     }
-  }
-
-  _onPhaseFilesChanged(files) {
-    // Phase files changed — triage UI handles preview buttons
   }
 
   // ==================== DICOM Handling ====================
@@ -1662,11 +1631,12 @@ class QSMApp {
       if (footer) footer.style.display = '';
     } catch (error) {
       if (body) {
-        body.innerHTML = `
-          <div class="dicompare-error">
-            <p>Validation failed: ${error.message}</p>
-          </div>
-        `;
+        const errorEl = document.createElement('div');
+        errorEl.className = 'dicompare-error';
+        const p = document.createElement('p');
+        p.textContent = `Validation failed: ${error.message}`;
+        errorEl.appendChild(p);
+        body.replaceChildren(errorEl);
       }
       console.error('dicompare validation error:', error);
     }
@@ -1961,14 +1931,6 @@ class QSMApp {
 
     const label = type === 'totalField' ? 'Total Field Map' : 'Local Field Map';
     await this.loadAndVisualizeFile(file, label);
-    this.hideEchoNavigation();
-  }
-
-  async visualizeFieldMapMagnitude(type) {
-    const file = this.fileIOController.getFieldMapMagnitudeFile();
-    if (!file) return;
-
-    await this.loadAndVisualizeFile(file, 'Magnitude');
     this.hideEchoNavigation();
   }
 
@@ -2717,15 +2679,6 @@ class QSMApp {
         this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
 
-      // Determine which stages can be skipped based on settings changes
-      const skipStages = this.pipelineExecutor.determineSkipStages(this.pipelineSettings);
-      if (skipStages.skipUnwrap) {
-        this.updateOutput("Reusing cached unwrapped phase data");
-      }
-      if (skipStages.skipBgRemoval) {
-        this.updateOutput("Reusing cached background-removed data");
-      }
-
       // Show phase image at the start
       await this.visualizePhase();
 
@@ -2744,8 +2697,7 @@ class QSMApp {
         maskThreshold: this.maskThreshold,
         customMaskBuffer,
         preparedMagnitude,
-        pipelineSettings: this.pipelineSettings,
-        skipStages
+        pipelineSettings: this.pipelineSettings
       });
 
       if (started) {
@@ -3144,10 +3096,6 @@ class QSMApp {
     this.updateOutput("Results cleared");
   }
 
-  updateDownloadButtons() {
-    // Legacy method - now handled by enableStageButtons
-  }
-
   async showStage(stage) {
     try {
       // For magnitude and phase, use the multi-echo viewer with echo navigation
@@ -3224,7 +3172,7 @@ class QSMApp {
   // Display stage data as it arrives during pipeline processing
   async displayLiveStageData(data) {
     try {
-      const { stage, data: stageBytes, description, displayRange } = data;
+      const { stage, description, displayRange } = data;
 
       // Show the stage buttons section as soon as first result arrives
       this.showStageButtons();
@@ -3235,9 +3183,10 @@ class QSMApp {
       // Hide echo navigation - pipeline results are single 3D volumes, not multi-echo
       this.hideEchoNavigation();
 
-      // Create file from bytes
-      const blob = new Blob([stageBytes], { type: 'application/octet-stream' });
-      const file = new File([blob], `${stage}.nii`, { type: 'application/octet-stream' });
+      // PipelineExecutor has already cached the bytes as a File; keep the display range with it
+      const result = this.results[stage];
+      result.displayRange = displayRange;
+      const file = result.file;
 
       // Load in viewer
       await this.loadAndVisualizeFile(file, description);
@@ -3250,9 +3199,6 @@ class QSMApp {
         this.nv.updateGLVolume();
       }
 
-      // Cache the result with description and display range
-      this.results[stage] = { file: file, path: `${stage}.nii`, description: description, displayRange: displayRange };
-
       this.updateOutput(`Displaying: ${description}`);
     } catch (error) {
       this.updateOutput(`Error displaying live data: ${error.message}`);
@@ -3262,7 +3208,7 @@ class QSMApp {
   // Cache stage data without displaying (for auxiliary outputs like vasculature mask)
   cacheStageData(data) {
     try {
-      const { stage, data: stageBytes, description } = data;
+      const { stage, description } = data;
 
       // Show the stage buttons section
       this.showStageButtons();
@@ -3270,14 +3216,7 @@ class QSMApp {
       // Add/enable the button for this stage (with description for display name)
       this.addStageButton(stage, description);
 
-      // Create file from bytes
-      const blob = new Blob([stageBytes], { type: 'application/octet-stream' });
-      const file = new File([blob], `${stage}.nii`, { type: 'application/octet-stream' });
-
-      // Cache the result (but don't display)
-      this.results[stage] = { file: file, path: `${stage}.nii`, description: description };
-
-      // Silently cached — no console message needed
+      // PipelineExecutor has already cached the result as a File — no console message needed
     } catch (error) {
       this.updateOutput(`Error caching data: ${error.message}`);
     }
@@ -3428,7 +3367,13 @@ class QSMApp {
       const time = new Date().toLocaleTimeString('en-US', { hour12: false });
       const line = document.createElement('div');
       line.className = 'console-line';
-      line.innerHTML = `<span class="console-time">[${time}]</span> <span class="console-message">${message}</span>`;
+      const timeEl = document.createElement('span');
+      timeEl.className = 'console-time';
+      timeEl.textContent = `[${time}]`;
+      const messageEl = document.createElement('span');
+      messageEl.className = 'console-message';
+      messageEl.textContent = message;
+      line.append(timeEl, ' ', messageEl);
       consoleOutput.appendChild(line);
       // Auto-scroll to bottom
       consoleOutput.scrollTop = consoleOutput.scrollHeight;
@@ -3454,7 +3399,7 @@ class QSMApp {
 
     // Only trigger mask preview if threshold slider is enabled (user has clicked Threshold button)
     const thresholdSlider = document.getElementById('maskThreshold');
-    if (thresholdSlider && !thresholdSlider.disabled && this.magnitudeData && !this.maskUpdating) {
+    if (thresholdSlider && !thresholdSlider.disabled && this.magnitudeData) {
       this.updateMaskPreview();
     }
   }
@@ -3522,28 +3467,6 @@ class QSMApp {
       onError: () => {
         this.updateEchoInfo();
       }
-    });
-  }
-
-  /**
-   * Handle BET completion - delegates to MaskController
-   */
-  async handleBETComplete(data) {
-    await this.maskController.handleBETComplete(data, () => {
-      // Sync state from controller
-      this.currentMaskData = this.maskController.currentMaskData;
-      this.originalMaskData = this.maskController.originalMaskData;
-
-      // Show morphological operations panel
-      const opsPanel = document.getElementById('maskOperations');
-      if (opsPanel) opsPanel.style.display = 'block';
-
-      // Add mask to Results section
-      this.showStageButtons();
-      this.addStageButton('mask', 'Brain Mask');
-
-      // Update run button state
-      this.updateEchoInfo();
     });
   }
 
@@ -3986,7 +3909,21 @@ class QSMApp {
       scaleComment = `# Note: the mask was made with RS2-Net in QSMbly, which qsmxt cannot run;\n`
         + `# download it from Results and pass it to qsmxt as an existing mask.\n`;
     }
+    // The worker answers each request with commandResult, methodsResult, configTomlResult, in
+    // request order. Keep one listener: drop the previous click's, and skip the replies still owed
+    // to earlier clicks so their configTomlResult does not detach this one early.
+    if (this._exportWorker !== worker) this._exportPending = 0;
+    if (this._exportHandler) this._exportWorker.removeEventListener('message', this._exportHandler);
+    let skip = this._exportPending;
+    this._exportPending++;
     const handler = (e) => {
+      const type = e.data.type;
+      if (type !== 'commandResult' && type !== 'methodsResult' && type !== 'configTomlResult') return;
+      if (type === 'configTomlResult') this._exportPending--;
+      if (skip > 0) {
+        if (type === 'configTomlResult') skip--;
+        return;
+      }
       if (e.data.type === 'commandResult') {
         if (cmdEl) cmdEl.textContent = e.data.error ? `ERROR: ${e.data.error}` : scaleComment + e.data.result;
       } else if (e.data.type === 'methodsResult') {
@@ -4004,8 +3941,11 @@ class QSMApp {
         // Last message back — safe to detach. A null _lastToml disables the download.
         this._lastToml = e.data.error ? null : e.data.result;
         worker.removeEventListener('message', handler);
+        this._exportHandler = null;
       }
     };
+    this._exportWorker = worker;
+    this._exportHandler = handler;
     worker.addEventListener('message', handler);
     worker.postMessage({ type: 'generateCommand', data: { configJson, maskSection } });
     worker.postMessage({ type: 'generateMethods', data: { configJson, maskSection } });

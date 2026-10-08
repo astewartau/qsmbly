@@ -67,8 +67,9 @@ jobs:
             exit 1
           fi
 
-          # These files ship 0.0.0 placeholders in git; the real version is injected here at build
-          # time only (no commit, no tag move). It also cache-busts the wasm fetch, which keys off
+          # These files ship 0.0.0 placeholders in git (package.json's "version": "0.0.0" is one of
+          # them, not a stale field); the real version is injected here at build time only (no
+          # commit, no tag move). It also cache-busts the wasm fetch, which keys off
           # QSMConfig.VERSION — so it has to be unique per build, not just per release.
           sed -i "s/^export const VERSION = '[^']*'/export const VERSION = '$VERSION'/" js/app/config.js
           sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
@@ -83,19 +84,9 @@ jobs:
 
           echo "Stamped app version $VERSION into the build"
 
-      - name: Setup Rust (nightly + rust-src for wasm threads build-std)
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: wasm32-unknown-unknown
-          components: rust-src
-
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      # Nightly + rust-src, wasm-pack and Node; CI's deploy-parity job uses the same action.
+      - name: Set up the wasm build toolchain
+        uses: ./.github/actions/setup-wasm-build
 
       - name: Build WASM (threaded base + DL bundles; runs generate-defaults, copies to wasm/)
         run: ./build.sh --simd

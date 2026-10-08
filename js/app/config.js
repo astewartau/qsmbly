@@ -3,14 +3,7 @@
  *
  * Centralized configuration for all magic numbers, default values,
  * and constants used across the application.
- *
- * This module works as both an ES module (for modern scripts) and
- * can be loaded via importScripts in web workers.
  */
-
-// Detect environment and set up exports appropriately
-const isWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope;
-const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined' && window.QSMConfig === undefined);
 
 // Application version — 0.0.0 in git; the release CI stamps the real version (the release
 // tag) into the build at deploy time. Single source of truth is the git tag.
@@ -93,6 +86,7 @@ import {
   LINEAR_FIT_DEFAULTS as _LINEAR_FIT,
   HOMOGENEITY_DEFAULTS as _HOMOGENEITY,
   SIGNAL_ERODE_DEFAULTS as _SIGNAL_ERODE,
+  ILSQR_DEFAULTS as _ILSQR,
 } from './qsm-defaults.js';
 
 // Signal-gated erosion (QSM-CI): qsm-core's defaults, used by the mask "Signal Erode" refinement.
@@ -119,10 +113,12 @@ export const TKD_DEFAULTS = {
   threshold: _TKD.threshold,
 };
 
+// Radii are absolute, in mm (qsm-core's fixed defaults). The pipeline replaces them with
+// voxel-size-derived radii — see PIPELINE_DEFAULTS and getVoxelBasedDefaults below.
 export const VSHARP_DEFAULTS = {
   threshold: _VSHARP.threshold,
-  max_radius_factor: _VSHARP.max_radius_factor,
-  min_radius_factor: _VSHARP.min_radius_factor,
+  max_radius: _VSHARP.max_radius,
+  min_radius: _VSHARP.min_radius,
 };
 
 export const PDF_DEFAULTS = {
@@ -248,9 +244,16 @@ export const HARPERELLA_DEFAULTS = {
   tol: _HARPERELLA.tol,
 };
 
-// TSVD (Truncated SVD) defaults (shares TKD threshold)
+// TSVD (Truncated SVD) defaults. qsm-core has no TSVD params struct and qsmxt-config types
+// `inversion.tsvd` as TkdConfig, so TSVD's generated defaults are TKD's.
 export const TSVD_DEFAULTS = {
   threshold: _TKD.threshold,
+};
+
+// iLSQR as a standalone dipole inversion (QSMART's inner iLSQR uses QSMART_DEFAULTS.ilsqr_*)
+export const ILSQR_DEFAULTS = {
+  tol: _ILSQR.tol,
+  max_iter: _ILSQR.max_iter,
 };
 
 // (VSHARP_DEFAULTS, ISMV_DEFAULTS, PDF_DEFAULTS, LBV_DEFAULTS,
@@ -436,6 +439,7 @@ export const PIPELINE_DEFAULTS = {
   linearFit: { ...LINEAR_FIT_DEFAULTS },
   romeo: { ...ROMEO_DEFAULTS },
   bf_algorithm: 'vsharp',
+  // null = derive from voxel size once it is known (applyVoxelDefaults), not qsm-core's fixed mm radii
   vsharp: { ...VSHARP_DEFAULTS, max_radius: null, min_radius: null },
   sharp: { ...SHARP_DEFAULTS },
   resharp: { ...RESHARP_DEFAULTS },
@@ -460,7 +464,8 @@ export const PIPELINE_DEFAULTS = {
   l1qsm: { ...L1QSM_DEFAULTS },
   whqsm: { ...WHQSM_DEFAULTS },
   hdqsm: { ...HDQSM_DEFAULTS },
-  medi: { ...MEDI_DEFAULTS }
+  medi: { ...MEDI_DEFAULTS },
+  ilsqr: { ...ILSQR_DEFAULTS }
 };
 
 /**
@@ -496,21 +501,6 @@ export function getVoxelBasedDefaults(voxelSize = [1, 1, 1], maskDims = null) {
   };
 }
 
-/**
- * Phase scaling constants
- */
-export const PHASE_SCALING = {
-  PI_THRESHOLD_MULTIPLIER: 1.1,   // Range > 2π * 1.1 triggers scaling
-  MAX_PI_MULTIPLIER: 1.5          // Values > π * 1.5 trigger scaling
-};
-
-/**
- * Box filter default radius for reliability map computation
- */
-export const BOX_FILTER_DEFAULTS = {
-  reliabilityRadius: 1
-};
-
 // Make config available globally for non-module scripts and workers
 const QSMConfig = {
   VERSION,
@@ -541,6 +531,7 @@ const QSMConfig = {
   LBV_DEFAULTS,
   TKD_DEFAULTS,
   TSVD_DEFAULTS,
+  ILSQR_DEFAULTS,
   TIKHONOV_DEFAULTS,
   TV_DEFAULTS,
   RTS_DEFAULTS,
@@ -555,9 +546,7 @@ const QSMConfig = {
   STAGE_DISPLAY_NAMES,
   PIPELINE_METHODS,
   PIPELINE_DEFAULTS,
-  getVoxelBasedDefaults,
-  PHASE_SCALING,
-  BOX_FILTER_DEFAULTS
+  getVoxelBasedDefaults
 };
 
 // Export for different environments

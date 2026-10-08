@@ -5,6 +5,8 @@
  * and weighted echo fitting.
  */
 
+import { boxFilter3dSeparable } from './FilterUtils.js';
+
 /**
  * Scale phase to [-π, +π] range
  *
@@ -149,7 +151,6 @@ export function computeB0FromUnwrapped(unwrappedPhase, echoTimes, nx, ny, nz, me
  * @param {Uint8Array} mask - Binary mask
  * @param {number} fitThreshold - Fixed threshold (default 40)
  * @param {number|null} fitThreshPercentile - Adaptive percentile (overrides fixed)
- * @param {Function} boxFilter3dFn - Box filter function to use
  * @returns {Object} { tfs: Float64Array, R_0: Uint8Array }
  */
 export function computeWeightedEchoFit(
@@ -160,8 +161,7 @@ export function computeWeightedEchoFit(
   voxelSize,
   mask,
   fitThreshold = 40,
-  fitThreshPercentile = null,
-  boxFilter3dFn = null
+  fitThreshPercentile = null
 ) {
   const nEchoes = echoTimes.length;
   const voxelCount = nx * ny * nz;
@@ -228,14 +228,7 @@ export function computeWeightedEchoFit(
   const kx = Math.round(1 / voxelSize[0]) * 2 + 1;
   const ky = Math.round(1 / voxelSize[1]) * 2 + 1;
   const kz = Math.round(1 / voxelSize[2]) * 2 + 1;
-
-  let blurredResidual;
-  if (boxFilter3dFn) {
-    blurredResidual = boxFilter3dFn(residual, nx, ny, nz, kx, ky, kz);
-  } else {
-    // Fallback: no blurring
-    blurredResidual = residual;
-  }
+  const blurredResidual = boxFilter3dSeparable(residual, nx, ny, nz, kx, ky, kz);
 
   // Compute statistics on blurred residuals within mask
   const nonZeroResiduals = [];
@@ -243,6 +236,15 @@ export function computeWeightedEchoFit(
     if (mask[i] && blurredResidual[i] > 0) nonZeroResiduals.push(blurredResidual[i]);
   }
   nonZeroResiduals.sort((a, b) => a - b);
+
+  if (nonZeroResiduals.length > 0) {
+    const minRes = nonZeroResiduals[0];
+    const maxRes = nonZeroResiduals[nonZeroResiduals.length - 1];
+    const medianRes = nonZeroResiduals[Math.floor(nonZeroResiduals.length / 2)];
+    const p90Res = nonZeroResiduals[Math.floor(nonZeroResiduals.length * 0.9)];
+    const p99Res = nonZeroResiduals[Math.floor(nonZeroResiduals.length * 0.99)];
+    console.log(`[EchoFit] Blurred residual stats: min=${minRes.toFixed(4)}, median=${medianRes.toFixed(4)}, p90=${p90Res.toFixed(4)}, p99=${p99Res.toFixed(4)}, max=${maxRes.toFixed(4)}`);
+  }
 
   // Threshold: fixed or adaptive percentile
   let threshold;
@@ -253,6 +255,7 @@ export function computeWeightedEchoFit(
   } else {
     threshold = fitThreshold;
   }
+  console.log(`[EchoFit] Using threshold=${threshold.toFixed(4)} (mode: ${fitThreshPercentile !== null ? 'adaptive p' + fitThreshPercentile : 'fixed'})`);
 
   // R_0: binary reliability map (only within mask)
   const R_0 = new Uint8Array(voxelCount);
@@ -286,11 +289,4 @@ export function ppmFieldToPhase(b0Ppm, fieldStrength, te, gyromagneticRatio) {
     phase[i] = b0Ppm[i] * scale;
   }
   return phase;
-}
-
-// Make available globally for non-module contexts (workers)
-if (typeof self !== 'undefined' && typeof WorkerGlobalScope !== 'undefined') {
-  self.PhaseUtils = { scalePhase, computeB0FromUnwrapped, computeWeightedEchoFit, ppmFieldToPhase };
-} else if (typeof window !== 'undefined') {
-  window.PhaseUtils = { scalePhase, computeB0FromUnwrapped, computeWeightedEchoFit, ppmFieldToPhase };
 }
