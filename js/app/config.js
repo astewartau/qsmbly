@@ -3,14 +3,7 @@
  *
  * Centralized configuration for all magic numbers, default values,
  * and constants used across the application.
- *
- * This module works as both an ES module (for modern scripts) and
- * can be loaded via importScripts in web workers.
  */
-
-// Detect environment and set up exports appropriately
-const isWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope;
-const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined' && window.QSMConfig === undefined);
 
 // Application version — 0.0.0 in git; the release CI stamps the real version (the release
 // tag) into the build at deploy time. Single source of truth is the git tag.
@@ -496,21 +489,6 @@ export function getVoxelBasedDefaults(voxelSize = [1, 1, 1], maskDims = null) {
   };
 }
 
-/**
- * Phase scaling constants
- */
-export const PHASE_SCALING = {
-  PI_THRESHOLD_MULTIPLIER: 1.1,   // Range > 2π * 1.1 triggers scaling
-  MAX_PI_MULTIPLIER: 1.5          // Values > π * 1.5 trigger scaling
-};
-
-/**
- * Box filter default radius for reliability map computation
- */
-export const BOX_FILTER_DEFAULTS = {
-  reliabilityRadius: 1
-};
-
 // Make config available globally for non-module scripts and workers
 const QSMConfig = {
   VERSION,
@@ -555,9 +533,7 @@ const QSMConfig = {
   STAGE_DISPLAY_NAMES,
   PIPELINE_METHODS,
   PIPELINE_DEFAULTS,
-  getVoxelBasedDefaults,
-  PHASE_SCALING,
-  BOX_FILTER_DEFAULTS
+  getVoxelBasedDefaults
 };
 
 // Export for different environments
