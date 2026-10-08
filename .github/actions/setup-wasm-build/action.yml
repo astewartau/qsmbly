@@ -1,0 +1,23 @@
+name: Set up the wasm build toolchain
+description: >
+  Installs what ./build.sh needs for the threaded build: nightly Rust with rust-src (build-std),
+  the wasm32 target, wasm-pack, and Node. Shared by the deploy (build-pages.yml) and the CI job
+  that mirrors it, so CI builds with exactly the toolchain a release does.
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Rust (nightly + rust-src for wasm threads build-std)
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        targets: wasm32-unknown-unknown
+        components: rust-src
+
+    - name: Install wasm-pack
+      shell: bash
+      run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: .nvmrc

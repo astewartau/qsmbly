@@ -21,6 +21,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -34,17 +35,56 @@ jobs:
         working-directory: rust-wasm
         run: cargo test
 
+      # rustfmt and clippy report but do not gate yet: the crate has existing findings, and the
+      # clippy cleanup (#79) is in progress. Drop continue-on-error from both once it lands.
+      - name: rustfmt
+        working-directory: rust-wasm
+        continue-on-error: true
+        run: cargo fmt --check
+
+      - name: clippy
+        working-directory: rust-wasm
+        continue-on-error: true
+        run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
+
+  deploy-build:
+    name: Deploy build (nightly, threads + onnx + SIMD) + defaults sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same toolchain build-pages.yml deploys with.
+      - uses: ./.github/actions/setup-wasm-build
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-wasm
+
+      # Exactly what a deploy runs: both bundles, threaded, with every feature the site ships.
+      - name: Build WASM as deployed
+        run: ./build.sh --simd
+
+      # build.sh regenerates js/app/qsm-defaults.js from the freshly built wasm; a diff means the
+      # committed copy has drifted from the Rust defaults.
+      - name: Check generated defaults are committed
+        run: |
+          node scripts/generate-defaults.mjs
+          git diff --exit-code js/app/qsm-defaults.js \
+            || { echo "::error::js/app/qsm-defaults.js is out of date; run ./build.sh (or node scripts/generate-defaults.mjs after a build) and commit it"; exit 1; }
+
   js:
-    name: JS tests (jest)
+    name: JS lint + tests (jest)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
+
+      - run: npm run lint
 
       - run: npm test

@@ -121,6 +121,7 @@ node scripts/generate-defaults.mjs
 
 echo ""
 echo "[3/4] Copying WASM files to serve directory..."
+mkdir -p "$WASM_DIR"  # untracked, so absent in a fresh clone
 cp "$RUST_DIR/pkg/qsm_wasm.js" "$WASM_DIR/"
 cp "$RUST_DIR/pkg/qsm_wasm_bg.wasm" "$WASM_DIR/"
 cp "$RUST_DIR/pkg/qsm_wasm.d.ts" "$WASM_DIR/" 2>/dev/null || true
