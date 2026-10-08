@@ -10,12 +10,35 @@ A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs enti
 
 ## Features
 
-- **Completely Private**: All processing happens locally in your browser — your data never leaves your computer
+- **Private**: All processing happens locally in your browser — your images are never uploaded (see [What leaves your browser](#what-leaves-your-browser))
 - **Zero Installation**: No Python, MATLAB, or specialized software required
 - **Cross-Platform**: Works on Windows, macOS, Linux, and even mobile devices
 - **Interactive**: Real-time visualization with NiiVue, adjustable contrast, and masking thresholds
 - **Portable**: Static files can be hosted anywhere (GitHub Pages, local server, etc.)
 - **Comprehensive**: 20+ algorithms covering the complete QSM pipeline
+
+## What leaves your browser
+
+Your images never do. Files you load are read into browser memory and processed by WebAssembly in a
+Web Worker on your machine; the app never uploads them. Results are only saved where you choose to
+download them.
+
+The page does make some network requests of its own. None of them carries image data:
+
+- **Cloudflare Web Analytics.** A beacon (`static.cloudflareinsights.com`) records an anonymous page
+  view: the usual visitor metadata such as country, referrer and browser. It sets no cookies.
+- **Fonts and libraries.** The Inter font comes from Google Fonts, and the Tagify and NiiVue
+  libraries from the unpkg CDN. These services see the request like any other web request.
+- **The QSMxT navigation bar.** `qsm-nav.js` is loaded from `qsmxt.github.io`.
+- **Deep-learning model weights**, downloaded from Hugging Face (`huggingface.co/qsmxt`) the first
+  time you run a deep-learning method, then cached in your browser's IndexedDB.
+- **Example data**, downloaded from Hugging Face only if you click to load it.
+- **dicompare**, the protocol checker, which loads its code and the QSM consensus schema from
+  `dicompare.neurodesk.org`, and when run, Pyodide from jsDelivr and the `dicompare` Python package
+  from PyPI. The DICOM headers it checks are read in your browser.
+
+Deep-learning methods and dicompare therefore need an internet connection the first time they are
+used; the rest of the pipeline works offline once the page has loaded.
 
 ## Algorithms
 
@@ -125,7 +148,8 @@ Notes:
 
 ```
 qsmbly/
-├── index.html              # Main application interface
+├── index.html              # Landing page and application interface
+├── coi-serviceworker.js    # Adds COOP/COEP headers on static hosts (cross-origin isolation)
 ├── build.sh                # WASM build script
 ├── run.sh                  # Development server (wraps serve.py)
 ├── serve.py                # Static server with COOP/COEP + no-cache headers
@@ -133,22 +157,28 @@ qsmbly/
 ├── js/
 │   ├── qsm-app-romeo.js    # Main application logic
 │   ├── qsm-worker-pure.js  # Web worker for pipeline execution
-│   ├── app/
-│   │   └── config.js       # Centralized configuration
-│   ├── controllers/        # UI controllers (file I/O, pipeline, viewer, etc.)
-│   ├── modules/            # UI modules (NIfTI utils, masking, viewer)
-│   └── workers/            # Web workers (DiCompare)
+│   ├── app/                # Configuration and algorithm defaults (qsm-defaults.js is generated)
+│   ├── controllers/        # UI controllers (file I/O, DICOM, masking, pipeline, viewer)
+│   ├── modules/            # File I/O, masking, model weights, UI (landing page, tour, modals)
+│   └── worker/utils/       # Helpers used by the pipeline worker
 ├── css/
-│   └── modern-styles.css   # Application styling
-├── wasm/                   # Compiled WebAssembly (served to browser)
+│   ├── modern-styles.css   # Application styling
+│   ├── landing.css         # Landing page styling
+│   ├── app.css             # Modals, pipeline settings and other app components
+│   └── a11y.css            # Accessibility tweaks (keyboard-operable accordion headers)
+├── assets/                 # App screenshot (written by scripts/capture-landing-shot.mjs)
+├── scripts/                # Defaults generator, Pages publishing, landing screenshot, benchmarks
+├── wasm/                   # Compiled WebAssembly (built by build.sh, served to the browser)
 ├── rust-wasm/              # WASM binding layer
 │   ├── Cargo.toml          # Depends on qsm-core
-│   └── src/lib.rs          # Thin wasm_bindgen wrappers (59 exports)
+│   └── src/lib.rs          # Thin wasm_bindgen wrappers around QSM.rs
 ├── dcm2niix/               # DICOM-to-NIfTI conversion (WASM)
-├── schemas/                # DiCompare validation schemas
-├── niivue/                 # NiiVue neuroimaging viewer
+├── niivue/                 # NiiVue neuroimaging viewer (vendored)
 └── nifti-js/               # NIfTI reader (JavaScript)
 ```
+
+Versions and licenses of the vendored third-party code are recorded in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Technical Stack
 
@@ -156,7 +186,9 @@ qsmbly/
 - **[wasm-bindgen](https://github.com/rustwasm/wasm-bindgen)**: JavaScript/WASM interop
 - **[NiiVue](https://github.com/niivue/niivue)**: WebGL neuroimaging viewer
 - **[dcm2niix](https://github.com/rordenlab/dcm2niix)**: DICOM conversion (WASM build)
-- **[Pyodide](https://pyodide.org/)**: Python in browser (for DiCompare validation)
+- **[NIFTI-Reader-JS](https://github.com/rii-mango/NIFTI-Reader-JS)**: NIfTI parsing
+- **[Tagify](https://github.com/yairEO/tagify)**: Echo-time input
+- **[coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker)**: Cross-origin isolation on static hosts
 
 ## License
 
