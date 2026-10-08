@@ -128,8 +128,7 @@ jobs:
           # Copy landing page imagery
           cp -r assets deploy/ 2>/dev/null || true
 
-          # Copy niivue and nifti-js
-          cp -r niivue deploy/
+          # Copy nifti-js
           cp -r nifti-js deploy/
 
           # Copy dcm2niix WASM module (DICOM conversion)

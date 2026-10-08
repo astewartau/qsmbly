@@ -49,6 +49,42 @@ export function isGzipped(data) {
 }
 
 /**
+ * Decompress gzipped NIfTI bytes with the platform DecompressionStream (browsers, Node 18+).
+ * Uncompressed input is returned unchanged.
+ * @param {Uint8Array} data - File data, compressed or not
+ * @param {number} [maxBytes=Infinity] - Stop once at least this many bytes are decoded (352 for a header)
+ * @returns {Promise<Uint8Array>} Uncompressed bytes (possibly longer than maxBytes)
+ */
+export async function gunzipNifti(data, maxBytes = Infinity) {
+  if (!isGzipped(data)) return data;
+
+  const stream = new DecompressionStream('gzip');
+  const writer = stream.writable.getWriter();
+  // Errors in the compressed data surface through reader.read() below.
+  writer.write(data).catch(() => {});
+  writer.close().catch(() => {});
+
+  const reader = stream.readable.getReader();
+  const chunks = [];
+  let length = 0;
+  while (length < maxBytes) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    length += value.length;
+  }
+  if (length >= maxBytes) await reader.cancel().catch(() => {});
+
+  const result = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
+}
+
+/**
  * Check if data is valid NIfTI-1 format
  * @param {Uint8Array} data - Uncompressed file data
  * @returns {boolean} True if valid NIfTI-1

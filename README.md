@@ -146,7 +146,6 @@ qsmbly/
 │   └── src/lib.rs          # Thin wasm_bindgen wrappers (59 exports)
 ├── dcm2niix/               # DICOM-to-NIfTI conversion (WASM)
 ├── schemas/                # DiCompare validation schemas
-├── niivue/                 # NiiVue neuroimaging viewer
 └── nifti-js/               # NIfTI reader (JavaScript)
 ```
 
