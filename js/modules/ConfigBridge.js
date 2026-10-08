@@ -96,7 +96,11 @@ export function buildConfig(settings, options = {}) {
   if (settings.tkd) config.inversion.tkd = settings.tkd;
   if (settings.tsvd) config.inversion.tsvd = settings.tsvd;
   if (settings.tikhonov) config.inversion.tikhonov = settings.tikhonov;
-  if (settings.nltv) config.inversion.nltv = settings.nltv;
+  if (settings.nltv) {
+    // The UI calls it newton_max_iter; qsmxt-config's NltvConfig calls it newton_iter.
+    const { newton_max_iter, ...nltv } = settings.nltv;
+    config.inversion.nltv = { ...nltv, newton_iter: newton_max_iter };
+  }
   if (settings.ndi) config.inversion.ndi = settings.ndi;
   if (settings.fansi) config.inversion.fansi = settings.fansi;
   if (settings.fansitgv) config.inversion.fansi = settings.fansitgv;

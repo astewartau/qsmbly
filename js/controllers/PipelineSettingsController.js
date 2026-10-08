@@ -199,6 +199,10 @@ export class PipelineSettingsController {
 
     // Dipole inversion
     this._setEl('dipole_method', D.dipole_inversion);
+    this._setChecked('dlTiled', D.dl_tiling.enabled);
+    this._setEl('dlTileSize', D.dl_tiling.tile_size);
+    this._setEl('dlTileHalo', D.dl_tiling.tile_halo);
+    this._setChecked('qsm_reference_mean', true);
     this._showEl('tkd_settings', false);
     this._showEl('tsvd_settings', false);
     this._showEl('tikhonov_settings', false);
@@ -659,7 +663,7 @@ export class PipelineSettingsController {
 
     // Dipole inversion - show for standard pipeline only (TGV/QSMART handle inversion internally)
     const showDipoleInversion = (!isCombined && isRawMode) || (!isCombined && isFieldMapMode);
-    this._showEl('dipole_inversionSection', showDipoleInversion);
+    this._showEl('dipoleInversionSection', showDipoleInversion);
 
     // Check if MEDI with SMV is enabled - show error on background removal
     const dipoleMethod = this._getEl('dipole_method');
@@ -766,15 +770,72 @@ export class PipelineSettingsController {
     this._setEl('sidebarSwiHpSigmaZ', swiSettings.hp_sigma?.[2] ?? SWI_DEFAULTS.hp_sigma[2]);
     this._setEl('sidebarSwiMipWindow', swiSettings.mip_window ?? SWI_DEFAULTS.mip_window);
 
+    this._setChecked('qsm_reference_mean', settings.reference_mean !== false);
+
     // TGV settings
     this._setEl('tgvRegularization', settings.tgv.regularization);
     this._setEl('tgvIterations', settings.tgv.iterations);
     this._setEl('tgvErosions', settings.tgv.erosions);
 
+    // TFI settings
+    this._setEl('tfiLambda', settings.tfi?.lambda ?? TFI_DEFAULTS.lambda);
+    this._setEl('tfiPrecond', settings.tfi?.precond ?? TFI_DEFAULTS.precond);
+
+    // QSMART settings. Without these the form keeps index.html's static values, which differ
+    // from QSMART_DEFAULTS, so a plain open + save silently changed the QSMART parameters.
+    const qsmart = { ...QSMART_DEFAULTS, ...settings.qsmart };
+    this._setEl('qsmartSdfSigma1Stage1', qsmart.sdf_sigma1_stage1);
+    this._setEl('qsmartSdfSigma2Stage1', qsmart.sdf_sigma2_stage1);
+    this._setEl('qsmartSdfSigma1Stage2', qsmart.sdf_sigma1_stage2);
+    this._setEl('qsmartSdfSigma2Stage2', qsmart.sdf_sigma2_stage2);
+    this._setEl('qsmartSdfSpatialRadius', qsmart.sdf_spatial_radius);
+    this._setEl('qsmartSdfLowerLim', qsmart.sdf_lower_lim);
+    this._setEl('qsmartSdfCurvConstant', qsmart.sdf_curv_constant);
+    this._setEl('qsmartVascSphereRadius', qsmart.vasc_sphere_radius);
+    this._setEl('qsmartFrangiScaleMin', qsmart.frangi_scale_min);
+    this._setEl('qsmartFrangiScaleMax', qsmart.frangi_scale_max);
+    this._setEl('qsmartFrangiScaleRatio', qsmart.frangi_scale_ratio);
+    this._setEl('qsmartFrangiC', qsmart.frangi_c);
+    this._setEl('qsmartIlsqrTol', qsmart.ilsqr_tol);
+    this._setEl('qsmartIlsqrMaxIter', qsmart.ilsqr_max_iter);
+    this._setEl('qsmartInversionMethod', qsmart.inversion_algorithm);
+    // Inner inversion params fall back to the standard algorithm defaults, as in reset()
+    const qTkd = { ...TKD_DEFAULTS, ...qsmart.tkd };
+    const qTsvd = { ...TSVD_DEFAULTS, ...qsmart.tsvd };
+    const qTikh = { ...TIKHONOV_DEFAULTS, ...qsmart.tikhonov };
+    const qTv = { ...TV_DEFAULTS, ...qsmart.tv };
+    const qRts = { ...RTS_DEFAULTS, ...qsmart.rts };
+    const qNltv = { ...NLTV_DEFAULTS, ...qsmart.nltv };
+    const qMedi = { ...MEDI_DEFAULTS, ...qsmart.medi };
+    this._setEl('qsmartTkdThreshold', qTkd.threshold);
+    this._setEl('qsmartTsvdThreshold', qTsvd.threshold);
+    this._setEl('qsmartTikhLambda', qTikh.lambda);
+    this._setEl('qsmartTikhReg', qTikh.reg ?? 'identity');
+    this._setEl('qsmartTvLambda', qTv.lambda);
+    this._setEl('qsmartTvMaxIter', qTv.max_iter);
+    this._setEl('qsmartTvTol', qTv.tol);
+    this._setEl('qsmartRtsDelta', qRts.delta);
+    this._setEl('qsmartRtsMu', qRts.mu);
+    this._setEl('qsmartRtsRho', qRts.rho);
+    this._setEl('qsmartRtsMaxIter', qRts.max_iter);
+    this._setEl('qsmartNltvLambda', qNltv.lambda);
+    this._setEl('qsmartNltvMu', qNltv.mu);
+    this._setEl('qsmartNltvMaxIter', qNltv.max_iter);
+    this._setEl('qsmartNltvTol', qNltv.tol);
+    this._setEl('qsmartNltvNewtonMaxIter', qNltv.newton_max_iter);
+    this._setEl('qsmartMediLambda', qMedi.lambda);
+    this._setEl('qsmartMediPercentage', qMedi.percentage);
+    this._setEl('qsmartMediMaxIter', qMedi.max_iter);
+    this._setEl('qsmartMediCgMaxIter', qMedi.cg_max_iter);
+    this._setChecked('qsmartMediSmv', qMedi.smv);
+    this._setEl('qsmartMediSmvRadius', qMedi.smv_radius);
+    this._setChecked('qsmartMediMerit', qMedi.merit);
+
     // Phase offset
     const phase_offset_method = settings.phase_offset_method || 'mcpc3ds';
     this._setChecked('phase_offset_enabled', phase_offset_method !== 'none');
     this._setEl('phase_offset_method', phase_offset_method === 'none' ? 'mcpc3ds' : phase_offset_method);
+    this._setChecked('bipolar_correction_enabled', !!settings.bipolar_correction);
 
     // MCPC-3D-S settings
     this._setEl('mcpc3dsSigmaX', settings.mcpc3ds?.sigma?.[0] ?? 10);
@@ -825,6 +886,10 @@ export class PipelineSettingsController {
     this._setEl('vsharpMaxRadius', settings.vsharp.max_radius ?? defaults.vsharpMaxRadius);
     this._setEl('vsharpMinRadius', settings.vsharp.min_radius ?? defaults.vsharpMinRadius);
     this._setEl('vsharpThreshold', settings.vsharp.threshold);
+
+    // SHARP settings
+    this._setEl('sharpRadius', settings.sharp?.radius ?? defaults.sharpRadius);
+    this._setEl('sharpThreshold', settings.sharp?.threshold ?? SHARP_DEFAULTS.threshold);
 
     // RESHARP settings
     if (settings.resharp) {

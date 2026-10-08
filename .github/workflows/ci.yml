@@ -72,6 +72,15 @@ jobs:
           git diff --exit-code js/app/qsm-defaults.js \
             || { echo "::error::js/app/qsm-defaults.js is out of date; run ./build.sh (or node scripts/generate-defaults.mjs after a build) and commit it"; exit 1; }
 
+      - run: npm ci
+
+      # The UI settings -> qsmxt-config round trip needs the built bundle, so the plain jest job
+      # skips it. Here it must run: QSMBLY_REQUIRE_WASM turns a missing bundle into a failure.
+      - name: ConfigBridge round trip through the built qsmxt-config schema
+        env:
+          QSMBLY_REQUIRE_WASM: '1'
+        run: npm test -- js/modules/ConfigBridge.roundtrip.test.js
+
   js:
     name: JS lint + tests (jest)
     runs-on: ubuntu-latest
