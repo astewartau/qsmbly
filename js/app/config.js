@@ -62,6 +62,7 @@ import {
   TV_DEFAULTS as _TV,
   TKD_DEFAULTS as _TKD,
   TGV_DEFAULTS as _TGV,
+  TGV_ALPHA_PRESETS as _TGV_ALPHA_PRESETS,
   BET_DEFAULTS as _BET,
   VSHARP_DEFAULTS as _VSHARP,
   PDF_DEFAULTS as _PDF,
@@ -159,6 +160,18 @@ export const TGV_DEFAULTS = {
   step_size: _TGV.step_size,
   tol: _TGV.tol,
 };
+
+/** qsm-core's TGV [alpha0, alpha1] for each UI regularization level (generated). */
+export const TGV_ALPHA_PRESETS = _TGV_ALPHA_PRESETS;
+
+/**
+ * The [alpha0, alpha1] a TGV regularization level stands for. Levels outside 1-4 are
+ * clamped, as qsm-core's get_default_alpha does.
+ */
+export function tgvAlphaPreset(level) {
+  const n = Number.isFinite(Number(level)) ? Math.round(Number(level)) : 2;
+  return [..._TGV_ALPHA_PRESETS[Math.min(4, Math.max(1, n))]];
+}
 
 export const SWI_DEFAULTS = {
   hp_sigma: _SWI.hp_sigma,
@@ -424,11 +437,17 @@ export const PIPELINE_METHODS = {
   qsmart_inversion: ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr']
 };
 
+// Deep-learning inversions that take the TOTAL field (they do their own background removal),
+// so they cannot run from a local field map.
+export const DL_TOTAL_FIELD_MODELS = ['autoqsm', 'nextqsm'];
+
 // Default pipeline settings (assembled from individual defaults)
 export const PIPELINE_DEFAULTS = {
   combined_method: 'none',
   swi: { ...SWI_DEFAULTS },
-  tgv: { ...TGV_DEFAULTS },
+  // The UI sets TGV's alphas through the regularization level (tgvAlphaPreset), so the
+  // defaults leave them unset rather than carry qsm-core's fixed pair alongside the level.
+  tgv: { ...TGV_DEFAULTS, alpha0: null, alpha1: null },
   qsmart: { ...QSMART_DEFAULTS },
   tfi: { ...TFI_DEFAULTS },
   unwrapping_algorithm: 'romeo',

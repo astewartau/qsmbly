@@ -122,8 +122,8 @@ describe('Config Module', () => {
   describe('generated qsm-defaults.js', () => {
     test('exports exactly what scripts/generate-defaults.mjs generates', () => {
       const generator = readFileSync(new URL('../../scripts/generate-defaults.mjs', import.meta.url), 'utf8');
-      const generatorNames = [...generator.matchAll(/^\s*(\w+_DEFAULTS): JSON\.parse\(wasmModule\.get_\w+_defaults\(\)\)/gm)]
-        .map(m => m[1]);
+      const block = generator.slice(generator.indexOf('const defaults = {'));
+      const generatorNames = [...block.matchAll(/^ {2}([A-Z][A-Z0-9_]+): /gm)].map(m => m[1]);
       expect(generatorNames.length).toBeGreaterThan(0);
       expect(Object.keys(Generated).sort()).toEqual([...generatorNames].sort());
     });
@@ -164,6 +164,29 @@ describe('Config Module', () => {
       const local = ['INPUT_DEFAULTS', 'MASK_PREP_DEFAULTS', 'PIPELINE_DEFAULTS', 'BOX_FILTER_DEFAULTS'];
       const exported = Object.keys(Config).filter(n => n.endsWith('_DEFAULTS') && !local.includes(n));
       expect(exported.sort()).toEqual(Object.keys(DERIVED).sort());
+    });
+  });
+
+  describe('TGV alpha presets', () => {
+    test('cover regularization levels 1-4 with [alpha0, alpha1] pairs', () => {
+      expect(Object.keys(Config.TGV_ALPHA_PRESETS).sort()).toEqual(['1', '2', '3', '4']);
+      for (const pair of Object.values(Config.TGV_ALPHA_PRESETS)) {
+        expect(pair).toHaveLength(2);
+        pair.forEach(a => expect(a).toBeGreaterThan(0));
+      }
+    });
+
+    test('tgvAlphaPreset reads the table and clamps like qsm-core', () => {
+      expect(Config.tgvAlphaPreset(3)).toEqual(Config.TGV_ALPHA_PRESETS[3]);
+      expect(Config.tgvAlphaPreset(0)).toEqual(Config.TGV_ALPHA_PRESETS[1]);
+      expect(Config.tgvAlphaPreset(9)).toEqual(Config.TGV_ALPHA_PRESETS[4]);
+      expect(Config.tgvAlphaPreset(undefined)).toEqual(Config.TGV_ALPHA_PRESETS[2]);
+    });
+
+    test('PIPELINE_DEFAULTS leaves the alphas to the regularization level', () => {
+      expect(PIPELINE_DEFAULTS.tgv.alpha0).toBeNull();
+      expect(PIPELINE_DEFAULTS.tgv.alpha1).toBeNull();
+      expect(PIPELINE_DEFAULTS.tgv.regularization).toBe(2);
     });
   });
 

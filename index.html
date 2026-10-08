@@ -368,7 +368,7 @@
           </select>
         </div>
 
-        <!-- Field Strength (hidden when units are ppm) -->
+        <!-- Field Strength (always required) -->
         <div class="param-group" id="fieldStrengthGroup">
           <label class="param-label" for="magField">Field Strength <span class="info-icon">i<span class="info-tooltip">Main magnetic field strength of the MRI scanner. Used to normalize field values to ppm for susceptibility calculation.</span></span></label>
           <div class="param-inline">
@@ -377,7 +377,7 @@
           </div>
         </div>
 
-        <!-- Echo Times (raw mode only) -->
+        <!-- Echo Times (raw mode; field maps when TGV/MEDI need the TE) -->
         <div class="param-group input-param-raw" id="echoTimesGroup">
           <label class="param-label" for="echoTimesTagify">Echo Times <span class="unit-inline">(ms)</span> <span class="info-icon">i<span class="info-tooltip">Echo times for each echo in milliseconds. Auto-populated from JSON sidecars if provided, or enter manually.</span></span></label>
           <input type="text" id="echoTimesTagify" placeholder="Type values...">
