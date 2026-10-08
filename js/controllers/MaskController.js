@@ -348,7 +348,8 @@ export class MaskController {
 
   /**
    * Apply bias field correction to magnitude data
-   * @param {Float64Array} magnitudeData - Input magnitude
+   * @param {Float64Array} magnitudeData - Input magnitude; its buffer is transferred to the
+   *   worker, so the caller must not use it afterwards
    * @returns {Float64Array} Bias-corrected magnitude
    */
   async applyBiasCorrection(magnitudeData) {
@@ -374,7 +375,7 @@ export class MaskController {
           if (event.data.error) {
             reject(new Error(event.data.error));
           } else {
-            resolve(new Float64Array(event.data.result));
+            resolve(event.data.result);
           }
         }
       };
@@ -389,7 +390,7 @@ export class MaskController {
           sigma_mm: 7.0,
           nbox: 15
         }
-      });
+      }, [magnitudeData.buffer]);
     });
   }
 
@@ -445,7 +446,7 @@ export class MaskController {
           if (event.data.error) {
             reject(new Error(event.data.error));
           } else {
-            resolve(new Float64Array(event.data.result));
+            resolve(event.data.result);
           }
         }
       };
@@ -461,7 +462,7 @@ export class MaskController {
           mask: mask,
           nx, ny, nz
         }
-      });
+      }, [phase1, mag, phase2, mask].filter(Boolean).map((a) => a.buffer));
     });
   }
 
@@ -1512,7 +1513,7 @@ export class MaskController {
           subdivisions: betSettings.subdivisions,
           voxelScale: betSettings.voxelScale || 1
         }
-      });
+      }, [magnitudeNifti]);
 
     } catch (error) {
       this.updateOutput(`BET Error: ${error.message}`);

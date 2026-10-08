@@ -223,3 +223,49 @@ describe('PipelineExecutor initialization', () => {
     spy.mockRestore();
   });
 });
+
+describe('PipelineExecutor job start', () => {
+  /** A worker stub that clones each message the way postMessage does, transfers included. */
+  function makeStartedExecutor() {
+    const onPipelineError = jest.fn();
+    const ex = new PipelineExecutor({ updateOutput: () => {}, setProgress: () => {}, onPipelineError });
+    const posted = [];
+    ex.worker = { postMessage: (msg, transfer) => posted.push(structuredClone(msg, { transfer })) };
+    ex.initialize = async () => {};
+    return { ex, posted, onPipelineError };
+  }
+
+  test.each([
+    ['runSWI', 'runSWI'],
+    ['runT2starR2star', 'runT2starR2star'],
+    ['run', 'run'],
+  ])('%s posts a %s message and marks the executor running', async (method, type) => {
+    const { ex, posted } = makeStartedExecutor();
+    const magnitude = new ArrayBuffer(16);
+    const prepared = new Float64Array([1, 2]);
+
+    await expect(ex[method]({ magnitudeBuffers: [magnitude], preparedMagnitude: prepared }, [magnitude]))
+      .resolves.toBe(true);
+
+    expect(ex.isRunning()).toBe(true);
+    expect(posted[0].type).toBe(type);
+    // Transferred buffers move to the worker; untransferred typed arrays are copied as-is.
+    expect(magnitude.byteLength).toBe(0);
+    expect(posted[0].data.magnitudeBuffers[0].byteLength).toBe(16);
+    expect(posted[0].data.preparedMagnitude.constructor.name).toBe('Float64Array');
+    expect(prepared.length).toBe(2);
+  });
+
+  test('a worker that fails to start reports an error and is not left running', async () => {
+    const { ex, posted, onPipelineError } = makeStartedExecutor();
+    ex.initialize = async () => { throw new Error('WASM init failed'); };
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(ex.runSWI({})).resolves.toBe(false);
+
+    expect(ex.isRunning()).toBe(false);
+    expect(posted).toHaveLength(0);
+    expect(onPipelineError).toHaveBeenCalledWith('WASM init failed');
+    spy.mockRestore();
+  });
+});

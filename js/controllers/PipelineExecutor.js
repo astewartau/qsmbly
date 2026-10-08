@@ -237,34 +237,39 @@ export class PipelineExecutor {
 
   // ==================== Pipeline Execution ====================
 
-  async run(pipelineConfig) {
+  /**
+   * @param {Object} pipelineConfig
+   * @param {Transferable[]} [transfer] - buffers in pipelineConfig to move to the worker rather
+   *   than copy; they are detached here, so pass only ones the caller no longer needs
+   */
+  async run(pipelineConfig, transfer = []) {
     const inputMode = pipelineConfig.inputMode || 'raw';
     const modeLabels = {
       raw: 'QSM Pipeline',
       totalField: 'Total Field Map Pipeline',
       localField: 'Local Field Map Pipeline'
     };
-    return this._start('run', pipelineConfig, `Starting ${modeLabels[inputMode] || 'Pipeline'}...`);
+    return this._start('run', pipelineConfig, `Starting ${modeLabels[inputMode] || 'Pipeline'}...`, transfer);
   }
 
-  async runSWI(data) {
-    return this._start('runSWI', data, 'Starting SWI pipeline...');
+  async runSWI(data, transfer = []) {
+    return this._start('runSWI', data, 'Starting SWI pipeline...', transfer);
   }
 
-  async runT2starR2star(data) {
-    return this._start('runT2starR2star', data, 'Starting T2*/R2* mapping...');
+  async runT2starR2star(data, transfer = []) {
+    return this._start('runT2starR2star', data, 'Starting T2*/R2* mapping...', transfer);
   }
 
   /**
    * Post a job to the worker and mark the executor running; the worker answers with stageData
    * messages and a final 'complete' or 'error'. Resolves false if the worker could not start.
    */
-  async _start(type, data, message) {
+  async _start(type, data, message, transfer) {
     try {
       await this.initialize();
       this.updateOutput(message);
       this.pipelineRunning = true;
-      this.worker.postMessage({ type, data });
+      this.worker.postMessage({ type, data }, transfer);
       return true;
     } catch (error) {
       this._handleError(error.message);

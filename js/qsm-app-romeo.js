@@ -20,6 +20,15 @@ import { buildConfigJson, maskSectionString } from './modules/ConfigBridge.js';
 // Make config available globally for backward compatibility
 window.QSMConfig = QSMConfig;
 
+/**
+ * Transfer list for a worker message: the ArrayBuffers given directly or in arrays, skipping
+ * nulls. Only for buffers the sender has just read for this message — they are detached once
+ * posted, so never pass data that is still displayed or cached (e.g. the prepared magnitude).
+ */
+function transferable(...items) {
+  return items.flat().filter((b) => b instanceof ArrayBuffer);
+}
+
 /** Simple markdown → HTML for methods text (headings, paragraphs, lists). */
 function renderMarkdown(md) {
   return md
@@ -2571,9 +2580,7 @@ class QSMApp {
       await this.visualizePhase();
 
       // Include prepared magnitude if available (for MEDI gradient weighting and threshold mask)
-      const preparedMagnitude = this.maskController.preparedMagnitudeData
-        ? Array.from(this.maskController.preparedMagnitudeData)
-        : null;
+      const preparedMagnitude = this.maskController.preparedMagnitudeData;
 
       // Run pipeline via executor
       const started = await this.pipelineExecutor.run({
@@ -2586,7 +2593,7 @@ class QSMApp {
         customMaskBuffer,
         preparedMagnitude,
         pipelineSettings: this.pipelineSettings
-      });
+      }, transferable(magnitudeBuffers, phaseBuffers, customMaskBuffer));
 
       if (started) {
         document.getElementById('cancelPipeline').disabled = false;
@@ -2669,9 +2676,9 @@ class QSMApp {
         customMaskBuffer,
         magField,
         maskThreshold: this.maskController.maskThreshold,
-        preparedMagnitude: this.maskController.preparedMagnitudeData ? Array.from(this.maskController.preparedMagnitudeData) : null,
+        preparedMagnitude: this.maskController.preparedMagnitudeData,
         pipelineSettings: this.pipelineSettings
-      });
+      }, transferable(totalFieldBuffer, magnitudeBuffer, maskBuffer, customMaskBuffer));
 
       if (started) {
         document.getElementById('cancelPipeline').disabled = false;
@@ -2756,9 +2763,9 @@ class QSMApp {
         customMaskBuffer,
         magField,
         maskThreshold: this.maskController.maskThreshold,
-        preparedMagnitude: this.maskController.preparedMagnitudeData ? Array.from(this.maskController.preparedMagnitudeData) : null,
+        preparedMagnitude: this.maskController.preparedMagnitudeData,
         pipelineSettings: this.pipelineSettings
-      });
+      }, transferable(localFieldBuffer, magnitudeBuffer, maskBuffer, customMaskBuffer));
 
       if (started) {
         document.getElementById('cancelPipeline').disabled = false;
@@ -3441,9 +3448,7 @@ class QSMApp {
         customMaskBuffer = this.maskController.createMaskNifti(this.maskController.currentMaskData);
       }
 
-      const preparedMagnitude = this.maskController.preparedMagnitudeData
-        ? Array.from(this.maskController.preparedMagnitudeData)
-        : null;
+      const preparedMagnitude = this.maskController.preparedMagnitudeData;
 
       const started = await this.pipelineExecutor.runSWI({
         magnitudeBuffers,
@@ -3452,7 +3457,7 @@ class QSMApp {
         customMaskBuffer,
         preparedMagnitude,
         pipelineSettings: this.pipelineSettings
-      });
+      }, transferable(magnitudeBuffers, phaseBuffers, customMaskBuffer));
 
       if (started) {
         document.getElementById('cancelPipeline').disabled = false;
@@ -3504,9 +3509,7 @@ class QSMApp {
         customMaskBuffer = this.maskController.createMaskNifti(this.maskController.currentMaskData);
       }
 
-      const preparedMagnitude = this.maskController.preparedMagnitudeData
-        ? Array.from(this.maskController.preparedMagnitudeData)
-        : null;
+      const preparedMagnitude = this.maskController.preparedMagnitudeData;
 
       const started = await this.pipelineExecutor.runT2starR2star({
         magnitudeBuffers,
@@ -3514,7 +3517,7 @@ class QSMApp {
         customMaskBuffer,
         preparedMagnitude,
         echoTimes
-      });
+      }, transferable(magnitudeBuffers, customMaskBuffer));
 
       if (started) {
         document.getElementById('cancelPipeline').disabled = false;
