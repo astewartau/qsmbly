@@ -13,7 +13,7 @@
 .landing-overlay {
   position: fixed;
   inset: var(--qsm-eco-h, 34px) 0 0 0; /* start below the pinned ecosystem bar */
-  z-index: 2000;
+  z-index: var(--z-landing);
   display: flex;
   overflow: hidden;
   background:
@@ -138,14 +138,6 @@ html.landing-seen .landing-overlay {
   display: block;
   width: 100%;
   height: auto;
-}
-
-.landing-hero-logo {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg), 0 0 40px rgba(59, 130, 246, 0.25);
-  margin-bottom: var(--space-lg);
 }
 
 .landing-hero h1 {
@@ -344,7 +336,7 @@ html.landing-seen .landing-overlay {
 }
 
 /* ==========================================================================
-   Welcome-tour modal (reuses .modal-overlay / .modal from index.html)
+   Welcome-tour modal (reuses .modal-overlay / .modal from app.css)
    ========================================================================== */
 
 .welcome-modal {
@@ -404,7 +396,7 @@ html.landing-seen .landing-overlay {
 
 .tour-spotlight {
   position: fixed;
-  z-index: 2500;
+  z-index: var(--z-tour-spotlight);
   border-radius: var(--radius-md);
   box-shadow: 0 0 0 9999px rgba(9, 12, 18, 0.68);
   outline: 2px solid var(--color-primary);
@@ -415,7 +407,7 @@ html.landing-seen .landing-overlay {
 
 .tour-tooltip {
   position: fixed;
-  z-index: 2600;
+  z-index: var(--z-tour-tooltip);
   width: 300px;
   max-width: calc(100vw - 32px);
   background: var(--color-surface-elevated);
