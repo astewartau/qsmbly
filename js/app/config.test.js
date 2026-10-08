@@ -1,20 +1,96 @@
 /**
  * Config Module Tests
  */
-import {
+import { readFileSync } from 'node:fs';
+import * as Config from './config.js';
+import * as Generated from './qsm-defaults.js';
+
+const {
   PHYSICS,
   VIEWER_CONFIG,
   MASK_CONFIG,
-  BET_DEFAULTS,
   PIPELINE_DEFAULTS,
-  TGV_DEFAULTS,
-  QSMART_DEFAULTS,
-  RTS_DEFAULTS,
-  NDI_DEFAULTS,
-  HDQSM_DEFAULTS,
+  PIPELINE_METHODS,
   STAGE_DISPLAY_NAMES,
   getVoxelBasedDefaults
-} from './config.js';
+} = Config;
+
+// How each algorithm default in config.js derives from the generated qsm-defaults.js.
+// `keys` is the exact key set config.js exports: a plain name reads the generated field of
+// the same name, and 'jsName:generatedName' reads a renamed one. `extras` are qsmbly-only
+// keys (not qsm-core parameters) with their expected types.
+const DERIVED = {
+  RTS_DEFAULTS: { from: 'RTS_DEFAULTS', keys: ['delta', 'mu', 'rho', 'tol', 'max_iter', 'lsmr_iter'] },
+  TV_DEFAULTS: { from: 'TV_DEFAULTS', keys: ['lambda', 'rho', 'tol', 'max_iter'] },
+  TKD_DEFAULTS: { from: 'TKD_DEFAULTS', keys: ['threshold'] },
+  TSVD_DEFAULTS: { from: 'TKD_DEFAULTS', keys: ['threshold'] },
+  ILSQR_DEFAULTS: { from: 'ILSQR_DEFAULTS', keys: ['tol', 'max_iter'] },
+  VSHARP_DEFAULTS: { from: 'VSHARP_DEFAULTS', keys: ['threshold', 'max_radius', 'min_radius'] },
+  PDF_DEFAULTS: { from: 'PDF_DEFAULTS', keys: ['tol'] },
+  LBV_DEFAULTS: { from: 'LBV_DEFAULTS', keys: ['tol'] },
+  ISMV_DEFAULTS: { from: 'ISMV_DEFAULTS', keys: ['tol', 'max_iter', 'radius'] },
+  SHARP_DEFAULTS: { from: 'SHARP_DEFAULTS', keys: ['threshold', 'radius'] },
+  RESHARP_DEFAULTS: { from: 'RESHARP_DEFAULTS', keys: ['radius', 'tik_reg', 'tol', 'max_iter'] },
+  HARPERELLA_DEFAULTS: { from: 'HARPERELLA_DEFAULTS', keys: ['radius', 'max_iter', 'tol'] },
+  BET_DEFAULTS: {
+    from: 'BET_DEFAULTS',
+    keys: ['fractionalIntensity:fractional_intensity', 'smoothness',
+      'gradientThreshold:gradient_threshold', 'iterations', 'subdivisions'],
+    extras: { erosions: 'number' },
+  },
+  TGV_DEFAULTS: {
+    from: 'TGV_DEFAULTS',
+    keys: ['alpha0', 'alpha1', 'iterations', 'erosions', 'step_size', 'tol'],
+    extras: { regularization: 'number' },
+  },
+  SWI_DEFAULTS: { from: 'SWI_DEFAULTS', keys: ['hp_sigma', 'scaling', 'strength', 'mip_window'] },
+  QSMART_DEFAULTS: {
+    from: 'QSMART_DEFAULTS',
+    keys: ['sdf_sigma1_stage1', 'sdf_sigma2_stage1', 'sdf_sigma1_stage2', 'sdf_sigma2_stage2',
+      'sdf_spatial_radius', 'sdf_lower_lim', 'sdf_curv_constant', 'vasc_sphere_radius',
+      'frangi_scale_min', 'frangi_scale_max', 'frangi_scale_ratio', 'frangi_c',
+      'ilsqr_tol', 'ilsqr_max_iter', 'inversion_algorithm:inversion'],
+  },
+  ROMEO_DEFAULTS: {
+    from: 'ROMEO_DEFAULTS',
+    keys: ['phase_gradient_coherence', 'mag_coherence', 'mag_weight'],
+    extras: { weighting: 'string' },
+  },
+  MCPC3DS_DEFAULTS: { from: 'MCPC3DS_DEFAULTS', keys: ['sigma'] },
+  LINEAR_FIT_DEFAULTS: { from: 'LINEAR_FIT_DEFAULTS', keys: ['estimate_offset', 'reliability_threshold_percentile'] },
+  HOMOGENEITY_DEFAULTS: { from: 'HOMOGENEITY_DEFAULTS', keys: ['sigmaMm:sigma_mm', 'nbox'] },
+  SIGNAL_ERODE_DEFAULTS: {
+    from: 'SIGNAL_ERODE_DEFAULTS',
+    keys: ['bias_sigma', 'depth_cap', 'global_erosions', 'min_component', 'threshold'],
+  },
+  TIKHONOV_DEFAULTS: { from: 'TIKHONOV_DEFAULTS', keys: ['lambda', 'reg'] },
+  NLTV_DEFAULTS: { from: 'NLTV_DEFAULTS', keys: ['lambda', 'mu', 'max_iter', 'tol', 'newton_max_iter:newton_iter'] },
+  NDI_DEFAULTS: { from: 'NDI_DEFAULTS', keys: ['tau', 'alpha', 'max_iter'] },
+  FANSI_DEFAULTS: { from: 'FANSI_DEFAULTS', keys: ['alpha1', 'mu1', 'mu2', 'alpha0', 'mu0', 'max_iter', 'tol_update'] },
+  L1QSM_DEFAULTS: { from: 'L1QSM_DEFAULTS', keys: ['alpha1', 'mu1', 'mu2', 'mu3', 'lambda', 'max_iter', 'tol_update'] },
+  WHQSM_DEFAULTS: { from: 'WHQSM_DEFAULTS', keys: ['alpha1', 'mu1', 'mu2', 'beta', 'muh', 'max_iter', 'tol_update'] },
+  HDQSM_DEFAULTS: { from: 'HDQSM_DEFAULTS', keys: ['alpha_l2', 'mu1_l2', 'mu2', 'max_iter_l1', 'max_iter_l2', 'tol_update'] },
+  MEDI_DEFAULTS: {
+    from: 'MEDI_DEFAULTS',
+    keys: ['lambda', 'percentage', 'max_iter', 'cg_max_iter', 'cg_tol', 'tol', 'smv', 'smv_radius',
+      'merit', 'data_weighting'],
+  },
+  TFI_DEFAULTS: {
+    from: 'TFI_DEFAULTS',
+    keys: ['lambda', 'precond', 'merit', 'data_weighting', 'percentage', 'cg_tol', 'cg_max_iter',
+      'max_iter', 'tol'],
+  },
+};
+
+const splitKey = (k) => {
+  const [jsKey, genKey = jsKey] = k.split(':');
+  return [jsKey, genKey];
+};
+
+// A generated value is whatever serde_json emits for a qsmxt-config field.
+const isJsonScalarOrArray = (v) =>
+  ['number', 'boolean', 'string'].includes(typeof v) ||
+  (Array.isArray(v) && v.every(x => typeof x === 'number'));
 
 describe('Config Module', () => {
   describe('PHYSICS', () => {
@@ -39,61 +115,51 @@ describe('Config Module', () => {
     });
   });
 
-  describe('BET_DEFAULTS', () => {
-    test('should have expected values', () => {
-      expect(BET_DEFAULTS.fractionalIntensity).toBe(0.5);
-      expect(BET_DEFAULTS.iterations).toBe(1000);
-      expect(BET_DEFAULTS.subdivisions).toBe(4);
+  describe('generated qsm-defaults.js', () => {
+    test('exports exactly what scripts/generate-defaults.mjs generates', () => {
+      const generator = readFileSync(new URL('../../scripts/generate-defaults.mjs', import.meta.url), 'utf8');
+      const generatorNames = [...generator.matchAll(/^\s*(\w+_DEFAULTS): JSON\.parse\(wasmModule\.get_\w+_defaults\(\)\)/gm)]
+        .map(m => m[1]);
+      expect(generatorNames.length).toBeGreaterThan(0);
+      expect(Object.keys(Generated).sort()).toEqual([...generatorNames].sort());
+    });
+
+    test.each(Object.keys(Generated))('%s is a non-empty object of JSON values', (name) => {
+      const obj = Generated[name];
+      expect(Object.keys(obj).length).toBeGreaterThan(0);
+      for (const [key, value] of Object.entries(obj)) {
+        expect([key, isJsonScalarOrArray(value)]).toEqual([key, true]);
+      }
     });
   });
 
-  describe('TGV_DEFAULTS', () => {
-    test('should have expected values', () => {
-      expect(TGV_DEFAULTS.regularization).toBe(2);
-      expect(TGV_DEFAULTS.iterations).toBe(1000);
-      expect(TGV_DEFAULTS.erosions).toBe(3);
-    });
-  });
-
-  describe('QSMART_DEFAULTS', () => {
-    test('should have SDF parameters', () => {
-      expect(QSMART_DEFAULTS.sdf_sigma1_stage1).toBe(10);
-      expect(QSMART_DEFAULTS.sdf_lower_lim).toBe(0.6);
+  describe('algorithm defaults derived from qsm-defaults.js', () => {
+    test.each(Object.keys(DERIVED))('%s has the expected key set', (name) => {
+      const { keys, extras = {} } = DERIVED[name];
+      const expected = [...keys.map(k => splitKey(k)[0]), ...Object.keys(extras)];
+      expect(Object.keys(Config[name]).sort()).toEqual(expected.sort());
     });
 
-    test('should have Frangi filter parameters in mm', () => {
-      expect(QSMART_DEFAULTS.frangi_scale_min).toBe(0.5);
-      expect(QSMART_DEFAULTS.frangi_scale_max).toBe(6.0);
+    test.each(Object.keys(DERIVED))('%s reads fields the generated defaults provide', (name) => {
+      const { from, keys } = DERIVED[name];
+      const generated = Generated[from];
+      for (const k of keys) {
+        const [jsKey, genKey] = splitKey(k);
+        expect(generated).toHaveProperty(genKey);
+        expect(Config[name][jsKey]).toEqual(generated[genKey]);
+      }
     });
 
-    test('should have iLSQR parameters', () => {
-      expect(QSMART_DEFAULTS.ilsqr_tol).toBe(0.01);
-      expect(QSMART_DEFAULTS.ilsqr_max_iter).toBe(50);
+    test.each(Object.keys(DERIVED))('%s has typed qsmbly-only extras', (name) => {
+      for (const [key, type] of Object.entries(DERIVED[name].extras || {})) {
+        expect(typeof Config[name][key]).toBe(type);
+      }
     });
-  });
 
-  describe('RTS_DEFAULTS', () => {
-    test('should have expected values', () => {
-      expect(RTS_DEFAULTS.delta).toBe(0.15);
-      expect(RTS_DEFAULTS.mu).toBe(100000);
-      expect(RTS_DEFAULTS.max_iter).toBe(20);
-    });
-  });
-
-  describe('NDI_DEFAULTS', () => {
-    test('should have expected values', () => {
-      expect(NDI_DEFAULTS.tau).toBe(2);
-      expect(NDI_DEFAULTS.alpha).toBe(0.00001);
-      expect(NDI_DEFAULTS.max_iter).toBe(200);
-    });
-  });
-
-  describe('HDQSM_DEFAULTS', () => {
-    test('should have expected values', () => {
-      expect(HDQSM_DEFAULTS.alpha_l2).toBe(0.0001);
-      expect(HDQSM_DEFAULTS.mu1_l2).toBe(0.01);
-      expect(HDQSM_DEFAULTS.max_iter_l1).toBe(20);
-      expect(HDQSM_DEFAULTS.max_iter_l2).toBe(80);
+    test('every exported *_DEFAULTS built from qsm-defaults.js is covered above', () => {
+      const local = ['INPUT_DEFAULTS', 'MASK_PREP_DEFAULTS', 'PIPELINE_DEFAULTS', 'BOX_FILTER_DEFAULTS'];
+      const exported = Object.keys(Config).filter(n => n.endsWith('_DEFAULTS') && !local.includes(n));
+      expect(exported.sort()).toEqual(Object.keys(DERIVED).sort());
     });
   });
 
@@ -121,12 +187,32 @@ describe('Config Module', () => {
       expect(PIPELINE_DEFAULTS.dipole_inversion).toBe('rts');
     });
 
-    test('should have nested algorithm settings', () => {
-      expect(PIPELINE_DEFAULTS.tgv).toBeDefined();
-      expect(PIPELINE_DEFAULTS.qsmart).toBeDefined();
-      expect(PIPELINE_DEFAULTS.vsharp).toBeDefined();
-      expect(PIPELINE_DEFAULTS.rts).toBeDefined();
-      expect(PIPELINE_DEFAULTS.medi).toBeDefined();
+    test('has a settings object for every selectable algorithm', () => {
+      const methods = [
+        ...PIPELINE_METHODS.combined.filter(m => m !== 'none'),
+        ...PIPELINE_METHODS.bf_algorithm,
+        ...PIPELINE_METHODS.dipole_inversion,
+        ...PIPELINE_METHODS.qsmart_inversion,
+      ];
+      for (const m of methods) {
+        expect([m, typeof PIPELINE_DEFAULTS[m]]).toEqual([m, 'object']);
+      }
+    });
+
+    test('has no undefined values in algorithm settings', () => {
+      for (const [name, value] of Object.entries(PIPELINE_DEFAULTS)) {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) continue;
+        for (const [key, v] of Object.entries(value)) {
+          expect([name, key, v === undefined]).toEqual([name, key, false]);
+        }
+      }
+    });
+
+    test('leaves voxel-size-derived radii unset until voxel size is known', () => {
+      expect(PIPELINE_DEFAULTS.vsharp.max_radius).toBeNull();
+      expect(PIPELINE_DEFAULTS.vsharp.min_radius).toBeNull();
+      expect(PIPELINE_DEFAULTS.ismv.radius).toBeNull();
+      expect(PIPELINE_DEFAULTS.pdf.maxit).toBeNull();
     });
   });
 
