@@ -15,6 +15,7 @@ import {
   TV_DEFAULTS, RTS_DEFAULTS, NLTV_DEFAULTS, MEDI_DEFAULTS, TFI_DEFAULTS,
   NDI_DEFAULTS, FANSI_DEFAULTS, L1QSM_DEFAULTS, WHQSM_DEFAULTS, HDQSM_DEFAULTS,
 } from '../app/config.js';
+import { clampTileConfig, MAX_WASM_PATCH_EDGE } from '../worker/utils/DlTiling.js';
 
 // Deep-learning inversion methods and how browser tiling applies to each:
 //  - TILEABLE: overlap-tiling works well (approximate but sound) — default tiled.
@@ -1106,6 +1107,14 @@ export class PipelineSettingsController {
       msg = `⚠ With tiling off, ${nice} loads the entire volume and can exhaust the browser's memory (the tab may crash on clinical-size data). Keep tiling on, or run it in QSMxT.`;
     } else {
       msg = `Tiled inference is approximate (≈0.94 correlation vs whole-volume; some low-frequency drift). For a publication-quality result, run ${nice} in QSMxT.`;
+    }
+    if (tiled && !DL_NATIVE_TILE.has(method)) {
+      const core = parseInt(this._getEl('dlTileSize')) || 56;
+      const halo = (v => Number.isFinite(v) ? v : 4)(parseInt(this._getEl('dlTileHalo')));
+      const c = clampTileConfig(core, halo);
+      if (c.clamped) {
+        msg += ` ⚠ Core ${core} + halo ${halo} makes ${core + 2 * halo}³ patches, too big for the browser's memory (at most ${MAX_WASM_PATCH_EDGE}³); this run will use core ${c.core} + halo ${c.halo}.`;
+      }
     }
     box.textContent = msg;
     box.style.display = '';
