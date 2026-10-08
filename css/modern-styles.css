@@ -306,7 +306,7 @@ input[type="range"]:disabled::-moz-range-thumb {
   display: block;
 }
 
-.logo h1 {
+.logo .app-title {
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -942,78 +942,82 @@ input[type="range"]:disabled::-moz-range-thumb {
   font-size: 0.7rem;
 }
 
-/* Tagify dark theme overrides - use high specificity */
+/* Tagify dark theme overrides. tagify.css is pinned (index.html) and loads before this file, so
+   equal-or-higher specificity is enough; the one !important beats tagify.css's own !important
+   inset shadow on a tag while its remove button is hovered or it is being edited. */
 #echoTimesTagify {
   display: none;
 }
 
 .tagify {
-  --tags-border-color: #2d3f5a !important;
-  --tags-focus-border-color: #3b82f6 !important;
-  --tagify-dd-bg-color: #232f42 !important;
-  background: #232f42 !important;
-  border: 1px solid #2d3f5a !important;
-  border-radius: 6px !important;
-  min-height: 26px !important;
-  padding: 2px 4px !important;
-  width: 100% !important;
-  min-width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box !important;
-  display: flex !important;
+  --tags-border-color: #2d3f5a;
+  --tags-focus-border-color: #3b82f6;
+  --tags-hover-border-color: #2d3f5a;
+  --tagify-dd-bg-color: #232f42;
+  --placeholder-color-focus: #8b99ad;
+  background: #232f42;
+  border: 1px solid #2d3f5a;
+  border-radius: 6px;
+  min-height: 26px;
+  padding: 2px 4px;
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  display: flex;
 }
 
 .tagify:focus-within {
-  border-color: #3b82f6 !important;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15) !important;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
 }
 
 .tagify .tagify__tag {
-  margin: 2px !important;
-  border-radius: 3px !important;
-  background: #1e3a5f !important;
-  box-shadow: none !important;
+  margin: 2px;
+  border-radius: 3px;
+  background: #1e3a5f;
+  box-shadow: none;
 }
 
 .tagify .tagify__tag > div {
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace !important;
-  font-size: 0.65rem !important;
-  padding: 0.15em 0.4em !important;
-  color: #e2e8f0 !important;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 0.65rem;
+  padding: 0.15em 0.4em;
+  color: #e2e8f0;
 }
 
 .tagify .tagify__tag > div::before {
   box-shadow: none !important;
-  background: transparent !important;
+  background: transparent;
 }
 
 .tagify .tagify__tag:hover > div::before {
-  background: rgba(255,255,255,0.05) !important;
+  background: rgba(255,255,255,0.05);
 }
 
 .tagify .tagify__tag__removeBtn {
-  width: 12px !important;
-  height: 12px !important;
-  margin-left: 2px !important;
-  color: rgba(255,255,255,0.5) !important;
-  background: none !important;
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  color: rgba(255,255,255,0.5);
+  background: none;
 }
 
 .tagify .tagify__tag__removeBtn:hover {
-  background: rgba(255,255,255,0.15) !important;
-  color: #fff !important;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
 }
 
 .tagify .tagify__input {
-  font-size: 0.7rem !important;
-  margin: 2px !important;
-  padding: 2px 4px !important;
-  color: #e2e8f0 !important;
+  font-size: 0.7rem;
+  margin: 2px;
+  padding: 2px 4px;
+  color: #e2e8f0;
 }
 
 .tagify .tagify__input::before {
-  font-size: 0.65rem !important;
-  color: #8b99ad !important;
+  font-size: 0.65rem;
+  color: #8b99ad;
 }
 
 input[type="number"],
@@ -1522,11 +1526,11 @@ select {
     padding: var(--space-xs) var(--space-sm);
   }
 
-  .logo h1 {
+  .logo .app-title {
     font-size: 0.9rem;
   }
 
-  .logo h1 > span {
+  .logo .app-title > span {
     display: none;
   }
 
@@ -1688,6 +1692,12 @@ select {
 
 /* Utility Classes */
 .hidden {
+  display: none !important;
+}
+
+/* The hidden attribute must win over component display rules (e.g. .modal-body .param-group
+   is flex), so JS can toggle visibility with el.hidden. */
+[hidden] {
   display: none !important;
 }
 
