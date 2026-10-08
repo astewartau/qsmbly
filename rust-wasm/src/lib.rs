@@ -194,45 +194,6 @@ fn echo_slices_mut(flat: &mut [f64], n_echoes: usize, n: usize) -> Vec<&mut [f64
 // WASM Exports: Phase Unwrapping
 // ============================================================================
 
-/// WASM-accessible region growing phase unwrapping
-///
-/// # Arguments
-/// * `phase` - Float64Array of phase values (nx * ny * nz), modified in-place
-/// * `weights` - Uint8Array of weights (3 * nx * ny * nz), layout [dim][x][y][z]
-/// * `mask` - Uint8Array mask (nx * ny * nz), 1 = process, 0 = skip (modified: 2 = visited)
-/// * `nx`, `ny`, `nz` - Array dimensions
-/// * `seed_i`, `seed_j`, `seed_k` - Seed point coordinates
-///
-/// # Returns
-/// Number of voxels processed
-#[wasm_bindgen]
-pub fn grow_region_unwrap_wasm(
-    phase: &mut [f64],
-    weights: &[u8],
-    mask: &mut [u8],
-    nx: usize,
-    ny: usize,
-    nz: usize,
-    seed_i: usize,
-    seed_j: usize,
-    seed_k: usize,
-) -> Result<usize, JsValue> {
-    let n = n_elements(&[nx, ny, nz])?;
-    check_len("phase", phase, n)?;
-    check_len("weights", weights, n_elements(&[3, n])?)?;
-    check_len("mask", mask, n)?;
-
-    console_log!("WASM grow_region_unwrap: {}x{}x{}, seed=({},{},{})",
-                 nx, ny, nz, seed_i, seed_j, seed_k);
-
-    let processed = qsm_core::region_grow::grow_region_unwrap(
-        phase, weights, mask, nx, ny, nz, seed_i, seed_j, seed_k
-    );
-
-    console_log!("WASM processed {} voxels", processed);
-    Ok(processed)
-}
-
 /// Laplacian phase unwrapping
 ///
 /// Uses FFT-based Poisson solver - fast but may have issues at mask boundaries.
@@ -263,102 +224,6 @@ pub fn laplacian_unwrap_wasm(
 
     console_log!("WASM laplacian_unwrap complete");
     Ok(unwrapped)
-}
-
-/// Calculate ROMEO edge weights for phase unwrapping
-///
-/// # Arguments
-/// * `phase` - Phase data (nx * ny * nz)
-/// * `mag` - Magnitude data (nx * ny * nz), can be empty
-/// * `phase2` - Second echo phase for gradient coherence (nx * ny * nz), can be empty
-/// * `te1`, `te2` - Echo times for gradient coherence scaling
-/// * `mask` - Binary mask (nx * ny * nz)
-/// * `nx`, `ny`, `nz` - Array dimensions
-///
-/// # Returns
-/// Weights array (3 * nx * ny * nz) for x, y, z directions
-#[wasm_bindgen]
-pub fn calculate_weights_romeo_wasm(
-    phase: &[f64],
-    mag: &[f64],
-    phase2: &[f64],
-    te1: f64,
-    te2: f64,
-    mask: &[u8],
-    nx: usize, ny: usize, nz: usize,
-) -> Result<Vec<u8>, JsValue> {
-    let n = n_elements(&[nx, ny, nz])?;
-    check_len("phase", phase, n)?;
-    check_len_or_empty("mag", mag, n)?;
-    check_len_or_empty("phase2", phase2, n)?;
-    check_len("mask", mask, n)?;
-
-    console_log!("WASM calculate_weights_romeo: {}x{}x{}", nx, ny, nz);
-
-    let phase2_opt = if phase2.is_empty() { None } else { Some(phase2) };
-
-    let weights = qsm_core::unwrap::romeo::calculate_weights_romeo(
-        phase, mag, phase2_opt, te1, te2, mask, nx, ny, nz
-    );
-
-    console_log!("WASM weights calculation complete");
-    Ok(weights)
-}
-
-/// Calculate ROMEO edge weights with configurable weight components
-///
-/// # Arguments
-/// * `phase` - Phase data (nx * ny * nz)
-/// * `mag` - Magnitude data (nx * ny * nz), can be empty
-/// * `phase2` - Second echo phase for gradient coherence (nx * ny * nz), can be empty
-/// * `te1`, `te2` - Echo times for gradient coherence scaling
-/// * `mask` - Binary mask (nx * ny * nz)
-/// * `nx`, `ny`, `nz` - Array dimensions
-/// * `use_phase_gradient_coherence` - Include phase gradient coherence (multi-echo temporal)
-/// * `use_mag_coherence` - Include magnitude coherence (min/max similarity)
-/// * `use_mag_weight` - Include magnitude weight (penalize low signal)
-///
-/// # Returns
-/// Weights array (3 * nx * ny * nz) for x, y, z directions
-#[wasm_bindgen]
-pub fn calculate_weights_romeo_configurable_wasm(
-    phase: &[f64],
-    mag: &[f64],
-    phase2: &[f64],
-    te1: f64,
-    te2: f64,
-    mask: &[u8],
-    nx: usize, ny: usize, nz: usize,
-    use_phase_gradient_coherence: bool,
-    use_mag_coherence: bool,
-    use_mag_weight: bool,
-) -> Result<Vec<u8>, JsValue> {
-    let n = n_elements(&[nx, ny, nz])?;
-    check_len("phase", phase, n)?;
-    check_len_or_empty("mag", mag, n)?;
-    check_len_or_empty("phase2", phase2, n)?;
-    check_len("mask", mask, n)?;
-
-    console_log!("WASM calculate_weights_romeo_configurable: {}x{}x{}, pgc={}, mc={}, mw={}",
-                 nx, ny, nz, use_phase_gradient_coherence, use_mag_coherence, use_mag_weight);
-
-    let phase2_opt = if phase2.is_empty() { None } else { Some(phase2) };
-
-    let flags = [
-        true,                          // phase coherence (always on)
-        use_phase_gradient_coherence,  // phase gradient coherence
-        false,                         // phase linearity
-        use_mag_coherence,             // magnitude coherence
-        use_mag_weight,                // magnitude weight
-        false,                         // magnitude weight 2
-    ];
-    let weights = qsm_core::unwrap::romeo::calculate_weights_romeo_with_flags(
-        phase, mag, phase2_opt, te1, te2, mask, nx, ny, nz,
-        flags
-    );
-
-    console_log!("WASM weights calculation complete");
-    Ok(weights)
 }
 
 /// Calculate ROMEO voxel quality map for phase-based masking
@@ -973,51 +838,6 @@ pub fn ilsqr_wasm_with_progress(
     Ok(chi)
 }
 
-/// iLSQR with full output (susceptibility, artifacts, fastqsm, initial lsqr)
-///
-/// Returns all intermediate results for analysis/debugging.
-///
-/// # Returns
-/// Flattened array: [chi, xsa, xfs, xlsqr] - 4 * (nx * ny * nz) elements
-/// - chi: Final susceptibility map
-/// - xsa: Estimated streaking artifacts
-/// - xfs: FastQSM estimate
-/// - xlsqr: Initial LSQR result
-#[wasm_bindgen]
-pub fn ilsqr_full_wasm(
-    local_field: &[f64],
-    mask: &[u8],
-    nx: usize, ny: usize, nz: usize,
-    vsx: f64, vsy: f64, vsz: f64,
-    bx: f64, by: f64, bz: f64,
-    tol: f64,
-    max_iter: usize,
-) -> Result<Vec<f64>, JsValue> {
-    let n = n_elements(&[nx, ny, nz])?;
-    check_len("local_field", local_field, n)?;
-    check_len("mask", mask, n)?;
-
-    console_log!("WASM iLSQR full: {}x{}x{}", nx, ny, nz);
-
-    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
-    let params = qsm_core::inversion::IlsqrParams { tol, max_iter };
-    let (chi, xsa, xfs, xlsqr) = qsm_core::inversion::ilsqr(
-        local_field, mask, &grid,
-        (bx, by, bz), &params, |_, _| {}
-    );
-
-    // Concatenate all outputs
-    let n_total = nx * ny * nz;
-    let mut result = Vec::with_capacity(4 * n_total);
-    result.extend(chi);
-    result.extend(xsa);
-    result.extend(xfs);
-    result.extend(xlsqr);
-
-    console_log!("WASM iLSQR full complete");
-    Ok(result)
-}
-
 // ============================================================================
 // WASM Exports: TGV (Single-Step QSM from Wrapped Phase)
 // ============================================================================
@@ -1368,17 +1188,6 @@ pub fn get_version_wasm() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-/// Get dipole kernel for visualization/debugging
-#[wasm_bindgen]
-pub fn get_dipole_kernel(
-    nx: usize, ny: usize, nz: usize,
-    vsx: f64, vsy: f64, vsz: f64,
-    bx: f64, by: f64, bz: f64,
-) -> Vec<f64> {
-    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
-    qsm_core::kernels::dipole::dipole_kernel(&grid, (bx, by, bz))
-}
-
 // ============================================================================
 // WASM Exports: NIfTI I/O
 // ============================================================================
@@ -1422,44 +1231,6 @@ pub fn load_nifti_wasm(bytes: &[u8]) -> Result<js_sys::Object, JsValue> {
     Ok(result)
 }
 
-/// Load a 4D NIfTI file from bytes (for multi-echo data)
-///
-/// Returns a JS object with: data (Float64Array), dims (array of 4), voxelSize (array), affine (array)
-#[wasm_bindgen]
-pub fn load_nifti_4d_wasm(bytes: &[u8]) -> Result<js_sys::Object, JsValue> {
-    let (data, dims, voxel_size, affine) = qsm_core::io::load_nifti_4d(bytes)
-        .map_err(js_err)?;
-
-    let result = js_sys::Object::new();
-
-    // Data as Float64Array
-    let data_arr = js_sys::Float64Array::from(data.as_slice());
-    js_sys::Reflect::set(&result, &"data".into(), &data_arr)?;
-
-    // Dimensions (4D)
-    let dims_arr = js_sys::Array::new();
-    dims_arr.push(&JsValue::from(dims.0 as u32));
-    dims_arr.push(&JsValue::from(dims.1 as u32));
-    dims_arr.push(&JsValue::from(dims.2 as u32));
-    dims_arr.push(&JsValue::from(dims.3 as u32));
-    js_sys::Reflect::set(&result, &"dims".into(), &dims_arr)?;
-
-    // Voxel size
-    let voxel_size_arr = js_sys::Array::new();
-    voxel_size_arr.push(&JsValue::from(voxel_size.0));
-    voxel_size_arr.push(&JsValue::from(voxel_size.1));
-    voxel_size_arr.push(&JsValue::from(voxel_size.2));
-    js_sys::Reflect::set(&result, &"voxelSize".into(), &voxel_size_arr)?;
-
-    // Affine matrix
-    let affine_arr = js_sys::Float64Array::from(affine.as_slice());
-    js_sys::Reflect::set(&result, &"affine".into(), &affine_arr)?;
-
-    console_log!("WASM load_nifti_4d: {}x{}x{}x{}", dims.0, dims.1, dims.2, dims.3);
-
-    Ok(result)
-}
-
 /// Save data as NIfTI bytes
 ///
 /// # Arguments
@@ -1488,29 +1259,6 @@ pub fn save_nifti_wasm(
         .map_err(js_err)?;
 
     console_log!("WASM save_nifti: {}x{}x{}, {} bytes", nx, ny, nz, bytes.len());
-
-    Ok(bytes)
-}
-
-/// Save data as gzipped NIfTI bytes (.nii.gz)
-#[wasm_bindgen]
-pub fn save_nifti_gz_wasm(
-    data: &[f64],
-    nx: usize, ny: usize, nz: usize,
-    vsx: f64, vsy: f64, vsz: f64,
-    affine: &[f64],
-) -> Result<Vec<u8>, JsValue> {
-    if affine.len() != 16 {
-        return Err(js_err("Affine matrix must have 16 elements"));
-    }
-
-    let mut affine_arr = [0.0f64; 16];
-    affine_arr.copy_from_slice(affine);
-
-    let bytes = qsm_core::io::save_nifti_gz(data, (nx, ny, nz), (vsx, vsy, vsz), &affine_arr)
-        .map_err(js_err)?;
-
-    console_log!("WASM save_nifti_gz: {}x{}x{}, {} bytes (compressed)", nx, ny, nz, bytes.len());
 
     Ok(bytes)
 }
@@ -1787,81 +1535,6 @@ pub fn otsu_threshold_wasm(data: &[f64], num_bins: usize) -> Vec<u8> {
 // WASM Exports: Multi-Echo Processing (MCPC-3D-S)
 // ============================================================================
 
-/// 3D Gaussian smoothing for phase data (handles wrapping)
-///
-/// Smooths phase by converting to complex representation, smoothing real/imag
-/// separately, then converting back to phase. This correctly handles phase wrapping.
-///
-/// # Arguments
-/// * `phase` - Phase data in radians (nx * ny * nz)
-/// * `mask` - Binary mask (nx * ny * nz)
-/// * `nx`, `ny`, `nz` - Dimensions
-/// * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma in voxels
-///
-/// # Returns
-/// Smoothed phase data
-#[wasm_bindgen]
-pub fn gaussian_smooth_3d_phase_wasm(
-    phase: &[f64],
-    mask: &[u8],
-    nx: usize, ny: usize, nz: usize,
-    sigma_x: f64, sigma_y: f64, sigma_z: f64,
-) -> Result<Vec<f64>, JsValue> {
-    let n = n_elements(&[nx, ny, nz])?;
-    check_len("phase", phase, n)?;
-    check_len("mask", mask, n)?;
-
-    console_log!("WASM gaussian_smooth_3d_phase: {}x{}x{}, sigma=({:.1},{:.1},{:.1})",
-                 nx, ny, nz, sigma_x, sigma_y, sigma_z);
-
-    let grid = qsm_core::Grid::new(nx, ny, nz, 1.0, 1.0, 1.0);
-    let result = qsm_core::utils::multi_echo::gaussian_smooth_3d_phase(
-        phase, [sigma_x, sigma_y, sigma_z], mask, &grid
-    );
-
-    console_log!("WASM gaussian_smooth_3d_phase complete");
-    Ok(result)
-}
-
-/// Hermitian Inner Product (HIP) between two echoes
-///
-/// Computes HIP = conj(echo1) * echo2 = mag1 * mag2 * exp(i * (phase2 - phase1))
-///
-/// # Arguments
-/// * `phase1`, `mag1` - First echo phase and magnitude
-/// * `phase2`, `mag2` - Second echo phase and magnitude
-/// * `mask` - Binary mask (nx * ny * nz)
-/// * `n` - Total number of voxels
-///
-/// # Returns
-/// Flattened [hip_phase, hip_mag] - first n elements are phase diff, next n are combined mag
-#[wasm_bindgen]
-pub fn hermitian_inner_product_wasm(
-    phase1: &[f64], mag1: &[f64],
-    phase2: &[f64], mag2: &[f64],
-    mask: &[u8],
-    n: usize,
-) -> Result<Vec<f64>, JsValue> {
-    check_len("phase1", phase1, n)?;
-    check_len("mag1", mag1, n)?;
-    check_len("phase2", phase2, n)?;
-    check_len("mag2", mag2, n)?;
-    check_len("mask", mask, n)?;
-
-    console_log!("WASM hermitian_inner_product: n={}", n);
-
-    let (hip_phase, hip_mag) = qsm_core::utils::multi_echo::hermitian_inner_product(
-        phase1, mag1, phase2, mag2, mask, n
-    );
-
-    // Combine into single output
-    let mut result = hip_phase;
-    result.extend(hip_mag);
-
-    console_log!("WASM hermitian_inner_product complete");
-    Ok(result)
-}
-
 /// MCPC-3D-S phase offset estimation for single-coil multi-echo data
 ///
 /// Estimates and removes the phase offset from each echo using the
@@ -1973,67 +1646,6 @@ pub fn calculate_b0_weighted_wasm(
 
     console_log!("WASM calculate_b0_weighted complete");
     Ok(b0)
-}
-
-/// Multi-echo linear fit with magnitude weighting
-///
-/// Fits a linear model: phase = slope * TE + intercept
-/// using weighted least squares with magnitude as weights.
-///
-/// # Arguments
-/// * `unwrapped_phases_flat` - Flattened unwrapped phases [echo0, echo1, ...]
-/// * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
-/// * `tes` - Echo times in seconds
-/// * `mask` - Binary mask
-/// * `n_total` - Voxels per echo
-/// * `estimate_offset` - If true, estimate phase offset (intercept)
-/// * `reliability_percentile` - Percentile for reliability masking (0-100, 0=disable)
-///
-/// # Returns
-/// Flattened [field_hz, phase_offset, fit_residual, reliability_mask]
-/// - First n_total: field in Hz
-/// - Next n_total: phase offset in radians
-/// - Next n_total: fit residual
-/// - Next n_total: reliability mask (as f64, 0 or 1)
-#[wasm_bindgen]
-pub fn multi_echo_linear_fit_wasm(
-    unwrapped_phases_flat: &[f64],
-    mags_flat: &[f64],
-    tes: &[f64],
-    mask: &[u8],
-    n_total: usize,
-    estimate_offset: bool,
-    reliability_percentile: f64,
-) -> Result<Vec<f64>, JsValue> {
-    let n_echoes = tes.len();
-    let n_all = n_elements(&[n_echoes, n_total])?;
-    check_len("unwrapped_phases_flat", unwrapped_phases_flat, n_all)?;
-    check_len("mags_flat", mags_flat, n_all)?;
-    check_len("mask", mask, n_total)?;
-
-    console_log!("WASM multi_echo_linear_fit: {} echoes, {} voxels, offset={}, reliability={}%",
-                 n_echoes, n_total, estimate_offset, reliability_percentile);
-
-    let unwrapped_phases = echo_slices(unwrapped_phases_flat, n_echoes, n_total);
-    let mags = echo_slices(mags_flat, n_echoes, n_total);
-
-    let result = qsm_core::utils::multi_echo::multi_echo_linear_fit(
-        &unwrapped_phases, &mags, tes, mask,
-        estimate_offset, reliability_percentile
-    );
-
-    // Convert field to Hz
-    let field_hz = qsm_core::utils::multi_echo::field_to_hz(&result.field);
-
-    // Flatten output
-    let mut output = Vec::with_capacity(4 * n_total);
-    output.extend(field_hz);
-    output.extend(result.phase_offset);
-    output.extend(result.fit_residual);
-    output.extend(result.reliability_mask.iter().map(|&v| v as f64));
-
-    console_log!("WASM multi_echo_linear_fit complete");
-    Ok(output)
 }
 
 
@@ -2378,37 +1990,6 @@ pub fn qsmart_adjust_offset_wasm(
 
     console_log!("WASM QSMART offset adjustment complete");
     Ok(result)
-}
-
-/// Calculate Gaussian curvature at mask boundary
-///
-/// Used for curvature-based edge weighting in QSMART SDF.
-///
-/// # Arguments
-/// * `mask` - Binary brain mask
-/// * `nx`, `ny`, `nz` - Dimensions
-///
-/// # Returns
-/// Flattened [gaussian_curvature, mean_curvature] - each n_total elements
-#[wasm_bindgen]
-pub fn curvature_wasm(
-    mask: &[u8],
-    nx: usize, ny: usize, nz: usize,
-) -> Result<Vec<f64>, JsValue> {
-    let n = n_elements(&[nx, ny, nz])?;
-    check_len("mask", mask, n)?;
-
-    console_log!("WASM curvature: {}x{}x{}", nx, ny, nz);
-
-    let grid = qsm_core::Grid::new(nx, ny, nz, 1.0, 1.0, 1.0);
-    let result = qsm_core::utils::curvature::calculate_gaussian_curvature(mask, &grid);
-
-    // Combine outputs
-    let mut output = result.gaussian_curvature;
-    output.extend(result.mean_curvature);
-
-    console_log!("WASM curvature complete: {} surface voxels", result.surface_indices.len());
-    Ok(output)
 }
 
 // ============================================================================
