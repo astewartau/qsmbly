@@ -110,6 +110,7 @@ class QSMApp {
     this.aboutModal = null;
     this.citationsModal = null;
     this.privacyModal = null;
+    this.swiModal = null;
 
     this.init();
   }
@@ -231,6 +232,7 @@ class QSMApp {
     this.citationsModal = new ModalManager('citationsModal');
     this.privacyModal = new ModalManager('privacyModal');
     this.dicompareModal = new ModalManager('dicompareModal');
+    this.swiModal = new ModalManager('swiSettingsModal');
 
     // Start loading WASM in the background immediately. A failure here is reported, and the
     // next action that needs the worker retries the load.
@@ -629,15 +631,9 @@ class QSMApp {
     document.getElementById('exportTabMethods')?.addEventListener('click', () => this.switchExportTab('methods'));
     document.getElementById('exportCommand')?.addEventListener('click', () => { this.showCommandPreview(); this.switchExportTab('command'); });
     document.getElementById('exportMethods')?.addEventListener('click', () => { this.showCommandPreview(); this.switchExportTab('methods'); });
-    document.getElementById('openSwiSettings')?.addEventListener('click', () => {
-      document.getElementById('swiSettingsModal')?.classList.add('active');
-    });
-    document.getElementById('closeSwiSettings')?.addEventListener('click', () => {
-      document.getElementById('swiSettingsModal')?.classList.remove('active');
-    });
-    document.getElementById('closeSwiSettings2')?.addEventListener('click', () => {
-      document.getElementById('swiSettingsModal')?.classList.remove('active');
-    });
+    document.getElementById('openSwiSettings')?.addEventListener('click', () => this.swiModal?.open());
+    document.getElementById('closeSwiSettings')?.addEventListener('click', () => this.swiModal?.close());
+    document.getElementById('closeSwiSettings2')?.addEventListener('click', () => this.swiModal?.close());
 
     document.getElementById('runSWI')?.addEventListener('click', () => {
       // Sync the SWI modal's settings before running. The settings controller reads the

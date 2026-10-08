@@ -16,6 +16,7 @@ import {
   NDI_DEFAULTS, FANSI_DEFAULTS, L1QSM_DEFAULTS, WHQSM_DEFAULTS, HDQSM_DEFAULTS,
 } from '../app/config.js';
 import { clampTileConfig, MAX_WASM_PATCH_EDGE } from '../worker/utils/DlTiling.js';
+import { openDialog, closeDialog } from '../modules/ui/dialogFocus.js';
 
 // Deep-learning inversion methods and how browser tiling applies to each:
 //  - TILEABLE: overlap-tiling works well (approximate but sound) — default tiled.
@@ -55,14 +56,14 @@ export class PipelineSettingsController {
     this._populateForm(settings, defaults);
     this.updateVisibility(nEchoes);
     this._switchTab('tabQsmPipeline');
-    this.modal.classList.add('active');
+    openDialog(this.modal, { onEscape: () => this.close() });
   }
 
   /**
    * Close the modal
    */
   close() {
-    this.modal.classList.remove('active');
+    closeDialog(this.modal);
   }
 
   /**
@@ -672,7 +673,7 @@ export class PipelineSettingsController {
     const bgDisabledByMediSmv = dipoleMethod === 'medi' && mediSmvEnabled && showBgRemoval;
 
     const bgHint = document.getElementById('bgRemovalDisabledHint');
-    if (bgHint) bgHint.style.display = bgDisabledByMediSmv ? '' : 'none';
+    if (bgHint) bgHint.hidden = !bgDisabledByMediSmv;
 
     // Enable/disable tabs based on pipeline state
     this._setTabEnabled('tabPhaseProcessing', isRawMode);
@@ -1158,7 +1159,7 @@ export class PipelineSettingsController {
   _updateDlTilingWarning(method) {
     const box = document.getElementById('dlTilingWarning');
     if (!box) return;
-    if (!DL_INVERSION_METHODS.has(method)) { box.style.display = 'none'; return; }
+    if (!DL_INVERSION_METHODS.has(method)) { box.hidden = true; return; }
     const tiled = this._getChecked('dlTiled');
     const nice = method.toUpperCase();
     let msg;
@@ -1182,7 +1183,7 @@ export class PipelineSettingsController {
       }
     }
     box.textContent = msg;
-    box.style.display = '';
+    box.hidden = false;
   }
 
   _setEl(id, value) {
@@ -1202,7 +1203,7 @@ export class PipelineSettingsController {
 
   _showEl(id, show) {
     const el = document.getElementById(id);
-    if (el) el.style.display = show ? 'block' : 'none';
+    if (el) el.hidden = !show;
   }
 
   _disableEl(id, disabled) {

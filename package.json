@@ -23,6 +23,7 @@
     "eslint": "^9.39.5",
     "globals": "^17.13.0",
     "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "smol-toml": "^1.9.0"
   },
   "keywords": [

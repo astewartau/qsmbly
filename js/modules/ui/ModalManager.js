@@ -2,7 +2,10 @@
  * Modal Manager Module
  *
  * Simple utility to manage modal open/close state and overlay-click-to-close behavior.
+ * Focus handling (trap, Escape, return to opener) comes from dialogFocus.js.
  */
+
+import { openDialog, closeDialog } from './dialogFocus.js';
 
 export class ModalManager {
   /**
@@ -22,18 +25,14 @@ export class ModalManager {
    * Open the modal
    */
   open() {
-    if (this.modal) {
-      this.modal.classList.add('active');
-    }
+    openDialog(this.modal, { onEscape: () => this.close() });
   }
 
   /**
    * Close the modal
    */
   close() {
-    if (this.modal) {
-      this.modal.classList.remove('active');
-    }
+    closeDialog(this.modal);
   }
 
   /**

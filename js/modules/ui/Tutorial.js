@@ -17,6 +17,8 @@
  *   }
  */
 
+import { openDialog, closeDialog } from './dialogFocus.js';
+
 const POLL_MS = 200;
 const PADDING = 12;      // gap between spotlight and tooltip
 const VIEWPORT_PAD = 16; // keep tooltip this far from the viewport edge
@@ -254,11 +256,11 @@ export class WelcomePrompt {
   }
 
   open() {
-    this.modal?.classList.add('active');
+    openDialog(this.modal, { onEscape: () => this.close() });
   }
 
   close() {
-    this.modal?.classList.remove('active');
+    closeDialog(this.modal);
     const checkbox = document.getElementById('welcomeDontShow');
     if (checkbox?.checked) {
       try {
