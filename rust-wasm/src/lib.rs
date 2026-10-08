@@ -1089,7 +1089,7 @@ pub fn tgv_qsm_wasm_with_progress(
 /// Get default TGV alpha values for a given regularization level (1-4)
 /// Returns [alpha0, alpha1]
 #[wasm_bindgen]
-pub fn tgv_get_default_alpha(regularization: u8) -> Vec<f64> {
+pub fn tgv_get_default_alpha_wasm(regularization: u8) -> Vec<f64> {
     let (alpha0, alpha1) = qsm_core::inversion::tgv::get_default_alpha(regularization);
     vec![alpha0 as f64, alpha1 as f64]
 }
@@ -1097,8 +1097,11 @@ pub fn tgv_get_default_alpha(regularization: u8) -> Vec<f64> {
 /// Get default TGV iteration count based on voxel size and step size.
 /// Matches Julia reference: max(1000, 3200 / prod(res)^0.42) / step_size^0.6
 #[wasm_bindgen]
-pub fn tgv_get_default_iterations(vsx: f32, vsy: f32, vsz: f32, step_size: f32) -> usize {
-    qsm_core::inversion::tgv::get_default_iterations((vsx, vsy, vsz), step_size)
+pub fn tgv_get_default_iterations_wasm(vsx: f64, vsy: f64, vsz: f64, step_size: f64) -> usize {
+    qsm_core::inversion::tgv::get_default_iterations(
+        (vsx as f32, vsy as f32, vsz as f32),
+        step_size as f32,
+    )
 }
 
 // ============================================================================
@@ -1354,14 +1357,14 @@ pub fn iharperella_wasm_with_progress(
 
 /// Check if WASM module is loaded and working
 #[wasm_bindgen]
-pub fn wasm_health_check() -> bool {
+pub fn health_check_wasm() -> bool {
     console_log!("QSM-WASM module loaded successfully!");
     true
 }
 
 /// Get version string
 #[wasm_bindgen]
-pub fn get_version() -> String {
+pub fn get_version_wasm() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
@@ -1386,7 +1389,7 @@ pub fn get_dipole_kernel(
 #[wasm_bindgen]
 pub fn load_nifti_wasm(bytes: &[u8]) -> Result<js_sys::Object, JsValue> {
     let nifti_data = qsm_core::io::load_nifti(bytes)
-        .map_err(|e| JsValue::from_str(&e))?;
+        .map_err(js_err)?;
 
     let result = js_sys::Object::new();
 
@@ -1425,7 +1428,7 @@ pub fn load_nifti_wasm(bytes: &[u8]) -> Result<js_sys::Object, JsValue> {
 #[wasm_bindgen]
 pub fn load_nifti_4d_wasm(bytes: &[u8]) -> Result<js_sys::Object, JsValue> {
     let (data, dims, voxel_size, affine) = qsm_core::io::load_nifti_4d(bytes)
-        .map_err(|e| JsValue::from_str(&e))?;
+        .map_err(js_err)?;
 
     let result = js_sys::Object::new();
 
@@ -1475,14 +1478,14 @@ pub fn save_nifti_wasm(
     affine: &[f64],
 ) -> Result<Vec<u8>, JsValue> {
     if affine.len() != 16 {
-        return Err(JsValue::from_str("Affine matrix must have 16 elements"));
+        return Err(js_err("Affine matrix must have 16 elements"));
     }
 
     let mut affine_arr = [0.0f64; 16];
     affine_arr.copy_from_slice(affine);
 
     let bytes = qsm_core::io::save_nifti(data, (nx, ny, nz), (vsx, vsy, vsz), &affine_arr)
-        .map_err(|e| JsValue::from_str(&e))?;
+        .map_err(js_err)?;
 
     console_log!("WASM save_nifti: {}x{}x{}, {} bytes", nx, ny, nz, bytes.len());
 
@@ -1498,14 +1501,14 @@ pub fn save_nifti_gz_wasm(
     affine: &[f64],
 ) -> Result<Vec<u8>, JsValue> {
     if affine.len() != 16 {
-        return Err(JsValue::from_str("Affine matrix must have 16 elements"));
+        return Err(js_err("Affine matrix must have 16 elements"));
     }
 
     let mut affine_arr = [0.0f64; 16];
     affine_arr.copy_from_slice(affine);
 
     let bytes = qsm_core::io::save_nifti_gz(data, (nx, ny, nz), (vsx, vsy, vsz), &affine_arr)
-        .map_err(|e| JsValue::from_str(&e))?;
+        .map_err(js_err)?;
 
     console_log!("WASM save_nifti_gz: {}x{}x{}, {} bytes (compressed)", nx, ny, nz, bytes.len());
 
@@ -1565,7 +1568,7 @@ pub fn hd_bet_wasm(
 ) -> Result<Vec<u8>, JsValue> {
     let n = nx * ny * nz;
     if magnitude.len() != n {
-        return Err(JsValue::from_str(&format!(
+        return Err(js_err(format!(
             "HD-BET: magnitude has {} voxels, expected {n} for {nx}x{ny}x{nz}",
             magnitude.len()
         )));
@@ -1584,7 +1587,7 @@ pub fn hd_bet_wasm(
         mirror_tta: tta,
     };
     qsm_core::bet::hd_bet(magnitude, &grid, weights, &params, js_progress(progress_callback))
-    .map_err(|e| JsValue::from_str(&format!("HD-BET: {e}")))
+    .map_err(|e| js_err(format!("HD-BET: {e}")))
 }
 
 /// RS2-Net deep-learning rodent brain extraction: magnitude → brain mask.
@@ -1663,7 +1666,7 @@ pub fn apply_mask_ops_wasm(
         .filter(|o| !o.is_empty())
         .map(qsmxt_config::parse_mask_op)
         .collect::<Result<_, _>>()
-        .map_err(|e| JsValue::from_str(&format!("{e}")))?;
+        .map_err(js_err)?;
     if parsed.is_empty() {
         return Ok(mask);
     }
@@ -1678,7 +1681,7 @@ pub fn apply_mask_ops_wasm(
     let meta = qsmxt_config::to_scan_metadata((nx, ny, nz), (vsx, vsy, vsz), &[], 0.0, (0.0, 0.0, 1.0));
     let magnitude = (!magnitude.is_empty()).then_some(magnitude);
     qsm_core::pipeline::apply_mask_ops(mask, &core[0].all_ops(), input_data, magnitude, &meta)
-        .map_err(|e| JsValue::from_str(&format!("{e}")))
+        .map_err(js_err)
 }
 
 /// BET brain extraction (aligned with FSL-BET2)
@@ -1737,7 +1740,7 @@ pub fn bet_wasm_with_progress(
 
 /// Create a simple spherical mask for testing (bypasses BET algorithm)
 #[wasm_bindgen]
-pub fn create_sphere_mask(
+pub fn create_sphere_mask_wasm(
     nx: usize, ny: usize, nz: usize,
     center_x: f64, center_y: f64, center_z: f64,
     radius: f64,
@@ -2044,8 +2047,8 @@ pub fn bipolar_correction_wasm(
     mags_flat: &[f64],
     tes: &[f64],
     mask: &[u8],
-    sigma_x: f64, sigma_y: f64, sigma_z: f64,
     nx: usize, ny: usize, nz: usize,
+    sigma_x: f64, sigma_y: f64, sigma_z: f64,
 ) -> Result<Vec<f64>, JsValue> {
     let n_echoes = tes.len();
     let n_total = n_elements(&[nx, ny, nz])?;
@@ -2175,24 +2178,9 @@ pub fn frangi_filter_3d_wasm(
     scale_min: f64, scale_max: f64, scale_ratio: f64,
     alpha: f64, beta: f64, c: f64,
     black_white: bool,
-) -> Vec<f64> {
-    console_log!("WASM Frangi: {}x{}x{}, scales=[{:.1},{:.1}], c={}",
-                 nx, ny, nz, scale_min, scale_max, c);
-
-    let params = qsm_core::utils::frangi::FrangiParams {
-        scale_range: [scale_min, scale_max],
-        scale_ratio,
-        alpha,
-        beta,
-        c,
-        black_white,
-    };
-
-    let grid = qsm_core::Grid::new(nx, ny, nz, 1.0, 1.0, 1.0);
-    let result = qsm_core::utils::frangi::frangi_filter_3d(data, &grid, &params, |_, _| {});
-
-    console_log!("WASM Frangi complete");
-    result.vesselness
+) -> Result<Vec<f64>, JsValue> {
+    let params = frangi_params(scale_min, scale_max, scale_ratio, alpha, beta, c, black_white);
+    frangi_vesselness(data, nx, ny, nz, &params, |_, _| {})
 }
 
 /// Frangi filter with progress callback
@@ -2205,25 +2193,40 @@ pub fn frangi_filter_3d_wasm_with_progress(
     black_white: bool,
     progress_callback: &js_sys::Function,
 ) -> Result<Vec<f64>, JsValue> {
-    let n = n_elements(&[nx, ny, nz])?;
-    check_len("data", data, n)?;
+    let params = frangi_params(scale_min, scale_max, scale_ratio, alpha, beta, c, black_white);
+    frangi_vesselness(data, nx, ny, nz, &params, js_progress(progress_callback))
+}
 
-    console_log!("WASM Frangi with progress: {}x{}x{}", nx, ny, nz);
-
-    let params = qsm_core::utils::frangi::FrangiParams {
+fn frangi_params(
+    scale_min: f64, scale_max: f64, scale_ratio: f64,
+    alpha: f64, beta: f64, c: f64,
+    black_white: bool,
+) -> qsm_core::utils::frangi::FrangiParams {
+    qsm_core::utils::frangi::FrangiParams {
         scale_range: [scale_min, scale_max],
         scale_ratio,
         alpha,
         beta,
         c,
         black_white,
-    };
+    }
+}
+
+/// The two Frangi exports, which differ only in whether progress reaches JS.
+fn frangi_vesselness(
+    data: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    params: &qsm_core::utils::frangi::FrangiParams,
+    progress: impl Fn(usize, usize),
+) -> Result<Vec<f64>, JsValue> {
+    let n = n_elements(&[nx, ny, nz])?;
+    check_len("data", data, n)?;
+
+    console_log!("WASM Frangi: {}x{}x{}, scales=[{:.1},{:.1}], c={}",
+                 nx, ny, nz, params.scale_range[0], params.scale_range[1], params.c);
 
     let grid = qsm_core::Grid::new(nx, ny, nz, 1.0, 1.0, 1.0);
-    let result = qsm_core::utils::frangi::frangi_filter_3d(
-        data, &grid, &params,
-        js_progress(progress_callback)
-    );
+    let result = qsm_core::utils::frangi::frangi_filter_3d(data, &grid, params, progress);
 
     console_log!("WASM Frangi complete");
     Ok(result.vesselness)
@@ -2791,7 +2794,7 @@ mod tests {
 
     #[test]
     fn test_version() {
-        let version = get_version();
+        let version = get_version_wasm();
         assert!(!version.is_empty());
     }
 
@@ -3093,8 +3096,9 @@ pub fn validate_config_wasm(toml_string: &str) -> String {
 
 /// Run field mapping: multi-echo phase → B0 field map (ppm).
 ///
-/// Takes a TOML config string and returns [b0_field_ppm, phase_offset (if any)].
-/// Echo times are in seconds.
+/// Takes a TOML config string and returns `{ b0FieldPpm: Float64Array, phaseOffset:
+/// Float64Array | null }`; `phaseOffset` is null when the method estimates none. Echo times are
+/// in seconds.
 #[wasm_bindgen]
 pub fn run_field_mapping_wasm(
     phases_flat: &[f64],
@@ -3105,7 +3109,7 @@ pub fn run_field_mapping_wasm(
     vsx: f64, vsy: f64, vsz: f64,
     field_strength: f64,
     config_toml: &str,
-) -> Result<Vec<f64>, JsValue> {
+) -> Result<js_sys::Object, JsValue> {
     let n_echoes = echo_times.len();
     let n_total = n_elements(&[nx, ny, nz])?;
     let n_all = n_elements(&[n_echoes, n_total])?;
@@ -3132,10 +3136,13 @@ pub fn run_field_mapping_wasm(
     );
 
     let r = result.map_err(|e| js_err(format!("field mapping failed: {e}")))?;
-    let mut out = r.b0_field_ppm;
-    if let Some(offset) = r.phase_offset {
-        out.extend(offset);
-    }
+    let out = js_sys::Object::new();
+    js_sys::Reflect::set(&out, &"b0FieldPpm".into(), &js_sys::Float64Array::from(r.b0_field_ppm.as_slice()))?;
+    let phase_offset = match r.phase_offset {
+        Some(offset) => js_sys::Float64Array::from(offset.as_slice()).into(),
+        None => JsValue::NULL,
+    };
+    js_sys::Reflect::set(&out, &"phaseOffset".into(), &phase_offset)?;
     Ok(out)
 }
 
@@ -3352,7 +3359,7 @@ pub fn get_model_registry_wasm() -> String {
             "inputs": m.inputs, "outputs": m.outputs, "files": files,
         })
     }).collect();
-    serde_json::to_string(&serde_json::Value::Array(arr)).unwrap_or_else(|_| "[]".into())
+    serde_json::Value::Array(arr).to_string()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
