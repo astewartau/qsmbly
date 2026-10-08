@@ -437,6 +437,10 @@ export const PIPELINE_METHODS = {
   qsmart_inversion: ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr']
 };
 
+// Deep-learning inversions that take the TOTAL field (they do their own background removal),
+// so they cannot run from a local field map.
+export const DL_TOTAL_FIELD_MODELS = ['autoqsm', 'nextqsm'];
+
 // Default pipeline settings (assembled from individual defaults)
 export const PIPELINE_DEFAULTS = {
   combined_method: 'none',

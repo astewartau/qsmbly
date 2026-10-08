@@ -16,6 +16,7 @@ import { FileIOController, PipelineExecutor, PipelineSettingsController, MaskCon
 import { DicomController } from './controllers/DicomController.js';
 import * as QSMConfig from './app/config.js';
 import { buildConfigJson, maskSectionString } from './modules/ConfigBridge.js';
+import { echoTimeDependentStep } from './worker/utils/ScanParams.js';
 
 // Make config available globally for backward compatibility
 window.QSMConfig = QSMConfig;
@@ -1753,22 +1754,18 @@ class QSMApp {
   updateInputParamsVisibility() {
     const mode = this.fileIOController.getInputMode();
     const isRaw = mode === 'raw';
-    const units = this.fileIOController.getFieldMapUnits();
-    const combined_method = this.pipelineSettings?.combined_method || 'none';
-    // Field strength needed for: raw mode, Hz/rad_s units, or TGV/QSMART (internal scaling)
-    const needsFieldStrength = isRaw || units !== 'ppm' || combined_method !== 'none';
 
-    // Show/hide raw-mode-only parameters
+    // Echo times: always for raw data; for a field map only when the result depends on its TE
     const echoTimesGroup = document.getElementById('echoTimesGroup');
-    if (echoTimesGroup) echoTimesGroup.style.display = isRaw ? '' : 'none';
+    if (echoTimesGroup) {
+      echoTimesGroup.style.display = isRaw || echoTimeDependentStep(this.pipelineSettings) ? '' : 'none';
+    }
 
     // Show/hide field map units (only for field map modes)
     const unitsGroup = document.getElementById('fieldMapUnitsGroup');
     if (unitsGroup) unitsGroup.style.display = isRaw ? 'none' : '';
 
-    // Show/hide field strength
-    const fieldGroup = document.getElementById('fieldStrengthGroup');
-    if (fieldGroup) fieldGroup.style.display = needsFieldStrength ? '' : 'none';
+    // Field strength is needed in every mode (it is never defaulted), so it stays visible.
   }
 
   updateMagnitudePrepSection() {
@@ -2605,6 +2602,26 @@ class QSMApp {
     }
   }
 
+  /**
+   * Field strength and echo times for a field-map run, or null (after telling the user) if
+   * one the run needs is missing. B0 is always required; the echo time only when TGV or
+   * MEDI regularizes the field at it (see echoTimeDependentStep).
+   */
+  _fieldMapScanParams() {
+    const magField = parseFloat(document.getElementById('magField').value);
+    if (!magField || magField <= 0) {
+      this.updateOutput("Please enter a valid magnetic field strength");
+      return null;
+    }
+    const echoTimes = this.getEchoTimesFromInputs();
+    const step = echoTimeDependentStep(this.pipelineSettings);
+    if (step && echoTimes.length === 0) {
+      this.updateOutput(`${step} needs the echo time the field map was acquired at; enter it under Echo Times`);
+      return null;
+    }
+    return { magField, echoTimes };
+  }
+
   async _runTotalFieldPipeline() {
     const totalFieldFile = this.fileIOController.getTotalFieldFile();
     if (!totalFieldFile) {
@@ -2614,14 +2631,9 @@ class QSMApp {
 
     const units = this.fileIOController.getFieldMapUnits();
     const combined_method = this.pipelineSettings?.combined_method || 'none';
-    // Field strength needed for Hz/rad_s conversion, and for TGV/QSMART internal scaling
-    const needsFieldStrength = units !== 'ppm' || combined_method !== 'none';
-    const magField = needsFieldStrength ? parseFloat(document.getElementById('magField').value) : null;
-
-    if (needsFieldStrength && (!magField || magField <= 0)) {
-      this.updateOutput("Please enter a valid magnetic field strength");
-      return;
-    }
+    const fieldParams = this._fieldMapScanParams();
+    if (!fieldParams) return;
+    const { magField, echoTimes } = fieldParams;
 
     // QSMART and MEDI require magnitude
     const dipoleMethod = this.pipelineSettings?.dipole_inversion || 'rts';
@@ -2671,6 +2683,7 @@ class QSMApp {
         maskBuffer,
         customMaskBuffer,
         magField,
+        echoTimes,
         maskThreshold: this.maskController.maskThreshold,
         preparedMagnitude: this.maskController.preparedMagnitudeData,
         pipelineSettings: this.pipelineSettings
@@ -2698,13 +2711,9 @@ class QSMApp {
 
     const units = this.fileIOController.getFieldMapUnits();
     const combined_method = this.pipelineSettings?.combined_method || 'none';
-    const needsFieldStrength = units !== 'ppm' || combined_method !== 'none';
-    const magField = needsFieldStrength ? parseFloat(document.getElementById('magField').value) : null;
-
-    if (needsFieldStrength && (!magField || magField <= 0)) {
-      this.updateOutput("Please enter a valid magnetic field strength");
-      return;
-    }
+    const fieldParams = this._fieldMapScanParams();
+    if (!fieldParams) return;
+    const { magField, echoTimes } = fieldParams;
 
     // QSMART and MEDI require magnitude
     const dipoleMethod = this.pipelineSettings?.dipole_inversion || 'rts';
@@ -2758,6 +2767,7 @@ class QSMApp {
         maskBuffer,
         customMaskBuffer,
         magField,
+        echoTimes,
         maskThreshold: this.maskController.maskThreshold,
         preparedMagnitude: this.maskController.preparedMagnitudeData,
         pipelineSettings: this.pipelineSettings

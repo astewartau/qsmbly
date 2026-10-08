@@ -15,6 +15,7 @@ import {
   TV_DEFAULTS, RTS_DEFAULTS, NLTV_DEFAULTS, MEDI_DEFAULTS, TFI_DEFAULTS,
   NDI_DEFAULTS, FANSI_DEFAULTS, L1QSM_DEFAULTS, WHQSM_DEFAULTS, HDQSM_DEFAULTS,
   DL_TILING_DEFAULTS,
+  DL_TOTAL_FIELD_MODELS,
 } from '../app/config.js';
 import { clampTileConfig, MAX_WASM_PATCH_EDGE } from '../worker/utils/DlTiling.js';
 import { openDialog, closeDialog } from '../modules/ui/dialogFocus.js';
@@ -692,12 +693,13 @@ export class PipelineSettingsController {
         'Requires magnitude', 'error');
     }
 
-    // MEDI option in dipole inversion dropdown
+    // MEDI needs magnitude; the total-field deep-learning nets can't start from a local field
     const dipoleSelect = document.getElementById('dipole_method');
     if (dipoleSelect) {
+      const needsTotalField = isLocalFieldMode && DL_TOTAL_FIELD_MODELS.includes(dipoleSelect.value);
       this._showWarning('dipole_method', 'dipoleMethodWarning',
-        noMag && dipoleSelect.value === 'medi',
-        'Requires magnitude', 'error');
+        needsTotalField || (noMag && dipoleSelect.value === 'medi'),
+        needsTotalField ? 'Requires a total field (not a local field map)' : 'Requires magnitude', 'error');
     }
 
     // ROMEO magnitude weight checkboxes

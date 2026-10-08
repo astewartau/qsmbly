@@ -2,7 +2,7 @@
  * Tests for the mask-section string handed to qsmxt (`--mask <section>`).
  */
 
-import { maskSectionString, buildConfigJson } from './ConfigBridge.js';
+import { maskSectionString, buildConfigJson, buildQsmartInnerConfigJson } from './ConfigBridge.js';
 import { DL_TILING_DEFAULTS, PIPELINE_DEFAULTS, TGV_ALPHA_PRESETS } from '../app/config.js';
 
 describe('maskSectionString', () => {
@@ -230,3 +230,41 @@ describe('TGV export', () => {
   });
 });
 
+describe('QSMART inner inversion config', () => {
+  const settings = {
+    combined_method: 'qsmart',
+    tkd: { threshold: 0.2 },
+    qsmart: {
+      inversion_algorithm: 'tkd', ilsqr_tol: 0.02, ilsqr_max_iter: 40,
+      tkd: { threshold: 0.12 },
+    },
+  };
+
+  test('exports the QSMART panel\'s values for its inner algorithm', () => {
+    const config = JSON.parse(buildConfigJson(settings));
+    expect(config.inversion.algorithm).toBe('qsmart');
+    expect(config.inversion.qsmart.inversion).toBe('tkd');
+    expect(config.inversion.tkd).toEqual({ threshold: 0.12 });
+  });
+
+  test('runs the inner algorithm with iLSQR pinned to QSMART\'s own limits', () => {
+    const config = JSON.parse(buildQsmartInnerConfigJson(settings));
+    expect(config.inversion.algorithm).toBe('tkd');
+    expect(config.inversion.tkd).toEqual({ threshold: 0.12 });
+    expect(config.inversion.ilsqr).toEqual({ tol: 0.02, max_iter: 40 });
+  });
+
+  test('defaults to iLSQR', () => {
+    const config = JSON.parse(buildQsmartInnerConfigJson({ combined_method: 'qsmart', qsmart: {} }));
+    expect(config.inversion.algorithm).toBe('ilsqr');
+  });
+});
+
+describe('NLTV export', () => {
+  test('maps the UI\'s newton_max_iter to qsmxt-config\'s newton_iter', () => {
+    const nltv = { lambda: 0.001, mu: 1, max_iter: 250, tol: 0.001, newton_max_iter: 7 };
+    const config = JSON.parse(buildConfigJson({ dipole_inversion: 'nltv', nltv }));
+    expect(config.inversion.nltv.newton_iter).toBe(7);
+    expect(config.inversion.nltv).not.toHaveProperty('newton_max_iter');
+  });
+});
