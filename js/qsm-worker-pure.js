@@ -9,6 +9,7 @@
 import { scalePhase, computeWeightedEchoFit, ppmFieldToPhase } from './worker/utils/PhaseUtils.js';
 import { createThresholdMask } from './worker/utils/MaskUtils.js';
 import { resolveTgvParams } from './worker/utils/TgvParams.js';
+import { clampTileConfig, MAX_WASM_PATCH_EDGE } from './worker/utils/DlTiling.js';
 import { buildConfigJson } from './modules/ConfigBridge.js';
 import { scaleVoxelSize } from './modules/mask/RodentMask.js';
 import * as QSMConfig from './app/config.js';
@@ -94,8 +95,13 @@ async function runDlFieldInversion(model, field, mask, nx, ny, nz, vsx, vsy, vsz
   const tiled = t.enabled !== undefined ? t.enabled !== false : DL_TILEABLE.has(model.id);
   // Browser-safe default 64³ patch (core 56 + halo 4): the size the natively-patch-based nets use,
   // proven not to OOM the 32-bit wasm heap; large core + thin halo minimizes overlap recompute.
-  const tileCore = Number(t.tile_size) || 56;
-  const tileHalo = Number.isFinite(Number(t.tile_halo)) ? Number(t.tile_halo) : 4;
+  const requestedCore = Number(t.tile_size) || 56;
+  const requestedHalo = Number.isFinite(Number(t.tile_halo)) ? Number(t.tile_halo) : 4;
+  // One patch has to fit the wasm heap on its own; past that the run stalls rather than failing.
+  const { core: tileCore, halo: tileHalo, clamped } = clampTileConfig(requestedCore, requestedHalo);
+  if (tiled && clamped) {
+    postLog(`  tile core ${requestedCore} + halo ${requestedHalo} is too big for the browser's memory; using core ${tileCore} + halo ${tileHalo} (${MAX_WASM_PATCH_EDGE}³ patches are the largest that fit)`);
+  }
   if (tiled) postLog(`  tiled inference (${tileCore + 2 * tileHalo}³ patches, bounded memory; approximate vs whole-volume)`);
   const cb = onProgress || (() => {});
   return new Float64Array(dl.run_dl_field_inversion_wasm(
