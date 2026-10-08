@@ -15,7 +15,6 @@ export class PipelineExecutor {
     this.onStageData = options.onStageData || (() => {});
     this.onPipelineComplete = options.onPipelineComplete || (() => {});
     this.onPipelineError = options.onPipelineError || (() => {});
-    this.onInitialized = options.onInitialized || (() => {});
     this.config = options.config;
     // How long `initialize()` waits for the worker's 'initialized' reply before giving up.
     this.initTimeoutMs = options.initTimeoutMs ?? PipelineExecutor.INIT_TIMEOUT_MS;
@@ -36,7 +35,6 @@ export class PipelineExecutor {
     this.cancelHandlers = new Set();
     this.results = {};
     this.stageOrder = [];
-    this.pendingStageResolve = null;
   }
 
   // ==================== State Accessors ====================
@@ -60,14 +58,6 @@ export class PipelineExecutor {
   onCancel(fn) {
     this.cancelHandlers.add(fn);
     return () => this.cancelHandlers.delete(fn);
-  }
-
-  hasResult(stage) {
-    return !!this.results[stage]?.file;
-  }
-
-  getResult(stage) {
-    return this.results[stage] || null;
   }
 
   getResults() {
@@ -109,7 +99,6 @@ export class PipelineExecutor {
         case 'initialized':
           this.workerReady = true;
           this._settleInit(null);
-          this.onInitialized();
           // Fetch default pipeline config from qsmxt-config WASM
           this.worker.postMessage({ type: 'getDefaultConfig' });
           break;
@@ -191,11 +180,7 @@ export class PipelineExecutor {
   }
 
   _handleStageData(data) {
-    // Handle both live stage updates and explicit requests
-    if (this.pendingStageResolve) {
-      this.pendingStageResolve(data);
-      this.pendingStageResolve = null;
-    } else if (this.pipelineRunning) {
+    if (this.pipelineRunning) {
       // Track stage order
       if (!this.stageOrder.includes(data.stage)) {
         this.stageOrder.push(data.stage);
@@ -252,25 +237,39 @@ export class PipelineExecutor {
 
   // ==================== Pipeline Execution ====================
 
-  async run(pipelineConfig) {
+  /**
+   * @param {Object} pipelineConfig
+   * @param {Transferable[]} [transfer] - buffers in pipelineConfig to move to the worker rather
+   *   than copy; they are detached here, so pass only ones the caller no longer needs
+   */
+  async run(pipelineConfig, transfer = []) {
+    const inputMode = pipelineConfig.inputMode || 'raw';
+    const modeLabels = {
+      raw: 'QSM Pipeline',
+      totalField: 'Total Field Map Pipeline',
+      localField: 'Local Field Map Pipeline'
+    };
+    return this._start('run', pipelineConfig, `Starting ${modeLabels[inputMode] || 'Pipeline'}...`, transfer);
+  }
+
+  async runSWI(data, transfer = []) {
+    return this._start('runSWI', data, 'Starting SWI pipeline...', transfer);
+  }
+
+  async runT2starR2star(data, transfer = []) {
+    return this._start('runT2starR2star', data, 'Starting T2*/R2* mapping...', transfer);
+  }
+
+  /**
+   * Post a job to the worker and mark the executor running; the worker answers with stageData
+   * messages and a final 'complete' or 'error'. Resolves false if the worker could not start.
+   */
+  async _start(type, data, message, transfer) {
     try {
       await this.initialize();
-
-      const inputMode = pipelineConfig.inputMode || 'raw';
-      const modeLabels = {
-        raw: 'QSM Pipeline',
-        totalField: 'Total Field Map Pipeline',
-        localField: 'Local Field Map Pipeline'
-      };
-      this.updateOutput(`Starting ${modeLabels[inputMode] || 'Pipeline'}...`);
+      this.updateOutput(message);
       this.pipelineRunning = true;
-
-      // Pass through all pipeline config to the worker
-      this.worker.postMessage({
-        type: 'run',
-        data: pipelineConfig
-      });
-
+      this.worker.postMessage({ type, data }, transfer);
       return true;
     } catch (error) {
       this._handleError(error.message);
@@ -312,23 +311,6 @@ export class PipelineExecutor {
   clearResults() {
     this.results = {};
     this.stageOrder = [];
-  }
-
-  async downloadStage(stage) {
-    if (!this.results[stage]?.file) {
-      this.updateOutput(`${stage} not available - run the pipeline first`);
-      return;
-    }
-
-    const file = this.results[stage].file;
-    const url = URL.createObjectURL(file);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   }
 
   // ==================== Worker Access (for mask controller) ====================

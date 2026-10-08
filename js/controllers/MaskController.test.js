@@ -321,6 +321,37 @@ describe('MaskController error paths', () => {
       await expect(controller.applyMaskOps('erode:1')).rejects.toThrow('WASM init failed');
     });
   });
+
+  describe('applyBiasCorrection', () => {
+    it('moves the magnitude to the worker and resolves with the typed-array result', async () => {
+      const listeners = new Set();
+      let received;
+      const worker = {
+        addEventListener: (_, fn) => listeners.add(fn),
+        removeEventListener: (_, fn) => listeners.delete(fn),
+        // Clone like a real postMessage, honouring the transfer list in both directions.
+        postMessage: (msg, transfer) => {
+          received = structuredClone(msg, { transfer });
+          const result = received.data.magnitude.map((v) => v * 2);
+          const reply = structuredClone({ type: 'biasCorrection', result }, { transfer: [result.buffer] });
+          queueMicrotask(() => listeners.forEach((fn) => fn({ data: reply })));
+        },
+      };
+      controller.initializeWorker = async () => {};
+      controller.getWorker = () => worker;
+      controller.magnitudeFileBytes = new ArrayBuffer(352);
+      const magnitude = new Float64Array([1, 2, 3]);
+
+      const corrected = await controller.applyBiasCorrection(magnitude);
+
+      expect(magnitude.byteLength).toBe(0);
+      // (constructor names: structuredClone builds its copies outside jest's realm)
+      expect(received.data.magnitude.constructor.name).toBe('Float64Array');
+      expect(corrected.constructor.name).toBe('Float64Array');
+      expect(Array.from(corrected)).toEqual([2, 4, 6]);
+      expect(listeners.size).toBe(0);
+    });
+  });
 });
 
 describe('MaskController NIfTI reading of .nii and .nii.gz', () => {

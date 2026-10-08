@@ -142,7 +142,7 @@ function sendStageData(stage, data, dims, voxelSize, affine, description, displa
     voxelSize[0], voxelSize[1], voxelSize[2],
     affine
   );
-  self.postMessage({ type: 'stageData', stage, data: niftiBytes, description, displayNow, displayRange });
+  self.postMessage({ type: 'stageData', stage, data: niftiBytes, description, displayNow, displayRange }, [niftiBytes.buffer]);
 }
 
 /// Apply QSM mean referencing: subtract mean of masked voxels, zero outside mask.
@@ -1205,7 +1205,7 @@ function postBETLog(message) {
 }
 
 function postBETComplete(maskData, coverage) {
-  self.postMessage({ type: 'betComplete', maskData, coverage });
+  self.postMessage({ type: 'betComplete', maskData, coverage }, [maskData.buffer]);
 }
 
 function postBETError(message) {
@@ -1489,8 +1489,8 @@ async function runBiasCorrection(data) {
     // Send result back
     self.postMessage({
       type: 'biasCorrection',
-      result: Array.from(result)
-    });
+      result
+    }, [result.buffer]);
 
   } catch (error) {
     console.error('[Worker] Bias correction error:', error);
@@ -1533,8 +1533,8 @@ async function runVoxelQuality(data) {
 
     self.postMessage({
       type: 'voxelQuality',
-      result: Array.from(result)
-    });
+      result
+    }, [result.buffer]);
 
   } catch (error) {
     console.error('[Worker] Voxel quality error:', error);
