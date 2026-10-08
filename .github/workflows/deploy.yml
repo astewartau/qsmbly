@@ -30,11 +30,29 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       VERSION: ${{ steps.version.outputs.VERSION }}
+      REF: ${{ steps.ref.outputs.REF }}
     steps:
+      # A release builds the commit its tag points at, not whatever main holds by the time this
+      # runs; otherwise a push to main between tagging and deploying ships under the release's
+      # version. A manual run has no tag, and builds main as before.
+      - name: Choose the ref to build
+        id: ref
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ "$EVENT_NAME" = "release" ]; then
+            REF="refs/tags/$RELEASE_TAG"
+          else
+            REF="main"
+          fi
+          echo "REF=$REF" >> $GITHUB_OUTPUT
+          echo "Building ref: $REF"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ steps.ref.outputs.REF }}
 
       - name: Extract version from release tag
         id: version
@@ -70,7 +88,7 @@ jobs:
       contents: write
     uses: ./.github/workflows/build-pages.yml
     with:
-      ref: main
+      ref: ${{ needs.version.outputs.REF }}
       version: ${{ needs.version.outputs.VERSION }}
       # The root of the site; staging/ belongs to the other workflow and must survive this deploy.
       subtree: ''
