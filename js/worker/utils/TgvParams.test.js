@@ -1,7 +1,7 @@
 /**
  * TgvParams Tests
  */
-import { resolveTgvParams } from './TgvParams.js';
+import { resolveTgvParams, resolveTgvAlphas } from './TgvParams.js';
 
 describe('resolveTgvParams', () => {
   const defaultAlpha = (level) => [level * 0.001, level * 0.002];
@@ -35,5 +35,19 @@ describe('resolveTgvParams', () => {
   test('defaults to regularization level 2', () => {
     const p = resolveTgvParams({}, defaultAlpha, defaultIterations);
     expect(p.alpha0).toBeCloseTo(0.002);
+  });
+});
+
+describe('resolveTgvAlphas', () => {
+  const defaultAlpha = (level) => [level * 0.001, level * 0.002];
+
+  test('treats null alphas (the PIPELINE_DEFAULTS shape) as unset', () => {
+    expect(resolveTgvAlphas({ regularization: 1, alpha0: null, alpha1: null }, defaultAlpha))
+      .toEqual({ alpha0: 0.001, alpha1: 0.002 });
+  });
+
+  test('needs both alphas to override the level', () => {
+    expect(resolveTgvAlphas({ regularization: 2, alpha0: 0.5 }, defaultAlpha))
+      .toEqual({ alpha0: 0.002, alpha1: 0.004 });
   });
 });

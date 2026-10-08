@@ -503,12 +503,14 @@ async function runTgvCore({
   const [vsx, vsy, vsz] = voxelSize;
   const voxelCount = nx * ny * nz;
 
-  // The user's values win; qsm-core's preset alphas and voxel-size-adaptive iteration count
-  // apply only where they are unset. step_size matches the 3.0 tgv_qsm_wasm_with_progress uses.
+  // The user's values win; the regularization level's preset alphas and qsm-core's
+  // voxel-size-adaptive iteration count apply only where they are unset. The presets are the
+  // generated table ConfigBridge also exports from, so the run and the exported config agree.
+  // step_size matches the 3.0 tgv_qsm_wasm_with_progress uses.
   const step_size = 3.0;
   const { alpha0, alpha1, iterations } = resolveTgvParams(
     tgvSettings,
-    (level) => wasmModule.tgv_get_default_alpha_wasm(level),
+    QSMConfig.tgvAlphaPreset,
     () => wasmModule.tgv_get_default_iterations_wasm(vsx, vsy, vsz, step_size),
   );
 
@@ -563,7 +565,7 @@ async function runTgvPipeline(data) {
   const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
   const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
 
-  const tgvSettings = pipelineSettings?.tgv || { regularization: 2, iterations: 1000, erosions: 3 };
+  const tgvSettings = pipelineSettings?.tgv || QSMConfig.PIPELINE_DEFAULTS.tgv;
 
   // =========================================================================
   // Step 1: Load NIfTI data (0% - 10%)
@@ -1930,7 +1932,7 @@ async function runTgvFieldMapPipeline(data) {
   const hasMagnitude = magnitudeBuffer !== null && magnitudeBuffer !== undefined;
   const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
 
-  const tgvSettings = pipelineSettings?.tgv || { regularization: 2, iterations: 1000, erosions: 3 };
+  const tgvSettings = pipelineSettings?.tgv || QSMConfig.PIPELINE_DEFAULTS.tgv;
 
   // Load field map
   postProgress(0.05, 'Loading field map...');

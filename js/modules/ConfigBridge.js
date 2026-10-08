@@ -5,7 +5,8 @@
  * generate_command_wasm / generate_methods_wasm) — qsmbly no longer hand-rolls TOML.
  */
 
-import { DL_TILING_DEFAULTS } from '../app/config.js';
+import { DL_TILING_DEFAULTS, tgvAlphaPreset } from '../app/config.js';
+import { resolveTgvAlphas } from '../worker/utils/TgvParams.js';
 
 /**
  * A [f64; 3] the config can carry, or null if any element is missing/non-finite.
@@ -120,7 +121,9 @@ export function buildConfig(settings, options = {}) {
   if (settings.ilsqr) config.inversion.ilsqr = settings.ilsqr;
   if (settings.tgv) config.inversion.tgv = {
     iterations: settings.tgv.iterations, erosions: settings.tgv.erosions,
-    alpha0: settings.tgv.alpha0, alpha1: settings.tgv.alpha1,
+    // The UI picks alphas by regularization level, which TgvConfig has no field for, so
+    // export the pair the run resolves to; left unset, qsmxt-config would fill in its own.
+    ...resolveTgvAlphas(settings.tgv, tgvAlphaPreset),
     step_size: settings.tgv.step_size, tol: settings.tgv.tol,
   };
   if (settings.qsmart) config.inversion.qsmart = {

@@ -3,7 +3,7 @@
  */
 
 import { maskSectionString, buildConfigJson } from './ConfigBridge.js';
-import { DL_TILING_DEFAULTS } from '../app/config.js';
+import { DL_TILING_DEFAULTS, PIPELINE_DEFAULTS, TGV_ALPHA_PRESETS } from '../app/config.js';
 
 describe('maskSectionString', () => {
   test('returns empty for no ops', () => {
@@ -208,3 +208,25 @@ describe('buildConfigJson deep-learning tiling', () => {
       .toBeUndefined();
   });
 });
+
+describe('TGV export', () => {
+  const tgvOf = (tgv) => JSON.parse(buildConfigJson({ combined_method: 'tgv', tgv })).inversion.tgv;
+
+  test('exports the alphas the regularization level stands for', () => {
+    // What PipelineSettingsController.save() sends: a level, no alphas.
+    const tgv = tgvOf({ regularization: 3, iterations: 800, erosions: 3 });
+    expect([tgv.alpha0, tgv.alpha1]).toEqual(TGV_ALPHA_PRESETS[3]);
+    expect(tgv.iterations).toBe(800);
+  });
+
+  test('the default settings export the level-2 alphas, not a separate fixed pair', () => {
+    const tgv = tgvOf(PIPELINE_DEFAULTS.tgv);
+    expect([tgv.alpha0, tgv.alpha1]).toEqual(TGV_ALPHA_PRESETS[2]);
+  });
+
+  test('explicit alphas win over the level', () => {
+    const tgv = tgvOf({ regularization: 1, alpha0: 0.0015, alpha1: 0.0005 });
+    expect([tgv.alpha0, tgv.alpha1]).toEqual([0.0015, 0.0005]);
+  });
+});
+

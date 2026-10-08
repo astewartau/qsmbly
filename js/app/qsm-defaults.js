@@ -269,3 +269,22 @@ export const DL_TILING_DEFAULTS = {
     "modl-qsm"
   ]
 };
+
+export const TGV_ALPHA_PRESETS = {
+  "1": [
+    0.0005,
+    0.0005
+  ],
+  "2": [
+    0.001,
+    0.001
+  ],
+  "3": [
+    0.002,
+    0.003
+  ],
+  "4": [
+    0.003,
+    0.005
+  ]
+};
