@@ -2876,6 +2876,24 @@ mod tests {
     }
 
     #[test]
+    fn dl_tiling_table_names_registered_field_inversions() {
+        for (id, _) in DL_TILING {
+            assert!(
+                qsm_core::models::find_model(id).is_some(),
+                "DL_TILING lists '{id}', which the model registry lacks"
+            );
+        }
+        let json: serde_json::Value = serde_json::from_str(&get_dl_tiling_defaults()).unwrap();
+        let ids = |key: &str| -> std::collections::BTreeSet<String> {
+            serde_json::from_value(json[key].clone()).unwrap()
+        };
+        assert_eq!((json["tile_core"].as_u64(), json["tile_halo"].as_u64()), (Some(56), Some(4)));
+        assert_eq!(ids("tileable").len(), 7);
+        assert_eq!(ids("off_design"), ["lpcnn", "modl-qsm", "nextqsm"].map(String::from).into());
+        assert_eq!(ids("native"), ["autoqsm", "qsmgan"].map(String::from).into());
+    }
+
+    #[test]
     fn checked_count_rejects_overflow() {
         assert_eq!(checked_count(&[4, 5, 6]), Ok(120));
         assert!(checked_count(&[usize::MAX, 2]).is_err());
@@ -3362,6 +3380,65 @@ pub fn get_model_registry_wasm() -> String {
     serde_json::Value::Array(arr).to_string()
 }
 
+/// How browser overlap-tiling applies to a field-input DL inversion.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DlTiling {
+    /// Fully convolutional whole-volume net with a tiled variant: approximate but sound.
+    Tileable,
+    /// Has a tiled variant, but the net takes global (k-space) steps, so tiling is off-design.
+    OffDesign,
+    /// Already patch-based: it never exhausts memory and ignores the tiling options.
+    Native,
+}
+
+/// The field-input DL inversions and how tiling applies to each, keyed by model registry id.
+/// `run_dl_field_inversion_wasm` runs the `Tileable` and `OffDesign` ids tiled, and JS reads the
+/// same table through [`get_dl_tiling_defaults`].
+const DL_TILING: &[(&str, DlTiling)] = &[
+    ("xqsm", DlTiling::Tileable),
+    ("qsmnet", DlTiling::Tileable),
+    ("qsmnet-plus", DlTiling::Tileable),
+    ("ir2qsm", DlTiling::Tileable),
+    ("lpcnn", DlTiling::OffDesign),
+    ("modl-qsm", DlTiling::OffDesign),
+    ("nextqsm", DlTiling::OffDesign),
+    ("qsmgan", DlTiling::Native),
+    ("autoqsm", DlTiling::Native),
+];
+
+/// Browser default tile: a 64³ patch (core 56 + halo 4 each side), the size the natively
+/// patch-based nets use and one that fits the 32-bit heap; a thin halo keeps overlap recompute
+/// low. Much smaller than qsm-core's native `TileConfig` default.
+const DL_TILE_CORE: usize = 56;
+const DL_TILE_HALO: usize = 4;
+
+fn dl_tiling(model_id: &str) -> Option<DlTiling> {
+    DL_TILING.iter().find(|(id, _)| *id == model_id).map(|&(_, t)| t)
+}
+
+/// The DL tiling table as JSON, in model-registry order: `tile_core`/`tile_halo` (the default
+/// tile), `tileable` (ids run tiled by default), and the `off_design` and `native` subsets the
+/// settings dialog warns about. scripts/generate-defaults.mjs bakes it into qsm-defaults.js so
+/// the settings dialog has it before the worker is up.
+#[wasm_bindgen]
+pub fn get_dl_tiling_defaults() -> String {
+    let ids = |keep: fn(DlTiling) -> bool| -> Vec<&'static str> {
+        qsm_core::models::all_models()
+            .iter()
+            .filter(|m| dl_tiling(m.id).is_some_and(keep))
+            .map(|m| m.id)
+            .collect()
+    };
+    serde_json::json!({
+        "tile_core": DL_TILE_CORE,
+        "tile_halo": DL_TILE_HALO,
+        "tileable": ids(|t| t != DlTiling::Native),
+        "off_design": ids(|t| t == DlTiling::OffDesign),
+        "native": ids(|t| t == DlTiling::Native),
+    })
+    .to_string()
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Deep-learning inference (ONNX). WASM can't download weights, so JS fetches the
 // bytes (see get_model_registry_wasm) and passes them in. Requires the `onnx` feature.
@@ -3396,16 +3473,16 @@ pub fn run_dl_field_inversion_wasm(
     let bdir = (bx, by, bz);
     // Per-tile progress → JS (done, total). Non-tiled nets never call it (bar just sits at start).
     let on_tile = js_progress(progress_callback);
-    // Browser memory is the constraint (unlike native): the proven-safe patch is ~64³, matching
-    // the natively-patch-based nets (qsmgan/autoqsm). Caller passes core/halo; 0 → a 64³-patch
-    // default (core 48 + halo 8). This is much smaller than qsm-core's native TileConfig default.
+    // Caller passes core/halo; a core of 0 means the browser default (see DL_TILE_CORE).
     let cfg = if tile_core > 0 {
         inv::TileConfig { core: tile_core, halo: tile_halo }
     } else {
-        inv::TileConfig { core: 56, halo: 4 } // 64³ patch (browser-safe), minimal overlap waste
+        inv::TileConfig { core: DL_TILE_CORE, halo: DL_TILE_HALO }
     };
-    // Tiled variants for the fully-convolutional whole-volume nets (bounded WASM memory).
-    let tiled_res = if tiled {
+    // Tiled variants (bounded WASM memory) for the ids DL_TILING lists as tileable; this match
+    // must cover exactly those.
+    let has_tiled_variant = matches!(dl_tiling(model_id), Some(DlTiling::Tileable | DlTiling::OffDesign));
+    let tiled_res = if tiled && has_tiled_variant {
         match model_id {
             "xqsm" => Some(inv::xqsm_tiled(field_ppm, mask, &grid, weights, &cfg, on_tile)),
             "qsmnet" => Some(inv::qsmnet_tiled(field_ppm, mask, &grid, weights, &inv::QsmnetNorm::qsmnet(), &cfg, on_tile)),
@@ -3415,7 +3492,7 @@ pub fn run_dl_field_inversion_wasm(
             "lpcnn" => Some(inv::lpcnn_tiled(field_ppm, mask, &grid, bdir, weights, &cfg, on_tile)),
             "modl-qsm" => Some(inv::modl_qsm_tiled(field_ppm, mask, &grid, bdir, weights, &cfg, on_tile)),
             "nextqsm" => Some(inv::nextqsm_tiled(field_ppm, mask, &grid, bdir, weights, weights2, &cfg, on_tile)),
-            _ => None, // not-yet-tiled or intrinsically un-tileable → whole-volume below
+            _ => None,
         }
     } else {
         None

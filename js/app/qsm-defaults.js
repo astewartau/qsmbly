@@ -246,3 +246,26 @@ export const ILSQR_DEFAULTS = {
   "tol": 0.01,
   "max_iter": 50
 };
+
+export const DL_TILING_DEFAULTS = {
+  "native": [
+    "qsmgan",
+    "autoqsm"
+  ],
+  "off_design": [
+    "lpcnn",
+    "nextqsm",
+    "modl-qsm"
+  ],
+  "tile_core": 56,
+  "tile_halo": 4,
+  "tileable": [
+    "xqsm",
+    "qsmnet",
+    "qsmnet-plus",
+    "lpcnn",
+    "ir2qsm",
+    "nextqsm",
+    "modl-qsm"
+  ]
+};

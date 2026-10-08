@@ -5,6 +5,8 @@
  * generate_command_wasm / generate_methods_wasm) — qsmbly no longer hand-rolls TOML.
  */
 
+import { DL_TILING_DEFAULTS } from '../app/config.js';
+
 /**
  * A [f64; 3] the config can carry, or null if any element is missing/non-finite.
  * JSON.stringify writes NaN — and anything the null-dropping replacer removes — as
@@ -82,12 +84,11 @@ export function buildConfig(settings, options = {}) {
   // Deep-learning overlap-tiling: qsmbly runs the tileable DL nets tiled (bounded wasm memory),
   // so reflect that in the generated `qsmxt run` command + methods. Only set for those algorithms
   // (qsmxt-config emits --tile-size/--tile-halo for them, and the methods note is DL-only).
-  const DL_TILEABLE = ['xqsm', 'qsmnet', 'qsmnet-plus', 'ir2qsm', 'lpcnn', 'modl-qsm', 'nextqsm'];
   const tiling = settings.dl_tiling || {};
-  if (tiling.enabled !== false && DL_TILEABLE.includes(config.inversion.algorithm)) {
-    config.inversion.tile_size = Number(tiling.tile_size) || 56;
+  if (tiling.enabled !== false && DL_TILING_DEFAULTS.tileable.includes(config.inversion.algorithm)) {
+    config.inversion.tile_size = Number(tiling.tile_size) || DL_TILING_DEFAULTS.tile_core;
     const halo = Number(tiling.tile_halo);
-    config.inversion.tile_halo = Number.isFinite(halo) ? halo : 4;
+    config.inversion.tile_halo = Number.isFinite(halo) ? halo : DL_TILING_DEFAULTS.tile_halo;
   }
 
   // Algorithm params

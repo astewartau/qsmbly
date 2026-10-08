@@ -14,17 +14,18 @@ import {
   TKD_DEFAULTS, TSVD_DEFAULTS, ILSQR_DEFAULTS, TIKHONOV_DEFAULTS,
   TV_DEFAULTS, RTS_DEFAULTS, NLTV_DEFAULTS, MEDI_DEFAULTS, TFI_DEFAULTS,
   NDI_DEFAULTS, FANSI_DEFAULTS, L1QSM_DEFAULTS, WHQSM_DEFAULTS, HDQSM_DEFAULTS,
+  DL_TILING_DEFAULTS,
 } from '../app/config.js';
 import { clampTileConfig, MAX_WASM_PATCH_EDGE } from '../worker/utils/DlTiling.js';
 
 // Deep-learning inversion methods and how browser tiling applies to each:
-//  - TILEABLE: overlap-tiling works well (approximate but sound) — default tiled.
-//  - NATIVE_TILE: the net is already patch-based, so it never OOMs and the tile options are moot.
-//  - OFFDESIGN: global (k-space) ops → not soundly tileable; runs whole-volume (may OOM) — prefer QSMxT.
-const DL_TILEABLE = new Set(['xqsm', 'qsmnet', 'qsmnet-plus', 'ir2qsm']);
-const DL_NATIVE_TILE = new Set(['qsmgan', 'autoqsm']);
-const DL_OFFDESIGN = new Set(['lpcnn', 'modl-qsm', 'nextqsm']);
-const DL_INVERSION_METHODS = new Set([...DL_TILEABLE, ...DL_NATIVE_TILE, ...DL_OFFDESIGN]);
+//  - tileable: has a tiled variant and runs tiled by default (approximate).
+//  - off_design (a subset of tileable): global (k-space) ops, so tiling is strongly off-design —
+//    tiled only so it runs in the browser at all; untiled it will likely OOM. Prefer QSMxT.
+//  - native: the net is already patch-based, so it never OOMs and the tile options are moot.
+const DL_NATIVE_TILE = new Set(DL_TILING_DEFAULTS.native);
+const DL_OFFDESIGN = new Set(DL_TILING_DEFAULTS.off_design);
+const DL_INVERSION_METHODS = new Set([...DL_TILING_DEFAULTS.tileable, ...DL_NATIVE_TILE]);
 
 export class PipelineSettingsController {
   constructor(modalElement) {
@@ -475,8 +476,8 @@ export class PipelineSettingsController {
       dipole_inversion: this._getEl('dipole_method'),
       dl_tiling: {
         enabled: this._getChecked('dlTiled'),
-        tile_size: parseInt(this._getEl('dlTileSize')) || 56,
-        tile_halo: (v => Number.isFinite(v) ? v : 4)(parseInt(this._getEl('dlTileHalo')))
+        tile_size: parseInt(this._getEl('dlTileSize')) || DL_TILING_DEFAULTS.tile_core,
+        tile_halo: (v => Number.isFinite(v) ? v : DL_TILING_DEFAULTS.tile_halo)(parseInt(this._getEl('dlTileHalo')))
       },
       tkd: {
         threshold: parseFloat(this._getEl('tkdThreshold'))
@@ -943,11 +944,11 @@ export class PipelineSettingsController {
     this._showEl('hdqsm_settings', dipoleMethod === 'hdqsm');
     this._showEl('ilsqr_settings', dipoleMethod === 'ilsqr');
     this._showEl('dl_inversion_settings', DL_INVERSION_METHODS.has(dipoleMethod));
-    // Deep-learning tiling controls (default: tiled on, browser-safe 56/4).
+    // Deep-learning tiling controls (default: tiled on, browser-safe core/halo).
     const dlTiling = settings.dl_tiling || {};
     this._setChecked('dlTiled', dlTiling.enabled !== false);
-    this._setEl('dlTileSize', dlTiling.tile_size ?? 56);
-    this._setEl('dlTileHalo', dlTiling.tile_halo ?? 4);
+    this._setEl('dlTileSize', dlTiling.tile_size ?? DL_TILING_DEFAULTS.tile_core);
+    this._setEl('dlTileHalo', dlTiling.tile_halo ?? DL_TILING_DEFAULTS.tile_halo);
     this._updateDlTilingWarning(dipoleMethod);
 
     // TKD settings
@@ -1174,8 +1175,8 @@ export class PipelineSettingsController {
       msg = `Tiled inference is approximate (≈0.94 correlation vs whole-volume; some low-frequency drift). For a publication-quality result, run ${nice} in QSMxT.`;
     }
     if (tiled && !DL_NATIVE_TILE.has(method)) {
-      const core = parseInt(this._getEl('dlTileSize')) || 56;
-      const halo = (v => Number.isFinite(v) ? v : 4)(parseInt(this._getEl('dlTileHalo')));
+      const core = parseInt(this._getEl('dlTileSize')) || DL_TILING_DEFAULTS.tile_core;
+      const halo = (v => Number.isFinite(v) ? v : DL_TILING_DEFAULTS.tile_halo)(parseInt(this._getEl('dlTileHalo')));
       const c = clampTileConfig(core, halo);
       if (c.clamped) {
         msg += ` ⚠ Core ${core} + halo ${halo} makes ${core + 2 * halo}³ patches, too big for the browser's memory (at most ${MAX_WASM_PATCH_EDGE}³); this run will use core ${c.core} + halo ${c.halo}.`;

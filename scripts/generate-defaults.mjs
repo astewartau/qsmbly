@@ -63,6 +63,7 @@ const defaults = {
   HOMOGENEITY_DEFAULTS: JSON.parse(wasmModule.get_homogeneity_defaults()),
   SIGNAL_ERODE_DEFAULTS: JSON.parse(wasmModule.get_signal_erode_defaults()),
   ILSQR_DEFAULTS: JSON.parse(wasmModule.get_ilsqr_defaults()),
+  DL_TILING_DEFAULTS: JSON.parse(wasmModule.get_dl_tiling_defaults()),
 };
 
 // Generate JS file
