@@ -22,8 +22,6 @@ How the versions were determined:
   `dist/index.js` and `dist/worker.js` and were not traced to a specific earlier release.
 - `coi-serviceworker.js` matches upstream `master`, not the v0.1.7 npm release.
 
-`niivue/` (a vendored NiiVue build) is not covered here.
-
 ## Loaded from a CDN at runtime
 
 These are not committed, but are pinned to an exact version with subresource integrity in

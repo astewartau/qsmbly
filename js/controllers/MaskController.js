@@ -6,7 +6,7 @@
  */
 
 import { computeOtsuThreshold } from '../modules/mask/ThresholdUtils.js';
-import { createMaskNifti, createNiftiHeaderFromVolume, sameNiftiGrid } from '../modules/file-io/NiftiUtils.js';
+import { createMaskNifti, createNiftiHeaderFromVolume, gunzipNifti, isValidNifti1, readNiftiImageData, sameNiftiGrid } from '../modules/file-io/NiftiUtils.js';
 
 export class MaskController {
   /**
@@ -279,24 +279,7 @@ export class MaskController {
    * @returns {Promise<ArrayBuffer>} Header buffer (352 bytes)
    */
   async readNiftiHeader(file) {
-    // Read file as ArrayBuffer
-    const arrayBuffer = await file.arrayBuffer();
-    let data = new Uint8Array(arrayBuffer);
-
-    // Check if gzipped (magic bytes 0x1f, 0x8b)
-    if (data[0] === 0x1f && data[1] === 0x8b) {
-      // Use fflate for decompression (bundled in niivue)
-      const fflate = await import('../../niivue/index.js').then(m => m.fflate || window.fflate);
-      if (fflate && fflate.gunzipSync) {
-        data = fflate.gunzipSync(data);
-      } else {
-        // Fallback: load into NiiVue and extract header
-        const url = URL.createObjectURL(file);
-        await this.nv.loadVolumes([{ url, name: file.name }]);
-        URL.revokeObjectURL(url);
-        return createNiftiHeaderFromVolume(this.nv.volumes[0]);
-      }
-    }
+    const data = await gunzipNifti(new Uint8Array(await file.arrayBuffer()), 352);
 
     // Return the first 352 bytes (NIfTI-1 header)
     return data.slice(0, 352).buffer;
@@ -304,97 +287,15 @@ export class MaskController {
 
   /**
    * Read NIfTI image data from a file without displaying it
-   * @param {File} file - The NIfTI file to read
-   * @returns {Promise<Float64Array>} Image data as Float64Array
+   * @param {File} file - The NIfTI file to read (.nii or .nii.gz)
+   * @returns {Promise<Float64Array>} Image data as Float64Array, with scl_slope/scl_inter applied
    */
   async readNiftiData(file) {
-    // Read file as ArrayBuffer
-    const arrayBuffer = await file.arrayBuffer();
-    let data = new Uint8Array(arrayBuffer);
-
-    // Check if gzipped (magic bytes 0x1f, 0x8b)
-    if (data[0] === 0x1f && data[1] === 0x8b) {
-      // Use fflate for decompression (bundled in niivue)
-      const fflate = await import('../../niivue/index.js').then(m => m.fflate || window.fflate);
-      if (fflate && fflate.gunzipSync) {
-        data = fflate.gunzipSync(data);
-      } else {
-        // Fallback: use NiiVue's decompression
-        const blob = new Blob([data]);
-        const url = URL.createObjectURL(blob);
-        await this.nv.loadVolumes([{ url, name: file.name }]);
-        URL.revokeObjectURL(url);
-        return new Float64Array(this.nv.volumes[0].img);
-      }
-    }
-
-    // Parse NIfTI header
-    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-
-    // Check magic number at offset 344 for NIfTI-1
-    const magic = String.fromCharCode(data[344], data[345], data[346]);
-    const isNifti1 = (magic === 'n+1' || magic === 'ni1');
-
-    if (!isNifti1) {
+    const data = await gunzipNifti(new Uint8Array(await file.arrayBuffer()));
+    if (!isValidNifti1(data)) {
       throw new Error('Not a valid NIfTI-1 file');
     }
-
-    // Get dimensions from header
-    const dims = [];
-    for (let i = 0; i < 8; i++) {
-      dims.push(view.getInt16(40 + i * 2, true));
-    }
-    const nTotal = dims[1] * dims[2] * dims[3];
-
-    // Get datatype and vox_offset
-    const datatype = view.getInt16(70, true);
-    const voxOffset = view.getFloat32(108, true);
-
-    // Get scaling factors
-    const sclSlope = view.getFloat32(112, true) || 1;
-    const sclInter = view.getFloat32(116, true) || 0;
-
-    // Read image data starting at vox_offset
-    const dataStart = Math.ceil(voxOffset);
-    const result = new Float64Array(nTotal);
-
-    // Parse based on datatype
-    switch (datatype) {
-      case 2: // UINT8
-        for (let i = 0; i < nTotal; i++) {
-          result[i] = data[dataStart + i] * sclSlope + sclInter;
-        }
-        break;
-      case 4: // INT16
-        for (let i = 0; i < nTotal; i++) {
-          result[i] = view.getInt16(dataStart + i * 2, true) * sclSlope + sclInter;
-        }
-        break;
-      case 8: // INT32
-        for (let i = 0; i < nTotal; i++) {
-          result[i] = view.getInt32(dataStart + i * 4, true) * sclSlope + sclInter;
-        }
-        break;
-      case 16: // FLOAT32
-        for (let i = 0; i < nTotal; i++) {
-          result[i] = view.getFloat32(dataStart + i * 4, true) * sclSlope + sclInter;
-        }
-        break;
-      case 64: // FLOAT64
-        for (let i = 0; i < nTotal; i++) {
-          result[i] = view.getFloat64(dataStart + i * 8, true) * sclSlope + sclInter;
-        }
-        break;
-      case 512: // UINT16
-        for (let i = 0; i < nTotal; i++) {
-          result[i] = view.getUint16(dataStart + i * 2, true) * sclSlope + sclInter;
-        }
-        break;
-      default:
-        throw new Error(`Unsupported NIfTI datatype: ${datatype}`);
-    }
-
-    return result;
+    return readNiftiImageData(data);
   }
 
   /**

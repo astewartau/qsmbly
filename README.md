@@ -173,7 +173,6 @@ qsmbly/
 │   ├── Cargo.toml          # Depends on qsm-core
 │   └── src/lib.rs          # Thin wasm_bindgen wrappers around QSM.rs
 ├── dcm2niix/               # DICOM-to-NIfTI conversion (WASM)
-├── niivue/                 # NiiVue neuroimaging viewer (vendored)
 └── nifti-js/               # NIfTI reader (JavaScript)
 ```
 

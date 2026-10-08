@@ -6,6 +6,7 @@
  */
 
 import { jest } from '@jest/globals';
+import zlib from 'node:zlib';
 import { MaskController } from './MaskController.js';
 
 /** Build a NIfTI-1 file (header + data) as a File-like object. */
@@ -319,5 +320,77 @@ describe('MaskController error paths', () => {
       controller.initializeWorker = async () => { throw new Error('WASM init failed'); };
       await expect(controller.applyMaskOps('erode:1')).rejects.toThrow('WASM init failed');
     });
+  });
+});
+
+describe('MaskController NIfTI reading of .nii and .nii.gz', () => {
+  const DIMS = [8, 6, 4];
+  const N = DIMS[0] * DIMS[1] * DIMS[2];
+  const SLOPE = 2.5;
+  const INTER = -3;
+  let controller;
+
+  beforeEach(() => {
+    // No viewer: decoding must not depend on (or touch) NiiVue.
+    controller = new MaskController({ nv: null, updateOutput: () => {}, setProgress: () => {}, config: {} });
+  });
+
+  /** The same int16 image with a non-identity scale, uncompressed and gzipped. */
+  async function scaledPair() {
+    const values = Array.from({ length: N }, (_, i) => (i * 37) % 1000 - 500);
+    const nii = makeNiftiFile('mag.nii', DIMS, 4, values);
+    const buffer = await nii.arrayBuffer();
+    const view = new DataView(buffer);
+    view.setFloat32(112, SLOPE, true);
+    view.setFloat32(116, INTER, true);
+    const gz = zlib.gzipSync(new Uint8Array(buffer));
+    const niiGz = { name: 'mag.nii.gz', arrayBuffer: async () => gz.buffer.slice(gz.byteOffset, gz.byteOffset + gz.byteLength) };
+    return { values, nii, niiGz };
+  }
+
+  it('applies scl_slope/scl_inter identically to both', async () => {
+    const { values, nii, niiGz } = await scaledPair();
+
+    const plain = await controller.readNiftiData(nii);
+    const gzipped = await controller.readNiftiData(niiGz);
+
+    expect(gzipped).toBeInstanceOf(Float64Array);
+    expect(Array.from(gzipped)).toEqual(Array.from(plain));
+    expect(Array.from(plain)).toEqual(values.map(v => v * SLOPE + INTER));
+  });
+
+  it('returns the same 352-byte header for both', async () => {
+    const { nii, niiGz } = await scaledPair();
+
+    const plain = new Uint8Array(await controller.readNiftiHeader(nii));
+    const gzipped = new Uint8Array(await controller.readNiftiHeader(niiGz));
+
+    expect(gzipped.length).toBe(352);
+    expect(Array.from(gzipped)).toEqual(Array.from(plain));
+  });
+
+  it('rejects a corrupt gzip stream', async () => {
+    const { niiGz } = await scaledPair();
+    const truncated = (await niiGz.arrayBuffer()).slice(0, 40);
+    await expect(controller.readNiftiData({ name: 'bad.nii.gz', arrayBuffer: async () => truncated }))
+      .rejects.toThrow();
+  });
+
+  it('adopts a gzipped mask against an uncompressed reference', async () => {
+    controller.clearMask = async () => {};
+    controller.displayCurrentMask = async () => {};
+    const values = new Uint8Array(N);
+    values[5] = 1;
+    const maskBuffer = await makeNiftiFile('mask.nii', DIMS, 2, values).arrayBuffer();
+    const gz = zlib.gzipSync(new Uint8Array(maskBuffer));
+    const mask = { name: 'mask.nii.gz', arrayBuffer: async () => gz.buffer.slice(gz.byteOffset, gz.byteOffset + gz.byteLength) };
+    const reference = makeNiftiFile('mag.nii', DIMS, 16, new Float32Array(N).fill(100));
+
+    const result = await controller.loadMaskFromFile(mask, reference);
+
+    expect(result.ok).toBe(true);
+    expect(controller.maskDims).toEqual(DIMS);
+    expect(controller.currentMaskData[5]).toBe(1);
+    expect(controller.currentMaskData[4]).toBe(0);
   });
 });

@@ -6,7 +6,6 @@ export default [
   {
     // Vendored third-party code and build outputs are not ours to lint.
     ignores: [
-      'niivue/**',
       'nifti-js/**',
       'dcm2niix/**',
       'coi-serviceworker.js',

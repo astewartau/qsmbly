@@ -4,7 +4,7 @@ import { estimateHdBetPatches } from './modules/HdBetEstimate.js';
 import { MOUSE_BET_DEFAULTS, looksLikeRodentFov, fieldOfViewMm, voxelScaleMethodsNote, insertBetMethodsNote, replaceMaskingSentence, RS2_NET_METHODS } from './modules/mask/RodentMask.js';
 import {
   parseNiftiHeader,
-  isGzipped,
+  gunzipNifti,
   createMaskNifti,
   createNiftiHeaderFromVolume,
   createFloat64Nifti
@@ -15,8 +15,6 @@ import { LandingPage } from './modules/ui/LandingPage.js';
 import { Tutorial, WelcomePrompt } from './modules/ui/Tutorial.js';
 import { FileIOController, PipelineExecutor, PipelineSettingsController, MaskController, ViewerController } from './controllers/index.js';
 import { DicomController } from './controllers/DicomController.js';
-import { DicompareController } from 'https://dicompare.neurodesk.org/embed/DicompareController.js';
-import { DicompareReportRenderer } from 'https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js';
 import * as QSMConfig from './app/config.js';
 import { buildConfigJson, maskSectionString } from './modules/ConfigBridge.js';
 
@@ -213,12 +211,9 @@ class QSMApp {
       updateDownloadVolumeButton: () => this.updateDownloadVolumeButton()
     });
 
-    // Initialize dicompare controller
-    this.dicompareController = new DicompareController({
-      schemaUrl: 'https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json',
-      updateOutput: (msg) => this.updateOutput(msg)
-    });
-    this.dicompareRenderer = new DicompareReportRenderer();
+    // dicompare is loaded from its own host on first use (see _loadDicompare)
+    this.dicompareController = null;
+    this.dicompareRenderer = null;
 
     // Initialize DICOM controller
     this.dicomController = new DicomController({
@@ -1546,9 +1541,39 @@ class QSMApp {
   // ==================== dicompare Integration ====================
 
   /**
+   * Load dicompare from its host the first time it is needed. A static import would stop the
+   * whole app booting whenever that host is unreachable, so a failure here only disables the report.
+   * @returns {Promise<boolean>} True if the dicompare modules are available
+   */
+  _loadDicompare() {
+    this.dicompareLoad ||= Promise.all([
+      import('https://dicompare.neurodesk.org/embed/DicompareController.js'),
+      import('https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js')
+    ]).then(([{ DicompareController }, { DicompareReportRenderer }]) => {
+      this.dicompareController = new DicompareController({
+        schemaUrl: 'https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json',
+        updateOutput: (msg) => this.updateOutput(msg)
+      });
+      this.dicompareRenderer = new DicompareReportRenderer();
+      return true;
+    }).catch((error) => {
+      console.error('Could not load dicompare:', error);
+      const btn = document.getElementById('dicompareReportBtn');
+      if (btn) {
+        btn.disabled = true;
+        btn.title = 'dicompare could not be loaded from dicompare.neurodesk.org';
+      }
+      this.updateOutput('dicompare report unavailable: could not load it from dicompare.neurodesk.org');
+      return false;
+    });
+    return this.dicompareLoad;
+  }
+
+  /**
    * Callback when DICOM files are retained for validation.
    */
   async _onDicomFilesRetained(files) {
+    if (!(await this._loadDicompare())) return;
     await this.dicompareController.retainDicomFiles(files);
     const btn = document.getElementById('dicompareReportBtn');
     if (btn) {
@@ -1560,6 +1585,7 @@ class QSMApp {
    * Run dicompare validation and display results in modal.
    */
   async runDicompareReport() {
+    if (!(await this._loadDicompare())) return;
     if (!this.dicompareController.hasFiles()) {
       this.updateOutput('No DICOM files available for validation.');
       return;
@@ -1620,7 +1646,7 @@ class QSMApp {
    * Print the dicompare report in a new window.
    */
   printDicompareReport() {
-    if (!this.dicompareController.complianceResults) return;
+    if (!this.dicompareController?.complianceResults) return;
     const html = this.dicompareRenderer.generatePrintHtml({
       acquisitions: this.dicompareController.acquisitions,
       complianceResults: this.dicompareController.complianceResults,
@@ -2131,38 +2157,6 @@ class QSMApp {
   }
 
   /**
-   * Read NIfTI header from a file without displaying it
-   * Delegates to MaskController
-   */
-  async readNiftiHeader(file) {
-    return this.maskController.readNiftiHeader(file);
-  }
-
-  /**
-   * Read NIfTI image data from a file without displaying it
-   * Delegates to MaskController
-   */
-  async readNiftiData(file) {
-    return this.maskController.readNiftiData(file);
-  }
-
-  /**
-   * Combine multiple magnitude echoes using Root Sum of Squares (RSS)
-   * Delegates to MaskController
-   */
-  async combineMagnitudeRSS() {
-    return this.maskController.combineMagnitudeRSS(this.fileIOController.buckets.magnitude);
-  }
-
-  /**
-   * Apply bias field correction to magnitude data
-   * Delegates to MaskController
-   */
-  async applyBiasCorrection(magnitudeData) {
-    return this.maskController.applyBiasCorrection(magnitudeData);
-  }
-
-  /**
    * Preview mask based on threshold
    * Delegates to MaskController
    */
@@ -2521,7 +2515,7 @@ class QSMApp {
     this.applyVoxelDefaults();
     this.maskUploadMessage = 'Mask loaded for processing and displayed over the brain image.';
 
-    // Always restore the anatomy after decoding the mask, including compressed uploads.
+    // Restore the anatomy under the mask overlay.
     if (headerSource) await this.loadAndVisualizeFile(headerSource, 'Mask reference image');
     await this.displayCurrentMask();
     this.hideEchoNavigation();
@@ -2751,8 +2745,9 @@ class QSMApp {
       const totalFieldBuffer = await totalFieldFile.arrayBuffer();
 
       // Extract voxel size from NIfTI header for pipeline defaults
-      if (!isGzipped(new Uint8Array(totalFieldBuffer)) && totalFieldBuffer.byteLength >= 352) {
-        const headerInfo = parseNiftiHeader(totalFieldBuffer.slice(0, 352));
+      const fieldHeader = (await gunzipNifti(new Uint8Array(totalFieldBuffer), 352)).slice(0, 352).buffer;
+      if (fieldHeader.byteLength >= 352) {
+        const headerInfo = parseNiftiHeader(fieldHeader);
         this.voxelSize = headerInfo.voxelSize;
         this.maskDims = [headerInfo.nx, headerInfo.ny, headerInfo.nz];
         this.applyVoxelDefaults();
@@ -2833,8 +2828,9 @@ class QSMApp {
       const localFieldBuffer = await localFieldFile.arrayBuffer();
 
       // Extract voxel size from NIfTI header for pipeline defaults
-      if (!isGzipped(new Uint8Array(localFieldBuffer)) && localFieldBuffer.byteLength >= 352) {
-        const headerInfo = parseNiftiHeader(localFieldBuffer.slice(0, 352));
+      const fieldHeader = (await gunzipNifti(new Uint8Array(localFieldBuffer), 352)).slice(0, 352).buffer;
+      if (fieldHeader.byteLength >= 352) {
+        const headerInfo = parseNiftiHeader(fieldHeader);
         this.voxelSize = headerInfo.voxelSize;
         this.maskDims = [headerInfo.nx, headerInfo.ny, headerInfo.nz];
         this.applyVoxelDefaults();
