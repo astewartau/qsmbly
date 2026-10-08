@@ -13,6 +13,7 @@ import {
   createFloat64Nifti
 } from './modules/file-io/NiftiUtils.js';
 import { ModalManager } from './modules/ui/ModalManager.js';
+import { escapeHtml } from './modules/ui/escapeHtml.js';
 import { LandingPage } from './modules/ui/LandingPage.js';
 import { Tutorial, WelcomePrompt } from './modules/ui/Tutorial.js';
 import { FileIOController, PipelineExecutor, PipelineSettingsController, MaskController, ViewerController } from './controllers/index.js';
@@ -49,7 +50,7 @@ class QSMApp {
     this.nv = new window.Niivue({
       ...cfg.VIEWER_CONFIG,
       onLocationChange: (data) => {
-        document.getElementById("intensity").innerHTML = data.string;
+        document.getElementById("intensity").textContent = data.string;
       }
     });
     this.currentFile = null;
@@ -501,6 +502,12 @@ class QSMApp {
       this.updateEchoInfo();
     });
 
+    // Remove buttons in the mask file list, which FileIOController.updateFileList rebuilds
+    document.getElementById('maskList')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.file-remove');
+      if (btn) this.removeFile(btn.dataset.type, Number(btn.dataset.index));
+    });
+
     // dicompare report
     document.getElementById('dicompareReportBtn')?.addEventListener('click', () => this.runDicompareReport());
     document.getElementById('closeDicompare')?.addEventListener('click', () => this.dicompareModal?.close());
@@ -825,7 +832,7 @@ class QSMApp {
     });
   }
 
-  // Passthrough for backward compatibility (HTML onclick uses app.removeFile)
+  // Remove a file and drop state that depended on it (mask list remove buttons call this)
   removeFile(type, index) {
     this.fileIOController.removeFile(type, index);
 
@@ -1277,7 +1284,8 @@ class QSMApp {
 
       html += `<div class="file-triage-card" draggable="true" data-category="${key}" data-index="${i}">`;
       html += `<span class="file-triage-card-grip" aria-hidden="true">${gripSvg}</span>`;
-      html += `<span class="file-triage-card-name" title="${item.name}">${item.name}</span>`;
+      const name = escapeHtml(item.name);
+      html += `<span class="file-triage-card-name" title="${name}">${name}</span>`;
       if (teLabel) {
         html += `<span class="file-triage-card-te">${teLabel}</span>`;
       }
@@ -1636,11 +1644,12 @@ class QSMApp {
       if (footer) footer.style.display = '';
     } catch (error) {
       if (body) {
-        body.innerHTML = `
-          <div class="dicompare-error">
-            <p>Validation failed: ${error.message}</p>
-          </div>
-        `;
+        const errorEl = document.createElement('div');
+        errorEl.className = 'dicompare-error';
+        const p = document.createElement('p');
+        p.textContent = `Validation failed: ${error.message}`;
+        errorEl.appendChild(p);
+        body.replaceChildren(errorEl);
       }
       console.error('dicompare validation error:', error);
     }
@@ -3432,7 +3441,13 @@ class QSMApp {
       const time = new Date().toLocaleTimeString('en-US', { hour12: false });
       const line = document.createElement('div');
       line.className = 'console-line';
-      line.innerHTML = `<span class="console-time">[${time}]</span> <span class="console-message">${message}</span>`;
+      const timeEl = document.createElement('span');
+      timeEl.className = 'console-time';
+      timeEl.textContent = `[${time}]`;
+      const messageEl = document.createElement('span');
+      messageEl.className = 'console-message';
+      messageEl.textContent = message;
+      line.append(timeEl, ' ', messageEl);
       consoleOutput.appendChild(line);
       // Auto-scroll to bottom
       consoleOutput.scrollTop = consoleOutput.scrollHeight;

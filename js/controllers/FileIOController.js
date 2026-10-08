@@ -399,10 +399,14 @@ export class FileIOController {
       fileList.forEach((fileData, index) => {
         const fileItem = document.createElement('div');
         fileItem.className = 'file-item';
-        fileItem.innerHTML = `
-          <span>${fileData.name}</span>
-          <button class="file-remove" onclick="app.removeFile('${type}', ${index})">×</button>
-        `;
+        const name = document.createElement('span');
+        name.textContent = fileData.name;
+        const remove = document.createElement('button');
+        remove.className = 'file-remove';
+        remove.dataset.type = type;
+        remove.dataset.index = index;
+        remove.textContent = '×';
+        fileItem.append(name, remove);
         listElement.appendChild(fileItem);
       });
 
