@@ -245,8 +245,9 @@ class QSMApp {
     this.privacyModal = new ModalManager('privacyModal');
     this.dicompareModal = new ModalManager('dicompareModal');
 
-    // Start loading WASM in the background immediately
-    this.pipelineExecutor.initialize();
+    // Start loading WASM in the background immediately. A failure here is reported, and the
+    // next action that needs the worker retries the load.
+    this.pipelineExecutor.initialize().catch((e) => this.updateOutput(`Error: ${e.message}`));
   }
 
   /**
@@ -475,6 +476,16 @@ class QSMApp {
   }
 
   setupEventListeners() {
+    // Async handlers that reach the worker can reject (e.g. the WASM fails to load); report it.
+    const reportErrors = (fn) => async (...args) => {
+      try {
+        await fn(...args);
+      } catch (e) {
+        this.updateOutput(`Error: ${e.message}`);
+        console.error(e);
+      }
+    };
+
     // Mobile tab bar
     this._setupMobileTabs();
 
@@ -562,7 +573,7 @@ class QSMApp {
     }
 
     // Threshold Robust button - Otsu + auto-refinement
-    document.getElementById('thresholdRobust')?.addEventListener('click', async () => {
+    document.getElementById('thresholdRobust')?.addEventListener('click', reportErrors(async () => {
       document.getElementById('thresholdModeButtons').style.display = 'none';
       await this.previewMask();
       this.maskOpsHistory = ['threshold:otsu'];
@@ -576,7 +587,7 @@ class QSMApp {
       this._pushMaskOp('erode');
       await this.displayCurrentMask();
       this.updateOutput("Robust mask complete");
-    });
+    }));
 
     // Threshold Manual button - Otsu + slider
     document.getElementById('thresholdManual')?.addEventListener('click', async () => {
@@ -595,7 +606,7 @@ class QSMApp {
     // Mouse brain extraction - RS2-Net, with voxel-scaled BET as the fallback
     document.getElementById('runMouseBet')?.addEventListener('click', () => this.openMouseBrainModal());
     document.getElementById('closeMouseBrain')?.addEventListener('click', () => this.mouseBrainModal?.close());
-    document.getElementById('runRs2Net')?.addEventListener('click', () => this.runRs2NetWithSettings());
+    document.getElementById('runRs2Net')?.addEventListener('click', reportErrors(() => this.runRs2NetWithSettings()));
     document.getElementById('runMouseScaledBet')?.addEventListener('click', () => {
       this.mouseBrainModal?.close();
       this.openBetSettingsModal('mouse');
@@ -681,7 +692,7 @@ class QSMApp {
     // BET settings modal
     document.getElementById('closeHdBetSettings')?.addEventListener('click', () => this.hdBetModal?.close());
     document.getElementById('resetHdBetSettings')?.addEventListener('click', () => this.resetHdBetSettings());
-    document.getElementById('runHdBetWithSettings')?.addEventListener('click', () => this.runHdBetWithSettings());
+    document.getElementById('runHdBetWithSettings')?.addEventListener('click', reportErrors(() => this.runHdBetWithSettings()));
     document.getElementById('hdBetTileStep')?.addEventListener('change', () => this.updateHdBetEstimate());
     document.getElementById('hdBetTta')?.addEventListener('change', () => this.updateHdBetEstimate());
 
@@ -746,38 +757,38 @@ class QSMApp {
     // Note: Pipeline settings form event listeners are now handled by PipelineSettingsController
 
     // Morphological operation buttons
-    document.getElementById('fillHoles')?.addEventListener('click', async () => {
+    document.getElementById('fillHoles')?.addEventListener('click', reportErrors(async () => {
       this.updateOutput("Filling holes in mask...");
       await this.fillHoles3D();
       this.maskOpsHistory.push('fill-holes:0');
       await this.displayCurrentMask();
       this.updateOutput("Holes filled");
-    });
+    }));
 
-    document.getElementById('erodeMask')?.addEventListener('click', async () => {
+    document.getElementById('erodeMask')?.addEventListener('click', reportErrors(async () => {
       this.updateOutput("Eroding mask...");
       await this.erodeMask3D();
       this._pushMaskOp('erode');
       await this.displayCurrentMask();
       this.updateOutput("Mask eroded");
-    });
+    }));
 
-    document.getElementById('dilateMask')?.addEventListener('click', async () => {
+    document.getElementById('dilateMask')?.addEventListener('click', reportErrors(async () => {
       this.updateOutput("Dilating mask...");
       await this.dilateMask3D();
       this._pushMaskOp('dilate');
       await this.displayCurrentMask();
       this.updateOutput("Mask dilated");
-    });
+    }));
 
-    document.getElementById('signalErodeMask')?.addEventListener('click', async () => {
+    document.getElementById('signalErodeMask')?.addEventListener('click', reportErrors(async () => {
       this.updateOutput("Signal-gated erosion (removing low-signal boundary voxels)...");
       if (await this.signalErodeMask3D()) {
         this.maskOpsHistory.push('signal-erode');
         await this.displayCurrentMask();
         this.updateOutput("Low-signal boundary removed");
       }
-    });
+    }));
 
     document.getElementById('resetMask')?.addEventListener('click', async () => {
       this.updateOutput("Clearing mask...");
@@ -2723,15 +2734,6 @@ class QSMApp {
         this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
 
-      // Determine which stages can be skipped based on settings changes
-      const skipStages = this.pipelineExecutor.determineSkipStages(this.pipelineSettings);
-      if (skipStages.skipUnwrap) {
-        this.updateOutput("Reusing cached unwrapped phase data");
-      }
-      if (skipStages.skipBgRemoval) {
-        this.updateOutput("Reusing cached background-removed data");
-      }
-
       // Show phase image at the start
       await this.visualizePhase();
 
@@ -2750,8 +2752,7 @@ class QSMApp {
         maskThreshold: this.maskThreshold,
         customMaskBuffer,
         preparedMagnitude,
-        pipelineSettings: this.pipelineSettings,
-        skipStages
+        pipelineSettings: this.pipelineSettings
       });
 
       if (started) {

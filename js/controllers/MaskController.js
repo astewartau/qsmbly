@@ -895,6 +895,8 @@ export class MaskController {
       }
       magnitude = mag;
     }
+    // A previous cancel terminates and nulls the worker, so make sure there is a live one.
+    await this.initializeWorker?.();
     const worker = this.getWorker();
     const mask = Uint8Array.from(this.currentMaskData, (v) => (v > 0 ? 1 : 0));
     const magnitudeArr = Float64Array.from(magnitude);
