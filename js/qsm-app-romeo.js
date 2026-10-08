@@ -59,22 +59,17 @@ class QSMApp {
     this.fileIOController = null;
     this.pipelineExecutor = null;
 
-    // Mask threshold (percentage of max magnitude)
-    this.maskThreshold = cfg.MASK_CONFIG.defaultThreshold;
-    this.magnitudeData = null;
-    this.magnitudeMax = 0;
-
-    // Mask editing state
-    this.currentMaskData = null;
-    this.originalMaskData = null;
-    this.maskDims = null;
-    this.voxelSize = null;
-
-    // Drawing state
-    this.drawingEnabled = false;
-    this.brushMode = 'add';
-    this.brushSize = cfg.MASK_CONFIG.defaultBrushSize;
-    this.savedCrosshairWidth = cfg.VIEWER_CONFIG.crosshairWidth;
+    // Sole owner of the mask, magnitude, threshold and drawing state; the app reads it from
+    // here. Created now rather than in init() so that state exists from the start.
+    this.maskController = new MaskController({
+      nv: this.nv,
+      getWorker: () => this.pipelineExecutor?.getWorker(),
+      updateOutput: (msg) => this.updateOutput(msg),
+      setProgress: (val, text) => this.setProgress(val, text),
+      initializeWorker: () => this.pipelineExecutor?.initialize(),
+      beginCancellableJob: (onCancel) => this.beginCancellableJob(onCancel),
+      config: cfg
+    });
 
     // Pipeline settings from config
     this.pipelineSettings = JSON.parse(JSON.stringify(cfg.PIPELINE_DEFAULTS));
@@ -91,8 +86,6 @@ class QSMApp {
 
     // Mask preparation settings from config
     this.maskPrepSettings = { ...cfg.MASK_PREP_DEFAULTS, prepared: false };
-    this.preparedMagnitudeData = null;
-    this.preparedMagnitudeMax = 0;
 
     // Echo navigation state
     this.currentEchoIndex = 0;
@@ -100,7 +93,6 @@ class QSMApp {
 
     // Controllers (initialized in init() after DOM ready)
     this.pipelineSettingsController = null;
-    this.maskController = null;
     this.viewerController = null;
 
     // Modal managers (initialized in init() after DOM ready)
@@ -181,24 +173,13 @@ class QSMApp {
       this.pipelineSettingsController = new PipelineSettingsController(pipelineModal);
     }
 
-    // Initialize pipeline executor (before mask controller, provides worker)
+    // Initialize pipeline executor (provides the mask controller's worker)
     this.pipelineExecutor = new PipelineExecutor({
       updateOutput: (msg) => this.updateOutput(msg),
       setProgress: (val, text) => this.setProgress(val, text),
       onStageData: (data) => this._onStageData(data),
       onPipelineComplete: () => this._onPipelineComplete(),
       onPipelineError: () => this._onPipelineError(),
-      config: window.QSMConfig
-    });
-
-    // Initialize mask controller
-    this.maskController = new MaskController({
-      nv: this.nv,
-      getWorker: () => this.pipelineExecutor?.getWorker(),
-      updateOutput: (msg) => this.updateOutput(msg),
-      setProgress: (val, text) => this.setProgress(val, text),
-      initializeWorker: () => this.pipelineExecutor?.initialize(),
-      beginCancellableJob: (onCancel) => this.beginCancellableJob(onCancel),
       config: window.QSMConfig
     });
 
@@ -508,15 +489,15 @@ class QSMApp {
     const thresholdSlider = document.getElementById('maskThreshold');
     if (thresholdSlider) {
       thresholdSlider.addEventListener('input', (e) => {
-        this.maskThreshold = parseInt(e.target.value);
-        document.getElementById('thresholdLabel').textContent = `Threshold (${this.maskThreshold}%)`;
+        this.maskController.maskThreshold = parseInt(e.target.value);
+        document.getElementById('thresholdLabel').textContent = `Threshold (${this.maskController.maskThreshold}%)`;
 
         // Debounce the mask preview update
         if (this.maskUpdateTimeout) {
           clearTimeout(this.maskUpdateTimeout);
         }
         this.maskUpdateTimeout = setTimeout(() => {
-          if (this.magnitudeData) {
+          if (this.maskController.magnitudeData) {
             this.updateMaskPreview();
           }
         }, 150);
@@ -598,7 +579,7 @@ class QSMApp {
       this.updateMaskSectionState();
 
       // Switching to custom with a file already uploaded should adopt it, not wait for a re-upload.
-      if (isCustom && this.fileIOController.hasMask() && !this.currentMaskData) {
+      if (isCustom && this.fileIOController.hasMask() && !this.maskController.currentMaskData) {
         await this.loadCustomMaskFile();
       }
       this.updateEchoInfo();
@@ -766,7 +747,7 @@ class QSMApp {
 
     document.getElementById('brushSize')?.addEventListener('input', (e) => {
       this.setBrushSize(parseInt(e.target.value));
-      document.getElementById('brushSizeValue').textContent = this.brushSize;
+      document.getElementById('brushSizeValue').textContent = this.maskController.brushSize;
     });
 
     document.getElementById('brush3D')?.addEventListener('change', (e) => {
@@ -1083,7 +1064,7 @@ class QSMApp {
 
     // A mask uploaded before the images is dropped when the magnitude files change, and the
     // grid it has to be validated against only exists once they are loaded — so adopt it here.
-    if (changeType !== 'mask' && !this.maskAlignmentActive && this.maskPrepSettings.source === 'custom' && this.fileIOController.hasMask() && !this.currentMaskData) {
+    if (changeType !== 'mask' && !this.maskAlignmentActive && this.maskPrepSettings.source === 'custom' && this.fileIOController.hasMask() && !this.maskController.currentMaskData) {
       this.loadCustomMaskFile().then(() => this.updateEchoInfo());
     }
 
@@ -1311,10 +1292,10 @@ class QSMApp {
   _onMagnitudeFilesChanged(files) {
     // Clear prepared state when magnitude files change
     this.maskPrepSettings.prepared = false;
-    this.preparedMagnitudeData = null;
-    this.preparedMagnitudeMax = 0;
-    this.currentMaskData = null;
-    this.originalMaskData = null;
+    this.maskController.preparedMagnitudeData = null;
+    this.maskController.preparedMagnitudeMax = 0;
+    this.maskController.currentMaskData = null;
+    this.maskController.originalMaskData = null;
 
     // Update all dependent sections
     this.updateMagnitudePrepSection();
@@ -1702,7 +1683,7 @@ class QSMApp {
 
     // Magnitude gating
     const hasMagnitude = this.fileIOController?.buckets?.magnitude?.length > 0
-      || this.preparedMagnitudeData !== null;
+      || this.maskController.preparedMagnitudeData !== null;
     const noMag = !hasMagnitude;
 
     // Auto-correct to safe defaults when data changes
@@ -1938,7 +1919,7 @@ class QSMApp {
     const file = this.fileIOController.getMaskFile();
     if (!file) return;
 
-    if (!this.currentMaskData) {
+    if (!this.maskController.currentMaskData) {
       await this.loadCustomMaskFile();
       return;
     }
@@ -1958,7 +1939,7 @@ class QSMApp {
     switch (mode) {
       case 'raw': {
         const hasEchoTimes = this.fileIOController?.hasEchoTimes() || false;
-        const hasMask = this.currentMaskData !== null;
+        const hasMask = this.maskController.currentMaskData !== null;
         canRun = isValid && hasEchoTimes && hasMask;
         break;
       }
@@ -1969,14 +1950,14 @@ class QSMApp {
         const needsFieldStrength = units !== 'ppm' || combined_method !== 'none';
         const hasFieldStrength = !needsFieldStrength || (this.fileIOController.getFieldStrength() > 0);
         // Mask can come from: UI editing, mask file upload, or magnitude (for threshold generation)
-        const hasMaskSource = this.currentMaskData !== null
+        const hasMaskSource = this.maskController.currentMaskData !== null
           || (this.maskPrepSettings.source !== 'custom'
-            && (this.fileIOController.hasFieldMapMagnitude() || this.preparedMagnitudeData !== null));
+            && (this.fileIOController.hasFieldMapMagnitude() || this.maskController.preparedMagnitudeData !== null));
         // QSMART and MEDI require magnitude
         const dipoleMethod = this.pipelineSettings?.dipole_inversion || 'rts';
         const needsMagnitude = combined_method === 'qsmart' || dipoleMethod === 'medi';
         const hasMagnitude = this.fileIOController.hasFieldMapMagnitude()
-          || this.preparedMagnitudeData !== null;
+          || this.maskController.preparedMagnitudeData !== null;
         const algorithmOk = !needsMagnitude || hasMagnitude;
         canRun = isValid && hasFieldStrength && hasMaskSource && algorithmOk;
         break;
@@ -2093,7 +2074,7 @@ class QSMApp {
     const opsPanel = document.getElementById('maskOperations');
     if (opsPanel) {
       // Only show if prepared AND we have a mask (from either Threshold or BET)
-      opsPanel.style.display = (prepared && this.currentMaskData) ? 'block' : 'none';
+      opsPanel.style.display = (prepared && this.maskController.currentMaskData) ? 'block' : 'none';
     }
   }
 
@@ -2123,14 +2104,6 @@ class QSMApp {
       echoTimes: this.getEchoTimesFromInputs(),
       maskPrepSettings: this.maskPrepSettings,
       onComplete: () => {
-        // Sync state from controller to app
-        this.magnitudeData = this.maskController.magnitudeData;
-        this.magnitudeMax = this.maskController.magnitudeMax;
-        this.preparedMagnitudeData = this.maskController.preparedMagnitudeData;
-        this.preparedMagnitudeMax = this.maskController.preparedMagnitudeMax;
-        this.magnitudeFileBytes = this.maskController.magnitudeFileBytes;
-        this.magnitudeVolume = this.maskController.magnitudeVolume;
-
         this.maskPrepSettings.prepared = true;
         this.updatePrepareButtonState();
         this.updateMaskSectionState();
@@ -2147,7 +2120,6 @@ class QSMApp {
    */
   async displayPreparedMagnitude() {
     await this.maskController.displayPreparedMagnitude();
-    this.magnitudeVolume = this.maskController.magnitudeVolume;
     this.updateDownloadVolumeButton();
   }
 
@@ -2161,16 +2133,7 @@ class QSMApp {
    * Delegates to MaskController
    */
   async previewMask() {
-    // Sync threshold to controller before previewing
-    this.maskController.setMaskThreshold(this.maskThreshold);
-
     await this.maskController.previewMask(this.maskPrepSettings);
-
-    // Sync state from controller
-    this.currentMaskData = this.maskController.currentMaskData;
-    this.originalMaskData = this.maskController.originalMaskData;
-    this.maskDims = this.maskController.maskDims;
-    this.voxelSize = this.maskController.voxelSize;
     this.applyVoxelDefaults();
 
     // Show morphological operations panel
@@ -2190,16 +2153,7 @@ class QSMApp {
    * Delegates to MaskController
    */
   async updateMaskPreview() {
-    // Sync threshold to controller
-    this.maskController.setMaskThreshold(this.maskThreshold);
-
     await this.maskController.updateMaskPreview();
-
-    // Sync state from controller
-    this.currentMaskData = this.maskController.currentMaskData;
-    this.originalMaskData = this.maskController.originalMaskData;
-    this.maskDims = this.maskController.maskDims;
-    this.voxelSize = this.maskController.voxelSize;
 
     // Show morphological operations panel
     const opsPanel = document.getElementById('maskOperations');
@@ -2218,10 +2172,6 @@ class QSMApp {
    * Delegates to MaskController
    */
   async displayCurrentMask() {
-    // Sync mask data to controller if it was modified locally
-    if (this.currentMaskData !== this.maskController.currentMaskData) {
-      this.maskController.currentMaskData = this.currentMaskData;
-    }
     await this.maskController.displayCurrentMask();
   }
 
@@ -2278,17 +2228,7 @@ class QSMApp {
    * worker (one implementation shared with the qsmxt pipeline), so they are async now.
    */
   async applyMaskOps(ops) {
-    this.maskController.currentMaskData = this.currentMaskData;
-    // Keep the controller's geometry when this side doesn't have it. Generators that derive it
-    // themselves (HD-BET) leave `this.maskDims` unset here, and overwriting it with null made
-    // every following refinement bail out.
-    this.maskController.maskDims = this.maskDims || this.maskController.maskDims;
-    this.maskController.voxelSize = this.voxelSize || this.maskController.voxelSize;
-
-    const changed = await this.maskController.applyMaskOps(ops);
-
-    this.currentMaskData = this.maskController.currentMaskData;
-    return changed;
+    return this.maskController.applyMaskOps(ops);
   }
 
   async erodeMask3D(iterations = 1) { return this.applyMaskOps(`erode:${iterations}`); }
@@ -2311,18 +2251,8 @@ class QSMApp {
 
   /** Run a deep-learning mask generator on the controller and adopt its mask. */
   async runDlMaskGenerator(run) {
-    this.maskController.maskDims = this.maskDims || this.maskController.maskDims;
-    this.maskController.voxelSize = this.voxelSize || this.maskController.voxelSize;
-
     const ok = await run(this.maskController);
     if (ok) {
-      this.currentMaskData = this.maskController.currentMaskData;
-      this.originalMaskData = this.maskController.originalMaskData;
-      // The DL generators derive the geometry from the prepared header, so publish it here too —
-      // the refinements that follow read it from this side.
-      this.maskDims = this.maskController.maskDims;
-      this.voxelSize = this.maskController.voxelSize;
-
       // The same post-generation wiring the Threshold and BET generators do: reveal the
       // Refine Mask panel (#maskOperations starts hidden), publish the mask to Results, and
       // refresh the run button.
@@ -2448,7 +2378,7 @@ class QSMApp {
     this.resetMaskAlignmentRepair();
     try {
       if (reference) await this.loadAndVisualizeFile(reference, 'Mask reference image');
-      if (this.currentMaskData) await this.displayCurrentMask();
+      if (this.maskController.currentMaskData) await this.displayCurrentMask();
     } finally {
       this.updateMaskSectionState();
       this.updateEchoInfo();
@@ -2470,10 +2400,9 @@ class QSMApp {
       await this.visualizeMagnitude();
     }
 
-    this.maskController.magnitudeFileBytes = this.magnitudeFileBytes || this.maskController.magnitudeFileBytes;
     // A replacement must not leave a previously accepted mask available to the pipeline.
-    this.currentMaskData = null;
-    this.originalMaskData = null;
+    this.maskController.currentMaskData = null;
+    this.maskController.originalMaskData = null;
     this.updateEchoInfo();
 
     let result;
@@ -2507,11 +2436,6 @@ class QSMApp {
       return false;
     }
 
-    this.currentMaskData = this.maskController.currentMaskData;
-    this.originalMaskData = this.maskController.originalMaskData;
-    this.maskDims = this.maskController.maskDims;
-    this.voxelSize = this.maskController.voxelSize;
-    this.magnitudeFileBytes = this.maskController.magnitudeFileBytes;
     this.applyVoxelDefaults();
     this.maskUploadMessage = 'Mask loaded for processing and displayed over the brain image.';
 
@@ -2537,10 +2461,6 @@ class QSMApp {
     this.resetMaskAlignmentRepair();
     await this.maskController.clearMask();
 
-    // Sync state
-    this.currentMaskData = null;
-    this.originalMaskData = null;
-
     // Hide threshold slider
     const sliderGroup = document.getElementById('thresholdSliderGroup');
     if (sliderGroup) sliderGroup.style.display = 'none';
@@ -2551,28 +2471,16 @@ class QSMApp {
 
   // Toggle drawing mode on/off - delegates to MaskController
   async toggleDrawingMode() {
-    // Sync mask data to controller
-    this.maskController.currentMaskData = this.currentMaskData;
-    this.maskController.maskDims = this.maskDims;
-    this.maskController.brushSize = this.brushSize;
-
     await this.maskController.toggleDrawingMode();
-
-    // Sync state back
-    this.drawingEnabled = this.maskController.drawingEnabled;
-    this.brushMode = this.maskController.brushMode;
-    this.savedCrosshairWidth = this.maskController.savedCrosshairWidth;
   }
 
   // Set brush mode (add or remove) - delegates to MaskController
   setBrushMode(mode) {
     this.maskController.setBrushMode(mode);
-    this.brushMode = this.maskController.brushMode;
   }
 
   // Set brush size - delegates to MaskController
   setBrushSize(size) {
-    this.brushSize = size;
     this.maskController.setBrushSize(size);
   }
 
@@ -2588,16 +2496,7 @@ class QSMApp {
 
   // Apply the drawing to the current mask - delegates to MaskController
   async applyDrawingToMask() {
-    // Sync mask data to controller
-    this.maskController.currentMaskData = this.currentMaskData;
-    this.maskController.maskDims = this.maskDims;
-
     await this.maskController.applyDrawingToMask();
-
-    // Sync state back
-    this.currentMaskData = this.maskController.currentMaskData;
-    this.drawingEnabled = this.maskController.drawingEnabled;
-    this.brushMode = this.maskController.brushMode;
 
     // Update run button state
     this.updateEchoInfo();
@@ -2605,7 +2504,7 @@ class QSMApp {
 
   // Create mask NIfTI using source header as template - delegates to imported module
   createMaskNifti(maskData) {
-    return createMaskNifti(maskData, this.magnitudeFileBytes);
+    return createMaskNifti(maskData, this.maskController.magnitudeFileBytes);
   }
 
   async runRomeoQSM() {
@@ -2613,7 +2512,7 @@ class QSMApp {
       this.updateOutput('Apply or cancel the mask alignment preview before running.');
       return;
     }
-    if (this.fileIOController.hasMask() && !this.currentMaskData
+    if (this.fileIOController.hasMask() && !this.maskController.currentMaskData
         && !(await this.loadCustomMaskFile())) return;
     const mode = this.fileIOController.getInputMode();
 
@@ -2673,8 +2572,8 @@ class QSMApp {
 
       // Prepare custom mask if available
       let customMaskBuffer = null;
-      if (this.currentMaskData && this.magnitudeFileBytes) {
-        const maskNifti = this.createMaskNifti(this.currentMaskData);
+      if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
+        const maskNifti = this.createMaskNifti(this.maskController.currentMaskData);
         customMaskBuffer = maskNifti;
         this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
@@ -2683,8 +2582,8 @@ class QSMApp {
       await this.visualizePhase();
 
       // Include prepared magnitude if available (for MEDI gradient weighting and threshold mask)
-      const preparedMagnitude = this.preparedMagnitudeData
-        ? Array.from(this.preparedMagnitudeData)
+      const preparedMagnitude = this.maskController.preparedMagnitudeData
+        ? Array.from(this.maskController.preparedMagnitudeData)
         : null;
 
       // Run pipeline via executor
@@ -2694,7 +2593,7 @@ class QSMApp {
         phaseBuffers,
         echoTimes,
         magField,
-        maskThreshold: this.maskThreshold,
+        maskThreshold: this.maskController.maskThreshold,
         customMaskBuffer,
         preparedMagnitude,
         pipelineSettings: this.pipelineSettings
@@ -2735,7 +2634,7 @@ class QSMApp {
     // QSMART and MEDI require magnitude
     const dipoleMethod = this.pipelineSettings?.dipole_inversion || 'rts';
     if ((combined_method === 'qsmart' || dipoleMethod === 'medi')
-        && !this.fileIOController.hasFieldMapMagnitude() && !this.preparedMagnitudeData) {
+        && !this.fileIOController.hasFieldMapMagnitude() && !this.maskController.preparedMagnitudeData) {
       const method = combined_method === 'qsmart' ? 'QSMART' : 'MEDI';
       this.updateOutput(`${method} requires a magnitude image`);
       return;
@@ -2748,8 +2647,8 @@ class QSMApp {
       const fieldHeader = (await gunzipNifti(new Uint8Array(totalFieldBuffer), 352)).slice(0, 352).buffer;
       if (fieldHeader.byteLength >= 352) {
         const headerInfo = parseNiftiHeader(fieldHeader);
-        this.voxelSize = headerInfo.voxelSize;
-        this.maskDims = [headerInfo.nx, headerInfo.ny, headerInfo.nz];
+        this.maskController.voxelSize = headerInfo.voxelSize;
+        this.maskController.maskDims = [headerInfo.nx, headerInfo.ny, headerInfo.nz];
         this.applyVoxelDefaults();
       }
 
@@ -2763,8 +2662,8 @@ class QSMApp {
 
       // Use custom edited mask if available
       let customMaskBuffer = null;
-      if (this.currentMaskData && this.magnitudeFileBytes) {
-        const maskNifti = this.createMaskNifti(this.currentMaskData);
+      if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
+        const maskNifti = this.createMaskNifti(this.maskController.currentMaskData);
         customMaskBuffer = maskNifti;
         this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
@@ -2780,8 +2679,8 @@ class QSMApp {
         maskBuffer,
         customMaskBuffer,
         magField,
-        maskThreshold: this.maskThreshold,
-        preparedMagnitude: this.preparedMagnitudeData ? Array.from(this.preparedMagnitudeData) : null,
+        maskThreshold: this.maskController.maskThreshold,
+        preparedMagnitude: this.maskController.preparedMagnitudeData ? Array.from(this.maskController.preparedMagnitudeData) : null,
         pipelineSettings: this.pipelineSettings
       });
 
@@ -2818,7 +2717,7 @@ class QSMApp {
     // QSMART and MEDI require magnitude
     const dipoleMethod = this.pipelineSettings?.dipole_inversion || 'rts';
     if ((combined_method === 'qsmart' || dipoleMethod === 'medi')
-        && !this.fileIOController.hasFieldMapMagnitude() && !this.preparedMagnitudeData) {
+        && !this.fileIOController.hasFieldMapMagnitude() && !this.maskController.preparedMagnitudeData) {
       const method = combined_method === 'qsmart' ? 'QSMART' : 'MEDI';
       this.updateOutput(`${method} requires a magnitude image`);
       return;
@@ -2831,8 +2730,8 @@ class QSMApp {
       const fieldHeader = (await gunzipNifti(new Uint8Array(localFieldBuffer), 352)).slice(0, 352).buffer;
       if (fieldHeader.byteLength >= 352) {
         const headerInfo = parseNiftiHeader(fieldHeader);
-        this.voxelSize = headerInfo.voxelSize;
-        this.maskDims = [headerInfo.nx, headerInfo.ny, headerInfo.nz];
+        this.maskController.voxelSize = headerInfo.voxelSize;
+        this.maskController.maskDims = [headerInfo.nx, headerInfo.ny, headerInfo.nz];
         this.applyVoxelDefaults();
       }
 
@@ -2845,8 +2744,8 @@ class QSMApp {
       let maskBuffer = maskFile ? await maskFile.arrayBuffer() : null;
 
       let customMaskBuffer = null;
-      if (this.currentMaskData && this.magnitudeFileBytes) {
-        const maskNifti = this.createMaskNifti(this.currentMaskData);
+      if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
+        const maskNifti = this.createMaskNifti(this.maskController.currentMaskData);
         customMaskBuffer = maskNifti;
         this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
@@ -2867,8 +2766,8 @@ class QSMApp {
         maskBuffer,
         customMaskBuffer,
         magField,
-        maskThreshold: this.maskThreshold,
-        preparedMagnitude: this.preparedMagnitudeData ? Array.from(this.preparedMagnitudeData) : null,
+        maskThreshold: this.maskController.maskThreshold,
+        preparedMagnitude: this.maskController.preparedMagnitudeData ? Array.from(this.maskController.preparedMagnitudeData) : null,
         pipelineSettings: this.pipelineSettings
       });
 
@@ -2993,9 +2892,9 @@ class QSMApp {
     }
 
     // Mask (local data)
-    const headerBytes = this.magnitudeFileBytes || this.maskController.magnitudeFileBytes;
+    const headerBytes = this.maskController.magnitudeFileBytes;
     if (stage === 'mask') {
-      const maskData = this.currentMaskData || this.maskController.currentMaskData;
+      const maskData = this.maskController.currentMaskData;
       if (maskData && headerBytes) {
         const nifti = createMaskNifti(maskData, headerBytes);
         this._downloadBuffer(nifti, 'brain_mask.nii');
@@ -3005,7 +2904,7 @@ class QSMApp {
 
     // Prepared magnitude (local data)
     if (stage === 'preparedMagnitude') {
-      const prepData = this.preparedMagnitudeData || this.maskController.preparedMagnitudeData;
+      const prepData = this.maskController.preparedMagnitudeData;
       if (prepData && headerBytes) {
         const nifti = createFloat64Nifti(prepData, headerBytes);
         this._downloadBuffer(nifti, 'masking_input.nii');
@@ -3068,13 +2967,13 @@ class QSMApp {
     this.clearStageButtons();
 
     // Clear prepared magnitude
-    this.preparedMagnitudeData = null;
-    this.preparedMagnitudeMax = 0;
+    this.maskController.preparedMagnitudeData = null;
+    this.maskController.preparedMagnitudeMax = 0;
     this.maskPrepSettings.prepared = false;
 
     // Clear mask
-    this.currentMaskData = null;
-    this.originalMaskData = null;
+    this.maskController.currentMaskData = null;
+    this.maskController.originalMaskData = null;
 
     // Hide morphological operations panel and threshold slider
     const opsPanel = document.getElementById('maskOperations');
@@ -3112,10 +3011,7 @@ class QSMApp {
 
       // Handle prepared magnitude (local data, not from pipeline)
       if (stage === 'preparedMagnitude') {
-        if (this.preparedMagnitudeData || this.maskController.preparedMagnitudeData) {
-          if (!this.preparedMagnitudeData) {
-            this.preparedMagnitudeData = this.maskController.preparedMagnitudeData;
-          }
+        if (this.maskController.preparedMagnitudeData) {
           await this.displayPreparedMagnitude();
           this.updateDataUnits(null);
           this.updateOutput("Displaying: Masking input");
@@ -3132,10 +3028,7 @@ class QSMApp {
           this.updateDataUnits(null);
           return;
         }
-        if (this.currentMaskData || this.maskController.currentMaskData) {
-          if (!this.currentMaskData) {
-            this.currentMaskData = this.maskController.currentMaskData;
-          }
+        if (this.maskController.currentMaskData) {
           await this.displayCurrentMask();
           this.updateDataUnits(null);
           this.updateOutput("Displaying: Brain Mask");
@@ -3386,20 +3279,16 @@ class QSMApp {
    * Delegates to MaskController, which logs progress and updates the slider
    */
   autoDetectThreshold() {
-    // Sync prepared data to controller
-    this.maskController.preparedMagnitudeData = this.preparedMagnitudeData;
-    this.maskController.preparedMagnitudeMax = this.preparedMagnitudeMax;
-
     // null when there is no prepared magnitude or Otsu failed (e.g. constant image);
     // the controller has already reported why.
     const result = this.maskController.computeOtsuThreshold();
     if (!result) return;
 
-    this.maskThreshold = result.thresholdPercent;
+    this.maskController.maskThreshold = result.thresholdPercent;
 
     // Only trigger mask preview if threshold slider is enabled (user has clicked Threshold button)
     const thresholdSlider = document.getElementById('maskThreshold');
-    if (thresholdSlider && !thresholdSlider.disabled && this.magnitudeData) {
+    if (thresholdSlider && !thresholdSlider.disabled && this.maskController.magnitudeData) {
       this.updateMaskPreview();
     }
   }
@@ -3412,14 +3301,6 @@ class QSMApp {
     // Disable threshold slider since user chose BET-based masking
     this.setThresholdSliderEnabled(false);
 
-    // Sync state to controller
-    this.maskController.magnitudeFileBytes = this.magnitudeFileBytes;
-    this.maskController.magnitudeVolume = this.magnitudeVolume;
-    this.maskController.magnitudeData = this.magnitudeData;
-    this.maskController.magnitudeMax = this.magnitudeMax;
-    this.maskController.preparedMagnitudeData = this.preparedMagnitudeData;
-    this.maskController.maskDims = this.maskDims;
-
     // Get magnitude files from unified buckets
     const magnitudeFilesForBET = this.fileIOController.buckets.magnitude;
 
@@ -3428,15 +3309,6 @@ class QSMApp {
       betSettings,
       createNiftiHeaderFromVolume: (vol) => this.createNiftiHeaderFromVolume(vol),
       onComplete: async () => {
-        // Sync state from controller
-        this.currentMaskData = this.maskController.currentMaskData;
-        this.originalMaskData = this.maskController.originalMaskData;
-        this.maskDims = this.maskController.maskDims;
-        this.magnitudeVolume = this.maskController.magnitudeVolume;
-        this.magnitudeData = this.maskController.magnitudeData;
-        this.magnitudeMax = this.maskController.magnitudeMax;
-        this.magnitudeFileBytes = this.maskController.magnitudeFileBytes;
-
         // Track BET as mask generator. The qsmxt op has no voxel scaling, so Mouse BET records the
         // same `bet:<fi>` and the scale is noted separately (see showCommandPreview).
         const fi = betSettings?.fractionalIntensity ?? 0.5;
@@ -3472,13 +3344,13 @@ class QSMApp {
 
   // Calculate dynamic defaults based on voxel size (matches QSM.jl)
   getVoxelBasedDefaults() {
-    return window.QSMConfig.getVoxelBasedDefaults(this.voxelSize || [1, 1, 1], this.maskDims);
+    return window.QSMConfig.getVoxelBasedDefaults(this.maskController.voxelSize || [1, 1, 1], this.maskController.maskDims);
   }
 
   // Apply voxel-based defaults to pipeline settings for any null values.
   // Called when voxel size becomes available (file upload, mask preparation).
   applyVoxelDefaults() {
-    if (!this.voxelSize) return;
+    if (!this.maskController.voxelSize) return;
     const defaults = this.getVoxelBasedDefaults();
     const s = this.pipelineSettings;
     if (s.vsharp.max_radius == null) s.vsharp.max_radius = defaults.vsharpMaxRadius;
@@ -3494,7 +3366,7 @@ class QSMApp {
     const nEchoes = this.fileIOController?.buckets?.phase?.filter(f => f.file)?.length || 0;
     const inputMode = this.fileIOController?.getInputMode() || 'raw';
     const hasMagnitude = this.fileIOController?.buckets?.magnitude?.length > 0
-      || this.preparedMagnitudeData !== null;
+      || this.maskController.preparedMagnitudeData !== null;
     this.pipelineSettingsController.setInputMode(inputMode);
     this.pipelineSettingsController.open(this.pipelineSettings, defaults, nEchoes, hasMagnitude);
     this.updateEchoInfo();
@@ -3547,7 +3419,7 @@ class QSMApp {
       this.updateOutput('Apply or cancel the mask alignment preview before running.');
       return;
     }
-    if (this.fileIOController.hasMask() && !this.currentMaskData
+    if (this.fileIOController.hasMask() && !this.maskController.currentMaskData
         && !(await this.loadCustomMaskFile())) return;
     const mode = this.fileIOController.getInputMode();
     if (mode !== 'raw') {
@@ -3577,32 +3449,27 @@ class QSMApp {
       }
 
       let customMaskBuffer = null;
-      if (this.currentMaskData && this.magnitudeFileBytes) {
-        customMaskBuffer = this.createMaskNifti(this.currentMaskData);
+      if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
+        customMaskBuffer = this.createMaskNifti(this.maskController.currentMaskData);
       }
 
-      const preparedMagnitude = this.preparedMagnitudeData
-        ? Array.from(this.preparedMagnitudeData)
+      const preparedMagnitude = this.maskController.preparedMagnitudeData
+        ? Array.from(this.maskController.preparedMagnitudeData)
         : null;
 
-      await this.pipelineExecutor.initialize();
-      this.pipelineExecutor.pipelineRunning = true;
-      this.updateOutput("Starting SWI pipeline...");
-
-      this.pipelineExecutor.getWorker().postMessage({
-        type: 'runSWI',
-        data: {
-          magnitudeBuffers,
-          phaseBuffers,
-          maskThreshold: this.maskThreshold,
-          customMaskBuffer,
-          preparedMagnitude,
-          pipelineSettings: this.pipelineSettings
-        }
+      const started = await this.pipelineExecutor.runSWI({
+        magnitudeBuffers,
+        phaseBuffers,
+        maskThreshold: this.maskController.maskThreshold,
+        customMaskBuffer,
+        preparedMagnitude,
+        pipelineSettings: this.pipelineSettings
       });
 
-      document.getElementById('cancelPipeline').disabled = false;
-      document.getElementById('runSWI').disabled = true;
+      if (started) {
+        document.getElementById('cancelPipeline').disabled = false;
+        document.getElementById('runSWI').disabled = true;
+      }
 
     } catch (error) {
       this.updateOutput(`Error: ${error.message}`);
@@ -3616,7 +3483,7 @@ class QSMApp {
       this.updateOutput('Apply or cancel the mask alignment preview before running.');
       return;
     }
-    if (this.fileIOController.hasMask() && !this.currentMaskData
+    if (this.fileIOController.hasMask() && !this.maskController.currentMaskData
         && !(await this.loadCustomMaskFile())) return;
     const mode = this.fileIOController.getInputMode();
     if (mode !== 'raw') {
@@ -3645,31 +3512,26 @@ class QSMApp {
       }
 
       let customMaskBuffer = null;
-      if (this.currentMaskData && this.magnitudeFileBytes) {
-        customMaskBuffer = this.createMaskNifti(this.currentMaskData);
+      if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
+        customMaskBuffer = this.createMaskNifti(this.maskController.currentMaskData);
       }
 
-      const preparedMagnitude = this.preparedMagnitudeData
-        ? Array.from(this.preparedMagnitudeData)
+      const preparedMagnitude = this.maskController.preparedMagnitudeData
+        ? Array.from(this.maskController.preparedMagnitudeData)
         : null;
 
-      await this.pipelineExecutor.initialize();
-      this.pipelineExecutor.pipelineRunning = true;
-      this.updateOutput("Starting T2*/R2* mapping...");
-
-      this.pipelineExecutor.getWorker().postMessage({
-        type: 'runT2starR2star',
-        data: {
-          magnitudeBuffers,
-          maskThreshold: this.maskThreshold,
-          customMaskBuffer,
-          preparedMagnitude,
-          echoTimes
-        }
+      const started = await this.pipelineExecutor.runT2starR2star({
+        magnitudeBuffers,
+        maskThreshold: this.maskController.maskThreshold,
+        customMaskBuffer,
+        preparedMagnitude,
+        echoTimes
       });
 
-      document.getElementById('cancelPipeline').disabled = false;
-      document.getElementById('runT2starR2star').disabled = true;
+      if (started) {
+        document.getElementById('cancelPipeline').disabled = false;
+        document.getElementById('runT2starR2star').disabled = true;
+      }
 
     } catch (error) {
       this.updateOutput(`Error: ${error.message}`);
@@ -3815,7 +3677,6 @@ class QSMApp {
 
     // BET's defaults assume a human-sized head; point out the mismatch either way.
     const mc = this.maskController;
-    if (!mc.magnitudeFileBytes) mc.magnitudeFileBytes = this.magnitudeFileBytes;
     if (mc.ensureGeometry?.()) {
       const rodent = looksLikeRodentFov(mc.maskDims, mc.voxelSize);
       const fov = fieldOfViewMm(mc.maskDims, mc.voxelSize).map(v => v.toFixed(0)).join('x');
@@ -3891,7 +3752,7 @@ class QSMApp {
     this.commandPreviewModal?.open();
 
     // Ask worker to generate command and methods via WASM
-    const worker = this.pipelineExecutor?.worker;
+    const worker = this.pipelineExecutor?.getWorker();
     if (!worker) { if (cmdEl) cmdEl.textContent = 'ERROR: Worker not available'; return; }
 
     const maskSection = maskSectionString(this.maskOpsHistory, maskSource);

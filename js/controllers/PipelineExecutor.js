@@ -253,24 +253,33 @@ export class PipelineExecutor {
   // ==================== Pipeline Execution ====================
 
   async run(pipelineConfig) {
+    const inputMode = pipelineConfig.inputMode || 'raw';
+    const modeLabels = {
+      raw: 'QSM Pipeline',
+      totalField: 'Total Field Map Pipeline',
+      localField: 'Local Field Map Pipeline'
+    };
+    return this._start('run', pipelineConfig, `Starting ${modeLabels[inputMode] || 'Pipeline'}...`);
+  }
+
+  async runSWI(data) {
+    return this._start('runSWI', data, 'Starting SWI pipeline...');
+  }
+
+  async runT2starR2star(data) {
+    return this._start('runT2starR2star', data, 'Starting T2*/R2* mapping...');
+  }
+
+  /**
+   * Post a job to the worker and mark the executor running; the worker answers with stageData
+   * messages and a final 'complete' or 'error'. Resolves false if the worker could not start.
+   */
+  async _start(type, data, message) {
     try {
       await this.initialize();
-
-      const inputMode = pipelineConfig.inputMode || 'raw';
-      const modeLabels = {
-        raw: 'QSM Pipeline',
-        totalField: 'Total Field Map Pipeline',
-        localField: 'Local Field Map Pipeline'
-      };
-      this.updateOutput(`Starting ${modeLabels[inputMode] || 'Pipeline'}...`);
+      this.updateOutput(message);
       this.pipelineRunning = true;
-
-      // Pass through all pipeline config to the worker
-      this.worker.postMessage({
-        type: 'run',
-        data: pipelineConfig
-      });
-
+      this.worker.postMessage({ type, data });
       return true;
     } catch (error) {
       this._handleError(error.message);
