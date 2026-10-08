@@ -6,7 +6,7 @@ import { classifyImage } from '../modules/file-io/ImageClassification.js';
  *
  * This controller is stateless with respect to classification results — each
  * conversion produces a batch result that is passed to the onConversionComplete
- * callback. Accumulation across batches is handled by the consumer (QSMApp._triageState).
+ * callback. Accumulation across batches is handled by the consumer (FileIOController's buckets).
  */
 
 export class DicomController {

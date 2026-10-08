@@ -28,10 +28,6 @@ export class FileIOController {
     // Centralized mask file storage (used by all modes, managed in Masking section)
     this.maskFile = [];
 
-    // Combined data cache
-    this.combinedMagnitude = null;
-    this.combinedPhase = null;
-
     // Tagify instance for echo times
     this.echoTagify = null;
   }
@@ -171,10 +167,6 @@ export class FileIOController {
     const [item] = arr.splice(fromIndex, 1);
     arr.splice(toIndex, 0, item);
 
-    // Clear combined data cache
-    this.combinedMagnitude = null;
-    this.combinedPhase = null;
-
     this._fireCallbacks();
   }
 
@@ -219,10 +211,6 @@ export class FileIOController {
     // Sort the target bucket alphabetically
     this._sortBucket(targetBucket);
 
-    // Clear combined data cache (files changed)
-    this.combinedMagnitude = null;
-    this.combinedPhase = null;
-
     // Fire callbacks
     this._fireCallbacks();
   }
@@ -241,24 +229,6 @@ export class FileIOController {
     if (!this.buckets[bucket] || index < 0 || index >= this.buckets[bucket].length) return;
     this.buckets[bucket].splice(index, 1);
 
-    // Clear combined data cache
-    this.combinedMagnitude = null;
-    this.combinedPhase = null;
-
-    this._fireCallbacks();
-  }
-
-  /**
-   * Clear all files from all buckets.
-   */
-  clearAllFiles() {
-    for (const key of Object.keys(this.buckets)) {
-      this.buckets[key] = [];
-    }
-    this.combinedMagnitude = null;
-    this.combinedPhase = null;
-    this.maskFile = [];
-    this.updateFileList('mask', []);
     this._fireCallbacks();
   }
 
@@ -272,22 +242,6 @@ export class FileIOController {
   }
 
   // ==================== State Accessors ====================
-
-  getMagnitudeFiles() {
-    return this.buckets.magnitude;
-  }
-
-  getPhaseFiles() {
-    return this.buckets.phase;
-  }
-
-  getJsonFiles() {
-    return this.buckets.json;
-  }
-
-  getEchoCount() {
-    return Math.max(this.buckets.magnitude.length, this.buckets.phase.length);
-  }
 
   /**
    * Check if we have valid data for the current (derived) input mode.
@@ -317,9 +271,7 @@ export class FileIOController {
     return {
       magnitude: this.buckets.magnitude,
       phase: this.buckets.phase,
-      json: this.buckets.json,
-      combinedMagnitude: this.combinedMagnitude,
-      combinedPhase: this.combinedPhase
+      json: this.buckets.json
     };
   }
 
@@ -335,14 +287,6 @@ export class FileIOController {
 
   getFieldMapMagnitudeFile() {
     return this.buckets.magnitude[0]?.file || null;
-  }
-
-  getFieldMapMagnitudeFiles() {
-    return this.buckets.magnitude;
-  }
-
-  getFieldMapMagnitudeCount() {
-    return this.buckets.magnitude.length;
   }
 
   hasFieldMapMagnitude() {
@@ -399,10 +343,14 @@ export class FileIOController {
       fileList.forEach((fileData, index) => {
         const fileItem = document.createElement('div');
         fileItem.className = 'file-item';
-        fileItem.innerHTML = `
-          <span>${fileData.name}</span>
-          <button class="file-remove" onclick="app.removeFile('${type}', ${index})">×</button>
-        `;
+        const name = document.createElement('span');
+        name.textContent = fileData.name;
+        const remove = document.createElement('button');
+        remove.className = 'file-remove';
+        remove.dataset.type = type;
+        remove.dataset.index = index;
+        remove.textContent = '×';
+        fileItem.append(name, remove);
         listElement.appendChild(fileItem);
       });
 
@@ -539,10 +487,6 @@ export class FileIOController {
     this._sortBucket('magnitude');
     this._sortBucket('phase');
 
-    // Clear combined data cache
-    this.combinedMagnitude = null;
-    this.combinedPhase = null;
-
     this.onMagnitudeFilesChanged(this.buckets.magnitude);
     this.onPhaseFilesChanged(this.buckets.phase);
 
@@ -554,23 +498,5 @@ export class FileIOController {
       this._sortBucket('json');
       this.processJsonFiles(jsonFiles);
     }
-  }
-
-  // ==================== Combined Data ====================
-
-  setCombinedMagnitude(data) {
-    this.combinedMagnitude = data;
-  }
-
-  setCombinedPhase(data) {
-    this.combinedPhase = data;
-  }
-
-  getCombinedMagnitude() {
-    return this.combinedMagnitude;
-  }
-
-  getCombinedPhase() {
-    return this.combinedPhase;
   }
 }

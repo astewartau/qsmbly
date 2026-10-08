@@ -28,7 +28,7 @@ const DL_INVERSION_METHODS = new Set([...DL_TILEABLE, ...DL_NATIVE_TILE, ...DL_O
 export class PipelineSettingsController {
   constructor(modalElement) {
     this.modal = modalElement;
-    this.inputMode = 'dicom'; // 'dicom', 'raw', 'totalField', or 'localField'
+    this.inputMode = 'raw'; // 'raw', 'totalField', or 'localField'
     this._setupTabs();
     this._setupEventListeners();
   }
@@ -574,7 +574,7 @@ export class PipelineSettingsController {
    * @param {number} nEchoes - Number of echo files loaded
    */
   updateVisibility(nEchoes) {
-    const isRawMode = this.inputMode === 'raw' || this.inputMode === 'dicom';
+    const isRawMode = this.inputMode === 'raw';
     const isTotalFieldMode = this.inputMode === 'totalField';
     const isLocalFieldMode = this.inputMode === 'localField';
     const isFieldMapMode = isTotalFieldMode || isLocalFieldMode;
@@ -1168,40 +1168,6 @@ export class PipelineSettingsController {
         warning.querySelector('span').textContent = message;
         warning.style.display = '';
       }
-    } else if (warning) {
-      warning.style.display = 'none';
-    }
-  }
-
-  /**
-   * Show/hide a warning banner at the top of a section (replaces _disableSection)
-   * All inputs remain interactive.
-   * @param {string} id - Section element ID
-   * @param {boolean} hasWarning - Whether to show the warning
-   * @param {string} [warningText] - Warning text
-   */
-  _showSectionWarning(id, hasWarning, warningText) {
-    const section = document.getElementById(id);
-    if (!section) return;
-
-    const warningId = id + 'Warning';
-    let warning = document.getElementById(warningId);
-
-    if (hasWarning && warningText) {
-      if (!warning) {
-        warning = document.createElement('div');
-        warning.id = warningId;
-        warning.className = 'validation-message error inline-warning';
-        warning.innerHTML = '<span></span>';
-        const heading = section.querySelector('h4');
-        if (heading) {
-          heading.after(warning);
-        } else {
-          section.prepend(warning);
-        }
-      }
-      warning.querySelector('span').textContent = warningText;
-      warning.style.display = 'flex';
     } else if (warning) {
       warning.style.display = 'none';
     }
