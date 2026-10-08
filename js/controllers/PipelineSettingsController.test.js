@@ -14,6 +14,11 @@ const modal = () => ({
   querySelector: () => null,
   querySelectorAll: () => [],
   classList: { add() {}, remove() {} },
+  // open()/close() go through the dialog focus helper.
+  contains: () => false,
+  hasAttribute: () => true,
+  setAttribute() {},
+  focus() {},
 });
 
 let dom;
@@ -147,7 +152,10 @@ describe('PipelineSettingsController.save', () => {
 });
 
 describe('PipelineSettingsController.updateVisibility', () => {
-  const shown = id => dom.elements.get(id).style.display !== 'none';
+  const shown = (id) => {
+    const el = dom.elements.get(id);
+    return !el.hidden && el.style.display !== 'none';
+  };
 
   test('hides dipole inversion for the combined methods, which invert internally', () => {
     controller.open(structuredClone(PIPELINE_DEFAULTS), VOXEL_DEFAULTS, 4, true);

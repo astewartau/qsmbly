@@ -27,7 +27,7 @@ function makeElement(id, tagName, a, options) {
   if (options) value = (options.find(o => o.selected) || options[0])?.value ?? '';
   const el = {
     id, tagName: tagName.toUpperCase(), type: a.type || '', options,
-    checked: 'checked' in a, disabled: 'disabled' in a,
+    checked: 'checked' in a, disabled: 'disabled' in a, hidden: 'hidden' in a,
     style: {}, textContent: '', innerHTML: '',
     // Enough of a parent for code that inserts an inline warning next to a control.
     parentNode: { tagName: 'DIV', insertBefore() {} },
@@ -40,6 +40,10 @@ function makeElement(id, tagName, a, options) {
     querySelector: () => null,
     querySelectorAll: () => [],
     closest: () => null,
+    // Enough for the dialog focus helper (dialogFocus.js) that open()/close() go through.
+    hasAttribute: n => n in a,
+    setAttribute(n, v) { a[n] = String(v); },
+    focus() {},
     get value() { return value; },
     set value(v) {
       const s = String(v);
@@ -75,6 +79,9 @@ export function installIndexHtmlDom() {
   const missing = new Set();
   const previous = globalThis.document;
   globalThis.document = {
+    activeElement: null,
+    body: null,
+    addEventListener() {},
     getElementById(id) {
       if (!elements.has(id)) missing.add(id);
       return elements.get(id) ?? null;
