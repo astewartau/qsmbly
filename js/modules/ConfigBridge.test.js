@@ -25,6 +25,13 @@ describe('maskSectionString', () => {
       .toBe('magnitude,hd-bet:128x128x64,signal-erode,erode:2');
   });
 
+  test('keeps post-BET erosions in the BET mask section', () => {
+    // runBET records the BET modal's erosions after `bet:<fi>`; without them the exported
+    // command describes a larger mask than the one the run used.
+    expect(maskSectionString(['bet:0.5', 'erode:2'], 'combined'))
+      .toBe('magnitude,bet:0.5,erode:2');
+  });
+
   test('passes signal-gated erosion through in order', () => {
     // qsmxt parses a bare `signal-erode` as qsm-core's defaults (the QSM-CI setting).
     expect(maskSectionString(['bet:0.50', 'signal-erode'], 'combined'))

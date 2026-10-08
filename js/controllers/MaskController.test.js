@@ -5,6 +5,7 @@
  * handed to the worker as `customMaskBuffer`, and what the overlay draws.
  */
 
+import { jest } from '@jest/globals';
 import { MaskController } from './MaskController.js';
 
 /** Build a NIfTI-1 file (header + data) as a File-like object. */
@@ -202,5 +203,88 @@ describe('MaskController.loadMaskFromFile', () => {
     const result = await controller.loadMaskFromFile(null);
     expect(result.ok).toBe(false);
     expect(controller.currentMaskData).toBeNull();
+  });
+});
+
+describe('MaskController error paths', () => {
+  const DIMS = [4, 4, 2];
+  const N = DIMS[0] * DIMS[1] * DIMS[2];
+  let controller;
+  let log;
+  let savedDocument;
+
+  beforeEach(() => {
+    savedDocument = global.document;
+    global.document = { getElementById: () => null };
+    log = [];
+    controller = new MaskController({
+      nv: { volumes: [] },
+      updateOutput: (m) => log.push(m),
+      setProgress: () => {},
+      initializeWorker: async () => {},
+      config: {},
+    });
+  });
+
+  afterEach(() => {
+    global.document = savedDocument;
+  });
+
+  describe('combineMagnitudeRSS', () => {
+    it('combines echoes of the same size', async () => {
+      const a = makeNiftiFile('e1.nii', DIMS, 16, new Float32Array(N).fill(3));
+      const b = makeNiftiFile('e2.nii', DIMS, 16, new Float32Array(N).fill(4));
+      const rss = await controller.combineMagnitudeRSS([{ file: a }, { file: b }]);
+      expect(rss.length).toBe(N);
+      expect(rss[0]).toBeCloseTo(5);
+    });
+
+    it('names the echo whose matrix size differs instead of producing NaNs', async () => {
+      const a = makeNiftiFile('e1.nii', DIMS, 16, new Float32Array(N).fill(3));
+      const b = makeNiftiFile('e2_small.nii', [4, 4, 1], 16, new Float32Array(N / 2).fill(4));
+      await expect(controller.combineMagnitudeRSS([{ file: a }, { file: b }]))
+        .rejects.toThrow(/Echo 2 \(e2_small\.nii\) has 16 voxels but echo 1 has 32/);
+    });
+  });
+
+  describe('computeOtsuThreshold', () => {
+    it('returns null for a constant image so callers can bail out', () => {
+      controller.preparedMagnitudeData = new Float64Array(N).fill(7);
+      expect(controller.computeOtsuThreshold()).toBeNull();
+      expect(log.some(m => /Cannot compute threshold/.test(m))).toBe(true);
+    });
+
+    it('returns null before Prepare', () => {
+      expect(controller.computeOtsuThreshold()).toBeNull();
+    });
+  });
+
+  describe('runBET', () => {
+    const magnitudeFiles = [{ file: { name: 'mag.nii' } }];
+
+    it('reports a failure through onError, not onComplete', async () => {
+      controller.initializeWorker = async () => { throw new Error('WASM init failed'); };
+      const onComplete = jest.fn();
+      const onError = jest.fn();
+      await controller.runBET({ magnitudeFiles, betSettings: {}, onComplete, onError });
+      expect(onComplete).not.toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledWith('WASM init failed');
+    });
+
+    it('falls back to onComplete({ error }) when no onError is given', async () => {
+      controller.initializeWorker = async () => { throw new Error('WASM init failed'); };
+      const onComplete = jest.fn();
+      await controller.runBET({ magnitudeFiles, betSettings: {}, onComplete });
+      expect(onComplete).toHaveBeenCalledWith({ error: 'WASM init failed' });
+    });
+
+    it('reports a mask display failure through onError', async () => {
+      controller.displayCurrentMask = async () => { throw new Error('display failed'); };
+      const onComplete = jest.fn();
+      const onError = jest.fn();
+      await controller.handleBETComplete({ maskData: new Float32Array(N), coverage: '0%' }, onComplete, onError);
+      expect(onComplete).not.toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledWith('display failed');
+    });
   });
 });

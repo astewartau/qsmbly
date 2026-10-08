@@ -447,6 +447,14 @@ export class MaskController {
       this.updateOutput(`Combining echo ${e + 1}/${nEchoes}...`);
       const file = magnitudeFiles[e].file;
       const echoData = await this.readNiftiData(file);
+      // A shorter echo would read as undefined past its end, turning the sum into an all-NaN
+      // volume and, downstream, an empty mask with no error.
+      if (echoData.length !== nTotal) {
+        throw new Error(
+          `Echo ${e + 1} (${file.name}) has ${echoData.length} voxels but echo 1 has ${nTotal} ` +
+          `— all echoes must come from the same acquisition`
+        );
+      }
       for (let i = 0; i < nTotal; i++) {
         rssData[i] += echoData[i] * echoData[i];
       }
@@ -1508,10 +1516,15 @@ export class MaskController {
    * @param {Object} options
    * @param {Array} options.magnitudeFiles - Magnitude files
    * @param {Object} options.betSettings - BET settings
-   * @param {Function} options.onComplete - Completion callback
+   * @param {Function} options.onComplete - Called with { success, coverage } once the mask is displayed
+   * @param {Function} [options.onError] - Called with the error message if BET fails
    */
   async runBET(options) {
     const { magnitudeFiles, betSettings, onComplete } = options;
+    const fail = (message) => {
+      if (options.onError) options.onError(message);
+      else if (onComplete) onComplete({ error: message });
+    };
 
     if (magnitudeFiles.length === 0) {
       this.updateOutput("No magnitude files uploaded - please load magnitude data first");
@@ -1615,13 +1628,13 @@ export class MaskController {
             break;
           case 'betComplete':
             worker.removeEventListener('message', betHandler);
-            this.handleBETComplete(data, onComplete);
+            this.handleBETComplete(data, onComplete, fail);
             break;
           case 'betError':
             worker.removeEventListener('message', betHandler);
             this.updateOutput(`BET Error: ${data.message}`);
             this.setProgress(0, 'BET Failed');
-            if (onComplete) onComplete({ error: data.message });
+            fail(data.message);
             break;
         }
       };
@@ -1643,12 +1656,12 @@ export class MaskController {
     } catch (error) {
       this.updateOutput(`BET Error: ${error.message}`);
       this.setProgress(0, 'Failed');
-      if (onComplete) onComplete({ error: error.message });
+      fail(error.message);
       console.error(error);
     }
   }
 
-  async handleBETComplete(data, onComplete) {
+  async handleBETComplete(data, onComplete, onError) {
     try {
       this.updateOutput("BET completed, loading mask...");
 
@@ -1675,7 +1688,8 @@ export class MaskController {
     } catch (error) {
       this.updateOutput(`Error displaying BET mask: ${error.message}`);
       console.error(error);
-      if (onComplete) onComplete({ error: error.message });
+      if (onError) onError(error.message);
+      else if (onComplete) onComplete({ error: error.message });
     }
   }
 

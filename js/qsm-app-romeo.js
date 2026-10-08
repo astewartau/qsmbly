@@ -12,12 +12,9 @@ import {
   createNiftiHeaderFromVolume,
   createFloat64Nifti
 } from './modules/file-io/NiftiUtils.js';
-import { ConsoleOutput } from './modules/ui/ConsoleOutput.js';
 import { ModalManager } from './modules/ui/ModalManager.js';
-import { ProgressManager } from './modules/ui/ProgressManager.js';
 import { LandingPage } from './modules/ui/LandingPage.js';
 import { Tutorial, WelcomePrompt } from './modules/ui/Tutorial.js';
-import { EchoNavigator } from './modules/viewer/EchoNavigator.js';
 import { FileIOController, PipelineExecutor, PipelineSettingsController, MaskController, ViewerController } from './controllers/index.js';
 import { DicomController } from './controllers/DicomController.js';
 import { DicompareController } from 'https://dicompare.neurodesk.org/embed/DicompareController.js';
@@ -3444,44 +3441,20 @@ class QSMApp {
   }
 
   /**
-   * Auto-detect optimal threshold using Otsu's method and set the slider
-   * Delegates computation to imported ThresholdUtils module
-   */
-  /**
    * Auto-detect optimal threshold using Otsu's method
-   * Delegates to MaskController
+   * Delegates to MaskController, which logs progress and updates the slider
    */
   autoDetectThreshold() {
-    if (!this.preparedMagnitudeData) {
-      this.updateOutput("Please click Prepare first");
-      return;
-    }
-
-    this.updateOutput("Computing optimal threshold (Otsu)...");
-
     // Sync prepared data to controller
     this.maskController.preparedMagnitudeData = this.preparedMagnitudeData;
     this.maskController.preparedMagnitudeMax = this.preparedMagnitudeMax;
 
+    // null when there is no prepared magnitude or Otsu failed (e.g. constant image);
+    // the controller has already reported why.
     const result = this.maskController.computeOtsuThreshold();
+    if (!result) return;
 
-    if (result.error) {
-      this.updateOutput(`Cannot compute threshold: ${result.error}`);
-      return;
-    }
-
-    const clampedPercent = result.thresholdPercent;
-
-    // Update slider and display
-    const slider = document.getElementById('maskThreshold');
-    if (slider) {
-      slider.value = clampedPercent;
-      this.maskThreshold = clampedPercent;
-      this.maskController.setMaskThreshold(clampedPercent);
-      document.getElementById('thresholdLabel').textContent = `Threshold (${clampedPercent}%)`;
-    }
-
-    this.updateOutput(`Otsu threshold: ${clampedPercent}% (${result.thresholdValue.toFixed(1)})`);
+    this.maskThreshold = result.thresholdPercent;
 
     // Only trigger mask preview if threshold slider is enabled (user has clicked Threshold button)
     const thresholdSlider = document.getElementById('maskThreshold');
@@ -3495,12 +3468,6 @@ class QSMApp {
    * Delegates to MaskController
    */
   async runBET(betSettings = this.betSettings) {
-    // Track BET as mask generator. The qsmxt op has no voxel scaling, so Mouse BET records the
-    // same `bet:<fi>` and the scale is noted separately (see showCommandPreview).
-    const fi = betSettings?.fractionalIntensity ?? 0.5;
-    this.maskOpsHistory = [`bet:${fi}`];
-    this.maskVoxelScale = betSettings?.voxelScale || 1;
-
     // Disable threshold slider since user chose BET-based masking
     this.setThresholdSliderEnabled(false);
 
@@ -3529,11 +3496,18 @@ class QSMApp {
         this.magnitudeMax = this.maskController.magnitudeMax;
         this.magnitudeFileBytes = this.maskController.magnitudeFileBytes;
 
+        // Track BET as mask generator. The qsmxt op has no voxel scaling, so Mouse BET records the
+        // same `bet:<fi>` and the scale is noted separately (see showCommandPreview).
+        const fi = betSettings?.fractionalIntensity ?? 0.5;
+        this.maskOpsHistory = [`bet:${fi}`];
+        this.maskVoxelScale = betSettings?.voxelScale || 1;
+
         // Apply post-BET erosions
         const erosions = betSettings.erosions || 0;
         if (erosions > 0) {
           this.updateOutput(`Applying ${erosions} erosion step(s)...`);
           await this.erodeMask3D(erosions);
+          this.maskOpsHistory.push(`erode:${erosions}`);
           await this.displayCurrentMask();
           this.updateOutput(`BET mask complete with ${erosions} erosion(s)`);
         }
@@ -4101,7 +4075,15 @@ function waitForNiiVue(maxAttempts = 20, attempt = 0) {
   } else if (attempt < maxAttempts) {
     setTimeout(() => waitForNiiVue(maxAttempts, attempt + 1), 100);
   } else {
-    document.getElementById("output").textContent = "Error: NiiVue library failed to load. Please refresh the page.";
+    const message = "Error: NiiVue library failed to load. Please refresh the page.";
+    console.error(message);
+    const consoleOutput = document.getElementById('consoleOutput');
+    if (consoleOutput) {
+      const line = document.createElement('div');
+      line.className = 'console-line';
+      line.textContent = message;
+      consoleOutput.appendChild(line);
+    }
   }
 }
 
