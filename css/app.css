@@ -12,6 +12,7 @@
 
 .stage-item .stage-tab {
   flex: 1;
+  text-align: left;
   font-size: 0.7rem;
   padding: var(--space-xs);
 }
@@ -36,6 +37,7 @@
   grid-template-columns: 1fr 1fr;
   gap: var(--space-xs);
   margin-top: var(--space-sm);
+  margin-bottom: var(--space-sm);
 }
 
 .mask-preview-buttons .btn {
@@ -98,6 +100,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--space-xs);
   margin-bottom: var(--space-xs);
 }
 
@@ -249,7 +252,7 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.6);
-  z-index: 1000;
+  z-index: var(--z-modal);
   justify-content: center;
   align-items: center;
   backdrop-filter: blur(2px);
@@ -529,6 +532,7 @@
   gap: var(--space-sm);
   cursor: pointer;
   font-size: 0.85rem;
+  color: var(--color-text);
 }
 
 .checkbox-label input[type="checkbox"] {
@@ -544,6 +548,8 @@
   align-items: center;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  margin-left: 0;
+  margin-right: auto;
 }
 
 .window-controls {
