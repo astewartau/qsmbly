@@ -49,7 +49,9 @@ const DERIVED = {
     keys: ['sdf_sigma1_stage1', 'sdf_sigma2_stage1', 'sdf_sigma1_stage2', 'sdf_sigma2_stage2',
       'sdf_spatial_radius', 'sdf_lower_lim', 'sdf_curv_constant', 'vasc_sphere_radius',
       'frangi_scale_min', 'frangi_scale_max', 'frangi_scale_ratio', 'frangi_c',
-      'ilsqr_tol', 'ilsqr_max_iter', 'inversion_algorithm:inversion'],
+      'ilsqr_max_iter', 'inversion_algorithm:inversion'],
+    // QSMART's iLSQR tolerance is iLSQR's (qsmxt-config has no QSMART field for it).
+    extras: { ilsqr_tol: 'number' },
   },
   ROMEO_DEFAULTS: {
     from: 'ROMEO_DEFAULTS',
@@ -153,6 +155,10 @@ describe('Config Module', () => {
       for (const [key, type] of Object.entries(DERIVED[name].extras || {})) {
         expect(typeof Config[name][key]).toBe(type);
       }
+    });
+
+    test("QSMART's iLSQR tolerance defaults to iLSQR's", () => {
+      expect(Config.QSMART_DEFAULTS.ilsqr_tol).toEqual(Generated.ILSQR_DEFAULTS.tol);
     });
 
     test('every exported *_DEFAULTS built from qsm-defaults.js is covered above', () => {

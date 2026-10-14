@@ -3,7 +3,7 @@
  */
 
 import { maskSectionString, buildConfigJson, buildQsmartInnerConfigJson } from './ConfigBridge.js';
-import { DL_TILING_DEFAULTS, PIPELINE_DEFAULTS, TGV_ALPHA_PRESETS } from '../app/config.js';
+import { DL_TILING_DEFAULTS, PIPELINE_DEFAULTS, QSMART_ILSQR_PAD_MM, TGV_ALPHA_PRESETS } from '../app/config.js';
 
 describe('maskSectionString', () => {
   test('returns empty for no ops', () => {
@@ -66,7 +66,7 @@ const BG_REMOVAL_SCHEMA = {
   sharp: ['threshold', 'radius'],
   resharp: ['radius', 'tik_reg', 'tol', 'max_iter'],
   harperella: ['radius', 'max_iter', 'tol'],
-  iharperella: ['radius', 'max_iter', 'tol'],
+  iharperella: ['max_iter', 'tol'],
 };
 
 /** A settings object shaped like PipelineSettingsController.save() output. */
@@ -82,7 +82,7 @@ function settingsFixture(overrides = {}) {
     lbv: { tol: 1e-6 },
     resharp: { radius: 6, tik_reg: 1e-4, tol: 1e-6, max_iter: 30 },
     harperella: { radius: 10, max_iter: 20, tol: 1e-6 },
-    iharperella: { radius: 10, max_iter: 20, tol: 1e-6 },
+    iharperella: { max_iter: 20, tol: 1e-6 },
     ...overrides,
   };
 }
@@ -247,11 +247,17 @@ describe('QSMART inner inversion config', () => {
     expect(config.inversion.tkd).toEqual({ threshold: 0.12 });
   });
 
+  test('exports the QSMART panel\'s iLSQR tolerance as iLSQR\'s, which QSMART reads', () => {
+    const config = JSON.parse(buildConfigJson(settings));
+    expect(config.inversion.qsmart).not.toHaveProperty('ilsqr_tol');
+    expect(config.inversion.ilsqr.tol).toBe(0.02);
+  });
+
   test('runs the inner algorithm with iLSQR pinned to QSMART\'s own limits', () => {
     const config = JSON.parse(buildQsmartInnerConfigJson(settings));
     expect(config.inversion.algorithm).toBe('tkd');
     expect(config.inversion.tkd).toEqual({ threshold: 0.12 });
-    expect(config.inversion.ilsqr).toEqual({ tol: 0.02, max_iter: 40 });
+    expect(config.inversion.ilsqr).toEqual({ tol: 0.02, max_iter: 40, pad_mm: QSMART_ILSQR_PAD_MM });
   });
 
   test('defaults to iLSQR', () => {

@@ -854,7 +854,7 @@ dependencies = [
 [[package]]
 name = "qsm-core"
 version = "0.0.0"
-source = "git+https://github.com/stebo85/QSM.rs.git?rev=30df24f8e2c4892bacf6e1be8c4c85ae1d772dd4#30df24f8e2c4892bacf6e1be8c4c85ae1d772dd4"
+source = "git+https://github.com/astewartau/QSM.rs.git?rev=3a2f4ee2626168bbc70b9cd1aeb60de3bbe45bfc#3a2f4ee2626168bbc70b9cd1aeb60de3bbe45bfc"
 dependencies = [
  "bytemuck",
  "delaunator",
@@ -876,9 +876,7 @@ name = "qsm_wasm"
 version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",
- "getrandom",
  "js-sys",
- "qsm-core",
  "qsmxt-config",
  "serde_json",
  "wasm-bindgen",
@@ -889,8 +887,9 @@ dependencies = [
 [[package]]
 name = "qsmxt-config"
 version = "0.0.0"
-source = "git+https://github.com/QSMxT/QSMxT.git?tag=v9.22.0#9bffc6e726b09670a68790c71643cca811c5dfa9"
+source = "git+https://github.com/QSMxT/QSMxT.git?rev=7180e1d9487b258088345ad751dd655d00061e62#7180e1d9487b258088345ad751dd655d00061e62"
 dependencies = [
+ "getrandom",
  "qsm-core",
  "serde",
  "serde_json",
@@ -1151,6 +1150,7 @@ version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "serde",

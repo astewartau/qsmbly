@@ -3,6 +3,14 @@ name: Bump qsmxt-config pin
 # Opens a PR pinning rust-wasm/Cargo.toml's qsmxt-config to a new QSMxT/QSMxT
 # release tag whenever QSMxT publishes a release (it fires a repository_dispatch).
 # Can also be run manually with a specific version.
+#
+# qsmxt-config is qsmbly's only pin on the QSM stack: it re-exports qsm-core, so moving this one
+# tag also moves qsm-core to the version that QSMxT release was built with.
+#
+# A PR opened with the workflow's GITHUB_TOKEN triggers no `pull_request` workflows, so CI would
+# never run on it. workflow_dispatch is the exception GitHub makes for GITHUB_TOKEN, so after
+# opening the PR this dispatches ci.yml on the bump branch; its checks land on the branch's head
+# commit and show on the PR like any other CI run.
 on:
   repository_dispatch:
     types: [qsmxt-config-release]
@@ -15,6 +23,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write  # dispatch ci.yml on the bump branch
 
 jobs:
   bump:
@@ -51,11 +60,12 @@ jobs:
 
       - name: Update Cargo.lock
         working-directory: rust-wasm
-        # Update only qsmxt-config; a failure here should stop the bump, not silently
-        # update every other dependency instead.
+        # Update only qsmxt-config (and the qsm-core it now requires); a failure here should
+        # stop the bump, not silently update every other dependency instead.
         run: cargo update -p qsmxt-config
 
       - name: Open pull request
+        id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
           commit-message: "Bump qsmxt-config to ${{ steps.ver.outputs.version }}"
@@ -66,9 +76,18 @@ jobs:
             (**${{ steps.ver.outputs.version }}**).
 
             Pins `rust-wasm/Cargo.toml` (+ `Cargo.lock`) to the new QSMxT/QSMxT
-            release tag. Review, then merge — the GitHub Pages deploy runs when
-            you cut the next qsm-wasm release.
+            release tag. qsm-core comes with it (qsmxt-config re-exports it), so
+            this is the only pin to move. Review, then merge — the GitHub Pages
+            deploy runs when you cut the next qsm-wasm release.
 
-            > If qsm-core was also bumped in this release, bump the qsm-core pin
-            > here too so both resolve to the same version.
+            CI is dispatched on this branch by the bump workflow (a PR opened with
+            the workflow token triggers no `pull_request` runs); its checks appear
+            below once they start.
           labels: dependencies
+
+      - name: Run CI on the bump branch
+        if: steps.cpr.outputs.pull-request-operation == 'created' || steps.cpr.outputs.pull-request-operation == 'updated'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: bump-qsmxt-config-${{ steps.ver.outputs.version }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"

@@ -198,7 +198,6 @@ export class PipelineSettingsController {
     this._setEl('resharpMaxIter', RESHARP_DEFAULTS.max_iter);
     this._setEl('harperellaRadius', HARPERELLA_DEFAULTS.radius);
     this._setEl('harperellaMaxIter', HARPERELLA_DEFAULTS.max_iter);
-    this._setEl('iharperellaRadius', HARPERELLA_DEFAULTS.radius);
     this._setEl('iharperellaMaxIter', HARPERELLA_DEFAULTS.max_iter);
 
     // Dipole inversion
@@ -467,7 +466,6 @@ export class PipelineSettingsController {
         tol: 1e-6
       },
       iharperella: {
-        radius: parseFloat(this._getEl('iharperellaRadius')),
         max_iter: parseInt(this._getEl('iharperellaMaxIter')),
         tol: 1e-6
       },
@@ -912,7 +910,6 @@ export class PipelineSettingsController {
 
     // iHARPERELLA settings
     if (settings.iharperella) {
-      this._setEl('iharperellaRadius', settings.iharperella.radius);
       this._setEl('iharperellaMaxIter', settings.iharperella.max_iter);
     }
 

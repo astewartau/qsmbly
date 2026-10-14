@@ -8,6 +8,9 @@
 // clippy's argument-count lint flags nearly every function here without pointing at a problem.
 #![allow(clippy::too_many_arguments)]
 
+// qsm-core comes through qsmxt-config's re-export, so qsmbly has a single pin (on QSMxT) and runs
+// exactly the qsm-core QSMxT was built against.
+use qsmxt_config::qsm_core;
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "debug-log")]
@@ -180,7 +183,12 @@ pub fn laplacian_unwrap_wasm(
     console_log!("WASM laplacian_unwrap: {}x{}x{}", nx, ny, nz);
 
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
-    let unwrapped = qsm_core::unwrap::laplacian_unwrap(phase, mask, &grid);
+    let unwrapped = qsm_core::unwrap::laplacian_unwrap(
+        phase,
+        mask,
+        &grid,
+        qsm_core::unwrap::LaplacianSolver::Dct,
+    );
 
     console_log!("WASM laplacian_unwrap complete");
     Ok(unwrapped)
@@ -298,20 +306,24 @@ pub fn tgv_qsm_wasm_with_progress(
         iterations,
         erosions,
         step_size: 3.0,
-        fieldstrength: fieldstrength as f32,
-        te: te as f32,
         tol: 1e-5,
     };
 
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
-    let chi = qsm_core::inversion::tgv_qsm(
+    let input = qsm_core::inversion::tgv::TgvInput::WrappedPhase {
         phase,
+        te_s: te,
+        b0_t: fieldstrength,
+    };
+    let chi = qsm_core::inversion::tgv_qsm(
+        input,
         mask,
         &grid,
         &params,
         (bx, by, bz),
         js_progress(progress_callback),
-    );
+    )
+    .map_err(js_err)?;
 
     console_log!("WASM TGV-QSM complete");
     Ok(chi)
@@ -525,8 +537,10 @@ pub fn hd_bet_wasm(
     // qsm-core validates `tile_step` in (0, 1] and the patch divisibility, so a bad value comes
     // back as a readable error rather than a panic.
     let params = qsm_core::bet::HdBetParams {
-        patch: (patch_x, patch_y, patch_z),
-        tile_step,
+        inference: qsm_core::bet::HdBetInference::SlidingWindow {
+            patch: (patch_x, patch_y, patch_z),
+            tile_step,
+        },
         mirror_tta: tta,
     };
     qsm_core::bet::hd_bet(
@@ -543,7 +557,8 @@ pub fn hd_bet_wasm(
 ///
 /// A mask **generator**, like [`hd_bet_wasm`]: JS runs this, then hands the result to
 /// [`apply_mask_ops_wasm`] for any refinements. qsm-core's `bet::rs2_net` does the work (a port of
-/// RS2-Net's nnU-Net pipeline); qsmxt-config has no RS2-Net op, so it is not reachable through
+/// RS2-Net's nnU-Net pipeline). qsmxt-config's `rs2-net` mask op loads its weights through
+/// qsm-core's model cache, which the browser does not have, so it is not run through
 /// `apply_mask_ops_wasm`.
 ///
 /// Weights are not bundled: JS fetches `rs2-net.onnx` from the model registry (63 MB,
@@ -651,9 +666,19 @@ pub fn apply_mask_ops_wasm(
         generator: parsed[0].clone(),
         refinements: parsed[1..].to_vec(),
     };
-    let core = qsmxt_config::to_mask_sections(std::slice::from_ref(&section));
-    let meta =
-        qsmxt_config::to_scan_metadata((nx, ny, nz), (vsx, vsy, vsz), &[], 0.0, (0.0, 0.0, 1.0));
+    // A mask op string carries no BET surface settings, so BET steps get the [bet] defaults.
+    let core = qsmxt_config::to_mask_sections(
+        std::slice::from_ref(&section),
+        &qsmxt_config::config::BetConfig::default(),
+    );
+    let meta = qsmxt_config::to_scan_metadata(
+        (nx, ny, nz),
+        (vsx, vsy, vsz),
+        &[],
+        0.0,
+        (0.0, 0.0, 1.0),
+        None,
+    );
     let magnitude = (!magnitude.is_empty()).then_some(magnitude);
     qsm_core::pipeline::apply_mask_ops(mask, &core[0].all_ops(), input_data, magnitude, &meta)
         .map_err(js_err)
@@ -713,6 +738,7 @@ pub fn bet_wasm_with_progress(
         gradient_threshold,
         iterations,
         subdivisions,
+        voxel_scale: 1.0,
     };
     let mask = qsm_core::bet::run_bet(data, &grid, &params, js_progress(progress_callback));
 
@@ -1039,13 +1065,17 @@ pub fn calculate_swi_wasm(
     let scaling = swi_phase_scaling(scaling_type).map_err(js_err)?;
 
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
-    let swi_params = qsm_core::swi::SwiParams {
-        hp_sigma: [hp_sigma_x, hp_sigma_y, hp_sigma_z],
-        scaling,
-        strength,
-        ..Default::default()
-    };
-    let result = qsm_core::swi::calculate_swi(phase, magnitude, mask, &grid, &swi_params);
+    // qsm-core's calculate_swi is now CLEAR-SWI over all echoes; this binding keeps the
+    // single-image SWI the worker was built around (high-pass filter, phase mask, times
+    // magnitude) from the same qsm-core building blocks, until SWI moves to the run engine.
+    let filtered =
+        qsm_core::swi::highpass_filter(phase, mask, &grid, [hp_sigma_x, hp_sigma_y, hp_sigma_z]);
+    let phase_mask = qsm_core::swi::create_phase_mask(&filtered, mask, scaling, strength);
+    let result: Vec<f64> = magnitude
+        .iter()
+        .zip(&phase_mask)
+        .map(|(m, p)| m * p)
+        .collect();
 
     console_log!("WASM SWI complete");
     Ok(result)
@@ -1146,7 +1176,8 @@ pub fn r2star_arlo_wasm(
         echo_times.len()
     );
     let grid = qsm_core::Grid::new(nx, ny, nz, 1.0, 1.0, 1.0);
-    let (r2star, _s0) = qsm_core::utils::r2star_arlo(magnitude, mask, echo_times, &grid);
+    let (r2star, _s0) =
+        qsm_core::utils::r2star_arlo(magnitude, mask, echo_times, &grid).map_err(js_err)?;
     console_log!("WASM R2* complete");
     Ok(r2star)
 }
@@ -1196,7 +1227,15 @@ config_defaults!(get_medi_defaults, qsmxt_config::config::MediConfig);
 config_defaults!(get_tfi_defaults, qsmxt_config::config::TfiConfig);
 config_defaults!(get_qsmart_defaults, qsmxt_config::config::QsmartConfig);
 config_defaults!(get_romeo_defaults, qsmxt_config::config::RomeoConfig);
-config_defaults!(get_mcpc3ds_defaults, qsmxt_config::config::Mcpc3dsConfig);
+
+/// MCPC-3D-S defaults, `{"sigma": [x, y, z]}`. qsmxt-config folded its MCPC-3D-S section into
+/// `[field_mapping]` (`phase_offset_sigma`); this keeps the shape the UI reads.
+#[wasm_bindgen]
+pub fn get_mcpc3ds_defaults() -> String {
+    let sigma = qsmxt_config::config::FieldMappingConfig::default().phase_offset_sigma;
+    serde_json::json!({ "sigma": sigma }).to_string()
+}
+
 config_defaults!(
     get_linear_fit_defaults,
     qsmxt_config::config::LinearFitConfig
@@ -1562,6 +1601,7 @@ pub fn run_field_mapping_wasm(
         echo_times,
         field_strength,
         (0.0, 0.0, 1.0),
+        None,
     );
 
     let result = qsm_core::pipeline::run_field_mapping(
@@ -1617,6 +1657,7 @@ pub fn run_bg_removal_wasm(
         &[],
         field_strength,
         (0.0, 0.0, 1.0),
+        None,
     );
     let result = qsm_core::pipeline::run_bg_removal(
         field_ppm,
@@ -1665,6 +1706,7 @@ pub fn run_dipole_inversion_wasm(
         echo_times,
         field_strength,
         (bx, by, bz),
+        None,
     );
 
     let mag_opt: Option<&[f64]> = if magnitude.is_empty() {

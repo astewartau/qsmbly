@@ -5,7 +5,7 @@
  * generate_command_wasm / generate_methods_wasm) — qsmbly no longer hand-rolls TOML.
  */
 
-import { DL_TILING_DEFAULTS, tgvAlphaPreset } from '../app/config.js';
+import { DL_TILING_DEFAULTS, QSMART_ILSQR_PAD_MM, tgvAlphaPreset } from '../app/config.js';
 import { resolveTgvAlphas } from '../worker/utils/TgvParams.js';
 
 /**
@@ -129,7 +129,7 @@ export function buildConfig(settings, options = {}) {
     step_size: settings.tgv.step_size, tol: settings.tgv.tol,
   };
   if (settings.qsmart) config.inversion.qsmart = {
-    ilsqr_tol: settings.qsmart.ilsqr_tol, ilsqr_max_iter: settings.qsmart.ilsqr_max_iter,
+    ilsqr_max_iter: settings.qsmart.ilsqr_max_iter,
     vasc_sphere_radius: settings.qsmart.vasc_sphere_radius, sdf_spatial_radius: settings.qsmart.sdf_spatial_radius,
     inversion: settings.qsmart.inversion_algorithm || 'ilsqr',
     sdf_sigma1_stage1: settings.qsmart.sdf_sigma1_stage1, sdf_sigma2_stage1: settings.qsmart.sdf_sigma2_stage1,
@@ -144,6 +144,8 @@ export function buildConfig(settings, options = {}) {
     const inner = settings.qsmart?.inversion_algorithm || 'ilsqr';
     const panel = settings.qsmart?.[inner];
     if (inner !== 'ilsqr' && panel) config.inversion[inner] = inner === 'nltv' ? nltvConfig(panel) : panel;
+    // QSMART's iLSQR tolerance is iLSQR's own (`inversion.ilsqr.tol`); it has no QSMART field.
+    if (settings.qsmart) config.inversion.ilsqr = { ...config.inversion.ilsqr, tol: settings.qsmart.ilsqr_tol };
   }
 
   // BG removal params
@@ -195,6 +197,7 @@ export function buildQsmartInnerConfigJson(settings) {
   config.inversion.algorithm = settings?.qsmart?.inversion_algorithm || 'ilsqr';
   config.inversion.ilsqr = {
     tol: settings?.qsmart?.ilsqr_tol, max_iter: settings?.qsmart?.ilsqr_max_iter,
+    pad_mm: QSMART_ILSQR_PAD_MM,
   };
   return serializeConfig(config);
 }
