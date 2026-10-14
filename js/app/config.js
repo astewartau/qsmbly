@@ -204,7 +204,9 @@ export const QSMART_DEFAULTS = {
   frangi_scale_max: _QSMART.frangi_scale_max,
   frangi_scale_ratio: _QSMART.frangi_scale_ratio,
   frangi_c: _QSMART.frangi_c,
-  ilsqr_tol: _QSMART.ilsqr_tol,
+  // qsmxt-config has no QSMART tolerance of its own: QSMART's inner iLSQR takes iLSQR's
+  // (`inversion.ilsqr.tol`), so the panel's default is iLSQR's.
+  ilsqr_tol: _ILSQR.tol,
   ilsqr_max_iter: _QSMART.ilsqr_max_iter,
   inversion_algorithm: _QSMART.inversion,
 };
@@ -253,6 +255,9 @@ export const TSVD_DEFAULTS = {
 };
 
 // iLSQR as a standalone dipole inversion (QSMART's inner iLSQR uses QSMART_DEFAULTS.ilsqr_*)
+/** Zero padding (mm) of QSMART's inner iLSQR solves (qsm-core run_qsmart's `ilsqr_pad_mm`). */
+export const QSMART_ILSQR_PAD_MM = _QSMART.ilsqr_pad_mm;
+
 export const ILSQR_DEFAULTS = {
   tol: _ILSQR.tol,
   max_iter: _ILSQR.max_iter,
@@ -455,7 +460,8 @@ export const PIPELINE_DEFAULTS = {
   pdf: { ...PDF_DEFAULTS, maxit: null },
   lbv: { ...LBV_DEFAULTS },
   harperella: { ...HARPERELLA_DEFAULTS },
-  iharperella: { ...HARPERELLA_DEFAULTS },
+  // iHARPERELLA has no SMV kernel, so it takes HARPERELLA's settings without the radius.
+  iharperella: { max_iter: HARPERELLA_DEFAULTS.max_iter, tol: HARPERELLA_DEFAULTS.tol },
   dipole_inversion: 'rts',
   // Deep-learning overlap-tiling (browser only; keeps DL nets within the 32-bit wasm heap).
   // On by default with a browser-safe 64³ patch; the settings modal can change/disable it.

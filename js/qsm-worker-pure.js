@@ -555,7 +555,7 @@ async function runTgvCore({
   );
 
   postProgress(progressStart, 'Starting TGV reconstruction...');
-  postLog(`TGV parameters: alpha0=${alpha0.toFixed(4)}, alpha1=${alpha1.toFixed(4)}, iterations=${iterations}, erosions=${tgvSettings.erosions}`);
+  postLog(`TGV parameters: alpha0=${alpha0.toExponential(3)}, alpha1=${alpha1.toExponential(3)} (ppm), iterations=${iterations}, erosions=${tgvSettings.erosions}`);
   postLog(`Using TE=${(te * 1000).toFixed(2)}ms, B0=${fieldstrength}T`);
 
   const progressRange = progressEnd - progressStart;

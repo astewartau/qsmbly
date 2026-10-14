@@ -7,6 +7,9 @@ on:
   pull_request:
   push:
     branches: [main, staging]
+  # The qsmxt-config bump workflow dispatches this on its PR branch: PRs it opens with the
+  # workflow token trigger no pull_request runs.
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always

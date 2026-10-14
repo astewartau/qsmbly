@@ -27,8 +27,8 @@ export const TKD_DEFAULTS = {
 export const TGV_DEFAULTS = {
   "iterations": 1000,
   "erosions": 3,
-  "alpha0": 0.0015,
-  "alpha1": 0.0005,
+  "alpha0": 0.0002002475,
+  "alpha1": 0.00006674916,
   "step_size": 3,
   "tol": 0.00001
 };
@@ -38,13 +38,17 @@ export const BET_DEFAULTS = {
   "smoothness": 1,
   "gradient_threshold": 0,
   "iterations": 1000,
-  "subdivisions": 4
+  "subdivisions": 4,
+  "voxel_scale": 1
 };
 
 export const VSHARP_DEFAULTS = {
+  "deconvolve": false,
   "threshold": 0.2,
   "max_radius": 12,
-  "min_radius": 1
+  "min_radius": 1,
+  "grid": "native",
+  "grid_spacing": 1
 };
 
 export const PDF_DEFAULTS = {
@@ -62,6 +66,7 @@ export const ISMV_DEFAULTS = {
 };
 
 export const SWI_DEFAULTS = {
+  "unwrap": "laplacian",
   "hp_sigma": [
     4,
     4,
@@ -181,8 +186,8 @@ export const TFI_DEFAULTS = {
 };
 
 export const QSMART_DEFAULTS = {
-  "ilsqr_tol": 0.01,
   "ilsqr_max_iter": 50,
+  "ilsqr_pad_mm": 6,
   "vasc_sphere_radius": 8,
   "sdf_spatial_radius": 8,
   "inversion": "ilsqr",
@@ -230,20 +235,12 @@ export const LINEAR_FIT_DEFAULTS = {
 };
 
 export const ILSQR_DEFAULTS = {
-  "tol": 0.01,
-  "max_iter": 50
+  "tol": 0.001,
+  "max_iter": 100,
+  "pad_mm": 16
 };
 
 export const DL_TILING_DEFAULTS = {
-  "native": [
-    "qsmgan",
-    "autoqsm"
-  ],
-  "off_design": [
-    "lpcnn",
-    "nextqsm",
-    "modl-qsm"
-  ],
   "tile_core": 56,
   "tile_halo": 4,
   "tileable": [
@@ -254,24 +251,33 @@ export const DL_TILING_DEFAULTS = {
     "ir2qsm",
     "nextqsm",
     "modl-qsm"
+  ],
+  "off_design": [
+    "lpcnn",
+    "nextqsm",
+    "modl-qsm"
+  ],
+  "native": [
+    "qsmgan",
+    "autoqsm"
   ]
 };
 
 export const TGV_ALPHA_PRESETS = {
   "1": [
-    0.0005,
-    0.0005
+    0.00006674916,
+    0.00006674916
   ],
   "2": [
-    0.001,
-    0.001
+    0.00013349832,
+    0.00013349832
   ],
   "3": [
-    0.002,
-    0.003
+    0.00026699665,
+    0.000400495
   ],
   "4": [
-    0.003,
-    0.005
+    0.000400495,
+    0.00066749164
   ]
 };
