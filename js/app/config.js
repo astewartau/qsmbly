@@ -85,8 +85,6 @@ import {
   ROMEO_DEFAULTS as _ROMEO,
   MCPC3DS_DEFAULTS as _MCPC3DS,
   LINEAR_FIT_DEFAULTS as _LINEAR_FIT,
-  HOMOGENEITY_DEFAULTS as _HOMOGENEITY,
-  SIGNAL_ERODE_DEFAULTS as _SIGNAL_ERODE,
   ILSQR_DEFAULTS as _ILSQR,
   DL_TILING_DEFAULTS as _DL_TILING,
 } from './qsm-defaults.js';
@@ -94,9 +92,6 @@ import {
 // Deep-learning overlap tiling (lib.rs DL_TILING): the default tile core/halo, the model ids run
 // tiled by default, and the off-design and natively patch-based subsets.
 export const DL_TILING_DEFAULTS = { ..._DL_TILING };
-
-// Signal-gated erosion (QSM-CI): qsm-core's defaults, used by the mask "Signal Erode" refinement.
-export const SIGNAL_ERODE_DEFAULTS = { ..._SIGNAL_ERODE };
 
 // Re-export with JS-convention field names (camelCase, matching existing usage)
 export const RTS_DEFAULTS = {
@@ -231,12 +226,6 @@ export const MCPC3DS_DEFAULTS = {
 export const LINEAR_FIT_DEFAULTS = {
   estimate_offset: _LINEAR_FIT.estimate_offset,
   reliability_threshold_percentile: _LINEAR_FIT.reliability_threshold_percentile,
-};
-
-// Homogeneity correction defaults
-export const HOMOGENEITY_DEFAULTS = {
-  sigmaMm: _HOMOGENEITY.sigma_mm,
-  nbox: _HOMOGENEITY.nbox,
 };
 
 export const SHARP_DEFAULTS = {

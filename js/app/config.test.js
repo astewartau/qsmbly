@@ -58,11 +58,6 @@ const DERIVED = {
   },
   MCPC3DS_DEFAULTS: { from: 'MCPC3DS_DEFAULTS', keys: ['sigma'] },
   LINEAR_FIT_DEFAULTS: { from: 'LINEAR_FIT_DEFAULTS', keys: ['estimate_offset', 'reliability_threshold_percentile'] },
-  HOMOGENEITY_DEFAULTS: { from: 'HOMOGENEITY_DEFAULTS', keys: ['sigmaMm:sigma_mm', 'nbox'] },
-  SIGNAL_ERODE_DEFAULTS: {
-    from: 'SIGNAL_ERODE_DEFAULTS',
-    keys: ['bias_sigma', 'depth_cap', 'global_erosions', 'min_component', 'threshold'],
-  },
   TIKHONOV_DEFAULTS: { from: 'TIKHONOV_DEFAULTS', keys: ['lambda', 'reg'] },
   DL_TILING_DEFAULTS: {
     from: 'DL_TILING_DEFAULTS',

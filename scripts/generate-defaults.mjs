@@ -70,8 +70,6 @@ const defaults = {
   ROMEO_DEFAULTS: JSON.parse(wasmModule.get_romeo_defaults()),
   MCPC3DS_DEFAULTS: JSON.parse(wasmModule.get_mcpc3ds_defaults()),
   LINEAR_FIT_DEFAULTS: JSON.parse(wasmModule.get_linear_fit_defaults()),
-  HOMOGENEITY_DEFAULTS: JSON.parse(wasmModule.get_homogeneity_defaults()),
-  SIGNAL_ERODE_DEFAULTS: JSON.parse(wasmModule.get_signal_erode_defaults()),
   ILSQR_DEFAULTS: JSON.parse(wasmModule.get_ilsqr_defaults()),
   DL_TILING_DEFAULTS: JSON.parse(wasmModule.get_dl_tiling_defaults()),
   // TGV's alphas per UI regularization level (qsm-core's get_default_alpha), so the
