@@ -23,6 +23,8 @@ export class PipelineExecutor {
     this.worker = null;
     this.workerReady = false;
     this.workerInitializing = false;
+    // The QSMxT and QSM.rs versions the loaded WASM bundle reports (set on 'initialized').
+    this.buildVersions = null;
     // Shared by concurrent `initialize()` callers; `_initSettle` settles it (see `_settleInit`).
     this.initPromise = null;
     this._initSettle = null;
@@ -98,6 +100,8 @@ export class PipelineExecutor {
 
         case 'initialized':
           this.workerReady = true;
+          // { qsm_rs, qsmxt }: { version, commit, repository } each, from the loaded bundle.
+          this.buildVersions = data.versions || null;
           this._settleInit(null);
           // Fetch default pipeline config from qsmxt-config WASM
           this.worker.postMessage({ type: 'getDefaultConfig' });

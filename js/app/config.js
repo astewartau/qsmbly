@@ -9,9 +9,6 @@
 // tag) into the build at deploy time. Single source of truth is the git tag.
 export const VERSION = '0.0.0'; // 0.0.0 in git; the release CI stamps the real version at deploy time
 
-// QSM.rs core library version (the pinned qsm-core dependency tag in rust-wasm/Cargo.toml)
-export const QSM_RS_VERSION = '0.38.0';
-
 // Where deep-learning model weights are fetched from in the browser. The qsm-core model
 // registry points at OSF, which does NOT send CORS headers, so a browser fetch from it
 // fails — this base overrides it with a CORS-enabled mirror. Files are fetched as

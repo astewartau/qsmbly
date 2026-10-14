@@ -364,6 +364,30 @@ pub fn get_version_wasm() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// The QSM.rs (`qsm-core`) and QSMxT (`qsmxt-config`) this bundle was built against, as JSON:
+/// `{"qsm_rs": {"version", "commit", "repository"}, "qsmxt": {...}}`.
+///
+/// Read from `Cargo.lock` at build time (see build.rs), so it is what was linked, not a copy of
+/// the pins. `version` is the release tag without its `v`; a dependency pinned to a commit
+/// rather than a tag reports `git <short commit>`.
+#[wasm_bindgen]
+pub fn get_dependency_versions_wasm() -> String {
+    let dep = |version: &str, commit: &str, repository: &str| serde_json::json!({ "version": version, "commit": commit, "repository": repository });
+    serde_json::json!({
+        "qsm_rs": dep(
+            env!("QSM_CORE_VERSION"),
+            env!("QSM_CORE_COMMIT"),
+            env!("QSM_CORE_REPOSITORY"),
+        ),
+        "qsmxt": dep(
+            env!("QSMXT_CONFIG_VERSION"),
+            env!("QSMXT_CONFIG_COMMIT"),
+            env!("QSMXT_CONFIG_REPOSITORY"),
+        ),
+    })
+    .to_string()
+}
+
 // ============================================================================
 // WASM Exports: NIfTI I/O
 // ============================================================================
@@ -1254,6 +1278,36 @@ mod tests {
     fn test_version() {
         let version = get_version_wasm();
         assert!(!version.is_empty());
+    }
+
+    // The versions come from Cargo.lock, so they follow the pins in Cargo.toml without anyone
+    // editing a literal. qsmxt-config is pinned by tag; qsm-core may be patched to a commit.
+    #[test]
+    fn dependency_versions_follow_the_pins() {
+        let v: serde_json::Value = serde_json::from_str(&get_dependency_versions_wasm()).unwrap();
+        let manifest = include_str!("../Cargo.toml");
+        let pinned_tag = manifest
+            .lines()
+            .find(|l| l.starts_with("qsmxt-config"))
+            .and_then(|l| l.split("tag = \"").nth(1))
+            .and_then(|t| t.split('"').next())
+            .expect("qsmxt-config is pinned by tag");
+        assert_eq!(
+            v["qsmxt"]["version"].as_str(),
+            Some(pinned_tag.trim_start_matches('v'))
+        );
+        for dep in ["qsm_rs", "qsmxt"] {
+            assert_eq!(
+                v[dep]["commit"].as_str().map(str::len),
+                Some(40),
+                "{dep}: {v}"
+            );
+            assert!(v[dep]["repository"]
+                .as_str()
+                .unwrap()
+                .starts_with("https://github.com/"));
+            assert_ne!(v[dep]["version"], "unknown");
+        }
     }
 
     // A stage used to parse its config with `.unwrap_or_default()`, so a config that
