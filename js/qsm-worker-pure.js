@@ -13,6 +13,7 @@ import { clampTileConfig, MAX_WASM_PATCH_EDGE } from './worker/utils/DlTiling.js
 import { requireFieldStrength, echoTimeDependentStep, fieldMapEchoTimes } from './worker/utils/ScanParams.js';
 import { buildConfigJson, buildQsmartInnerConfigJson } from './modules/ConfigBridge.js';
 import { scaleVoxelSize } from './modules/mask/RodentMask.js';
+import { createGridGuard, requireVoxelCount } from './modules/file-io/GridAgreement.js';
 import * as QSMConfig from './app/config.js';
 import { parseRegistry, fetchModelWeights, loadDlWasm } from './modules/ModelWeights.js';
 
@@ -131,6 +132,14 @@ function postError(message) {
 // Post completion to main thread
 function postComplete(results) {
   self.postMessage({ type: 'complete', results });
+}
+
+/**
+ * A grid guard for one run: the first volume it loads sets the run's grid, and every volume after
+ * it, and every headerless array checked against it, must match. See GridAgreement.js.
+ */
+function runGridGuard() {
+  return createGridGuard(buffer => wasmModule.load_nifti_wasm(new Uint8Array(buffer)), postLog);
 }
 
 // Send intermediate stage data for live display
@@ -324,6 +333,9 @@ async function runPipeline(data) {
   // =========================================================================
   // Step 1: Load NIfTI data (0% - 10%)
   // =========================================================================
+  // Every volume this run loads has to sit on one grid, and the first one loaded sets it.
+  const runGrid = runGridGuard();
+
   postProgress(0.02, 'Loading NIfTI data...');
 
   const nEchoes = echoTimes.length;
@@ -335,7 +347,7 @@ async function runPipeline(data) {
     postProgress(0.02 + (e / nEchoes) * 0.08, `Loading echo ${e + 1}/${nEchoes}...`);
 
     // Load magnitude
-    const magResult = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffers[e]));
+    const magResult = runGrid.load(magnitudeBuffers[e], `magnitude echo ${e + 1}`);
     const magData = Array.from(magResult.data);
     dims = Array.from(magResult.dims);
     voxelSize = Array.from(magResult.voxelSize);
@@ -343,7 +355,7 @@ async function runPipeline(data) {
     magnitude4d.push(magData);
 
     // Load phase
-    const phaseResult = wasmModule.load_nifti_wasm(new Uint8Array(phaseBuffers[e]));
+    const phaseResult = runGrid.load(phaseBuffers[e], `phase echo ${e + 1}`);
     let phaseData = Array.from(phaseResult.data);
 
     // Scale phase to [-π, +π] using shared pipeline function
@@ -356,6 +368,11 @@ async function runPipeline(data) {
   const [nx, ny, nz] = dims;
   const [vsx, vsy, vsz] = voxelSize;
   const voxelCount = nx * ny * nz;
+  // The prepared masking input arrives as a bare array rather than a file, and goes stale if the
+  // files were changed after Prepare.
+  if (hasPreparedMagnitude) {
+    runGrid.requireVoxelCount(preparedMagnitude, 'the prepared masking input');
+  }
 
   postLog(`Data shape: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm`);
 
@@ -367,7 +384,7 @@ async function runPipeline(data) {
 
   if (hasCustomMask) {
     postLog("Loading custom mask...");
-    const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+    const maskResult = runGrid.load(customMaskBuffer, 'the custom mask');
     const maskData = Array.from(maskResult.data);
     mask = new Uint8Array(voxelCount);
     for (let i = 0; i < voxelCount; i++) {
@@ -605,6 +622,9 @@ async function runTgvPipeline(data) {
   // =========================================================================
   // Step 1: Load NIfTI data (0% - 10%)
   // =========================================================================
+  // Every volume this run loads has to sit on one grid, and the first one loaded sets it.
+  const runGrid = runGridGuard();
+
   postProgress(0.02, 'Loading NIfTI data...');
   postLog("TGV: Loading data via WASM...");
 
@@ -617,7 +637,7 @@ async function runTgvPipeline(data) {
     postProgress(0.02 + (e / nEchoes) * 0.08, `Loading echo ${e + 1}/${nEchoes}...`);
 
     // Load magnitude
-    const magResult = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffers[e]));
+    const magResult = runGrid.load(magnitudeBuffers[e], `magnitude echo ${e + 1}`);
     const magData = Array.from(magResult.data);
     dims = Array.from(magResult.dims);
     voxelSize = Array.from(magResult.voxelSize);
@@ -625,7 +645,7 @@ async function runTgvPipeline(data) {
     magnitude4d.push(magData);
 
     // Load phase
-    const phaseResult = wasmModule.load_nifti_wasm(new Uint8Array(phaseBuffers[e]));
+    const phaseResult = runGrid.load(phaseBuffers[e], `phase echo ${e + 1}`);
     let phaseData = Array.from(phaseResult.data);
 
     // Scale phase to [-π, +π] using the same qsm-core rule as the standard pipeline
@@ -638,6 +658,11 @@ async function runTgvPipeline(data) {
   const [nx, ny, nz] = dims;
   const [vsx, vsy, vsz] = voxelSize;
   const voxelCount = nx * ny * nz;
+  // The prepared masking input arrives as a bare array rather than a file, and goes stale if the
+  // files were changed after Prepare.
+  if (hasPreparedMagnitude) {
+    runGrid.requireVoxelCount(preparedMagnitude, 'the prepared masking input');
+  }
 
   postLog(`Data shape: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm`);
 
@@ -649,7 +674,7 @@ async function runTgvPipeline(data) {
 
   if (hasCustomMask) {
     postLog("Loading custom mask...");
-    const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+    const maskResult = runGrid.load(customMaskBuffer, 'the custom mask');
     const maskData = Array.from(maskResult.data);
     mask = new Uint8Array(voxelCount);
     for (let i = 0; i < voxelCount; i++) {
@@ -999,6 +1024,9 @@ async function runQsmartPipeline(data) {
   // =========================================================================
   // Step 1: Load NIfTI data (0% - 10%)
   // =========================================================================
+  // Every volume this run loads has to sit on one grid, and the first one loaded sets it.
+  const runGrid = runGridGuard();
+
   postProgress(0.02, 'Loading NIfTI data...');
   postLog("QSMART: Loading multi-echo data...");
 
@@ -1010,13 +1038,13 @@ async function runQsmartPipeline(data) {
   for (let e = 0; e < nEchoes; e++) {
     postProgress(0.02 + (e / nEchoes) * 0.06, `Loading echo ${e + 1}/${nEchoes}...`);
 
-    const magResult = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffers[e]));
+    const magResult = runGrid.load(magnitudeBuffers[e], `magnitude echo ${e + 1}`);
     magnitude4d.push(Array.from(magResult.data));
     dims = Array.from(magResult.dims);
     voxelSize = Array.from(magResult.voxelSize);
     affine = Array.from(magResult.affine);
 
-    const phaseResult = wasmModule.load_nifti_wasm(new Uint8Array(phaseBuffers[e]));
+    const phaseResult = runGrid.load(phaseBuffers[e], `phase echo ${e + 1}`);
     phase4d.push(Array.from(scalePhaseToPi(phaseResult.data)));
 
     postLog(`  Echo ${e + 1}: shape ${dims[0]}x${dims[1]}x${dims[2]}`);
@@ -1025,6 +1053,11 @@ async function runQsmartPipeline(data) {
   const [nx, ny, nz] = dims;
   const [vsx, vsy, vsz] = voxelSize;
   const voxelCount = nx * ny * nz;
+  // The prepared masking input arrives as a bare array rather than a file, and goes stale if the
+  // files were changed after Prepare.
+  if (hasPreparedMagnitude) {
+    runGrid.requireVoxelCount(preparedMagnitude, 'the prepared masking input');
+  }
 
   postLog(`Data: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm, B0=${b0}T`);
 
@@ -1036,7 +1069,7 @@ async function runQsmartPipeline(data) {
 
   if (hasCustomMask) {
     postLog("Loading custom mask...");
-    const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+    const maskResult = runGrid.load(customMaskBuffer, 'the custom mask');
     mask = new Uint8Array(voxelCount);
     for (let i = 0; i < voxelCount; i++) {
       mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
@@ -1188,6 +1221,10 @@ async function runHdBet(data) {
     const [nx, ny, nz] = dims;
     const [vsx, vsy, vsz] = voxelSize;
 
+    // Before the weight download, not after: the model indexes the magnitude to this grid, and the
+    // download plus a run is minutes of work to spend on a volume that cannot fit it.
+    requireVoxelCount(magnitude, 'The magnitude', dims);
+
     const model = dlRegistry['hd-bet'];
     if (!model) throw new Error('hd-bet is not in the model registry');
 
@@ -1261,6 +1298,10 @@ async function runRs2Net(data) {
     const [nx, ny, nz] = dims;
     const [vsx, vsy, vsz] = voxelSize;
 
+    // Before the weight download, not after: the model indexes the magnitude to this grid, and the
+    // download plus a run is minutes of work to spend on a volume that cannot fit it.
+    requireVoxelCount(magnitude, 'The magnitude', dims);
+
     const model = dlRegistry['rs2-net'];
     if (!model) throw new Error('rs2-net is not in the model registry');
 
@@ -1331,6 +1372,9 @@ async function runApplyMaskOps(data) {
   try {
     const [nx, ny, nz] = dims;
     const [vsx, vsy, vsz] = voxelSize;
+    requireVoxelCount(mask, 'The mask', dims);
+    requireVoxelCount(inputData, 'The masking input', dims);
+    requireVoxelCount(magnitude, 'The magnitude', dims);
     const maskData = wasmModule.apply_mask_ops_wasm(
       new Uint8Array(mask), ops,
       new Float64Array(inputData || []),
@@ -1428,6 +1472,7 @@ async function runBiasCorrection(data) {
     console.log(`[Worker] Bias correction: ${nx}x${ny}x${nz}, voxel size=${vx.toFixed(2)}x${vy.toFixed(2)}x${vz.toFixed(2)}mm, sigma=${sigma_mm}mm, nbox=${nbox}`);
 
     const inputArray = new Float64Array(magnitude);
+    requireVoxelCount(inputArray, 'The magnitude', [nx, ny, nz]);
     const inputSum = inputArray.reduce((a, b) => a + b, 0);
     console.log(`[Worker] Input data length: ${inputArray.length}, sum: ${inputSum.toExponential(3)}`);
 
@@ -1480,6 +1525,13 @@ async function runVoxelQuality(data) {
       : new Float64Array([]);
     const maskArray = new Uint8Array(mask);
 
+    // ROMEO indexes the magnitude and the second echo to this grid with no check of its own, so a
+    // volume that is short here would be an out-of-bounds panic inside the WASM module.
+    requireVoxelCount(phaseArray, 'The phase', [nx, ny, nz]);
+    requireVoxelCount(maskArray, 'The mask', [nx, ny, nz]);
+    if (magArray.length > 0) requireVoxelCount(magArray, 'The magnitude', [nx, ny, nz]);
+    if (phase2Array.length > 0) requireVoxelCount(phase2Array, 'The second phase echo', [nx, ny, nz]);
+
     const result = wasmModule.voxel_quality_romeo_wasm(
       phaseArray, magArray, phase2Array,
       te1 || 1.0, te2 || 1.0,
@@ -1507,8 +1559,8 @@ async function runVoxelQuality(data) {
 // The field is converted to ppm on load, so every field-map pipeline runs the
 // same stages, in the same units, as a raw-phase run.
 // =========================================================================
-function loadBinaryMask(buffer, voxelCount) {
-  const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(buffer));
+function loadBinaryMask(runGrid, buffer, label, voxelCount) {
+  const maskResult = runGrid.load(buffer, label);
   const mask = new Uint8Array(voxelCount);
   for (let i = 0; i < voxelCount; i++) {
     mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
@@ -1528,9 +1580,12 @@ function loadFieldMapInputs(data, { requireMaskFile = false } = {}) {
   const isLocalField = inputMode === 'localField';
   const fieldLabel = isLocalField ? 'local' : 'total';
 
+  // Every volume this run loads has to sit on the field map's grid.
+  const runGrid = runGridGuard();
+
   postProgress(0.05, `Loading ${fieldLabel} field map...`);
   postLog(`Loading ${fieldLabel} field map...`);
-  const fieldResult = wasmModule.load_nifti_wasm(new Uint8Array(isLocalField ? localFieldBuffer : totalFieldBuffer));
+  const fieldResult = runGrid.load(isLocalField ? localFieldBuffer : totalFieldBuffer, `the ${fieldLabel} field map`);
   const dims = Array.from(fieldResult.dims);
   const voxelSize = Array.from(fieldResult.voxelSize);
   const affine = Array.from(fieldResult.affine);
@@ -1540,11 +1595,13 @@ function loadFieldMapInputs(data, { requireMaskFile = false } = {}) {
   // Prefer prepared magnitude (RSS-combined, bias-corrected) over the raw file
   let magnitudeData = null;
   if (preparedMagnitude !== null && preparedMagnitude !== undefined) {
+    // A bare array rather than a file, and stale if the files were changed after Prepare.
+    runGrid.requireVoxelCount(preparedMagnitude, 'the prepared masking input');
     magnitudeData = new Float64Array(preparedMagnitude);
     postLog("Using prepared magnitude");
   } else if (magnitudeBuffer !== null && magnitudeBuffer !== undefined) {
     postProgress(0.08, 'Loading magnitude...');
-    magnitudeData = new Float64Array(wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffer)).data);
+    magnitudeData = new Float64Array(runGrid.load(magnitudeBuffer, 'the magnitude image').data);
     postLog("Loaded magnitude image");
   }
 
@@ -1556,10 +1613,10 @@ function loadFieldMapInputs(data, { requireMaskFile = false } = {}) {
   let mask;
   if (customMaskBuffer !== null && customMaskBuffer !== undefined) {
     postLog("Using edited mask");
-    mask = loadBinaryMask(customMaskBuffer, voxelCount);
+    mask = loadBinaryMask(runGrid, customMaskBuffer, 'the edited mask', voxelCount);
   } else if (maskBuffer !== null && maskBuffer !== undefined) {
     postLog("Loading mask from file...");
-    mask = loadBinaryMask(maskBuffer, voxelCount);
+    mask = loadBinaryMask(runGrid, maskBuffer, 'the mask file', voxelCount);
   } else if (requireMaskFile) {
     throw new Error("Mask is required for local field map pipeline");
   } else if (magnitudeData) {
@@ -1671,6 +1728,9 @@ async function runT2starR2starPipeline(data) {
     throw new Error(`T2*/R2* mapping requires 3+ echoes, got ${nEchoes}`);
   }
 
+  // Every volume this run loads has to sit on one grid, and the first one loaded sets it.
+  const runGrid = runGridGuard();
+
   // Step 1: Load magnitude data
   postProgress(0.05, 'Loading magnitude data...');
   postLog(`T2*/R2*: Loading ${nEchoes} echo magnitudes...`);
@@ -1678,7 +1738,7 @@ async function runT2starR2starPipeline(data) {
   const magnitude4d = [];
   let dims, voxelSize, affine;
   for (let i = 0; i < nEchoes; i++) {
-    const result = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffers[i]));
+    const result = runGrid.load(magnitudeBuffers[i], `magnitude echo ${i + 1}`);
     magnitude4d.push(new Float64Array(result.data));
     if (i === 0) {
       dims = Array.from(result.dims);
@@ -1696,10 +1756,15 @@ async function runT2starR2starPipeline(data) {
   const thresholdFraction = (maskThreshold || 15) / 100;
   const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
   const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
+  // The prepared masking input arrives as a bare array rather than a file, and goes stale if the
+  // files were changed after Prepare.
+  if (hasPreparedMagnitude) {
+    runGrid.requireVoxelCount(preparedMagnitude, 'the prepared masking input');
+  }
 
   let mask;
   if (hasCustomMask) {
-    const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+    const maskResult = runGrid.load(customMaskBuffer, 'the custom mask');
     mask = new Uint8Array(voxelCount);
     for (let i = 0; i < voxelCount; i++) {
       mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
@@ -1757,22 +1822,30 @@ async function runSWIPipeline(data) {
   const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
   const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
 
+  // Every volume this run loads has to sit on one grid, and the first one loaded sets it.
+  const runGrid = runGridGuard();
+
   // Step 1: Load first echo NIfTI data
   postProgress(0.05, 'Loading NIfTI data...');
   postLog("SWI: Loading data...");
 
-  const magResult = wasmModule.load_nifti_wasm(new Uint8Array(magnitudeBuffers[0]));
+  const magResult = runGrid.load(magnitudeBuffers[0], 'magnitude echo 1');
   const magnitude = new Float64Array(magResult.data);
   const dims = Array.from(magResult.dims);
   const voxelSize = Array.from(magResult.voxelSize);
   const affine = Array.from(magResult.affine);
 
-  const phaseResult = wasmModule.load_nifti_wasm(new Uint8Array(phaseBuffers[0]));
+  const phaseResult = runGrid.load(phaseBuffers[0], 'phase echo 1');
   const phase = scalePhaseToPi(phaseResult.data);
 
   const [nx, ny, nz] = dims;
   const [vsx, vsy, vsz] = voxelSize;
   const voxelCount = nx * ny * nz;
+  // The prepared masking input arrives as a bare array rather than a file, and goes stale if the
+  // files were changed after Prepare.
+  if (hasPreparedMagnitude) {
+    runGrid.requireVoxelCount(preparedMagnitude, 'the prepared masking input');
+  }
 
   postLog(`Data: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm`);
 
@@ -1781,7 +1854,7 @@ async function runSWIPipeline(data) {
   let mask;
 
   if (hasCustomMask) {
-    const maskResult = wasmModule.load_nifti_wasm(new Uint8Array(customMaskBuffer));
+    const maskResult = runGrid.load(customMaskBuffer, 'the custom mask');
     mask = new Uint8Array(voxelCount);
     for (let i = 0; i < voxelCount; i++) {
       mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
