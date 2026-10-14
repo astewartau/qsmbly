@@ -75,13 +75,6 @@ jobs:
           sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
           sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" rust-wasm/Cargo.toml
 
-          # QSM.rs core version comes from the pinned qsm-core dependency tag.
-          QSM_RS_VERSION=$(grep 'qsm-core' rust-wasm/Cargo.toml | grep -oP 'tag = "v\K[^"]+' || echo "")
-          if [ -n "$QSM_RS_VERSION" ]; then
-            sed -i "s/^export const QSM_RS_VERSION = '[^']*'/export const QSM_RS_VERSION = '$QSM_RS_VERSION'/" js/app/config.js
-            echo "Stamped QSM.rs version $QSM_RS_VERSION"
-          fi
-
           echo "Stamped app version $VERSION into the build"
 
       # Nightly + rust-src, wasm-pack and Node; CI's deploy-parity job uses the same action.

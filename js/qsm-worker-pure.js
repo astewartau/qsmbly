@@ -199,6 +199,11 @@ function computeRobustRange(data, mask, lowPct = 2, highPct = 98) {
   return [lo, hi];
 }
 
+/** The QSMxT and QSM.rs this bundle links (from its Cargo.lock; see rust-wasm/build.rs). */
+function buildVersions() {
+  return JSON.parse(wasmModule.get_dependency_versions_wasm());
+}
+
 async function initializeWasm() {
   try {
     // Construct URLs relative to worker location. Cache-bust by app version so a
@@ -230,7 +235,9 @@ async function initializeWasm() {
     }
 
     if (wasmModule.health_check_wasm()) {
-      postLog(`QSMbly v${wasmModule.get_version_wasm()} ready`);
+      const deps = buildVersions();
+      postLog(`QSMbly v${wasmModule.get_version_wasm()} ready `
+        + `(QSMxT ${deps.qsmxt.version}, QSM.rs ${deps.qsm_rs.version})`);
     }
   } catch (e) {
     // Reported once, by whichever handler called us (onmessage, or a request's own error reply).
@@ -1829,7 +1836,7 @@ self.onmessage = async function (e) {
     switch (type) {
       case 'init':
         await initializeWasm();
-        self.postMessage({ type: 'initialized' });
+        self.postMessage({ type: 'initialized', versions: buildVersions() });
         break;
 
       case 'run':
