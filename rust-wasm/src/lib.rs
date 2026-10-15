@@ -13,6 +13,8 @@
 use qsmxt_engine::qsm_core;
 use wasm_bindgen::prelude::*;
 
+pub mod engine;
+
 #[cfg(feature = "debug-log")]
 #[wasm_bindgen]
 extern "C" {
@@ -141,12 +143,6 @@ fn field_and_mask((field, mask): (Vec<f64>, Vec<u8>)) -> Vec<f64> {
     out.reserve_exact(mask.len());
     out.extend(mask.iter().map(|&m| m as f64));
     out
-}
-
-/// Split `n_echoes` concatenated volumes of `n` voxels into per-echo views, without copying.
-/// The caller has checked that `flat` holds `n_echoes * n` values.
-fn echo_slices(flat: &[f64], n_echoes: usize, n: usize) -> Vec<&[f64]> {
-    (0..n_echoes).map(|e| &flat[e * n..(e + 1) * n]).collect()
 }
 
 // ============================================================================
@@ -1385,16 +1381,6 @@ mod tests {
     }
 
     #[test]
-    fn echo_slices_split_per_echo() {
-        let flat = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
-        assert_eq!(
-            echo_slices(&flat, 3, 2),
-            vec![&[1.0, 2.0][..], &[3.0, 4.0], &[5.0, 6.0]]
-        );
-        assert!(echo_slices(&[], 2, 0).iter().all(|e| e.is_empty()));
-    }
-
-    #[test]
     fn dl_tiling_table_names_registered_field_inversions() {
         for (id, _) in DL_TILING {
             assert!(
@@ -1627,76 +1613,6 @@ pub fn validate_config_wasm(toml_string: &str) -> String {
 // =========================================================================
 // Shared pipeline stage functions (guaranteed identical to qsmxt.rs)
 // =========================================================================
-
-/// Run field mapping: multi-echo phase → B0 field map (ppm).
-///
-/// Takes a TOML config string and returns `{ b0FieldPpm: Float64Array, phaseOffset:
-/// Float64Array | null }`; `phaseOffset` is null when the method estimates none. Echo times are
-/// in seconds.
-#[wasm_bindgen]
-pub fn run_field_mapping_wasm(
-    phases_flat: &[f64],
-    mags_flat: &[f64],
-    mask: &[u8],
-    echo_times: &[f64],
-    nx: usize,
-    ny: usize,
-    nz: usize,
-    vsx: f64,
-    vsy: f64,
-    vsz: f64,
-    field_strength: f64,
-    config_toml: &str,
-) -> Result<js_sys::Object, JsValue> {
-    let n_echoes = echo_times.len();
-    let n_total = n_elements(&[nx, ny, nz])?;
-    let n_all = n_elements(&[n_echoes, n_total])?;
-    check_len("phases_flat", phases_flat, n_all)?;
-    check_len_or_empty("mags_flat", mags_flat, n_all)?;
-    check_len("mask", mask, n_total)?;
-
-    let phases = echo_slices(phases_flat, n_echoes, n_total);
-    let mags: Vec<&[f64]> = if mags_flat.is_empty() {
-        Vec::new()
-    } else {
-        echo_slices(mags_flat, n_echoes, n_total)
-    };
-    let mag_opt: Option<&[&[f64]]> = if mags.is_empty() { None } else { Some(&mags) };
-
-    let config = config_from_toml(config_toml)?;
-    let (fm_config, _, _, _) = qsmxt_engine::to_pipeline_stages(&config);
-    let meta = qsmxt_engine::to_scan_metadata(
-        (nx, ny, nz),
-        (vsx, vsy, vsz),
-        echo_times,
-        field_strength,
-        (0.0, 0.0, 1.0),
-        None,
-    );
-
-    let result = qsm_core::pipeline::run_field_mapping(
-        &phases,
-        mag_opt,
-        mask,
-        &meta,
-        &fm_config,
-        &mut |_, _| {},
-    );
-
-    let r = result.map_err(|e| js_err(format!("field mapping failed: {e}")))?;
-    let out = js_sys::Object::new();
-    js_sys::Reflect::set(
-        &out,
-        &"b0FieldPpm".into(),
-        &js_sys::Float64Array::from(r.b0_field_ppm.as_slice()),
-    )?;
-    let phase_offset = match r.phase_offset {
-        Some(offset) => js_sys::Float64Array::from(offset.as_slice()).into(),
-        None => JsValue::NULL,
-    };
-    js_sys::Reflect::set(&out, &"phaseOffset".into(), &phase_offset)?;
-    Ok(out)
-}
 
 /// Run background removal: total field → local field (ppm).
 ///
