@@ -229,8 +229,25 @@ Phases 1 and 2 run in parallel; phase 3 starts as soon as the first engine slice
 pins QSMxT by commit during development, as QSMxT pins QSM.rs). qsmbly is released when it runs on
 the engine and QSMxT has released the engine; there is no interim port of today's JS worker.
 
-Status (2026-10-15): phase 1 is merged (QSM.rs #190–#193, QSMxT #329, qsmbly #147–#151), except
-an xQSM case in the 1.2 harness and moving QSMxT's pin to QSM.rs main. Phase 2 has started.
+Status (2026-10-15): phase 1 is merged (QSM.rs #190–#194, QSMxT #329 #330, qsmbly #147–#151).
+Phase 2: 2.0 (QSMxT #331), 2.1 (#332) and 2.2 (#333–#336) are merged; 2.3 is in progress.
+
+### UI redesign
+
+A larger overhaul of qsmbly's UI is being considered, designed around what the engine makes
+possible: the plan shown before a run (stages, memory, models to download, requirement problems),
+outputs streamed as each stage finishes, "re-run from here", mask recipes and settings generated
+from the schema. Steps that build or change UI wait for that redesign plan, so they are built
+once, for the new UI, and not twice:
+
+| Waits for the redesign | Does not |
+|---|---|
+| 3.4 mask builder, 3.5 "re-run from here", 3.6 plan before running, 4.2 settings renderer, the UI side of phase 5 | all of phase 2, 3.1 bindings, 3.2 worker relay (engine side), 3.3 deleting JS numerics that the UI does not use, 3.7 parity CI, 4.1 settings schema |
+
+The steps that do not wait define what the new UI is built on, so they go ahead. Where one of
+them would have to change today's UI just to keep it working (3.2 streaming outputs to the
+viewer, or a numeric helper the current mask previews still call in 3.3), it does the least that
+keeps today's UI working.
 
 ### Phase 1: unblock
 
@@ -302,6 +319,7 @@ intermediates too (1.4, 2.2).
 
 Still open:
 
+- The UI redesign (§4): its plan settles 3.4–3.6, 4.2 and the UI side of phase 5.
 - The tolerance for native vs WASM parity (measure it in 3.7, then fix it in CI).
 - qsmbly's version number for the first engine-based release.
 
