@@ -26,9 +26,9 @@ debug-log = []
 # The only pin on the QSM stack. qsmxt-config (pipeline configuration, command generation, methods
 # text) re-exports qsm-core (`qsmxt_config::qsm_core`) and forwards its `simd`/`onnx`/`parallel`
 # features, so qsmbly always runs the same qsm-core QSMxT was built and tested against.
-# Pinned by commit while QSMxT/QSMxT#329 is in development; moves to a release tag (which the
-# bump-qsmxt-config workflow then maintains) once QSMxT releases it.
-qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", rev = "7180e1d9487b258088345ad751dd655d00061e62" }
+# Pinned by commit on QSMxT main until a QSMxT release includes QSMxT/QSMxT#329; then it moves to a
+# release tag, which the bump-qsmxt-config workflow maintains.
+qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", rev = "8a92f37ae6c3193157e2470a6f2fb1612a31dbea" }
 
 # WASM bindings
 wasm-bindgen = "0.2"
