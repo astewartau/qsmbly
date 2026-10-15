@@ -1298,7 +1298,10 @@ mod tests {
         // A release tag `vX.Y.Z` reports `X.Y.Z`; a commit pin reports `git <short rev>`.
         match (pinned("tag"), pinned("rev")) {
             (Some(tag), _) => {
-                assert_eq!(v["qsmxt"]["version"].as_str(), Some(tag.trim_start_matches('v')))
+                assert_eq!(
+                    v["qsmxt"]["version"].as_str(),
+                    Some(tag.trim_start_matches('v'))
+                )
             }
             (None, Some(rev)) => {
                 assert_eq!(v["qsmxt"]["commit"].as_str(), Some(rev));
