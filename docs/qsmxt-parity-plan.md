@@ -316,4 +316,4 @@ Still open:
 - QSM.rs: `src/pipeline/*`, `src/models/mod.rs` (weight resolution), `src/inversion/ilsqr.rs`.
 - qsmbly: `rust-wasm/src/lib.rs`, `js/qsm-worker-pure.js`, `js/modules/ConfigBridge.js`,
   `js/controllers/PipelineSettingsController.js`, `js/app/config.js`, `scripts/generate-defaults.mjs`,
-  `.github/workflows/bump-qsmxt-config.yml`.
+  `.github/workflows/bump-qsmxt-engine.yml`.

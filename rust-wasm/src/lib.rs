@@ -8,9 +8,9 @@
 // clippy's argument-count lint flags nearly every function here without pointing at a problem.
 #![allow(clippy::too_many_arguments)]
 
-// qsm-core comes through qsmxt-config's re-export, so qsmbly has a single pin (on QSMxT) and runs
+// qsm-core comes through qsmxt-engine's re-export, so qsmbly has a single pin (on QSMxT) and runs
 // exactly the qsm-core QSMxT was built against.
-use qsmxt_config::qsm_core;
+use qsmxt_engine::qsm_core;
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "debug-log")]
@@ -364,7 +364,7 @@ pub fn get_version_wasm() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-/// The QSM.rs (`qsm-core`) and QSMxT (`qsmxt-config`) this bundle was built against, as JSON:
+/// The QSM.rs (`qsm-core`) and QSMxT (`qsmxt-engine`) this bundle was built against, as JSON:
 /// `{"qsm_rs": {"version", "commit", "repository"}, "qsmxt": {...}}`.
 ///
 /// Read from `Cargo.lock` at build time (see build.rs), so it is what was linked, not a copy of
@@ -380,9 +380,9 @@ pub fn get_dependency_versions_wasm() -> String {
             env!("QSM_CORE_REPOSITORY"),
         ),
         "qsmxt": dep(
-            env!("QSMXT_CONFIG_VERSION"),
-            env!("QSMXT_CONFIG_COMMIT"),
-            env!("QSMXT_CONFIG_REPOSITORY"),
+            env!("QSMXT_ENGINE_VERSION"),
+            env!("QSMXT_ENGINE_COMMIT"),
+            env!("QSMXT_ENGINE_REPOSITORY"),
         ),
     })
     .to_string()
@@ -581,7 +581,7 @@ pub fn hd_bet_wasm(
 ///
 /// A mask **generator**, like [`hd_bet_wasm`]: JS runs this, then hands the result to
 /// [`apply_mask_ops_wasm`] for any refinements. qsm-core's `bet::rs2_net` does the work (a port of
-/// RS2-Net's nnU-Net pipeline). qsmxt-config's `rs2-net` mask op loads its weights through
+/// RS2-Net's nnU-Net pipeline). qsmxt-engine's `rs2-net` mask op loads its weights through
 /// qsm-core's model cache, which the browser does not have, so it is not run through
 /// `apply_mask_ops_wasm`.
 ///
@@ -673,11 +673,11 @@ pub fn apply_mask_ops_wasm(
     check_len_or_empty("input_data", input_data, n)?;
     check_len_or_empty("magnitude", magnitude, n)?;
 
-    let parsed: Vec<qsmxt_config::MaskOp> = ops
+    let parsed: Vec<qsmxt_engine::MaskOp> = ops
         .split(',')
         .map(|o| o.trim())
         .filter(|o| !o.is_empty())
-        .map(qsmxt_config::parse_mask_op)
+        .map(qsmxt_engine::parse_mask_op)
         .collect::<Result<_, _>>()
         .map_err(js_err)?;
     if parsed.is_empty() {
@@ -685,17 +685,17 @@ pub fn apply_mask_ops_wasm(
     }
     // `to_mask_sections` converts generator + refinements; all_ops() hands them back in order, so
     // this works whether or not the first op happens to be a generator.
-    let section = qsmxt_config::MaskSection {
-        input: qsmxt_config::MaskingInput::Magnitude,
+    let section = qsmxt_engine::MaskSection {
+        input: qsmxt_engine::MaskingInput::Magnitude,
         generator: parsed[0].clone(),
         refinements: parsed[1..].to_vec(),
     };
     // A mask op string carries no BET surface settings, so BET steps get the [bet] defaults.
-    let core = qsmxt_config::to_mask_sections(
+    let core = qsmxt_engine::to_mask_sections(
         std::slice::from_ref(&section),
-        &qsmxt_config::config::BetConfig::default(),
+        &qsmxt_engine::config::BetConfig::default(),
     );
-    let meta = qsmxt_config::to_scan_metadata(
+    let meta = qsmxt_engine::to_scan_metadata(
         (nx, ny, nz),
         (vsx, vsy, vsz),
         &[],
@@ -1210,8 +1210,8 @@ pub fn r2star_arlo_wasm(
 // Algorithm Default Parameters
 // ============================================================================
 
-// Each get_*_defaults() serializes the matching qsmxt-config config struct, whose
-// Default impl sources its values from qsm-core. qsmxt-config is the single source of
+// Each get_*_defaults() serializes the matching qsmxt-engine config struct, whose
+// Default impl sources its values from qsm-core. qsmxt-engine is the single source of
 // truth for the parameter set (field names + defaults); these bindings just hand it to
 // JS as JSON. Adding a field there automatically flows through here — no hand-typed list.
 macro_rules! config_defaults {
@@ -1224,47 +1224,47 @@ macro_rules! config_defaults {
     };
 }
 
-config_defaults!(get_rts_defaults, qsmxt_config::config::RtsConfig);
-config_defaults!(get_tv_defaults, qsmxt_config::config::TvConfig);
-config_defaults!(get_tkd_defaults, qsmxt_config::config::TkdConfig);
-config_defaults!(get_tgv_defaults, qsmxt_config::config::TgvConfig);
-config_defaults!(get_bet_defaults, qsmxt_config::config::BetConfig);
-config_defaults!(get_vsharp_defaults, qsmxt_config::config::VsharpConfig);
-config_defaults!(get_pdf_defaults, qsmxt_config::config::PdfConfig);
-config_defaults!(get_lbv_defaults, qsmxt_config::config::LbvConfig);
-config_defaults!(get_ismv_defaults, qsmxt_config::config::IsmvConfig);
-config_defaults!(get_swi_defaults, qsmxt_config::config::SwiConfig);
-config_defaults!(get_sharp_defaults, qsmxt_config::config::SharpConfig);
-config_defaults!(get_resharp_defaults, qsmxt_config::config::ResharpConfig);
+config_defaults!(get_rts_defaults, qsmxt_engine::config::RtsConfig);
+config_defaults!(get_tv_defaults, qsmxt_engine::config::TvConfig);
+config_defaults!(get_tkd_defaults, qsmxt_engine::config::TkdConfig);
+config_defaults!(get_tgv_defaults, qsmxt_engine::config::TgvConfig);
+config_defaults!(get_bet_defaults, qsmxt_engine::config::BetConfig);
+config_defaults!(get_vsharp_defaults, qsmxt_engine::config::VsharpConfig);
+config_defaults!(get_pdf_defaults, qsmxt_engine::config::PdfConfig);
+config_defaults!(get_lbv_defaults, qsmxt_engine::config::LbvConfig);
+config_defaults!(get_ismv_defaults, qsmxt_engine::config::IsmvConfig);
+config_defaults!(get_swi_defaults, qsmxt_engine::config::SwiConfig);
+config_defaults!(get_sharp_defaults, qsmxt_engine::config::SharpConfig);
+config_defaults!(get_resharp_defaults, qsmxt_engine::config::ResharpConfig);
 config_defaults!(
     get_harperella_defaults,
-    qsmxt_config::config::HarperellaConfig
+    qsmxt_engine::config::HarperellaConfig
 );
-config_defaults!(get_tikhonov_defaults, qsmxt_config::config::TikhonovConfig);
-config_defaults!(get_nltv_defaults, qsmxt_config::config::NltvConfig);
-config_defaults!(get_ndi_defaults, qsmxt_config::config::NdiConfig);
-config_defaults!(get_fansi_defaults, qsmxt_config::config::FansiConfig);
-config_defaults!(get_l1qsm_defaults, qsmxt_config::config::L1qsmConfig);
-config_defaults!(get_whqsm_defaults, qsmxt_config::config::WhqsmConfig);
-config_defaults!(get_hdqsm_defaults, qsmxt_config::config::HdqsmConfig);
-config_defaults!(get_medi_defaults, qsmxt_config::config::MediConfig);
-config_defaults!(get_tfi_defaults, qsmxt_config::config::TfiConfig);
-config_defaults!(get_qsmart_defaults, qsmxt_config::config::QsmartConfig);
-config_defaults!(get_romeo_defaults, qsmxt_config::config::RomeoConfig);
+config_defaults!(get_tikhonov_defaults, qsmxt_engine::config::TikhonovConfig);
+config_defaults!(get_nltv_defaults, qsmxt_engine::config::NltvConfig);
+config_defaults!(get_ndi_defaults, qsmxt_engine::config::NdiConfig);
+config_defaults!(get_fansi_defaults, qsmxt_engine::config::FansiConfig);
+config_defaults!(get_l1qsm_defaults, qsmxt_engine::config::L1qsmConfig);
+config_defaults!(get_whqsm_defaults, qsmxt_engine::config::WhqsmConfig);
+config_defaults!(get_hdqsm_defaults, qsmxt_engine::config::HdqsmConfig);
+config_defaults!(get_medi_defaults, qsmxt_engine::config::MediConfig);
+config_defaults!(get_tfi_defaults, qsmxt_engine::config::TfiConfig);
+config_defaults!(get_qsmart_defaults, qsmxt_engine::config::QsmartConfig);
+config_defaults!(get_romeo_defaults, qsmxt_engine::config::RomeoConfig);
 
-/// MCPC-3D-S defaults, `{"sigma": [x, y, z]}`. qsmxt-config folded its MCPC-3D-S section into
+/// MCPC-3D-S defaults, `{"sigma": [x, y, z]}`. qsmxt-engine folded its MCPC-3D-S section into
 /// `[field_mapping]` (`phase_offset_sigma`); this keeps the shape the UI reads.
 #[wasm_bindgen]
 pub fn get_mcpc3ds_defaults() -> String {
-    let sigma = qsmxt_config::config::FieldMappingConfig::default().phase_offset_sigma;
+    let sigma = qsmxt_engine::config::FieldMappingConfig::default().phase_offset_sigma;
     serde_json::json!({ "sigma": sigma }).to_string()
 }
 
 config_defaults!(
     get_linear_fit_defaults,
-    qsmxt_config::config::LinearFitConfig
+    qsmxt_engine::config::LinearFitConfig
 );
-config_defaults!(get_ilsqr_defaults, qsmxt_config::config::IlsqrConfig);
+config_defaults!(get_ilsqr_defaults, qsmxt_engine::config::IlsqrConfig);
 
 // ============================================================================
 // Tests
@@ -1281,15 +1281,15 @@ mod tests {
     }
 
     // The versions come from Cargo.lock, so they follow the pins in Cargo.toml without anyone
-    // editing a literal. qsmxt-config is pinned by tag; qsm-core may be patched to a commit.
+    // editing a literal. qsmxt-engine is pinned by tag; qsm-core may be patched to a commit.
     #[test]
     fn dependency_versions_follow_the_pins() {
         let v: serde_json::Value = serde_json::from_str(&get_dependency_versions_wasm()).unwrap();
         let manifest = include_str!("../Cargo.toml");
         let pin = manifest
             .lines()
-            .find(|l| l.starts_with("qsmxt-config"))
-            .expect("qsmxt-config is pinned");
+            .find(|l| l.starts_with("qsmxt-engine"))
+            .expect("qsmxt-engine is pinned");
         let pinned = |key: &str| {
             pin.split(&format!("{key} = \""))
                 .nth(1)
@@ -1310,7 +1310,7 @@ mod tests {
                     Some(format!("git {}", &rev[..7]).as_str())
                 );
             }
-            (None, None) => panic!("qsmxt-config is pinned by neither tag nor rev: {pin}"),
+            (None, None) => panic!("qsmxt-engine is pinned by neither tag nor rev: {pin}"),
         }
         for dep in ["qsm_rs", "qsmxt"] {
             assert_eq!(
@@ -1347,9 +1347,9 @@ mod tests {
     fn parse_pipeline_config_keeps_the_users_algorithm() {
         let toml = "[bg_removal]\nalgorithm = \"pdf\"\n";
         let config = parse_pipeline_config(toml).expect("valid config should parse");
-        let default = qsmxt_config::PipelineConfig::default();
+        let default = qsmxt_engine::PipelineConfig::default();
 
-        assert_eq!(config.bg_removal.algorithm, qsmxt_config::BfAlgorithm::Pdf);
+        assert_eq!(config.bg_removal.algorithm, qsmxt_engine::BfAlgorithm::Pdf);
         assert_ne!(
             config.bg_removal.algorithm, default.bg_removal.algorithm,
             "fixture must differ from the default, or it cannot detect a silent fallback",
@@ -1462,19 +1462,19 @@ mod tests {
 
     #[test]
     fn apply_mask_section_applies_a_valid_section() {
-        let mut config = qsmxt_config::PipelineConfig::default();
+        let mut config = qsmxt_engine::PipelineConfig::default();
         apply_mask_section(&mut config, "magnitude-first,bet:0.4,erode:2").unwrap();
         let section = &config.masking.sections[0];
         assert!(matches!(
             section.generator,
-            qsmxt_config::MaskOp::Bet { .. }
+            qsmxt_engine::MaskOp::Bet { .. }
         ));
         assert_eq!(section.refinements.len(), 1);
     }
 
     #[test]
     fn apply_mask_section_rejects_what_it_cannot_parse() {
-        let mut config = qsmxt_config::PipelineConfig::default();
+        let mut config = qsmxt_engine::PipelineConfig::default();
         assert!(apply_mask_section(&mut config, "").is_ok());
         assert!(apply_mask_section(&mut config, "magnitude,not-an-op").is_err());
         assert!(apply_mask_section(&mut config, "not-an-input,bet:0.5").is_err());
@@ -1483,11 +1483,11 @@ mod tests {
 }
 
 // ============================================================================
-// Pipeline Configuration (via qsmxt-config library)
+// Pipeline Configuration (via qsmxt-engine library)
 // ============================================================================
 
 // qsmbly builds its config as a JSON object (its UI→schema adapter) and lets
-// qsmxt-config do all serialization — so command, methods, the downloadable .toml,
+// qsmxt-engine do all serialization — so command, methods, the downloadable .toml,
 // and the pipeline-execution config are one canonical representation produced by the
 // library, never a hand-rolled parallel TOML. `mask_section` is the CLI-style mask
 // string parsed here (the tagged mask-op enums round-trip cleanly via serde, unlike a
@@ -1495,8 +1495,8 @@ mod tests {
 fn config_from_json(
     config_json: &str,
     mask_section: &str,
-) -> Result<qsmxt_config::PipelineConfig, JsValue> {
-    let mut config: qsmxt_config::PipelineConfig = serde_json::from_str(config_json)
+) -> Result<qsmxt_engine::PipelineConfig, JsValue> {
+    let mut config: qsmxt_engine::PipelineConfig = serde_json::from_str(config_json)
         .map_err(|e| js_err(format!("config JSON is not a valid PipelineConfig: {e}")))?;
     apply_mask_section(&mut config, mask_section).map_err(js_err)?;
     Ok(config)
@@ -1510,12 +1510,12 @@ fn config_from_json(
 ///
 /// Split from `config_from_toml` so it is testable off-wasm — `js_sys` values cannot
 /// be constructed on the host target.
-fn parse_pipeline_config(config_toml: &str) -> Result<qsmxt_config::PipelineConfig, String> {
-    qsmxt_config::PipelineConfig::from_toml(config_toml)
+fn parse_pipeline_config(config_toml: &str) -> Result<qsmxt_engine::PipelineConfig, String> {
+    qsmxt_engine::PipelineConfig::from_toml(config_toml)
         .map_err(|e| format!("pipeline config failed to parse: {e}"))
 }
 
-fn config_from_toml(config_toml: &str) -> Result<qsmxt_config::PipelineConfig, JsValue> {
+fn config_from_toml(config_toml: &str) -> Result<qsmxt_engine::PipelineConfig, JsValue> {
     parse_pipeline_config(config_toml).map_err(js_err)
 }
 
@@ -1544,7 +1544,7 @@ pub fn config_json_to_toml_selected_wasm(
 /// Generate a qsmxt CLI command from a config (JSON + mask string). Throws on failure.
 #[wasm_bindgen]
 pub fn generate_command_wasm(config_json: &str, mask_section: &str) -> Result<String, JsValue> {
-    Ok(qsmxt_config::generate_command(&config_from_json(
+    Ok(qsmxt_engine::generate_command(&config_from_json(
         config_json,
         mask_section,
     )?))
@@ -1560,18 +1560,18 @@ pub fn generate_methods_wasm(
     mask_section: &str,
 ) -> Result<String, JsValue> {
     let config = config_from_json(config_json, mask_section)?;
-    Ok(qsmxt_config::methods::generate_methods_for(&config, tool))
+    Ok(qsmxt_engine::methods::generate_methods_for(&config, tool))
 }
 
 /// Parse a CLI-style mask string ("input,gen,refine,...") into the config's mask
 /// sections, so command and methods both reflect the real mask. The TOML can't
 /// easily carry the tagged mask-op enums, so the UI passes the same string the CLI
-/// uses and we parse it here with qsmxt-config's parsers. Empty string = no change.
+/// uses and we parse it here with qsmxt-engine's parsers. Empty string = no change.
 ///
 /// Anything it can't parse is an error: leaving the default mask in place would print a
 /// command and methods text describing a mask the user didn't make.
 fn apply_mask_section(
-    config: &mut qsmxt_config::PipelineConfig,
+    config: &mut qsmxt_engine::PipelineConfig,
     mask_section: &str,
 ) -> Result<(), String> {
     let parts: Vec<&str> = mask_section
@@ -1588,14 +1588,14 @@ fn apply_mask_section(
             "mask section '{mask_section}' has an input but no mask operation"
         ));
     }
-    let input = qsmxt_config::parse_masking_input(parts[0])
+    let input = qsmxt_engine::parse_masking_input(parts[0])
         .ok_or_else(|| format!("unknown mask input '{}'", parts[0]))?;
     let mut ops = parts[1..]
         .iter()
-        .map(|p| qsmxt_config::parse_mask_op(p).map_err(|e| format!("mask operation '{p}': {e}")))
+        .map(|p| qsmxt_engine::parse_mask_op(p).map_err(|e| format!("mask operation '{p}': {e}")))
         .collect::<Result<Vec<_>, _>>()?;
     let generator = ops.remove(0);
-    config.masking.sections = vec![qsmxt_config::MaskSection {
+    config.masking.sections = vec![qsmxt_engine::MaskSection {
         input,
         generator,
         refinements: ops,
@@ -1606,7 +1606,7 @@ fn apply_mask_section(
 /// Return the default PipelineConfig as a JSON string. Throws on failure.
 #[wasm_bindgen]
 pub fn get_default_config_json_wasm() -> Result<String, JsValue> {
-    qsmxt_config::PipelineConfig::default()
+    qsmxt_engine::PipelineConfig::default()
         .to_json()
         .map_err(|e| {
             js_err(format!(
@@ -1618,7 +1618,7 @@ pub fn get_default_config_json_wasm() -> Result<String, JsValue> {
 /// Validate a TOML config string. Returns empty string on success, error message on failure.
 #[wasm_bindgen]
 pub fn validate_config_wasm(toml_string: &str) -> String {
-    match qsmxt_config::PipelineConfig::from_toml(toml_string) {
+    match qsmxt_engine::PipelineConfig::from_toml(toml_string) {
         Err(e) => format!("Parse error: {}", e),
         Ok(_) => String::new(),
     }
@@ -1664,8 +1664,8 @@ pub fn run_field_mapping_wasm(
     let mag_opt: Option<&[&[f64]]> = if mags.is_empty() { None } else { Some(&mags) };
 
     let config = config_from_toml(config_toml)?;
-    let (fm_config, _, _, _) = qsmxt_config::to_pipeline_stages(&config);
-    let meta = qsmxt_config::to_scan_metadata(
+    let (fm_config, _, _, _) = qsmxt_engine::to_pipeline_stages(&config);
+    let meta = qsmxt_engine::to_scan_metadata(
         (nx, ny, nz),
         (vsx, vsy, vsz),
         echo_times,
@@ -1720,8 +1720,8 @@ pub fn run_bg_removal_wasm(
     check_len("mask", mask, n)?;
 
     let config = config_from_toml(config_toml)?;
-    let (_, bg_config, _, _) = qsmxt_config::to_pipeline_stages(&config);
-    let meta = qsmxt_config::to_scan_metadata(
+    let (_, bg_config, _, _) = qsmxt_engine::to_pipeline_stages(&config);
+    let meta = qsmxt_engine::to_scan_metadata(
         (nx, ny, nz),
         (vsx, vsy, vsz),
         &[],
@@ -1769,8 +1769,8 @@ pub fn run_dipole_inversion_wasm(
     check_len_or_empty("magnitude", magnitude, n)?;
 
     let config = config_from_toml(config_toml)?;
-    let (_, _, inv_config, _) = qsmxt_config::to_pipeline_stages(&config);
-    let meta = qsmxt_config::to_scan_metadata(
+    let (_, _, inv_config, _) = qsmxt_engine::to_pipeline_stages(&config);
+    let meta = qsmxt_engine::to_scan_metadata(
         (nx, ny, nz),
         (vsx, vsy, vsz),
         echo_times,

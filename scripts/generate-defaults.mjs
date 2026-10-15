@@ -33,7 +33,7 @@ const wasmBinary = await readFile(wasmBinaryPath);
 await wasmModule.default(wasmBinary);
 
 // qsm-core stores the TGV alphas as f32; write the shortest decimal that is the same f32
-// (0.001, not 0.0010000000474974513), as qsmxt-config does for TgvConfig.
+// (0.001, not 0.0010000000474974513), as qsmxt-engine does for TgvConfig.
 function shortestF32(x) {
   for (let p = 1; p <= 9; p++) {
     const d = Number(x.toPrecision(p));

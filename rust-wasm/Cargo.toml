@@ -10,25 +10,25 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["console_error_panic_hook"]
-simd = ["qsmxt-config/simd"]
-# qsmxt-config's `onnx` also enables getrandom's browser-crypto backend on wasm32.
-onnx = ["qsmxt-config/onnx"]
+simd = ["qsmxt-engine/simd"]
+# qsmxt-engine's `onnx` also enables getrandom's browser-crypto backend on wasm32.
+onnx = ["qsmxt-engine/onnx"]
 # Multithreading via wasm threads (SharedArrayBuffer + Web Worker pool). Turns on qsm-core's
-# rayon paths (all classical algorithms, via qsmxt-config) and the tiled-DL parallel tile loop. Requires a
+# rayon paths (all classical algorithms, via qsmxt-engine) and the tiled-DL parallel tile loop. Requires a
 # threaded build (nightly + -Z build-std + target-feature=+atomics,+bulk-memory) and a
 # cross-origin-isolated page (COOP/COEP). See build.sh and the coi service worker.
-parallel = ["qsmxt-config/parallel", "dep:wasm-bindgen-rayon"]
+parallel = ["qsmxt-engine/parallel", "dep:wasm-bindgen-rayon"]
 # Route the bindings' console_log! diagnostics to the browser console. Off by default, so
 # release bundles carry no logging strings or JS calls; enable it when debugging a build.
 debug-log = []
 
 [dependencies]
-# The only pin on the QSM stack. qsmxt-config (pipeline configuration, command generation, methods
-# text) re-exports qsm-core (`qsmxt_config::qsm_core`) and forwards its `simd`/`onnx`/`parallel`
+# The only pin on the QSM stack. qsmxt-engine (pipeline configuration, command generation, methods
+# text) re-exports qsm-core (`qsmxt_engine::qsm_core`) and forwards its `simd`/`onnx`/`parallel`
 # features, so qsmbly always runs the same qsm-core QSMxT was built and tested against.
-# Pinned by commit on QSMxT main until a QSMxT release includes QSMxT/QSMxT#329; then it moves to a
-# release tag, which the bump-qsmxt-config workflow maintains.
-qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", rev = "8a92f37ae6c3193157e2470a6f2fb1612a31dbea" }
+# Pinned by commit on QSMxT main until a QSMxT release includes QSMxT/QSMxT#331; then it moves to a
+# release tag, which the bump-qsmxt-engine workflow maintains.
+qsmxt-engine = { git = "https://github.com/QSMxT/QSMxT.git", rev = "d5b71c65c37ce302b69148dbb41c66d675dc0ec3" }
 
 # WASM bindings
 wasm-bindgen = "0.2"

@@ -1,4 +1,4 @@
-//! Record which QSM.rs (`qsm-core`) and QSMxT (`qsmxt-config`) this bundle links, so the UI can
+//! Record which QSM.rs (`qsm-core`) and QSMxT (`qsmxt-engine`) this bundle links, so the UI can
 //! show them without a hand-maintained copy of the pins.
 //!
 //! Both crates carry `version = "0.0.0"` in git (their release CI stamps the real one), so
@@ -76,7 +76,7 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
     let lock = fs::read_to_string(&lock_path).unwrap_or_default();
-    for (crate_name, prefix) in [("qsm-core", "QSM_CORE"), ("qsmxt-config", "QSMXT_CONFIG")] {
+    for (crate_name, prefix) in [("qsm-core", "QSM_CORE"), ("qsmxt-engine", "QSMXT_ENGINE")] {
         let (version, commit, repo) = locked_package(&lock, crate_name)
             .map(|p| describe(&p))
             .unwrap_or_else(|| ("unknown".into(), String::new(), String::new()));

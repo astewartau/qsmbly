@@ -1,13 +1,13 @@
 name: CI
 
 # Builds the wasm crate and runs the Rust + JS test suites on every PR/push.
-# The wasm build is the important guard: it catches qsm-core / qsmxt-config API
-# breakage — including on the automated qsmxt-config pin-bump PRs.
+# The wasm build is the important guard: it catches qsm-core / qsmxt-engine API
+# breakage — including on the automated qsmxt-engine pin-bump PRs.
 on:
   pull_request:
   push:
     branches: [main, staging]
-  # The qsmxt-config bump workflow dispatches this on its PR branch: PRs it opens with the
+  # The qsmxt-engine bump workflow dispatches this on its PR branch: PRs it opens with the
   # workflow token trigger no pull_request runs.
   workflow_dispatch:
 
@@ -73,9 +73,9 @@ jobs:
 
       - run: npm ci
 
-      # The UI settings -> qsmxt-config round trip needs the built bundle, so the plain jest job
+      # The UI settings -> qsmxt-engine round trip needs the built bundle, so the plain jest job
       # skips it. Here it must run: QSMBLY_REQUIRE_WASM turns a missing bundle into a failure.
-      - name: ConfigBridge round trip through the built qsmxt-config schema
+      - name: ConfigBridge round trip through the built qsmxt-engine schema
         env:
           QSMBLY_REQUIRE_WASM: '1'
         run: npm test -- js/modules/ConfigBridge.roundtrip.test.js

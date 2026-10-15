@@ -43,7 +43,7 @@ describe('maskSectionString', () => {
 });
 
 /**
- * Background-removal parameter fields as declared by the pinned qsmxt-config
+ * Background-removal parameter fields as declared by the pinned qsmxt-engine
  * schema (crates/qsmxt-config/src/config.rs, v9.18.1):
  *
  *   param_config!(VsharpConfig  { threshold, max_radius, min_radius });
@@ -88,7 +88,7 @@ function settingsFixture(overrides = {}) {
 }
 
 describe('buildConfigJson background-removal parameters', () => {
-  test('emits only fields the qsmxt-config schema declares', () => {
+  test('emits only fields the qsmxt-engine schema declares', () => {
     const bg = JSON.parse(buildConfigJson(settingsFixture())).bg_removal;
 
     for (const [algorithm, fields] of Object.entries(BG_REMOVAL_SCHEMA)) {
@@ -178,7 +178,7 @@ describe('buildConfigJson linear-fit parameters', () => {
     expect(fm.linear_fit).toEqual({ reliability_threshold_percentile: 0 });
   });
 
-  test('omits a blank percentile so qsmxt-config supplies its default', () => {
+  test('omits a blank percentile so qsmxt-engine supplies its default', () => {
     const fm = JSON.parse(buildConfigJson(
       settingsFixture({ linearFit: { reliability_threshold_percentile: NaN } }),
     )).field_mapping;
@@ -267,7 +267,7 @@ describe('QSMART inner inversion config', () => {
 });
 
 describe('NLTV export', () => {
-  test('maps the UI\'s newton_max_iter to qsmxt-config\'s newton_iter', () => {
+  test('maps the UI\'s newton_max_iter to qsmxt-engine\'s newton_iter', () => {
     const nltv = { lambda: 0.001, mu: 1, max_iter: 250, tol: 0.001, newton_max_iter: 7 };
     const config = JSON.parse(buildConfigJson({ dipole_inversion: 'nltv', nltv }));
     expect(config.inversion.nltv.newton_iter).toBe(7);

@@ -1,8 +1,8 @@
 /**
- * Round-trip buildConfigJson through the real qsmxt-config schema (#89).
+ * Round-trip buildConfigJson through the real qsmxt-engine schema (#89).
  *
- * buildConfigJson is the seam between the UI's settings and qsmxt-config's PipelineConfig. Every
- * qsmxt-config struct is `#[serde(default)]` without `deny_unknown_fields`, so a key the schema
+ * buildConfigJson is the seam between the UI's settings and qsmxt-engine's PipelineConfig. Every
+ * qsmxt-engine struct is `#[serde(default)]` without `deny_unknown_fields`, so a key the schema
  * does not declare is dropped in silence and the default is used instead of the user's value.
  * Only the real schema can catch that, so this test loads the built WASM and checks that every
  * value buildConfigJson sends comes back out of config_json_to_toml_wasm.
@@ -98,14 +98,14 @@ const closeTo = (obj) => Object.fromEntries(Object.entries(obj).map(
   ([k, v]) => [k, typeof v === 'number' && !Number.isInteger(v) ? expect.closeTo(v, 15) : v]));
 
 /**
- * Settings the UI offers that the pinned qsmxt-config schema has no field for. qsmbly uses them
+ * Settings the UI offers that the pinned qsmxt-engine schema has no field for. qsmbly uses them
  * when it runs the pipeline in the browser (the worker reads the settings directly), but the
  * exported command/TOML cannot carry them. Listed here so the gap is explicit, and so this test
  * starts failing — and the entry can go — once the schema grows the field.
  */
 const NOT_IN_SCHEMA = ['bg_removal.pdf.maxit', 'bg_removal.lbv.maxit'];
 
-describeWasm(`buildConfigJson round trip through qsmxt-config${SKIP_NOTE}`, () => {
+describeWasm(`buildConfigJson round trip through qsmxt-engine${SKIP_NOTE}`, () => {
   let wasm;
 
   beforeAll(async () => {
@@ -265,7 +265,7 @@ describeWasm(`buildConfigJson round trip through qsmxt-config${SKIP_NOTE}`, () =
         .toThrow(/invalid type: null/);
     });
 
-    test('blank numeric inputs fall back to the qsmxt-config defaults', () => {
+    test('blank numeric inputs fall back to the qsmxt-engine defaults', () => {
       const defaults = JSON.parse(wasm.get_default_config_json_wasm());
       const s = userSettings({
         ismv: { radius: NaN, tol: null, max_iter: 77 },

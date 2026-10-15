@@ -50,7 +50,7 @@ const DERIVED = {
       'sdf_spatial_radius', 'sdf_lower_lim', 'sdf_curv_constant', 'vasc_sphere_radius',
       'frangi_scale_min', 'frangi_scale_max', 'frangi_scale_ratio', 'frangi_c',
       'ilsqr_max_iter', 'inversion_algorithm:inversion'],
-    // QSMART's iLSQR tolerance is iLSQR's (qsmxt-config has no QSMART field for it).
+    // QSMART's iLSQR tolerance is iLSQR's (qsmxt-engine has no QSMART field for it).
     extras: { ilsqr_tol: 'number' },
   },
   ROMEO_DEFAULTS: {
@@ -88,7 +88,7 @@ const splitKey = (k) => {
   return [jsKey, genKey];
 };
 
-// A generated value is whatever serde_json emits for a qsmxt-config field.
+// A generated value is whatever serde_json emits for a qsmxt-engine field.
 const isJsonScalarOrArray = (v) =>
   ['number', 'boolean', 'string'].includes(typeof v) ||
   (Array.isArray(v) && v.every(x => ['number', 'string'].includes(typeof x)));
