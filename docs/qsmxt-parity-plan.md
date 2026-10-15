@@ -119,8 +119,7 @@ that compiles to `wasm32-unknown-unknown`, and make both front ends drive it.
 | Layer | Owns | Change |
 |---|---|---|
 | QSM.rs (`qsm-core`) | algorithms, per-stage pipeline functions | runs in WASM everywhere; DL weights can be supplied from memory |
-| QSMxT engine crate (new, e.g. `crates/qsmxt-engine`) | which stages run and on what inputs; crop box and working grid; referencing; requirement checks; memory estimates; cache keys; scan facts from header + sidecar | extracted from `src/pipeline/*` |
-| `qsmxt-config` | config schema, command, methods text, **settings schema** | adds the settings schema; re-exports `qsm-core` |
+| `qsmxt-engine` (`crates/qsmxt-engine`, today's `qsmxt-config` renamed) | config schema, command, methods text, **settings schema**; which stages run and on what inputs; crop box and working grid; referencing; requirement checks; memory estimates; cache keys; scan facts from header + sidecar | run logic extracted from `src/pipeline/*`; adds the settings schema; re-exports `qsm-core` |
 | `qsmxt` binary | BIDS discovery, file I/O, caching and provenance, executor (local/SLURM), CLI, TUI | `runner.rs` becomes file I/O around the engine |
 | qsmbly | UI, file and DICOM loading, viewer, model download, in-browser cache | thin bindings; JS numerics deleted |
 
@@ -185,7 +184,7 @@ qsmbly's defaults are QSMxT's defaults. Where the browser cannot use a QSMxT def
 - HD-BET sliding window instead of full volume (`hd-bet` mask-op parameters).
 - χ-separation and R2PRIMEnet patch sizes (QSM.rs `WASM_PATCH` constants today).
 
-The profile is defined once (in `qsmxt-config` or the engine, e.g. `PipelineConfig::browser()`),
+The profile is defined once in `qsmxt-engine` (e.g. `PipelineConfig::browser()`),
 not in qsmbly's JS. Changing qsmbly's defaults changes what existing users get (RTS → iLSQR,
 V-SHARP, mask, TGV α); the release notes say so.
 
@@ -198,7 +197,7 @@ become a **custom mask**; the methods text and the command say a custom mask was
 
 ### 3.5 One settings schema
 
-`qsmxt-config` gains a description of every user-facing setting:
+`qsmxt-engine` gains a description of every user-facing setting:
 
 - config path (e.g. `bg_removal.vsharp.max_radius`), label, help text;
 - type, units, range or step, enum options with their own labels and help;
@@ -230,6 +229,9 @@ Phases 1 and 2 run in parallel; phase 3 starts as soon as the first engine slice
 pins QSMxT by commit during development, as QSMxT pins QSM.rs). qsmbly is released when it runs on
 the engine and QSMxT has released the engine; there is no interim port of today's JS worker.
 
+Status (2026-10-15): phase 1 is merged (QSM.rs #190–#193, QSMxT #329, qsmbly #147–#151), except
+an xQSM case in the 1.2 harness and moving QSMxT's pin to QSM.rs main. Phase 2 has started.
+
 ### Phase 1: unblock
 
 | # | Owner | Work | Done when |
@@ -237,7 +239,7 @@ the engine and QSMxT has released the engine; there is no interim port of today'
 | 1.1 | QSM.rs | Take timing off iLSQR's library path (`ilsqr` must not touch `Instant`; tracing becomes opt-in for native benchmarks only). | no `Instant`/`SystemTime` reachable from non-test library code |
 | 1.2 | QSM.rs | CI job that builds for `wasm32-unknown-unknown` and runs every `pipeline::*` stage (and each inversion/BFR algorithm) on a tiny phantom under Node (`wasm-bindgen-test`). | a reintroduced `Instant::now()` fails CI |
 | 1.3 | QSM.rs | In-memory weight provider (e.g. `models::provide_weights(file_name, bytes)`), consulted before `$QSM_MODEL_DIR`/cache/download, so every DL-aware dispatcher (inversion, BFRnet, iQFM, HD-BET/RS2-Net masking, SynthSeg, R2PRIMEnet, χ-sep nets) runs in WASM. Verify sha256 against the registry. | `run_dipole_inversion` with `xqsm` runs in the 1.2 harness with provided bytes |
-| 1.4 | QSM.rs | `run_qsmart` reports its intermediates (vessel mask, stage-1/2 local fields and χ) through a callback, so hosts can show or save them. | QSMxT may also publish them (its decision) |
+| 1.4 | QSM.rs | `run_qsmart` reports its intermediates (vessel mask, stage-1/2 local fields and χ) through a callback, so hosts can show or save them. | QSMxT saves them too (decided; 2.2) |
 | 1.5 | QSMxT | `qsmxt-config` re-exports `qsm-core` and forwards `simd`, `onnx`, `parallel`, so a consumer pins QSMxT only. | qsmbly builds with no direct `qsm-core` pin |
 | 1.6 | qsmbly | Single pin on QSMxT; drop the stebo85 `[patch]`; bump workflow edits one tag and CI really runs on its PRs (dispatch `ci.yml` on the bump branch, or open the PR with an app token); close #143 and #146. | a bump PR shows a CI result without manual approval |
 | 1.7 | qsmbly | Delete the dead bindings (the 37 exports nothing calls) and their defaults plumbing; bring `staging` back in line with `main` (close or redo #144). | — |
@@ -251,11 +253,12 @@ fixture, the CI phantom and one in-vivo multi-echo dataset. QSMxT CI gains a
 
 | # | Work |
 |---|---|
-| 2.1 | Create the crate; move the modules that are already I/O-free: `referencing.rs`, `requirements.rs` (`RunFacts` → `ScanFacts`), `memory.rs` (estimates; host memory queries stay in the binary), `fieldmap.rs` checks, scan metadata from header + sidecar (`resolve_geometry`, `scan_metadata`, `bids/sidecar.rs` interpretation), `step_cache_key` / `consumed_config`, `hz_per_ppm` etc. |
-| 2.2 | Split the QSM chain stages in `runner.rs` into load → compute (engine) → save: phase scaling, magnitude / homogeneity, masking incl. two-pass and section combination, unwrap / field mapping (incl. robust-fit report), background removal and inversion incl. crop box and iQFM, TGV (`TgvInput`), QSMART (incl. the mm→voxel conversion), iQSM/iQSM+, referencing over support or region. |
+| 2.0 | Rename `qsmxt-config` to `qsmxt-engine` (crate and directory, release version stamping, docs) before the engine grows inside it; qsmbly follows (pin, bump workflow and its dispatch type, `build.rs`). Release assets and `qsmxt update` are unchanged. |
+| 2.1 | Move into the crate the modules that are already I/O-free: `referencing.rs`, `requirements.rs` (`RunFacts` → `ScanFacts`), `memory.rs` (estimates; host memory queries stay in the binary), `fieldmap.rs` checks, scan metadata from header + sidecar (`resolve_geometry`, `scan_metadata`, `bids/sidecar.rs` interpretation), `step_cache_key` / `consumed_config`, `hz_per_ppm` etc. |
+| 2.2 | Split the QSM chain stages in `runner.rs` into load → compute (engine) → save: phase scaling, magnitude / homogeneity, masking incl. two-pass and section combination, unwrap / field mapping (incl. robust-fit report), background removal and inversion incl. crop box and iQFM, TGV (`TgvInput`), QSMART (incl. the mm→voxel conversion; QSMxT saves its intermediates when intermediate outputs are requested, so default output is unchanged), iQSM/iQSM+, referencing over support or region. |
 | 2.3 | Planner (`plan`) and run loop (`run`) with `StageStore`/`Observer`; `runner.rs` becomes the file-backed store plus BIDS naming and provenance. Required DL models come from `plan` (replaces per-stage `prefetch_weights`). |
 | 2.4 | Remaining single-run stages: CLEAR-SWI and minIP, SMWI, T2*/R2* (ARLO), R2 (EPG, MESE) and R2′ incl. R2PRIMEnet, χ-separation (classical and DL), SynthSeg and region statistics, motion correction and registration, axial resampling and output space, slice-gap check, real/imaginary input (incl. GE corrections), coil combination of uncombined data. |
-| 2.5 | Browser profile (§3.3) as a function of the engine or `qsmxt-config`, with tests that the generated command carries it. |
+| 2.5 | Browser profile (§3.3) as a function of the engine, with tests that the generated command carries it. |
 | 2.6 | Later: multi-run inputs (multi-orientation COSMOS/STI). |
 
 ### Phase 3: qsmbly on the engine
@@ -264,7 +267,7 @@ fixture, the CI phantom and one in-vivo multi-echo dataset. QSMxT CI gains a
 |---|---|
 | 3.1 | New bindings: `plan`, `run` (with an in-memory `StageStore` and an `Observer` that posts progress, logs and outputs to the main thread), weight provider, schema, defaults, command, methods, TOML. Remove the per-algorithm wrappers and `run_dl_*`. Both bundles (base, DL) contain the engine; JS loads the DL bundle when `plan.models` is non-empty. |
 | 3.2 | Worker becomes a relay: build `ScanFacts` + inputs as typed arrays (no `Array.from` copies), fetch `plan.models` weights (existing IndexedDB cache, Hugging Face mirror), run, stream outputs to the viewer. Cancel stays "terminate the worker". |
-| 3.3 | Delete JS numerics: `MaskUtils`, `ThresholdUtils` (Otsu, thresholds), `PhaseUtils` (echo fit, `ppmFieldToPhase`), `FilterUtils`, `TgvParams`, `ScanParams` step logic, `HdBetEstimate`, and the methods-text edits in `RodentMask.js` (the methods text must come from `qsmxt-config`; if it lacks a sentence, fix it there). |
+| 3.3 | Delete JS numerics: `MaskUtils`, `ThresholdUtils` (Otsu, thresholds), `PhaseUtils` (echo fit, `ppmFieldToPhase`), `FilterUtils`, `TgvParams`, `ScanParams` step logic, `HdBetEstimate`, and the methods-text edits in `RodentMask.js` (the methods text must come from `qsmxt-engine`; if it lacks a sentence, fix it there). |
 | 3.4 | Mask builder on engine masking (§3.4): recipe editing with previews, custom-mask path for drawn or uploaded masks, mask alignment repair kept as a loading step. |
 | 3.5 | "Re-run from here": after a run, changing a setting re-runs from the first affected stage (engine cache keys). |
 | 3.6 | Show the memory estimate and requirement warnings from `plan` before running, in QSMxT's words. |
@@ -274,7 +277,7 @@ fixture, the CI phantom and one in-vivo multi-echo dataset. QSMxT CI gains a
 
 | # | Owner | Work |
 |---|---|---|
-| 4.1 | QSMxT | Settings schema in `qsmxt-config` (§3.5), built from the TUI's labels, help and visibility, with the coverage tests. |
+| 4.1 | QSMxT | Settings schema in `qsmxt-engine` (§3.5), built from the TUI's labels, help and visibility, with the coverage tests. |
 | 4.2 | qsmbly | Generic settings renderer from the schema, laid out by tab/sub-tab; `ConfigBridge.js` and the hand-written settings HTML go away (the settings object *is* a `PipelineConfig` JSON). |
 | 4.3 | QSMxT | (Optional, later) TUI renders its rows from the schema. |
 
@@ -293,8 +296,12 @@ Open: multi-orientation (COSMOS/STI; several acquisitions in one session) and DI
 
 ## 5. Open questions
 
-- Engine crate name and whether it absorbs `qsmxt-config` or sits beside it.
-- Whether QSMxT also publishes QSMART's intermediates (1.4).
+Decided (2026-10-15): the engine crate is `qsmxt-engine` and absorbs `qsmxt-config` (one crate,
+one pin; `config`, `command` and `methods` become its modules). QSMxT saves QSMART's
+intermediates too (1.4, 2.2).
+
+Still open:
+
 - The tolerance for native vs WASM parity (measure it in 3.7, then fix it in CI).
 - qsmbly's version number for the first engine-based release.
 
@@ -304,7 +311,8 @@ Open: multi-orientation (COSMOS/STI; several acquisitions in one session) and DI
   JS), #102 (Laplacian field-map meaning), #143 (RS2-Net fork), #146 (bump PR).
 - QSMxT code to read first: `src/pipeline/runner.rs` (`stage_*` functions, `stage_reference`,
   `crop_box_for`, `resolve_geometry`), `src/pipeline/{fieldmap,referencing,requirements,memory,graph}.rs`,
-  `crates/qsmxt-config/src/{bridge,config,masking}.rs`, `crates/qsmxt-config/tests/param_coverage.rs`.
+  `crates/qsmxt-config/src/{bridge,config,masking}.rs`, `crates/qsmxt-config/tests/param_coverage.rs`
+  (`crates/qsmxt-engine/` after 2.0).
 - QSM.rs: `src/pipeline/*`, `src/models/mod.rs` (weight resolution), `src/inversion/ilsqr.rs`.
 - qsmbly: `rust-wasm/src/lib.rs`, `js/qsm-worker-pure.js`, `js/modules/ConfigBridge.js`,
   `js/controllers/PipelineSettingsController.js`, `js/app/config.js`, `scripts/generate-defaults.mjs`,
