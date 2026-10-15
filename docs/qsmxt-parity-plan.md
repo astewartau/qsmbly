@@ -296,13 +296,18 @@ from the configuration alone, so it says what was done, including those changes.
 |---|---|---|---|
 | G1 | QSMxT | The graph from `plan`: step labels, algorithm and key settings per step, data-flow edges (from `graph.rs`'s "reads" table), two-pass as two branches joining at the combination. | 2.4 |
 | G2 | QSMxT | A run record (each step computed, cached or skipped; run-time decisions and their reasons); the graph after the run; methods text from plan + record. | G1 |
-| G3 | QSMxT | Mermaid (`pipeline.mmd`) and self-contained SVG (`pipeline.svg`, drawn by the engine, no Graphviz) renderers; `qsmxt run` writes them next to the methods text for each run; `qsmxt run --dry-run` writes and prints the planned graph. | G1 |
+| G3 | QSMxT | Mermaid (`pipeline.mmd`) and self-contained SVG (`pipeline.svg`, drawn by the engine, no Graphviz) renderers; `qsmxt run` writes them next to the methods text for each run, and a dataset graph (below) for the whole run; `qsmxt run --dry-run` writes and prints the planned graph. | G1, G2 |
 | G4 | QSMxT | TUI "Pipeline" view: the graph as text, with memory and models, updated as settings change; a key writes the SVG and opens it. | G3 |
 | G5 | qsmbly | The graph in the new UI, live during a run (queued, running, done, cached, stale). | the UI redesign |
 
+A dataset gets one graph per run and a **dataset graph**: every run's graph merged, each step
+once, labelled with how many runs took it (e.g. "Inversion (iLSQR), 320/320 runs"). A step only
+some runs took is drawn differently (e.g. dashed) with its count ("R2PRIMEnet, 12/320 runs"), and
+a step the runs took in different ways shows the split ("Mask: computed 318, supplied 2"). The
+dataset's methods text comes from the same merged record.
+
 Defaults until decided otherwise (§5): Mermaid and SVG only; one box per step, with files in
-tooltips; one graph per run, plus a dataset summary of how many runs took each variant; the
-methods text describes what ran.
+tooltips; the methods text describes what ran.
 
 ### Phase 3: qsmbly on the engine
 
@@ -347,8 +352,8 @@ Still open:
 
 - The UI redesign (§4): its plan settles 3.4–3.6, 4.2 and the UI side of phase 5.
 - The pipeline graph (§4), defaults in place until decided: formats (Mermaid and SVG; no DOT),
-  detail (one box per step), datasets (a graph per run plus a variant summary), and the methods
-  text describing what ran rather than what was configured.
+  detail (one box per step), and the methods text describing what ran rather than what was
+  configured.
 - The tolerance for native vs WASM parity (measure it in 3.7, then fix it in CI).
 - qsmbly's version number for the first engine-based release.
 
