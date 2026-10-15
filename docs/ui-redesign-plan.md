@@ -1,6 +1,6 @@
 # qsmbly UI redesign plan
 
-Status: proposal for decision, 2026-10-15. It settles how the steps that the
+Status: accepted 2026-10-16, with every recommendation in §7. It settles how the steps that the
 [parity plan](qsmxt-parity-plan.md) holds back for the redesign are built: 3.4 (mask builder),
 3.5 (re-run from here), 3.6 (plan before running), 4.2 (settings renderer) and the UI side of
 phase 5. It also lists what the engine has to provide for them.
@@ -802,44 +802,46 @@ Alternatives:
   builds the WASM bundle.
 - **Accessibility:** axe-core checks inside the Playwright flows.
 
-## 7. Open questions for Ashley
+## 7. Decisions
+
+Decided 2026-10-16: each question below is answered as recommended.
 
 1. **Layout.** Adopt the three-pane workspace (outline | viewer | inspector, plus the run bar)
    rather than restyling today's sidebar or building a wizard?
-   *Recommended: yes.*
+   *Decided: yes.*
 2. **Migration.** Build the new UI as a parallel app (`next.html` on staging), give today's UI
    fixes only, and switch in one release once the checklist passes?
-   *Recommended: yes.*
+   *Decided: yes.*
 3. **First engine-based release.** Should it wait for the new UI?
-   *Recommended: aim for the new UI. If the checklist is not met when QSMxT releases the
+   *Decided: aim for the new UI. If the checklist is not met when QSMxT releases the
    engine, ship today's UI on the engine and offer the new one as a preview.*
 4. **Framework.** Adopt Preact + htm + signals (vendored, no build step) with JSDoc types
    checked against `.d.ts` generated from the engine?
-   *Recommended: yes.*
+   *Decided: yes.*
 5. **Field-map inputs** (total and local field maps), which QSMxT cannot take today. Make them
    a QSMxT input mode (E20), keep them qsmbly-only and marked not reproducible, or drop them?
-   *Recommended: add them to QSMxT. The new UI leaves them out until QSMxT has them.*
+   *Decided: add them to QSMxT. The new UI leaves them out until QSMxT has them.*
 6. **Supplied masks.** Export hand-edited or uploaded masks as a BIDS derivative used through
    `--use-custom-masks qsmbly`, with methods wording for a supplied mask (E11)?
-   *Recommended: yes.*
+   *Decided: yes.*
 7. **Schema scope.** Should 4.1 carry `level` (basic/advanced) and a browser default per
    setting, and should visibility be an engine function (`settings_view`) rather than a
    condition language? This changes what the TUI can use too.
-   *Recommended: yes to both.*
+   *Decided: yes to both.*
 8. **Requirement messages.** Make the engine's problems front-end-neutral: structured, naming
    settings by path, with the CLI rendering flags and the GUI rendering labels (E4)?
-   *Recommended: yes.*
+   *Decided: yes.*
 9. **Run history.** Keep earlier runs' outputs for comparison, bounded by a memory budget, with
    the latest two kept by default and pinning available?
-   *Recommended: yes.*
+   *Decided: yes.*
 10. **Persistence.** Keep loaded data and outputs across page reloads, on disk via the browser's
     origin-private file system?
-    *Recommended: not in the first version. Settings persist; data persistence can come later
+    *Decided: not in the first version. Settings persist; data persistence can come later
     as an explicit opt-in, since it keeps subject data on disk.*
 11. **Presets.** Add pipeline presets beyond the mask presets (e.g. "fast", "deep learning")?
-    *Recommended: only if QSMxT gets them too, defined in the engine.*
+    *Decided: only if QSMxT gets them too, defined in the engine.*
 12. **Deep-learning licences.** Is listing each model's licence next to its download size enough
     (e.g. HD-BET, CC-BY-NC-4.0), or should non-commercial models need an explicit
     acknowledgement?
-    *Recommended: listing is enough. The download is the Run click, as today's HD-BET dialog
+    *Decided: listing is enough. The download is the Run click, as today's HD-BET dialog
     does.*
