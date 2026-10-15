@@ -1286,16 +1286,29 @@ mod tests {
     fn dependency_versions_follow_the_pins() {
         let v: serde_json::Value = serde_json::from_str(&get_dependency_versions_wasm()).unwrap();
         let manifest = include_str!("../Cargo.toml");
-        let pinned_tag = manifest
+        let pin = manifest
             .lines()
             .find(|l| l.starts_with("qsmxt-config"))
-            .and_then(|l| l.split("tag = \"").nth(1))
-            .and_then(|t| t.split('"').next())
-            .expect("qsmxt-config is pinned by tag");
-        assert_eq!(
-            v["qsmxt"]["version"].as_str(),
-            Some(pinned_tag.trim_start_matches('v'))
-        );
+            .expect("qsmxt-config is pinned");
+        let pinned = |key: &str| {
+            pin.split(&format!("{key} = \""))
+                .nth(1)
+                .and_then(|t| t.split('"').next())
+        };
+        // A release tag `vX.Y.Z` reports `X.Y.Z`; a commit pin reports `git <short rev>`.
+        match (pinned("tag"), pinned("rev")) {
+            (Some(tag), _) => {
+                assert_eq!(v["qsmxt"]["version"].as_str(), Some(tag.trim_start_matches('v')))
+            }
+            (None, Some(rev)) => {
+                assert_eq!(v["qsmxt"]["commit"].as_str(), Some(rev));
+                assert_eq!(
+                    v["qsmxt"]["version"].as_str(),
+                    Some(format!("git {}", &rev[..7]).as_str())
+                );
+            }
+            (None, None) => panic!("qsmxt-config is pinned by neither tag nor rev: {pin}"),
+        }
         for dep in ["qsm_rs", "qsmxt"] {
             assert_eq!(
                 v[dep]["commit"].as_str().map(str::len),
