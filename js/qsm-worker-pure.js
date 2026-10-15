@@ -1373,8 +1373,10 @@ async function runApplyMaskOps(data) {
     const [nx, ny, nz] = dims;
     const [vsx, vsy, vsz] = voxelSize;
     requireVoxelCount(mask, 'The mask', dims);
-    requireVoxelCount(inputData, 'The masking input', dims);
-    requireVoxelCount(magnitude, 'The magnitude', dims);
+    // The masking input and the magnitude are optional: only the ops that read them get them, and
+    // the controller sends an empty array otherwise.
+    if (inputData?.length) requireVoxelCount(inputData, 'The masking input', dims);
+    if (magnitude?.length) requireVoxelCount(magnitude, 'The magnitude', dims);
     const maskData = wasmModule.apply_mask_ops_wasm(
       new Uint8Array(mask), ops,
       new Float64Array(inputData || []),
