@@ -535,7 +535,8 @@ describe('MaskController.computeVoxelQualityMap', () => {
       getWorker: () => ({
         addEventListener: () => {},
         removeEventListener: () => {},
-        postMessage: (message) => posted.push(message),
+        // Clone like a real postMessage, so a transfer list holding anything but buffers throws.
+        postMessage: (message, transfer) => posted.push(structuredClone(message, { transfer })),
       }),
       updateOutput: () => {},
       setProgress: () => {},
@@ -567,10 +568,13 @@ describe('MaskController.computeVoxelQualityMap', () => {
   });
 
   it('sends voxel data, not volume objects, when every input shares the grid', async () => {
+    let failure;
     controller.computeVoxelQualityMap(
       [volume('ph1.nii'), volume('ph2.nii')], [volume('mag1.nii')], [10, 20]
-    ).catch(() => {});                       // no worker reply in this test; the job is the assertion
+    ).catch((e) => { failure = e; });        // no worker reply in this test; the job is the assertion
     await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(failure).toBeUndefined();
 
     expect(posted).toHaveLength(1);
     expect(posted[0].type).toBe('voxelQuality');

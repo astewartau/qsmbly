@@ -507,7 +507,7 @@ export class MaskController {
           mask: mask,
           nx, ny, nz
         }
-      }, [phase1, mag, phase2, mask].filter(Boolean).map((a) => a.buffer));
+      }, [phase1.data, mag, phase2, mask].filter(Boolean).map((a) => a.buffer));
     });
   }
 
