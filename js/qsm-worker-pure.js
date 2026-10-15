@@ -406,7 +406,7 @@ async function runPipeline(data) {
   // Step 3: Field mapping (15% - 45%) — shared with qsmxt.rs
   // =========================================================================
   postProgress(0.15, 'Field mapping...');
-  // Canonical TOML from qsmxt-config (serde). Mask is supplied separately to the
+  // Canonical TOML from qsmxt-engine (serde). Mask is supplied separately to the
   // pipeline, so the config's mask section is irrelevant here ('').
   const configToml = stageConfigToml(buildConfigJson(pipelineSettings));
   const echoTimesSec = echoTimes.map(t => t / 1000); // ms → seconds

@@ -201,7 +201,7 @@ export const QSMART_DEFAULTS = {
   frangi_scale_max: _QSMART.frangi_scale_max,
   frangi_scale_ratio: _QSMART.frangi_scale_ratio,
   frangi_c: _QSMART.frangi_c,
-  // qsmxt-config has no QSMART tolerance of its own: QSMART's inner iLSQR takes iLSQR's
+  // qsmxt-engine has no QSMART tolerance of its own: QSMART's inner iLSQR takes iLSQR's
   // (`inversion.ilsqr.tol`), so the panel's default is iLSQR's.
   ilsqr_tol: _ILSQR.tol,
   ilsqr_max_iter: _QSMART.ilsqr_max_iter,
@@ -245,7 +245,7 @@ export const HARPERELLA_DEFAULTS = {
   tol: _HARPERELLA.tol,
 };
 
-// TSVD (Truncated SVD) defaults. qsm-core has no TSVD params struct and qsmxt-config types
+// TSVD (Truncated SVD) defaults. qsm-core has no TSVD params struct and qsmxt-engine types
 // `inversion.tsvd` as TkdConfig, so TSVD's generated defaults are TKD's.
 export const TSVD_DEFAULTS = {
   threshold: _TKD.threshold,

@@ -1,7 +1,7 @@
 /**
- * Config Bridge — maps qsmbly pipeline settings to a qsmxt-config PipelineConfig
+ * Config Bridge — maps qsmbly pipeline settings to a qsmxt-engine PipelineConfig
  * shape (the UI→schema adapter). Serialization to TOML, command, and methods is
- * delegated to qsmxt-config via WASM (see rust-wasm config_json_to_toml_wasm /
+ * delegated to qsmxt-engine via WASM (see rust-wasm config_json_to_toml_wasm /
  * generate_command_wasm / generate_methods_wasm) — qsmbly no longer hand-rolls TOML.
  */
 
@@ -13,25 +13,25 @@ import { resolveTgvAlphas } from '../worker/utils/TgvParams.js';
  * JSON.stringify writes NaN — and anything the null-dropping replacer removes — as
  * `null` when it sits inside an array, and serde rejects null for a fixed-size f64
  * array ("invalid type: null, expected f64"). A scalar can simply be omitted so
- * qsmxt-config's default applies; an array element cannot, so drop the whole key.
+ * qsmxt-engine's default applies; an array element cannot, so drop the whole key.
  */
 function finiteTriple(arr) {
   return Array.isArray(arr) && arr.length === 3 && arr.every(Number.isFinite) ? arr : null;
 }
 
-/** The UI calls NLTV's Newton iteration limit newton_max_iter; qsmxt-config calls it newton_iter. */
+/** The UI calls NLTV's Newton iteration limit newton_max_iter; qsmxt-engine calls it newton_iter. */
 function nltvConfig(nltv) {
   const { newton_max_iter, ...rest } = nltv;
   return newton_max_iter === undefined ? rest : { ...rest, newton_iter: newton_max_iter };
 }
 
 /**
- * Build a qsmxt-config PipelineConfig object from qsmbly pipeline settings.
+ * Build a qsmxt-engine PipelineConfig object from qsmbly pipeline settings.
  * The returned object is JSON.stringify'd and handed to the WASM serializers; the
  * mask is passed separately as a CLI-style string (see maskSectionString).
  * @param {Object} settings - Pipeline settings from PipelineSettingsController.save()
  * @param {Object} options - { doSwi, doT2star, doR2star }
- * @returns {Object} config object matching the qsmxt-config schema
+ * @returns {Object} config object matching the qsmxt-engine schema
  */
 export function buildConfig(settings, options = {}) {
   if (!settings) return {};
@@ -54,7 +54,7 @@ export function buildConfig(settings, options = {}) {
       unwrapping_algorithm: settings.unwrapping_algorithm || 'romeo',
       b0_estimation: (settings.b0_estimation || 'weighted_avg').replace(/_/g, '-'),
       b0_weight_type: (settings.b0_weight_type || 'phase_snr').replace(/_/g, '-'),
-      // qsmxt-config's LinearFitConfig carries only the reliability percentile; its bridge
+      // qsmxt-engine's LinearFitConfig carries only the reliability percentile; its bridge
       // pins qsm-core's estimate_offset to the default, so the UI does not offer it.
       linear_fit: {
         reliability_threshold_percentile: settings.linearFit?.reliability_threshold_percentile,
@@ -82,7 +82,7 @@ export function buildConfig(settings, options = {}) {
   else if (isQsmart) config.inversion.algorithm = 'qsmart';
   else if (isTfi) config.inversion.algorithm = 'tfi';
   else {
-    // Translate qsmbly dropdown value -> qsmxt-config serde string.
+    // Translate qsmbly dropdown value -> qsmxt-engine serde string.
     // 'fansitgv' maps to 'fansi-tgv'; all others pass through unchanged.
     const dipole = settings.dipole_inversion || 'rts';
     config.inversion.algorithm = dipole === 'fansitgv' ? 'fansi-tgv' : dipole;
@@ -90,7 +90,7 @@ export function buildConfig(settings, options = {}) {
 
   // Deep-learning overlap-tiling: qsmbly runs the tileable DL nets tiled (bounded wasm memory),
   // so reflect that in the generated `qsmxt run` command + methods. Only set for those algorithms
-  // (qsmxt-config emits --tile-size/--tile-halo for them, and the methods note is DL-only).
+  // (qsmxt-engine emits --tile-size/--tile-halo for them, and the methods note is DL-only).
   const tiling = settings.dl_tiling || {};
   if (tiling.enabled !== false && DL_TILING_DEFAULTS.tileable.includes(config.inversion.algorithm)) {
     config.inversion.tile_size = Number(tiling.tile_size) || DL_TILING_DEFAULTS.tile_core;
@@ -124,7 +124,7 @@ export function buildConfig(settings, options = {}) {
   if (settings.tgv) config.inversion.tgv = {
     iterations: settings.tgv.iterations, erosions: settings.tgv.erosions,
     // The UI picks alphas by regularization level, which TgvConfig has no field for, so
-    // export the pair the run resolves to; left unset, qsmxt-config would fill in its own.
+    // export the pair the run resolves to; left unset, qsmxt-engine would fill in its own.
     ...resolveTgvAlphas(settings.tgv, tgvAlphaPreset),
     step_size: settings.tgv.step_size, tol: settings.tgv.tol,
   };
@@ -159,7 +159,7 @@ export function buildConfig(settings, options = {}) {
   if (settings.iharperella) config.bg_removal.iharperella = settings.iharperella;
 
   if (settings.swi) config.swi = {
-    // scaling uses snake_case in the UI (e.g. negative_tanh) but qsmxt-config expects
+    // scaling uses snake_case in the UI (e.g. negative_tanh) but qsmxt-engine expects
     // kebab-case (negative-tanh), same as b0_estimation/b0_weight_type above.
     // hp_sigma is omitted entirely unless it is a usable triple (see finiteTriple).
     ...(finiteTriple(settings.swi.hp_sigma) ? { hp_sigma: settings.swi.hp_sigma } : {}),
@@ -173,7 +173,7 @@ export function buildConfig(settings, options = {}) {
 /**
  * Serialize the config to JSON for the WASM serializers, dropping null/undefined
  * and non-finite numbers (NaN/Infinity, e.g. from a blank numeric input). serde
- * rejects null for a typed field; omitting it makes qsmxt-config fall back to the
+ * rejects null for a typed field; omitting it makes qsmxt-engine fall back to the
  * default — mirroring how the old hand-rolled TOML serializer skipped such values.
  */
 export function buildConfigJson(settings, options = {}) {
@@ -203,13 +203,13 @@ export function buildQsmartInnerConfigJson(settings) {
 }
 
 /**
- * Default mask ops from qsmxt-config (robust threshold preset).
+ * Default mask ops from qsmxt-engine (robust threshold preset).
  * Set dynamically from WASM default config; falls back to hardcoded.
  */
 let DEFAULT_MASK_OPS = ['threshold:otsu', 'dilate:1', 'fill-holes:0', 'erode:1'];
 
 /**
- * Update default mask ops from a parsed qsmxt-config default config JSON.
+ * Update default mask ops from a parsed qsmxt-engine default config JSON.
  */
 export function setDefaultsFromConfig(config) {
   if (config?.masking?.sections?.[0]) {

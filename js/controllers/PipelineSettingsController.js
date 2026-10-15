@@ -423,7 +423,7 @@ export class PipelineSettingsController {
       },
       b0_weight_type: this._getEl('b0_weight_type') || 'phase_snr',
       linearFit: {
-        // estimate_offset is not exposed: qsmxt-config's LinearFitConfig carries only the
+        // estimate_offset is not exposed: qsmxt-engine's LinearFitConfig carries only the
         // percentile, and its bridge pins estimate_offset to qsm-core's default (true).
         reliability_threshold_percentile: parseFloat(this._getEl('linear_fit_reliability_percentile'))
       },
