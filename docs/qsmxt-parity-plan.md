@@ -229,8 +229,9 @@ Phases 1 and 2 run in parallel; phase 3 starts as soon as the first engine slice
 pins QSMxT by commit during development, as QSMxT pins QSM.rs). qsmbly is released when it runs on
 the engine and QSMxT has released the engine; there is no interim port of today's JS worker.
 
-Status (2026-10-15): phase 1 is merged (QSM.rs #190–#194, QSMxT #329 #330, qsmbly #147–#151).
-Phase 2: 2.0 (QSMxT #331), 2.1 (#332) and 2.2 (#333–#336) are merged; 2.3 is in progress.
+Status (2026-10-16): phase 1 is merged (QSM.rs #190–#194, QSMxT #329 #330, qsmbly #147–#151).
+Phase 2: 2.0 (QSMxT #331), 2.1 (#332), 2.2 (#333–#336) and 2.3 (#337–#339) are merged; 2.4 is in
+progress. Phase 3: 3.1 and 3.2 are in progress.
 
 ### UI redesign
 
@@ -278,6 +279,31 @@ fixture, the CI phantom and one in-vivo multi-echo dataset. QSMxT CI gains a
 | 2.5 | Browser profile (§3.3) as a function of the engine, with tests that the generated command carries it. |
 | 2.6 | Later: multi-run inputs (multi-orientation COSMOS/STI). |
 
+### Pipeline graph
+
+The engine draws the pipeline a run will take, and the one it took, as a graph that goes with the
+methods text: each step a box (label, algorithm, key settings), each arrow the data one step reads
+from another. Both come from the plan, so the picture cannot disagree with what runs, and qsmbly
+and `qsmxt` draw the same graph.
+
+Some things are only decided during a run: a supplied mask that cannot be used, or that
+`--use-custom-masks` does not find, is computed instead; the reconstruction box depends on the
+mask; each step is computed or reused from the cache. The run records these, and the graph after
+the run shows them on its boxes. The methods text is generated from the plan and that record, not
+from the configuration alone, so it says what was done, including those changes.
+
+| # | Owner | Work | After |
+|---|---|---|---|
+| G1 | QSMxT | The graph from `plan`: step labels, algorithm and key settings per step, data-flow edges (from `graph.rs`'s "reads" table), two-pass as two branches joining at the combination. | 2.4 |
+| G2 | QSMxT | A run record (each step computed, cached or skipped; run-time decisions and their reasons); the graph after the run; methods text from plan + record. | G1 |
+| G3 | QSMxT | Mermaid (`pipeline.mmd`) and self-contained SVG (`pipeline.svg`, drawn by the engine, no Graphviz) renderers; `qsmxt run` writes them next to the methods text for each run; `qsmxt run --dry-run` writes and prints the planned graph. | G1 |
+| G4 | QSMxT | TUI "Pipeline" view: the graph as text, with memory and models, updated as settings change; a key writes the SVG and opens it. | G3 |
+| G5 | qsmbly | The graph in the new UI, live during a run (queued, running, done, cached, stale). | the UI redesign |
+
+Defaults until decided otherwise (§5): Mermaid and SVG only; one box per step, with files in
+tooltips; one graph per run, plus a dataset summary of how many runs took each variant; the
+methods text describes what ran.
+
 ### Phase 3: qsmbly on the engine
 
 | # | Work |
@@ -320,6 +346,9 @@ intermediates too (1.4, 2.2).
 Still open:
 
 - The UI redesign (§4): its plan settles 3.4–3.6, 4.2 and the UI side of phase 5.
+- The pipeline graph (§4), defaults in place until decided: formats (Mermaid and SVG; no DOT),
+  detail (one box per step), datasets (a graph per run plus a variant summary), and the methods
+  text describing what ran rather than what was configured.
 - The tolerance for native vs WASM parity (measure it in 3.7, then fix it in CI).
 - qsmbly's version number for the first engine-based release.
 
