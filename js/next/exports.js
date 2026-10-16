@@ -1,6 +1,7 @@
 /**
  * The seams for the Pipeline and Command tabs: the run's graph (qsmxt-engine
- * `pipeline_graph::pipeline_graph` and `PipelineGraph::to_mermaid`), its `qsmxt run` command
+ * `pipeline_graph::pipeline_graph` and `PipelineGraph::to_mermaid`), its methods text sentence by
+ * sentence (`methods::methods_structured`), its `qsmxt run` command
  * (`generate_command`), its settings file (`PipelineConfig::to_toml_selected`) and reading a
  * settings file back (`PipelineConfig::from_toml_migrating`).
  *
@@ -41,13 +42,18 @@
  * @property {GraphItem[]} items
  * @property {boolean} two_pass
  *
+ * @typedef {import('./protocol.js').Methods} Methods
+ *
  * @typedef {{ graph: PipelineGraph, mermaid: string }} GraphResult
+ * @typedef {{ methods: Methods }} MethodsResult
  * @typedef {{ command: string }} CommandResult
  * @typedef {{ toml: string }} TomlResult
  * @typedef {{ config: PipelineConfig, warnings: string[] }} ImportResult
  *
  * @typedef {object} Providers
  * @property {(config: PipelineConfig, facts: ScanFacts) => Promise<GraphResult>} graph
+ * @property {(config: PipelineConfig, facts: ScanFacts) => Promise<MethodsResult>} methods - the
+ *   methods text of a run of `config` on the scan, each sentence with the graph's boxes it describes
  * @property {(config: PipelineConfig) => Promise<CommandResult>} command - `qsmxt run <bids_dir> …`
  * @property {(config: PipelineConfig) => Promise<TomlResult>} toml - the settings file
  * @property {(text: string) => Promise<ImportResult>} importToml - rejects with the reason a file
