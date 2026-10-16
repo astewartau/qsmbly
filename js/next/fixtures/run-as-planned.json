@@ -530,14 +530,7 @@
       {
         "id": "output_space",
         "label": "Return to the acquired grid",
-        "state": "skipped",
-        "decisions": [
-          {
-            "topic": "step",
-            "choice": "skipped",
-            "reason": "The run was not resampled, so its outputs are on the acquired grid."
-          }
-        ]
+        "state": "skipped"
       }
     ],
     "resampled": false
