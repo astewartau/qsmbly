@@ -20,9 +20,8 @@ recorded fixtures. Delete this file before the PR is opened.
   algorithm_label), `reads`/`outputs` as item keys, plus plan-level `items` (key + `Item::meta`);
   new `Engine.pipelineGraph(config)` (uses the run grid). `get_model_registry_wasm` now includes
   `description`, `paper`, `source`, `license`.
-- ScanFacts → ViewFacts mapping is in settings.rs (`view_facts`); comment cites
-  QSMxT/QSMxT#377 — **that issue is NOT filed yet**: file "ViewFacts from ScanFacts in the engine"
-  and fix the number.
+- ScanFacts → ViewFacts mapping is in settings.rs (`view_facts`); filed as QSMxT/QSMxT#377 (number in
+  the comment is correct). Compact non-default TOML export filed as QSMxT/QSMxT#378.
 - `scripts/next-engine/main.rs` (moved from scripts/next-schema-fixtures/): native oracle calling
   qsmxt-engine directly for a table of cases → config/view/pruned/plan/command/toml/graph, for the
   parity script (not written yet).
@@ -32,10 +31,8 @@ recorded fixtures. Delete this file before the PR is opened.
 
 ## Pin
 
-`rust-wasm/Cargo.toml` has a **DEV-ONLY `[patch]`** pointing qsmxt-engine at a local QSMxT worktree
-(`/scratch/user/uqaste15/src/qsmxt-wt-nextengine`, = #375 head 4c97a3f merged locally with main
-516a72b). Remove it and pin `rev` to the sha in `SCHEMA375_MERGED <sha>` (bind-status.txt) once
-#374/#375 merge. `dependency_versions_follow_the_pins` fails only because of the patch.
+Done: qsmxt-engine pinned to QSMxT main 2025be95 (#374/#375 merged); local [patch] removed; 22 native
+tests pass (incl. dependency_versions_follow_the_pins).
 
 ## Decisions
 
@@ -70,5 +67,4 @@ recorded fixtures. Delete this file before the PR is opened.
    run), parity script (`node scripts/next-engine-parity.mjs <qsmxt> <bundle>`), screenshots.
 3. Agent B's PR (graph/command tabs): `gh pr list -R astewartau/qsmbly`; wire its providers to
    client `graph`/`command`.
-4. Verification list from the task; open PR; file QSMxT issues (ViewFacts; a compact
-   non-default TOML export).
+4. Verification list from the task; delete this file; open PR (mention QSMxT#377, #378).
