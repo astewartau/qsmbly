@@ -71,7 +71,7 @@ test.describe('next.html', () => {
     expect(errors).toEqual([]);
   });
 
-  test('edits settings inline, re-planning live, with the engine\'s errors, undo and redo', async ({ page }) => {
+  test('edits settings inline, re-planning live, with the engine\'s errors, undo and redo', async ({ page }, testInfo) => {
     const errors = watchErrors(page);
     await page.goto('next.html');
 
@@ -94,6 +94,8 @@ test.describe('next.html', () => {
     await expect(stepRow(page, 'background').getByTestId('engine-error')).toHaveText('Must be greater than 0');
     await expect(minRadius).toHaveAttribute('aria-invalid', 'true');
     expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(0);
+    const shot = await page.screenshot({ path: testInfo.outputPath('engine-error.png') });
+    await testInfo.attach('engine error', { body: shot, contentType: 'image/png' });
     // Text that is no number is not written at all.
     await minRadius.fill('two');
     await minRadius.press('Enter');
@@ -186,8 +188,11 @@ test.describe('next.html', () => {
     const shot = await page.screenshot({ path: testInfo.outputPath('mask-recipe.png') });
     await testInfo.attach('mask recipe', { body: shot, contentType: 'image/png' });
 
-    // Undo takes the step back off; two-pass reveals the reliable mask.
+    // Undo takes the value back, then the step off; two-pass reveals the reliable mask.
     await page.locator('.viewer-canvas').click();
+    await page.keyboard.press('Control+z');
+    await expect(fi).toHaveValue('0.5');
+    await expect(editor.getByTestId('engine-error')).toHaveCount(0);
     await page.keyboard.press('Control+z');
     await expect(section2.locator('.ops .row.op')).toHaveCount(3);
     await page.getByLabel('Two-pass Artefact Reduction', exact).check();
@@ -268,5 +273,28 @@ test.describe('index.html', () => {
     await page.goto('index.html#app');
     await expect(page.locator('#viewer, canvas').first()).toBeAttached();
     expect(errors.filter((e) => !/wasm|Failed to load resource/.test(e))).toEqual([]);
+  });
+
+  test('today\'s UI still runs a QSM pipeline on the example data', async ({ page }, testInfo) => {
+    test.skip(!!process.env.QSMBLY_E2E_OFFLINE, 'needs the example data from Hugging Face');
+    test.setTimeout(15 * 60_000);
+    await page.goto('index.html#app');
+    await page.locator('#loadExampleData').click();
+    const log = page.locator('#consoleOutput');
+    await expect(log).toContainText('Example data loaded successfully.', { timeout: 120_000 });
+    // The mask input, a threshold mask, then the run.
+    await expect(page.locator('#prepareMaskInput')).toBeEnabled({ timeout: 60_000 });
+    await page.locator('#prepareMaskInput').click();
+    await expect(page.locator('#previewMask')).toBeEnabled({ timeout: 120_000 });
+    await page.locator('#previewMask').click();
+    await page.locator('#thresholdRobust').click();
+    await expect(log).toContainText('Robust mask complete', { timeout: 120_000 });
+    const run = page.locator('#runPipelineSidebar');
+    await expect(run).toBeEnabled({ timeout: 120_000 });
+    // The sidebar's section headings overlap its sticky run button at this viewport.
+    await run.evaluate((button) => /** @type {HTMLButtonElement} */ (button).click());
+    await expect(log).toContainText('Pipeline completed successfully!', { timeout: 14 * 60_000 });
+    const shot = await page.screenshot({ path: testInfo.outputPath('index-run.png') });
+    await testInfo.attach('today\'s UI after a run', { body: shot, contentType: 'image/png' });
   });
 });

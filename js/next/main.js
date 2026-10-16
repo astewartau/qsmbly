@@ -13,6 +13,7 @@ import { createSession } from './store/session.js';
 import { VolumeStore } from './store/volumes.js';
 import { EXAMPLE_SCAN, putPhantom } from './fixtures.js';
 import { createEngineClient, Superseded } from './engine/client.js';
+import { engineProviders } from './engine/providers.js';
 import { learnItems, setItemLookup } from './items.js';
 
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
@@ -66,9 +67,11 @@ try {
   session.ui.viewing.value = 'Chi';
 
   const workspace = { schema, mask: { schema: schema.mask, defaults: maskDefaults }, models, versions, engine };
+  // The graph, command and settings-file answers, for the Pipeline and Command tabs.
+  const providers = engineProviders(engine);
   render(html`<${App} session=${session} store=${store} workspace=${workspace} />`, root);
   // For the smoke tests and for poking at it from the console.
-  Object.assign(globalThis, { qsmblyNext: { session, store, workspace, Superseded } });
+  Object.assign(globalThis, { qsmblyNext: { session, store, workspace, providers, Superseded } });
 } catch (e) {
   root.textContent = `The workspace could not start: ${e instanceof Error ? e.message : e}`;
   throw e;
