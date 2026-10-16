@@ -95,4 +95,36 @@ jobs:
 
       - run: npm run lint
 
+      - run: npm run typecheck
+
       - run: npm test
+
+  e2e:
+    name: Browser smoke tests (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Runs in the runner's preinstalled Chrome (playwright.config.js), with WebGL on SwiftShader.
+      # The example-data test downloads from Hugging Face, so it runs locally, not here.
+      - name: Smoke tests
+        env:
+          QSMBLY_E2E_OFFLINE: '1'
+        run: npm run test:e2e
+
+      - name: Keep screenshots and traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore

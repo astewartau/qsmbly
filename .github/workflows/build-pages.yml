@@ -104,6 +104,10 @@ jobs:
           cp -r js deploy/
           cp -r css deploy/
 
+          # The new workspace (preview) and the libraries it loads (vendor/README.md)
+          cp next.html deploy/
+          cp -r vendor deploy/
+
           # Copy favicon/logo files if they exist
           cp QSMbly.png deploy/ 2>/dev/null || true
           cp favicon.ico deploy/ 2>/dev/null || true
