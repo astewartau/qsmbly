@@ -2574,19 +2574,16 @@ class QSMApp {
       // Show phase image at the start
       await this.visualizePhase();
 
-      // Include prepared magnitude if available (for MEDI gradient weighting and threshold mask)
-      const preparedMagnitude = this.maskController.preparedMagnitudeData;
-
-      // Run pipeline via executor
+      // Run pipeline via executor. The run computes its own combined magnitude, as `qsmxt run`
+      // does; the sidecars carry what the headers do not (B0 direction, slice geometry).
       const started = await this.pipelineExecutor.run({
         inputMode: 'raw',
         magnitudeBuffers,
         phaseBuffers,
         echoTimes,
         magField,
-        maskThreshold: this.maskController.maskThreshold,
         customMaskBuffer,
-        preparedMagnitude,
+        sidecars: await this.fileIOController.getPhaseSidecars(),
         pipelineSettings: this.pipelineSettings
       }, transferable(magnitudeBuffers, phaseBuffers, customMaskBuffer));
 

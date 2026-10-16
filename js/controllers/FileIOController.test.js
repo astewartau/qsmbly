@@ -205,3 +205,19 @@ describe('moveFile and removeFile', () => {
     expect(names(io.buckets.magnitude)).toEqual(['b']);
   });
 });
+
+describe('getPhaseSidecars', () => {
+  test('pairs each phase echo with its sidecar by name, {} where it has none or it is unreadable', async () => {
+    const { io } = controller();
+    const json = (name, text) => ({ file: { name, text: async () => text }, name });
+    io.buckets.phase = [{ name: 'e1_phase.nii.gz' }, { name: 'e2_phase.nii' }, { name: 'e3_phase.nii' }];
+    io.buckets.json = [
+      json('e2_phase.json', '{"EchoTime": 0.01, "B0_dir": [0, 0, 1]}'),
+      json('e1_phase.json', '{"EchoTime": 0.005}'),
+      json('e3_phase.json', 'not json'),
+    ];
+    expect(await io.getPhaseSidecars()).toEqual([
+      { EchoTime: 0.005 }, { EchoTime: 0.01, B0_dir: [0, 0, 1] }, {},
+    ]);
+  });
+});

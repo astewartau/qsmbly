@@ -6,14 +6,18 @@
  */
 
 // Import utilities - no fallbacks
-import { computeWeightedEchoFit, ppmFieldToPhase } from './worker/utils/PhaseUtils.js';
+import { ppmFieldToPhase } from './worker/utils/PhaseUtils.js';
 import { createThresholdMask } from './worker/utils/MaskUtils.js';
 import { resolveTgvParams } from './worker/utils/TgvParams.js';
 import { clampTileConfig, MAX_WASM_PATCH_EDGE } from './worker/utils/DlTiling.js';
 import { requireFieldStrength, echoTimeDependentStep, fieldMapEchoTimes } from './worker/utils/ScanParams.js';
 import { buildConfigJson, buildQsmartInnerConfigJson } from './modules/ConfigBridge.js';
 import { scaleVoxelSize } from './modules/mask/RodentMask.js';
-import { createGridGuard, requireVoxelCount } from './modules/file-io/GridAgreement.js';
+import { createGridGuard, gridMismatch, requireVoxelCount } from './modules/file-io/GridAgreement.js';
+import { gunzipNifti, parseNiftiHeader, sameNiftiGrid } from './modules/file-io/NiftiUtils.js';
+import {
+  createVolumeStore, engineSidecars, engineConfigJson, outputStage, createPlanProgress,
+} from './worker/EngineRelay.js';
 import * as QSMConfig from './app/config.js';
 import { parseRegistry, fetchModelWeights, loadDlWasm } from './modules/ModelWeights.js';
 
@@ -297,6 +301,7 @@ async function runPipeline(data) {
   // Dispatch to the appropriate pipeline based on input mode
   const inputMode = data.inputMode || 'raw';
 
+  // Field-map inputs are not something QSMxT takes, so these keep the per-stage path.
   if (inputMode === 'totalField' || inputMode === 'localField') {
     const combined_method = data.pipelineSettings?.combined_method || 'none';
     if (combined_method === 'tgv') {
@@ -307,147 +312,128 @@ async function runPipeline(data) {
     return await runFieldMapPipeline(data);
   }
 
-  // Standard raw pipeline continues below
-  const {
-    magnitudeBuffers, phaseBuffers, echoTimes, magField,
-    maskThreshold, customMaskBuffer, preparedMagnitude, pipelineSettings
-  } = data;
+  // Magnitude and phase: QSMxT's own run, through its engine.
+  return await runEnginePipeline(data);
+}
 
-  const thresholdFraction = (maskThreshold || 15) / 100;
-  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
-  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
-
-  // Check for combined method (TGV)
-  const combined_method = pipelineSettings?.combined_method || 'none';
-
-  if (combined_method === 'tgv') {
-    // Use TGV single-step reconstruction
-    return await runTgvPipeline(data);
-  } else if (combined_method === 'qsmart') {
-    // Use QSMART two-stage reconstruction
-    return await runQsmartPipeline(data);
-  }
-
-  const b0 = requireFieldStrength(magField);
-
-  // =========================================================================
-  // Step 1: Load NIfTI data (0% - 10%)
-  // =========================================================================
-  // Every volume this run loads has to sit on one grid, and the first one loaded sets it.
-  const runGrid = runGridGuard();
-
-  postProgress(0.02, 'Loading NIfTI data...');
-
-  const nEchoes = echoTimes.length;
-  let magnitude4d = [];
-  let phase4d = [];
-  let dims, voxelSize, affine;
-
-  for (let e = 0; e < nEchoes; e++) {
-    postProgress(0.02 + (e / nEchoes) * 0.08, `Loading echo ${e + 1}/${nEchoes}...`);
-
-    // Load magnitude
-    const magResult = runGrid.load(magnitudeBuffers[e], `magnitude echo ${e + 1}`);
-    const magData = Array.from(magResult.data);
-    dims = Array.from(magResult.dims);
-    voxelSize = Array.from(magResult.voxelSize);
-    affine = Array.from(magResult.affine);
-    magnitude4d.push(magData);
-
-    // Load phase
-    const phaseResult = runGrid.load(phaseBuffers[e], `phase echo ${e + 1}`);
-    let phaseData = Array.from(phaseResult.data);
-
-    // Scale phase to [-π, +π] using shared pipeline function
-    phaseData = Array.from(wasmModule.scale_phase_to_pi_wasm(new Float64Array(phaseData)));
-    phase4d.push(phaseData);
-
-    postLog(`  Echo ${e + 1}: shape ${dims[0]}x${dims[1]}x${dims[2]}`);
-  }
-
-  const [nx, ny, nz] = dims;
-  const [vsx, vsy, vsz] = voxelSize;
-  const voxelCount = nx * ny * nz;
-  // The prepared masking input arrives as a bare array rather than a file, and goes stale if the
-  // files were changed after Prepare.
-  if (hasPreparedMagnitude) {
-    runGrid.requireVoxelCount(preparedMagnitude, 'the prepared masking input');
-  }
-
-  postLog(`Data shape: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm`);
-
-  // =========================================================================
-  // Step 2: Create or load mask (10% - 15%)
-  // =========================================================================
-  postProgress(0.10, 'Creating mask...');
-  let mask;
-
-  if (hasCustomMask) {
-    postLog("Loading custom mask...");
-    const maskResult = runGrid.load(customMaskBuffer, 'the custom mask');
-    const maskData = Array.from(maskResult.data);
-    mask = new Uint8Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      mask[i] = maskData[i] > 0.5 ? 1 : 0;
+/**
+ * Check that every NIfTI file of a run is on one grid, from their headers alone (the engine
+ * decodes the volumes itself). Returns the first file's grid.
+ * @param {{buffer: ArrayBuffer, label: string}[]} files - the first sets the grid
+ */
+async function checkRunGrid(files) {
+  let reference = null;
+  for (const { buffer, label } of files) {
+    const header = (await gunzipNifti(new Uint8Array(buffer), 352)).slice(0, 352).buffer;
+    const grid = { dims: parseNiftiHeader(header).dims.slice(1, 4), header, label };
+    if (!reference) {
+      reference = grid;
+      continue;
     }
-  } else {
-    const maskMagnitude = hasPreparedMagnitude
-      ? new Float64Array(preparedMagnitude)
-      : new Float64Array(magnitude4d[0]);
-    const magSource = hasPreparedMagnitude ? 'prepared' : 'first echo';
-    postLog(`Creating threshold mask (${thresholdFraction * 100}%) from ${magSource} magnitude...`);
-    mask = createThresholdMask(maskMagnitude, thresholdFraction);
+    const problem = gridMismatch(
+      { ...grid, label: label.charAt(0).toUpperCase() + label.slice(1) }, reference,
+      sameNiftiGrid(header, reference.header));
+    if (problem?.fatal) throw new Error(problem.message);
+    if (problem) postLog(`Warning: ${problem.message}`);
   }
+  return reference;
+}
 
-  const maskCount = mask.reduce((a, b) => a + b, 0);
-  postLog(`Mask coverage: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
+// Each run's inputs are new data, so each gets its own identity: nothing cached from an earlier
+// run is reused (re-running from a changed step waits for the UI redesign).
+let engineLoads = 0;
 
-  // =========================================================================
-  // Step 3: Field mapping (15% - 45%) — shared with qsmxt.rs
-  // =========================================================================
-  postProgress(0.15, 'Field mapping...');
-  // Canonical TOML from qsmxt-engine (serde). Mask is supplied separately to the
-  // pipeline, so the config's mask section is irrelevant here ('').
-  const configToml = stageConfigToml(buildConfigJson(pipelineSettings));
-  const echoTimesSec = echoTimes.map(t => t / 1000); // ms → seconds
+/**
+ * Provide the weights of the plan's deep-learning models to `mod` (fetched, or from the
+ * IndexedDB cache).
+ */
+async function provideWeights(mod, models) {
+  for (const id of models) {
+    const model = dlRegistry[id];
+    if (!model) throw new Error(`${id} is not in the model registry`);
+    const weights = await downloadWeights(model);
+    model.files.forEach((file, i) => mod.provide_weights_wasm(file.name, weights[i]));
+  }
+}
 
-  // Flatten per-echo arrays for WASM
-  const phasesFlat = new Float64Array(nEchoes * voxelCount);
-  const magsFlat = new Float64Array(nEchoes * voxelCount);
+/**
+ * A magnitude/phase run through QSMxT's engine (rust-wasm/src/engine.rs): `qsmxt run`'s plan,
+ * steps and numbers, with the volumes kept here, outside the WASM heap. Outputs reach the viewer
+ * as each step produces them.
+ */
+async function runEnginePipeline(data) {
+  const { magnitudeBuffers, phaseBuffers, echoTimes, magField, customMaskBuffer, pipelineSettings, sidecars } = data;
+  const b0 = requireFieldStrength(magField);
+  const nEchoes = echoTimes.length;
+  if (phaseBuffers.length !== nEchoes) {
+    throw new Error(`${phaseBuffers.length} phase images but ${nEchoes} echo times`);
+  }
+  const hasMagnitude = magnitudeBuffers?.length === nEchoes;
+
+  postProgress(0.01, 'Checking inputs...');
+  const files = phaseBuffers.map((buffer, e) => ({ buffer, label: `phase echo ${e + 1}` }));
+  if (hasMagnitude) files.push(...magnitudeBuffers.map((buffer, e) => ({ buffer, label: `magnitude echo ${e + 1}` })));
+  if (customMaskBuffer) files.push({ buffer: customMaskBuffer, label: 'the mask' });
+  const grid = await checkRunGrid(files);
+
+  const volumes = createVolumeStore();
   for (let e = 0; e < nEchoes; e++) {
-    phasesFlat.set(phase4d[e], e * voxelCount);
-    magsFlat.set(magnitude4d[e], e * voxelCount);
+    volumes.put(`AcquiredPhase(${e + 1})`, { nifti: new Uint8Array(phaseBuffers[e]) });
+    if (hasMagnitude) volumes.put(`AcquiredMagnitude(${e + 1})`, { nifti: new Uint8Array(magnitudeBuffers[e]) });
+  }
+  const sidecarsJson = JSON.stringify(engineSidecars(echoTimes, b0, sidecars));
+  const suppliedMask = !!customMaskBuffer;
+  const configJson = engineConfigJson(pipelineSettings, { suppliedMask });
+
+  // The plan says which models the run needs; the deep-learning bundle is loaded only for those.
+  const facts = JSON.parse(wasmModule.scan_facts_wasm(new Uint32Array(grid.dims), sidecarsJson, hasMagnitude));
+  facts.custom_mask = suppliedMask;
+  const plan = JSON.parse(wasmModule.plan_wasm(configJson, JSON.stringify(facts)));
+  self.postMessage({ type: 'plan', plan });
+  postLog(`Plan: ${plan.steps.map(s => s.name).join(' → ')}`);
+  // A plan with errors fails at the start of the run, in the engine's words: nothing to fetch.
+  let mod = wasmModule;
+  if (plan.models.length > 0 && plan.check.errors.length === 0) {
+    mod = await loadDlWasm(wasmBaseUrl, QSMConfig.VERSION);
+    // Bounded for the same reason as runDlFieldInversion's: concurrent tiles share one heap.
+    await initRayon(mod, 'dl', 4);
+    await provideWeights(mod, plan.models);
   }
 
-  const fieldResult = wasmModule.run_field_mapping_wasm(
-    phasesFlat, magsFlat, mask,
-    new Float64Array(echoTimesSec),
-    nx, ny, nz, vsx, vsy, vsz,
-    b0, configToml,
-  );
-
-  // phaseOffset is null when the field-mapping method estimates none
-  const b0Fieldmap = fieldResult.b0FieldPpm;
-  const phaseOffset = fieldResult.phaseOffset;
-
-  if (phaseOffset) {
-    sendStageData('phaseOffset', phaseOffset, dims, voxelSize, affine, 'Phase Offset (rad)', false);
+  const engine = new mod.Engine(volumes, sidecarsJson, `load-${++engineLoads}`);
+  try {
+    if (suppliedMask) engine.supplyMask(new Uint8Array(customMaskBuffer), 'the masking panel');
+    const progress = createPlanProgress(plan);
+    let doing = '';
+    engine.run(configJson, {
+      stage(step, algorithm, event, text) {
+        self.postMessage({ type: 'stage', step, algorithm, event, text });
+        if (event === 'started') {
+          doing = text;
+          postProgress(progress.step(step), `${text}...`);
+        }
+      },
+      progress(done, total) {
+        postProgress(progress.within(done, total), `${doing}: ${done}/${total}`);
+      },
+      log(level, message) {
+        postLog(level === 'INFO' ? message : `${level === 'WARN' ? 'Warning' : level}: ${message}`);
+      },
+      output(key) {
+        const shown = outputStage(key, { computedMask: !suppliedMask });
+        const volume = volumes.get(key);
+        if (!shown || !(volume instanceof Float32Array || volume instanceof Uint8Array)) return;
+        const { dims, voxel_size: voxelSize, affine } = volumes.grid;
+        sendStageData(shown.stage, Float64Array.from(volume), dims, voxelSize, affine,
+          shown.description, shown.display);
+      },
+    });
+  } finally {
+    engine.free();
   }
-
-  sendStageData('B0', b0Fieldmap, dims, voxelSize, affine, 'B0 Field Map (ppm)');
-
-  // Prepared (combined/bias-corrected) magnitude if available, for MEDI edge weighting
-  const magnitudeForInversion = hasPreparedMagnitude
-    ? new Float64Array(preparedMagnitude)
-    : new Float64Array(magnitude4d[0]);
-
-  await runBgRemovalAndInversion({
-    fieldPpm: b0Fieldmap, isTotalField: true, mask, dims, voxelSize, affine,
-    b0, echoTimesSec, magnitude: magnitudeForInversion, pipelineSettings, configToml,
-  });
+  postLog(`Volumes held during the run: ${(volumes.bytes() / 1e6).toFixed(0)} MB`);
 
   postProgress(1.0, 'Pipeline complete!');
-  postLog("Pipeline completed successfully!");
   postComplete({ success: true });
 }
 
@@ -604,165 +590,6 @@ async function runTgvCore({
   sendStageData('final', qsmResult, dims, voxelSize, affine, label);
 
   return qsmResult;
-}
-
-// TGV single-step pipeline (raw multi-echo input)
-async function runTgvPipeline(data) {
-  const {
-    magnitudeBuffers, phaseBuffers, echoTimes, magField,
-    maskThreshold, customMaskBuffer, preparedMagnitude, pipelineSettings
-  } = data;
-
-  const thresholdFraction = (maskThreshold || 15) / 100;
-  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
-  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
-
-  const tgvSettings = pipelineSettings?.tgv || QSMConfig.PIPELINE_DEFAULTS.tgv;
-
-  // =========================================================================
-  // Step 1: Load NIfTI data (0% - 10%)
-  // =========================================================================
-  // Every volume this run loads has to sit on one grid, and the first one loaded sets it.
-  const runGrid = runGridGuard();
-
-  postProgress(0.02, 'Loading NIfTI data...');
-  postLog("TGV: Loading data via WASM...");
-
-  const nEchoes = echoTimes.length;
-  let magnitude4d = [];
-  let phase4d = [];
-  let dims, voxelSize, affine;
-
-  for (let e = 0; e < nEchoes; e++) {
-    postProgress(0.02 + (e / nEchoes) * 0.08, `Loading echo ${e + 1}/${nEchoes}...`);
-
-    // Load magnitude
-    const magResult = runGrid.load(magnitudeBuffers[e], `magnitude echo ${e + 1}`);
-    const magData = Array.from(magResult.data);
-    dims = Array.from(magResult.dims);
-    voxelSize = Array.from(magResult.voxelSize);
-    affine = Array.from(magResult.affine);
-    magnitude4d.push(magData);
-
-    // Load phase
-    const phaseResult = runGrid.load(phaseBuffers[e], `phase echo ${e + 1}`);
-    let phaseData = Array.from(phaseResult.data);
-
-    // Scale phase to [-π, +π] using the same qsm-core rule as the standard pipeline
-    phaseData = scalePhaseToPi(phaseData);
-    phase4d.push(Array.from(phaseData));
-
-    postLog(`  Echo ${e + 1}: shape ${dims[0]}x${dims[1]}x${dims[2]}`);
-  }
-
-  const [nx, ny, nz] = dims;
-  const [vsx, vsy, vsz] = voxelSize;
-  const voxelCount = nx * ny * nz;
-  // The prepared masking input arrives as a bare array rather than a file, and goes stale if the
-  // files were changed after Prepare.
-  if (hasPreparedMagnitude) {
-    runGrid.requireVoxelCount(preparedMagnitude, 'the prepared masking input');
-  }
-
-  postLog(`Data shape: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm`);
-
-  // =========================================================================
-  // Step 2: Create or load mask (10% - 15%)
-  // =========================================================================
-  postProgress(0.10, 'Creating mask...');
-  let mask;
-
-  if (hasCustomMask) {
-    postLog("Loading custom mask...");
-    const maskResult = runGrid.load(customMaskBuffer, 'the custom mask');
-    const maskData = Array.from(maskResult.data);
-    mask = new Uint8Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      mask[i] = maskData[i] > 0.5 ? 1 : 0;
-    }
-  } else {
-    // Use prepared magnitude if available (combined/bias-corrected), otherwise first echo
-    const maskMagnitude = hasPreparedMagnitude
-      ? new Float64Array(preparedMagnitude)
-      : new Float64Array(magnitude4d[0]);
-    const magSource = hasPreparedMagnitude ? 'prepared' : 'first echo';
-    postLog(`Creating threshold mask (${thresholdFraction * 100}%) from ${magSource} magnitude...`);
-    mask = createThresholdMask(maskMagnitude, thresholdFraction);
-  }
-
-  const maskCount = mask.reduce((a, b) => a + b, 0);
-  postLog(`Mask coverage: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
-
-  // =========================================================================
-  // Step 3: Multi-echo combination (15% - 40%) or single-echo passthrough
-  // =========================================================================
-  let tgvInputPhase;
-  let te;  // Echo time to use for TGV (seconds)
-  const fieldstrength = requireFieldStrength(magField);
-
-  if (nEchoes > 1) {
-    // Multi-echo: field mapping → B0 → convert to phase for TGV.
-    // Same shared qsm-core stage the standard pipeline uses, so TGV honours the
-    // ROMEO coherence flags, the b0_estimation choice and the Laplacian handling
-    // that the config carries.
-    postLog(`Multi-echo data detected (${nEchoes} echoes), computing B0 field map...`);
-    postProgress(0.15, 'Field mapping...');
-
-    const configToml = stageConfigToml(buildConfigJson(pipelineSettings));
-    const echoTimesSec = echoTimes.map(t => t / 1000); // ms → seconds
-
-    const phasesFlat = new Float64Array(nEchoes * voxelCount);
-    const magsFlat = new Float64Array(nEchoes * voxelCount);
-    for (let e = 0; e < nEchoes; e++) {
-      phasesFlat.set(phase4d[e], e * voxelCount);
-      magsFlat.set(magnitude4d[e], e * voxelCount);
-    }
-
-    const fieldResult = wasmModule.run_field_mapping_wasm(
-      phasesFlat, magsFlat, mask,
-      new Float64Array(echoTimesSec),
-      nx, ny, nz, vsx, vsy, vsz,
-      fieldstrength, configToml,
-    );
-
-    // phaseOffset is null when the field-mapping method estimates none
-    const b0FieldmapPpm = fieldResult.b0FieldPpm;
-    const phaseOffset = fieldResult.phaseOffset;
-
-    if (phaseOffset) {
-      sendStageData('phaseOffset', phaseOffset, dims, voxelSize, affine, 'Phase Offset (rad)', false);
-    }
-    sendStageData('B0', b0FieldmapPpm, dims, voxelSize, affine, 'B0 Field Map (ppm)');
-    postProgress(0.40, 'Field mapping complete');
-
-    // TGV takes phase, so undo the stage's Hz→ppm with the same gamma qsm-core used,
-    // then convert with the first echo time. TGV divides this straight back out.
-    te = echoTimesSec[0];
-    tgvInputPhase = ppmFieldToPhase(
-      b0FieldmapPpm, fieldstrength, te, QSMConfig.PHYSICS.GYROMAGNETIC_RATIO,
-    );
-    postLog(`Converted B0 to equivalent phase using TE=${(te * 1000).toFixed(2)}ms`);
-
-  } else {
-    // Single echo: use wrapped phase directly (TGV handles wraps via Laplacian)
-    postLog("Single-echo data, using wrapped phase directly for TGV...");
-    tgvInputPhase = new Float64Array(phase4d[0]);
-    te = echoTimes[0] / 1000;
-  }
-
-  // =========================================================================
-  // Step 4: TGV reconstruction (40% - 95%)
-  // =========================================================================
-  await runTgvCore({
-    tgvInputPhase, mask, dims, voxelSize, affine,
-    te, fieldstrength, tgvSettings,
-    progressStart: 0.40, progressEnd: 0.95,
-    pipelineSettings,
-  });
-
-  postProgress(1.0, 'TGV pipeline complete!');
-  postLog("TGV pipeline completed successfully!");
-  postComplete({ success: true });
 }
 
 // =========================================================================
@@ -1002,187 +829,6 @@ async function runQsmartCore({
   sendStageData('final', qsmResult, dims, voxelSize, affine, 'QSMART QSM (ppm)');
 
   return qsmResult;
-}
-
-// QSMART two-stage pipeline (raw multi-echo input)
-async function runQsmartPipeline(data) {
-  const {
-    magnitudeBuffers, phaseBuffers, echoTimes, magField,
-    maskThreshold, customMaskBuffer, preparedMagnitude, pipelineSettings
-  } = data;
-
-  const thresholdFraction = (maskThreshold || 15) / 100;
-  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
-  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
-
-  // Settings used in steps 1-3 (remaining QSMART settings parsed in runQsmartCore)
-  const qsmartSettings = pipelineSettings?.qsmart || {};
-  const fitThreshold = qsmartSettings.fitThreshold ?? 40;
-  const fitThreshPercentile = qsmartSettings.fitThreshPercentile ?? null;
-  const b0 = requireFieldStrength(magField);
-
-  // =========================================================================
-  // Step 1: Load NIfTI data (0% - 10%)
-  // =========================================================================
-  // Every volume this run loads has to sit on one grid, and the first one loaded sets it.
-  const runGrid = runGridGuard();
-
-  postProgress(0.02, 'Loading NIfTI data...');
-  postLog("QSMART: Loading multi-echo data...");
-
-  const nEchoes = echoTimes.length;
-  let magnitude4d = [];
-  let phase4d = [];
-  let dims, voxelSize, affine;
-
-  for (let e = 0; e < nEchoes; e++) {
-    postProgress(0.02 + (e / nEchoes) * 0.06, `Loading echo ${e + 1}/${nEchoes}...`);
-
-    const magResult = runGrid.load(magnitudeBuffers[e], `magnitude echo ${e + 1}`);
-    magnitude4d.push(Array.from(magResult.data));
-    dims = Array.from(magResult.dims);
-    voxelSize = Array.from(magResult.voxelSize);
-    affine = Array.from(magResult.affine);
-
-    const phaseResult = runGrid.load(phaseBuffers[e], `phase echo ${e + 1}`);
-    phase4d.push(Array.from(scalePhaseToPi(phaseResult.data)));
-
-    postLog(`  Echo ${e + 1}: shape ${dims[0]}x${dims[1]}x${dims[2]}`);
-  }
-
-  const [nx, ny, nz] = dims;
-  const [vsx, vsy, vsz] = voxelSize;
-  const voxelCount = nx * ny * nz;
-  // The prepared masking input arrives as a bare array rather than a file, and goes stale if the
-  // files were changed after Prepare.
-  if (hasPreparedMagnitude) {
-    runGrid.requireVoxelCount(preparedMagnitude, 'the prepared masking input');
-  }
-
-  postLog(`Data: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm, B0=${b0}T`);
-
-  // =========================================================================
-  // Step 2: Create or load mask (10% - 12%)
-  // =========================================================================
-  postProgress(0.10, 'Creating mask...');
-  let mask;
-
-  if (hasCustomMask) {
-    postLog("Loading custom mask...");
-    const maskResult = runGrid.load(customMaskBuffer, 'the custom mask');
-    mask = new Uint8Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
-    }
-  } else {
-    const maskMagnitude = hasPreparedMagnitude
-      ? new Float64Array(preparedMagnitude)
-      : new Float64Array(magnitude4d[0]);
-    mask = createThresholdMask(maskMagnitude, thresholdFraction);
-  }
-
-  const maskCount = mask.reduce((a, b) => a + b, 0);
-  postLog(`Mask: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
-
-  // =========================================================================
-  // Step 3: Phase unwrapping and B0 estimation (12% - 20%)
-  // =========================================================================
-  postProgress(0.12, 'Phase unwrapping (Laplacian)...');
-  postLog("Running Laplacian phase unwrapping...");
-
-  // Unwrap first echo
-  const phase1 = new Float64Array(phase4d[0]);
-  let unwrappedPhase = new Float64Array(wasmModule.laplacian_unwrap_wasm(
-    phase1, mask, nx, ny, nz, vsx, vsy, vsz
-  ));
-
-  // Multi-echo B0 estimation with magnitude-weighted fitting and R_0
-  postProgress(0.16, 'Computing total field shift...');
-  let tfs;
-  let R_0;
-  if (nEchoes > 1) {
-    // Unwrap all echoes
-    const allUnwrapped = new Float64Array(voxelCount * nEchoes);
-    allUnwrapped.set(unwrappedPhase, 0);
-
-    for (let e = 1; e < nEchoes; e++) {
-      const phaseE = new Float64Array(phase4d[e]);
-      const unwrappedE = new Float64Array(wasmModule.laplacian_unwrap_wasm(
-        phaseE, mask, nx, ny, nz, vsx, vsy, vsz
-      ));
-      allUnwrapped.set(unwrappedE, e * voxelCount);
-    }
-
-    // Magnitude-weighted fit + R_0 reliability map (matching echofit.m)
-    const fitResult = computeWeightedEchoFit(
-      allUnwrapped, magnitude4d, echoTimes, nx, ny, nz, voxelSize, mask, fitThreshold, fitThreshPercentile
-    );
-    tfs = fitResult.tfs;
-    R_0 = fitResult.R_0;
-
-    const r0Count = R_0.reduce((a, b) => a + b, 0);
-    const maskCount2 = mask.reduce((a, b) => a + b, 0);
-    const excludedCount = maskCount2 - r0Count;
-    const threshMode = fitThreshPercentile !== null ? `adaptive percentile=${fitThreshPercentile}` : `fixed=${fitThreshold}`;
-    postLog(`R_0 reliability: ${r0Count} reliable voxels, ${excludedCount} excluded (${(100 * excludedCount / maskCount2).toFixed(1)}% of brain, ${threshMode})`);
-  } else {
-    // Single echo: no residuals to compute R_0 from
-    const te = echoTimes[0] / 1000;
-    tfs = new Float64Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      tfs[i] = unwrappedPhase[i] / (2 * Math.PI * te);
-    }
-    R_0 = new Uint8Array(voxelCount).fill(1);
-    postLog("Single echo: R_0 set to all ones (no multi-echo residual available)");
-  }
-
-  // Apply mask
-  for (let i = 0; i < voxelCount; i++) {
-    if (!mask[i]) tfs[i] = 0;
-  }
-
-  // Compute TFS range without spread operator (avoid stack overflow for large arrays)
-  let tfsMin = Infinity, tfsMax = -Infinity;
-  for (let i = 0; i < voxelCount; i++) {
-    if (mask[i]) {
-      if (tfs[i] < tfsMin) tfsMin = tfs[i];
-      if (tfs[i] > tfsMax) tfsMax = tfs[i];
-    }
-  }
-  postLog(`TFS range: [${tfsMin.toFixed(1)}, ${tfsMax.toFixed(1)}] Hz`);
-
-  // Send TFS as intermediate stage
-  sendStageData('tfs', tfs, dims, voxelSize, affine, 'Total Field Shift (Hz)');
-
-  // Send R_0 reliability map for visualization
-  if (nEchoes > 1) {
-    const r0Float = new Float64Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      r0Float[i] = R_0[i];
-    }
-    sendStageData('R0', r0Float, dims, voxelSize, affine, 'Reliability Map R_0', false);
-  }
-
-  // =========================================================================
-  // Steps 4-9: QSMART core (vasculature, two-stage SDF+iLSQR, combine, ppm)
-  // =========================================================================
-  const magnitudeForVasc = hasPreparedMagnitude
-    ? new Float64Array(preparedMagnitude)
-    : new Float64Array(magnitude4d[0]);
-
-  await runQsmartCore({
-    fieldPpm: new Float64Array(wasmModule.hz_to_ppm_wasm(tfs, b0)),
-    mask, R_0,
-    magnitudeData: magnitudeForVasc,
-    dims, voxelSize, affine,
-    pipelineSettings,
-    b0,
-    echoTimesSec: echoTimes.map(t => t / 1000),
-  });
-
-  postProgress(1.0, 'QSMART pipeline complete!');
-  postLog("QSMART two-stage pipeline completed successfully!");
-  postComplete({ success: true });
 }
 
 // BET-specific handlers
