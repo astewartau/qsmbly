@@ -1,7 +1,8 @@
 /**
  * Stand-ins for the engine until the workspace runs on it (U2): the engine's own answers about
  * the example data (fixtures/*.json, from scripts/next-fixtures.mjs), a planner that picks among
- * them, and volumes to look at.
+ * them, and volumes to look at; and the engine's settings schema, browser profile and recorded
+ * settings views (from scripts/next-schema-fixtures.mjs).
  *
  * @typedef {import('./protocol.js').Plan} Plan
  * @typedef {import('./protocol.js').ScanFacts} ScanFacts
@@ -13,7 +14,10 @@ import { readNifti } from './nifti.js';
 
 /**
  * @typedef {object} Fixtures
- * @property {Record<string, any>} config - the engine's default PipelineConfig
+ * @property {Record<string, any>} config - the engine's default PipelineConfig, as the plans were made from
+ * @property {Record<string, any>} browserConfig - the browser profile: the session's defaults
+ * @property {import('./schema.js').Schema} schema
+ * @property {import('./settings-view.js').RecordedViews} views
  * @property {ScanFacts} facts - the example scan
  * @property {{ default: Plan, xqsm: Plan, swiNoMagnitude: Plan }} plans
  * @property {ModelEntry[]} models
@@ -29,15 +33,18 @@ export async function loadFixtures(base = new URL('./fixtures/', import.meta.url
     if (!res.ok) throw new Error(`fixture ${name}: HTTP ${res.status}`);
     return res.json();
   };
-  const [config, facts, plan, xqsm, swiNoMagnitude, models] = await Promise.all([
+  const [config, facts, plan, xqsm, swiNoMagnitude, models, browserConfig, schema, views] = await Promise.all([
     get('config-default.json'),
     get('facts-example.json'),
     get('plan-default.json'),
     get('plan-xqsm.json'),
     get('plan-swi-nomag.json'),
     get('models.json'),
+    get('config-browser.json'),
+    get('schema.json'),
+    get('settings-views.json'),
   ]);
-  return { config, facts, plans: { default: plan, xqsm, swiNoMagnitude }, models };
+  return { config, facts, plans: { default: plan, xqsm, swiNoMagnitude }, models, browserConfig, schema, views };
 }
 
 /**

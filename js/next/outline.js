@@ -11,6 +11,7 @@
  * @property {string | null} group - the TUI tab the row sits under
  * @property {string[]} steps - plan step names (`invert-reliable` matches `invert`)
  * @property {string[]} config - the PipelineConfig sections its settings live in
+ * @property {string[]} schema - the engine schema's sections its inspector shows
  * @property {string[]} [toggles] - the config switches that turn it on (any of them)
  *
  * @typedef {object} OutlineRow
@@ -22,19 +23,19 @@
 
 /** @type {Section[]} */
 export const SECTIONS = [
-  { id: 'data', label: 'Data', group: null, steps: ['load', 'scale_phase'], config: [] },
-  { id: 'geometry', label: 'Geometry', group: 'Preprocessing', steps: ['output_space'], config: ['pipeline'] },
-  { id: 'masking', label: 'Masking', group: 'Preprocessing', steps: ['magnitude', 'mask', 'mask-reliable'], config: ['masking', 'bet', 'homogeneity'] },
-  { id: 'motion', label: 'Motion', group: 'Preprocessing', steps: ['motion'], config: ['motion_correction', 'registration'], toggles: ['motion_correction.enabled'] },
-  { id: 'fieldmap', label: 'Field map', group: 'QSM', steps: ['unwrap'], config: ['field_mapping'] },
-  { id: 'background', label: 'Background', group: 'QSM', steps: ['bgremove'], config: ['bg_removal'] },
-  { id: 'inversion', label: 'Inversion', group: 'QSM', steps: ['invert', 'tgv', 'qsmart', 'twopass'], config: ['inversion'] },
-  { id: 'reference', label: 'Reference', group: 'QSM', steps: ['reference'], config: ['qsm'] },
-  { id: 'chisep', label: 'χ-separation', group: 'χ-separation', steps: ['chi_separation'], config: ['separation'], toggles: ['pipeline.do_chi_separation'] },
-  { id: 'swi', label: 'SWI / SMWI', group: 'Other outputs', steps: ['swi', 'smwi'], config: ['swi', 'smwi'], toggles: ['pipeline.do_swi', 'pipeline.do_smwi'] },
-  { id: 'relaxometry', label: 'Relaxometry', group: 'Other outputs', steps: ['t2star_r2star', 'r2_r2prime'], config: [], toggles: ['pipeline.do_t2starmap', 'pipeline.do_r2starmap', 'pipeline.do_r2map', 'pipeline.do_r2primemap'] },
-  { id: 'segmentation', label: 'Segmentation', group: 'Other outputs', steps: ['segmentation', 'analysis'], config: ['segmentation'], toggles: ['pipeline.do_segmentation', 'pipeline.do_analysis'] },
-  { id: 'export', label: 'Export', group: 'Export', steps: [], config: [] },
+  { id: 'data', label: 'Data', group: null, steps: ['load', 'scale_phase'], schema: ['input'], config: [] },
+  { id: 'geometry', label: 'Geometry', group: 'Preprocessing', steps: ['output_space'], schema: ['geometry'], config: ['pipeline'] },
+  { id: 'masking', label: 'Masking', group: 'Preprocessing', steps: ['magnitude', 'mask', 'mask-reliable'], schema: ['masking'], config: ['masking', 'bet', 'homogeneity'] },
+  { id: 'motion', label: 'Motion', group: 'Preprocessing', steps: ['motion'], schema: ['motion'], config: ['motion_correction', 'registration'], toggles: ['motion_correction.enabled'] },
+  { id: 'fieldmap', label: 'Field map', group: 'QSM', steps: ['unwrap'], schema: ['field-map'], config: ['field_mapping'] },
+  { id: 'background', label: 'Background', group: 'QSM', steps: ['bgremove'], schema: ['background'], config: ['bg_removal'] },
+  { id: 'inversion', label: 'Inversion', group: 'QSM', steps: ['invert', 'tgv', 'qsmart', 'twopass'], schema: ['inversion'], config: ['inversion'] },
+  { id: 'reference', label: 'Reference', group: 'QSM', steps: ['reference'], schema: ['reference'], config: ['qsm'] },
+  { id: 'chisep', label: 'χ-separation', group: 'χ-separation', steps: ['chi_separation'], schema: ['separation'], config: ['separation'], toggles: ['pipeline.do_chi_separation'] },
+  { id: 'swi', label: 'SWI / SMWI', group: 'Other outputs', steps: ['swi', 'smwi'], schema: ['swi-smwi'], config: ['swi', 'smwi'], toggles: ['pipeline.do_swi', 'pipeline.do_smwi'] },
+  { id: 'relaxometry', label: 'Relaxometry', group: 'Other outputs', steps: ['t2star_r2star', 'r2_r2prime'], schema: ['relaxometry'], config: [], toggles: ['pipeline.do_t2starmap', 'pipeline.do_r2starmap', 'pipeline.do_r2map', 'pipeline.do_r2primemap'] },
+  { id: 'segmentation', label: 'Segmentation', group: 'Other outputs', steps: ['segmentation', 'analysis'], schema: ['segmentation'], config: ['segmentation'], toggles: ['pipeline.do_segmentation', 'pipeline.do_analysis'] },
+  { id: 'export', label: 'Export', group: 'Export', steps: [], schema: ['export'], config: [] },
 ];
 
 /**

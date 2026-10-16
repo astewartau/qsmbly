@@ -31,7 +31,7 @@ export function App({ session, store, fixtures }) {
       <div class="panes">
         <${Outline} session=${session} />
         <${ViewerPane} session=${session} store=${store} />
-        <${Inspector} session=${session} store=${store} />
+        <${Inspector} session=${session} store=${store} schema=${fixtures.schema} />
       </div>
       <nav class="pane-tabs" aria-label="Panes">
         ${[['outline', 'Pipeline'], ['viewer', 'View'], ['inspector', 'Settings']].map(([id, label]) => html`

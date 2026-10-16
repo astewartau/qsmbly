@@ -1,7 +1,8 @@
 /**
- * The inspector (right pane): the selected outline row's plan steps, problems and settings. The
- * settings are read-only here: from U3 they are rendered from the engine's schema.
+ * The inspector (right pane): the selected outline row's plan steps, problems and settings, the
+ * settings rendered from the engine's schema (Settings.js), and a search across every setting.
  *
+ * @typedef {import('../schema.js').Schema} Schema
  * @typedef {import('../store/session.js').Session} Session
  * @typedef {import('../store/volumes.js').VolumeStore} VolumeStore
  */
@@ -9,49 +10,16 @@ import { html } from '../html.js';
 import { SECTIONS, outlineRows } from '../outline.js';
 import { itemMeta } from '../items.js';
 import { formatBytes, formatMs } from '../format.js';
+import { searchSettings } from '../schema.js';
+import { SettingsPanel } from './Settings.js';
+import { useState, useEffect } from 'preact/hooks';
 
-/**
- * Every leaf of a config section, as [path, value].
- * @param {any} value
- * @param {string} prefix
- * @returns {[string, unknown][]}
- */
-function leaves(value, prefix) {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return [[prefix, value]];
-  return Object.entries(value).flatMap(([k, v]) => leaves(v, `${prefix}.${k}`));
-}
-
-/**
- * The settings to list for a config section: an `algorithm` section shows its algorithm's own
- * parameters only (`inversion.algorithm = "rts"` -> `inversion.rts.*`).
- * @param {any} config
- * @param {string} name
- * @returns {[string, unknown][]}
- */
-function sectionLeaves(config, name) {
-  const section = config[name];
-  if (section && typeof section === 'object' && typeof section.algorithm === 'string') {
-    const others = Object.keys(section).filter((k) => k !== section.algorithm && section[k] && typeof section[k] === 'object' && !Array.isArray(section[k]));
-    const shown = Object.fromEntries(Object.entries(section).filter(([k]) => !others.includes(k)));
-    return leaves(shown, name);
-  }
-  return leaves(section, name);
-}
-
-/** @param {unknown} v */
-function show(v) {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'object') return JSON.stringify(v);
-  return String(v);
-}
-
-/** @param {{ session: Session, store: VolumeStore }} props */
-export function Inspector({ session, store }) {
+/** @param {{ session: Session, store: VolumeStore, schema: Schema }} props */
+export function Inspector({ session, store, schema }) {
   const id = session.ui.section.value;
   const section = SECTIONS.find((s) => s.id === id) ?? SECTIONS[0];
   const row = outlineRows(session.plan.value, (p) => session.get(p)).find((r) => r.section.id === section.id);
-  const config = session.config.value;
-  const changed = new Set(session.changes.value.map((c) => c.path));
+  const tab = section.group ? `${section.group} › ` : '';
   // A problem belongs to the row whose settings or switches name it; one naming no setting, to Data.
   const paths = [...section.config, ...(section.toggles ?? [])];
   const problems = (session.plan.value?.check.problems ?? []).filter((p) => (p.setting
@@ -60,6 +28,8 @@ export function Inspector({ session, store }) {
 
   return html`
     <aside class="inspector" aria-labelledby="inspector-title">
+      <${SettingsSearch} session=${session} schema=${schema} />
+      <p class="inspector-tab muted small" aria-hidden="true">${tab}</p>
       <h2 class="pane-title" id="inspector-title">${section.label}</h2>
 
       ${section.id === 'data' && html`<${ScanFacts} session=${session} store=${store} />`}
@@ -82,19 +52,11 @@ export function Inspector({ session, store }) {
           ${problems.map((p) => html`<li class="problem-${p.severity}" role=${p.severity === 'error' ? 'alert' : undefined}>${p.reason}</li>`)}
         </ul>`}
 
-      ${section.config.length > 0 && html`
-        <h3>Settings</h3>
-        <p class="muted small">Read-only for now: settings will be generated from the engine's schema.</p>
-        <dl class="inspector-settings">
-          ${section.config.flatMap((c) => sectionLeaves(config, c)).map(([path, value]) => html`
-            <div class=${changed.has(path) ? 'changed' : ''}>
-              <dt title=${path}>${path.split('.').slice(1).join('.') || path}</dt>
-              <dd>${show(value)}</dd>
-            </div>`)}
-        </dl>`}
+      <${SettingsPanel} session=${session} store=${store} schema=${schema} sectionId=${section.id} sections=${section.schema} />
 
       ${section.id === 'export' && html`
         <p class="muted">The methods text, the equivalent command and the TOML config will come from the engine.</p>`}
+
     </aside>
   `;
 }
@@ -118,5 +80,54 @@ function ScanFacts({ session, store }) {
       <ul class="inspector-files">
         ${inputs.map((k) => html`<li>${itemMeta(k).label} <span class="muted">${formatBytes(store.entry(k)?.nifti?.byteLength ?? 0)}</span></li>`)}
       </ul>`}
+  `;
+}
+
+/**
+ * Search across every setting, by label, help, option, `qsmxt run` flag or config path. Choosing
+ * a result opens its section (with every setting shown, if it is an advanced one) and focuses it.
+ * @param {{ session: Session, schema: Schema }} props
+ */
+function SettingsSearch({ session, schema }) {
+  const [query, setQuery] = useState('');
+  const [focus, setFocus] = useState(/** @type {string | null} */ (null));
+  const sectionOf = (s) => SECTIONS.find((x) => x.schema.includes(s.section) || s.also_in?.some((a) => x.schema.includes(a)));
+  const view = session.view.value;
+  const results = searchSettings(schema, query)
+    .filter((s) => sectionOf(s) && view?.get(s.path)?.visible !== false)
+    .slice(0, 12);
+
+  useEffect(() => {
+    if (!focus) return;
+    const el = document.querySelector(`.setting[data-path="${focus}"]`);
+    if (el) {
+      el.scrollIntoView({ block: 'center' });
+      /** @type {HTMLElement | null} */ (el.querySelector('input, select') ?? el.querySelector('button'))?.focus();
+      setFocus(null);
+    }
+  });
+
+  const open = (s) => {
+    const section = sectionOf(s);
+    if (!section) return;
+    session.ui.section.value = section.id;
+    if (s.level === 'advanced') session.ui.advanced.value = { ...session.ui.advanced.peek(), [section.id]: true };
+    setQuery('');
+    setFocus(s.path);
+  };
+
+  return html`
+    <div class="settings-search" role="search">
+      <input type="search" aria-label="Search settings" placeholder="Search settings" value=${query}
+        onInput=${(e) => setQuery(e.currentTarget.value)} />
+      ${query.trim() && html`
+        <ul class="search-results" aria-label="Matching settings">
+          ${results.map((s) => html`
+            <li><button type="button" class="link-button" data-path=${s.path} onClick=${() => open(s)}>
+              ${s.label} <span class="muted small">${sectionOf(s)?.label}</span>
+            </button></li>`)}
+          ${results.length === 0 && html`<li class="muted small">No setting matches.</li>`}
+        </ul>`}
+    </div>
   `;
 }
