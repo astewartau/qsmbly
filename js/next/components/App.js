@@ -5,7 +5,13 @@
  *
  * @typedef {import('../store/session.js').Session} Session
  * @typedef {import('../store/volumes.js').VolumeStore} VolumeStore
- * @typedef {import('../fixtures.js').Fixtures} Fixtures
+ *
+ * @typedef {object} Workspace - what the engine said at start-up (main.js)
+ * @property {import('../schema.js').Schema} schema
+ * @property {import('../mask.js').MaskKit} mask
+ * @property {import('../protocol.js').ModelEntry[]} models
+ * @property {{ qsmxt: { version: string }, qsm_rs: { version: string } }} versions
+ * @property {import('../engine/client.js').EngineClient} engine
  */
 import { html } from '../html.js';
 import { useState, useEffect } from 'preact/hooks';
@@ -19,17 +25,17 @@ import { installUndoKeys } from '../shortcuts.js';
 export const THEME_STORAGE_KEY = 'qsmbly.next.theme';
 const THEMES = /** @type {const} */ (['auto', 'light', 'dark']);
 
-/** @param {{ session: Session, store: VolumeStore, fixtures: Fixtures }} props */
-export function App({ session, store, fixtures }) {
+/** @param {{ session: Session, store: VolumeStore, workspace: Workspace }} props */
+export function App({ session, store, workspace }) {
   useEffect(() => installUndoKeys(window, session), [session]);
   return html`
     <div class="workspace">
-      <${Header} session=${session} />
+      <${Header} session=${session} versions=${workspace.versions} />
       <div class="main">
-        <${Pipeline} session=${session} store=${store} schema=${fixtures.schema} mask=${fixtures.mask} />
+        <${Pipeline} session=${session} store=${store} schema=${workspace.schema} mask=${workspace.mask} />
         <${ViewerPane} session=${session} store=${store} />
       </div>
-      <${RunBar} session=${session} store=${store} models=${fixtures.models} />
+      <${RunBar} session=${session} store=${store} models=${workspace.models} />
     </div>
   `;
 }
@@ -44,8 +50,8 @@ function savedTheme() {
   }
 }
 
-/** @param {{ session: Session }} props */
-function Header({ session }) {
+/** @param {{ session: Session, versions?: Workspace['versions'] }} props */
+function Header({ session, versions }) {
   const facts = session.facts.value;
   const [theme, setTheme] = useState(savedTheme);
   useEffect(() => {
@@ -65,7 +71,7 @@ function Header({ session }) {
         <span class="scan-summary" data-testid="scan-summary">
           ${facts.n_echoes} echoes · ${facts.field_strength.toFixed(2)} T · ${facts.dims.join('×')}
         </span>`}
-      <span class="preview-badge" title="This workspace plans from recorded engine answers; it does not run anything yet">Preview</span>
+      <span class="preview-badge" title=${`Plans with QSMxT ${versions?.qsmxt.version ?? ''}; it does not run anything yet`}>Preview</span>
       <span class="topbar-actions">
         <button type="button" class="btn" onClick=${() => session.undo()} disabled=${!session.canUndo.value} title="Undo (Ctrl+Z)">Undo</button>
         <button type="button" class="btn" onClick=${() => session.redo()} disabled=${!session.canRedo.value} title="Redo (Ctrl+Shift+Z)">Redo</button>

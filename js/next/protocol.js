@@ -20,12 +20,10 @@
  * `Engine` typedef below is the hook. When the bindings export their serde types (`tsify`, §6.1),
  * the typedefs here become re-exports of those.
  *
- * Still in flux (U2 settles these once 3.1/3.2 land):
- * - `Plan.steps[].label` and `Check.problems` arrive with QSMxT #347; older engines omit them.
- * - Items carry no label, units or kind yet (E1), so js/next/items.js names them for now.
- * - The worker replies below are the ones today's UI receives. The new workspace adds the
- *   `volume` reply (an output as a float32 buffer instead of an encoded NIfTI) and the `plan`
- *   request, marked "proposed".
+ * The new workspace asks the engine through its own worker (js/next/engine/): the settings
+ * schema, the browser profile, `settings_view`, plans, the pipeline graph, the command, TOML and
+ * item metadata, all as the engine's own JSON. The compute worker's messages below are today's
+ * UI's, plus the `volume` and `recorded` replies the workspace's runs will use.
  */
 
 /** The engine's name for a volume: `Item::key()`, e.g. `AcquiredPhase(1)`, `FieldPpm`, `Chi`. */
@@ -60,9 +58,26 @@
  * @typedef {object} PlanStep
  * @property {Stage} stage
  * @property {string} name - the name its events and cache key use: `mask`, `invert-reliable`, ...
- * @property {string} [label] - for a plan view: `Dipole inversion (reliable pass)` (QSMxT #347)
+ * @property {string} label - for a plan view: `Dipole inversion (reliable pass)`
+ * @property {string | null} algorithm - the method it runs (`ilsqr`), if it has a choice
+ * @property {string | null} algorithm_label - its name (`iLSQR`)
+ * @property {ItemKey[]} reads
+ * @property {ItemKey[]} outputs
  * @property {string[]} models - QSM.rs model ids the step runs
- * @property {boolean} host - the step is not in the engine yet; the front end must run it
+ */
+
+/**
+ * What an item is (qsmxt-engine `Item::meta()`, with its key and the item as serde writes it).
+ * @typedef {object} ItemMeta
+ * @property {ItemKey} key
+ * @property {unknown} [item]
+ * @property {string} label - `Phase (as acquired)`; the echo and coil are separate
+ * @property {string | null} units
+ * @property {'magnitude' | 'phase' | 'field' | 'chi' | 'mask' | 'labels' | 'other' | string} kind
+ * @property {string | null} [bids_name]
+ * @property {boolean} [published]
+ * @property {number | null} [echo]
+ * @property {number | null} [coil]
  */
 
 /**
@@ -78,13 +93,44 @@
  * @typedef {object} Check
  * @property {string[]} errors - worded for the command line
  * @property {string[]} warnings - worded for the command line
- * @property {Problem[]} [problems] - the same, as data (QSMxT #347)
+ * @property {Problem[]} [problems] - the same, as data
  */
 
 /**
- * What a run will do (qsmxt-engine `Plan`, plus the bindings' step names and labels).
+ * How a setting applies to a config (qsmxt-engine `schema::SettingView`).
+ * @typedef {object} SettingView
+ * @property {string} path
+ * @property {boolean} visible - the setting applies, and so is shown
+ * @property {string} [forced_by] - the setting that forces this one on
+ * @property {string} [error] - what is wrong with its value: out of range, or refused by a rule
+ */
+
+/**
+ * The pipeline a run will take (qsmxt-engine `PipelineGraph`, plus its Mermaid text).
+ * @typedef {object} PipelineGraph
+ * @property {object[]} nodes
+ * @property {{ from: string, to: string, items: ItemKey[] }[]} edges
+ * @property {ItemMeta[]} items
+ * @property {boolean} two_pass
+ * @property {string} mermaid
+ */
+
+/**
+ * The mask recipe's parts as a browser run takes them (the bindings' `browser_mask_defaults`):
+ * each preset's recipe and each step type's default with the browser profile applied, and the
+ * reliable mask a run uses while `masking.two_pass_sections` is unset.
+ * @typedef {object} MaskDefaults
+ * @property {Record<string, { sections: any[], combine: 'or' | 'and', refinements: any[] }>} presets
+ * @property {Record<string, { op: string, [param: string]: any }>} steps
+ * @property {any[]} two_pass_sections
+ */
+
+/**
+ * What a run will do (qsmxt-engine `Plan`, with each step's reads and outputs as item keys, and
+ * every item it touches).
  * @typedef {object} Plan
  * @property {PlanStep[]} steps
+ * @property {ItemMeta[]} [items]
  * @property {string[]} models - every model the run needs, each once
  * @property {number} peak_memory_bytes
  * @property {Check} check
@@ -156,7 +202,10 @@
  * @property {string} id
  * @property {string} name
  * @property {{ name: string, url: string, sha256: string, bytes: number }[]} files
- * @property {string} [license] - not in the registry yet
+ * @property {string} [description]
+ * @property {string} [paper]
+ * @property {string} [source]
+ * @property {string} [license] - empty where the registry does not give one
  */
 
 // ---------------------------------------------------------------------------------------------

@@ -3,9 +3,9 @@
  * them. The UI keeps no parameters of its own; every setting is a path in the config.
  *
  * - `config` has an undo/redo history and is saved to localStorage, so settings survive a reload.
- * - `plan` is recomputed from config and facts by the planner (the worker, or fixtures until U2),
- *   batched so that several edits in one task plan once. `view` (which settings apply) is
- *   recomputed with it, by the engine's `settings_view` (settings-view.js).
+ * - `plan` is recomputed from config and facts by the planner (the engine worker), batched so
+ *   that several edits in one task plan once. `view` (which settings apply, and what is wrong
+ *   with their values) is recomputed with it, by the engine's `settings_view`.
  * - `ui.advanced` (which inspector sections show every setting) is saved too.
  * - Volumes live in the VolumeStore (store/volumes.js), not here.
  *
@@ -20,8 +20,8 @@
  * @property {number} bytes
  *
  * @typedef {(config: PipelineConfig, facts: ScanFacts) => Plan | Promise<Plan>} Planner
- * @typedef {import('../settings-view.js').SettingView} SettingView
- * @typedef {import('../settings-view.js').SettingsViewFn} SettingsViewFn
+ * @typedef {import('../protocol.js').SettingView} SettingView
+ * @typedef {(config: PipelineConfig, facts: ScanFacts | null) => SettingView[] | Promise<SettingView[]>} SettingsViewFn
  */
 import { signal, computed, effect, batch } from '@preact/signals-core';
 

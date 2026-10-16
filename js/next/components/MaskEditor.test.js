@@ -10,24 +10,31 @@ import { html } from '../html.js';
 import { MaskEditor } from './MaskEditor.js';
 import { createSession } from '../store/session.js';
 import { VolumeStore } from '../store/volumes.js';
-import { maskSummary } from '../mask.js';
+import { maskSummary, hdBetChoice } from '../mask.js';
+import { recordedEngine } from '../engine/recorded.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`../fixtures/${name}`, import.meta.url), 'utf8'));
 const schema = fixture('schema.json');
 const browser = fixture('config-browser.json');
-const kit = fixture('mask.json');
+const facts = fixture('facts-example.json');
+const kit = { schema: schema.mask, defaults: fixture('mask-defaults.json') };
 
-async function setup() {
+/** A session that plans nothing; with `engine`, its settings view is the engine's recorded one, run on `flush`. */
+async function setup({ engine = null } = {}) {
+  const pending = [];
   const session = createSession({
     defaults: browser,
     planner: () => ({ steps: [], models: [], peak_memory_bytes: 0, check: { errors: [], warnings: [] }, notes: [], two_pass: false, motion_corrected: false }),
-    schedule: () => {},
+    settingsView: engine ? (c, f) => engine.settingsView(c, f) : null,
+    schedule: (run) => pending.push(run),
   });
+  session.facts.value = facts;
   const store = new VolumeStore({ shared: false });
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   await act(() => { render(html`<${MaskEditor} session=${session} store=${store} schema=${schema} kit=${kit} />`, root); });
-  return { session, store, root };
+  const flush = () => act(async () => { while (pending.length) await pending.shift()(); });
+  return { session, store, root, flush };
 }
 const q = (root, sel) => root.querySelector(sel);
 const button = (root, label) => [...root.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === label || b.textContent.trim() === label);
@@ -52,7 +59,7 @@ describe('the mask builder', () => {
     expect(q(root, '#mask-preset').value).toBe('robust-threshold');
     expect(root.querySelectorAll('.mask-sec[data-section]')).toHaveLength(1);
     expect(q(root, '[id="Mask-0-input"]').value).toBe('phase-quality');
-    expect(q(root, '[id="Mask-0-method"]').value).toBe('threshold');
+    expect(q(root, '[id="Mask-0-method"]').value).toBe('threshold-otsu');
     expect([...root.querySelectorAll('.ops .row.op')].map((r) => r.textContent.match(/Dilate|Fill holes|Erode/)?.[0])).toEqual(['Dilate', 'Fill holes', 'Erode']);
     expect(button(root, 'Preview mask').disabled).toBe(true);
   });
@@ -63,16 +70,16 @@ describe('the mask builder', () => {
     expect(masking(session).combine).toBe('and');
     expect(root.querySelectorAll('.mask-sec[data-section]')).toHaveLength(2);
     expect(q(root, 'section[aria-label="After combining"]')).not.toBeNull();
-    expect(q(root, 'section[aria-label="BET surface"]')).not.toBeNull(); // BET's shared settings
+    expect(q(root, 'section[aria-label="BET settings"]')).not.toBeNull(); // BET's shared settings
     expect(q(root, '.row[data-path="bet.smoothness"]')).not.toBeNull();
     await act(() => session.undo());
-    expect(maskSummary(kit, masking(session))).toBe('robust-threshold');
+    expect(maskSummary(kit, masking(session))).toBe('Robust threshold');
   });
 
   test('steps: add, edit, move, remove; the preset reads "custom"', async () => {
     const { session, root } = await setup();
     await act(() => button(root, 'Add a step').click());
-    await act(() => [...root.querySelectorAll('.add-op .chip')].find((b) => b.textContent === 'Signal erode').click());
+    await act(() => [...root.querySelectorAll('.add-op .chip')].find((b) => b.textContent === 'Signal-gated erosion').click());
     expect(masking(session).sections[0].refinements.map((o) => o.op)).toEqual(['dilate', 'fill-holes', 'erode', 'signal-erode']);
     expect(q(root, '#mask-preset').selectedOptions[0].textContent).toBe('custom');
     await change(q(root, 'input[aria-label="Erode Iterations"]'), '3');
@@ -86,30 +93,41 @@ describe('the mask builder', () => {
     expect(masking(session).sections[0].refinements).toHaveLength(4);
   });
 
-  test('a value out of range is refused inline, and the recipe keeps its value', async () => {
-    const { session, root } = await setup();
+  test('a value out of range is written, and the engine says what is wrong with it', async () => {
+    const engine = recordedEngine(fixture('engine-cases.json'));
+    const { session, root, flush } = await setup({ engine });
+    await flush();
     const input = q(root, 'input[aria-label="Erode Iterations"]');
     await change(input, '0');
-    expect(q(root, '.sub.err').textContent).toBe('Must be at least 1.');
+    expect(masking(session).sections[0].refinements[2].iterations).toBe(0);
+    await flush();
+    expect(q(root, '[data-testid="engine-error"]').textContent).toBe('Section 1, step 4 (Erode): Iterations must be at least 1');
+    await change(input, '3');
+    await flush();
+    expect(q(root, '[data-testid="engine-error"]')).toBeNull();
+    // What cannot be a number is not written at all.
+    await change(input, '1.5');
+    expect(q(root, '.sub.err').textContent).toBe('Enter a whole number.');
     expect(input.getAttribute('aria-invalid')).toBe('true');
-    expect(masking(session).sections[0].refinements[2].iterations).toBe(1);
-    await change(q(root, '[id="Mask-0-method"]'), 'bet');
-    await change(q(root, 'input[aria-label="Fractional intensity"]'), '1');
-    expect(q(root, '.sub.err').textContent).toBe('Must be less than 1.');
-    expect(masking(session).sections[0].generator.fractional_intensity).toBe(0.5);
+    expect(masking(session).sections[0].refinements[2].iterations).toBe(3);
+    expect(engine.misses).toEqual([]);
   });
 
-  test('a method\'s own settings: a threshold value, HD-BET\'s window', async () => {
+  test('a method\'s own settings: a threshold value, HD-BET\'s inference', async () => {
     const { session, root } = await setup();
-    await change(q(root, '[id="Mask-0-method-threshold"]'), 'percentile');
+    await change(q(root, '[id="Mask-0-method"]'), 'threshold-percentile');
     expect(masking(session).sections[0].generator).toEqual({ op: 'threshold', method: 'percentile', value: 75 });
-    await change(q(root, 'input[aria-label="Threshold value"]'), '101');
-    expect(q(root, '.sub.err').textContent).toBe('Must be at most 100.');
+    await change(q(root, '[id="Mask-0-method-value"]'), '90');
+    expect(masking(session).sections[0].generator.value).toBe(90);
     await change(q(root, '[id="Mask-0-method"]'), 'hd-bet');
-    expect(masking(session).sections[0].generator.patch).toEqual(kit.hd_bet_patches.low_memory);
-    await change(q(root, '[id="Mask-0-method-inference"]'), 'full');
+    expect(hdBetChoice(kit, masking(session).sections[0].generator.patch)?.label).toBe('low-memory');
+    expect(root.textContent).toContain(hdBetChoice(kit, masking(session).sections[0].generator.patch)?.help);
+    const inference = q(root, '[id="Mask-0-method-patch"]');
+    await change(inference, String(kit.schema.hd_bet_inference.findIndex((c) => c.value === null)));
     expect(masking(session).sections[0].generator.patch).toBeNull();
-    expect(root.textContent).toContain('needs more memory than the browser');
+    expect(q(root, '[data-testid="hd-bet-memory"]').textContent).toContain('more memory than the browser');
+    // The patch step applies only to a window.
+    expect(root.textContent).not.toContain('Patch Step');
   });
 
   test('sections: add, combine, remove; two-pass reveals the reliable mask', async () => {

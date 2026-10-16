@@ -100,7 +100,8 @@ pub fn apply_browser_profile_wasm(config_json: &str) -> Result<String, JsValue> 
 /// and each step type's default (`schema.mask`) given the browser profile
 /// (`apply_browser_profile`, which runs an HD-BET step on the whole volume as the low-memory
 /// sliding window instead). `{ presets: { <preset>: { sections, combine, refinements } },
-/// steps: { <kind>: <op> } }`. A mask builder writes these, so choosing a preset or adding a step
+/// steps: { <kind>: <op> }, two_pass_sections }`, `two_pass_sections` being the reliable mask a
+/// run uses while `masking.two_pass_sections` is unset (`default_two_pass_sections`). A mask builder writes these, so choosing a preset or adding a step
 /// never brings back a default the browser cannot run.
 pub fn browser_mask_defaults() -> Result<String, String> {
     let mask = schema::mask_schema();
@@ -126,7 +127,11 @@ pub fn browser_mask_defaults() -> Result<String, String> {
         c.apply_browser_profile();
         steps.insert(step.kind.to_string(), json!(c.masking.refinements[0]));
     }
-    Ok(json!({ "presets": presets, "steps": steps }).to_string())
+    let mut c = PipelineConfig::browser();
+    c.masking.two_pass_sections = Some(qsmxt_engine::default_two_pass_sections());
+    c.apply_browser_profile();
+    let two_pass = c.masking.resolved_two_pass_sections();
+    Ok(json!({ "presets": presets, "steps": steps, "two_pass_sections": two_pass }).to_string())
 }
 
 /// [`browser_mask_defaults`].
@@ -367,6 +372,10 @@ mod tests {
         assert_eq!(
             d["steps"]["erode"],
             json!({ "op": "erode", "iterations": 1 })
+        );
+        assert_eq!(
+            d["two_pass_sections"],
+            json!(qsmxt_engine::default_two_pass_sections())
         );
         let robust = &d["presets"]["robust-threshold"];
         let browser: Value = serde_json::from_str(&browser()).unwrap();

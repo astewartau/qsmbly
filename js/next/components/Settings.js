@@ -2,19 +2,21 @@
  * A pipeline step's settings, rendered from the engine's schema (redesign §3.5): one compact row
  * per setting, label left and control right. Nothing here names a setting: each row's label,
  * help, control, range, default and visibility come from the schema and the engine's
- * `settings_view`. Every edit is a `session.set`, so it is undoable and re-plans.
+ * `settings_view`, which also says what is wrong with a value (out of range, refused by a rule):
+ * that shows under the row. Every edit is a `session.set`, so it is undoable and re-plans.
  *
  * @typedef {import('../store/session.js').Session} Session
  * @typedef {import('../store/volumes.js').VolumeStore} VolumeStore
  * @typedef {import('../schema.js').Schema} Schema
  * @typedef {import('../schema.js').Setting} Setting
- * @typedef {import('../settings-view.js').SettingView} SettingView
+ * @typedef {import('../protocol.js').SettingView} SettingView
  *
  * @typedef {object} Row
  * @property {Setting} setting
  * @property {unknown} value
  * @property {boolean} changed - from the browser default
  * @property {string | null} forcedBy
+ * @property {string | null} error - the engine's: what is wrong with the value
  * @property {boolean} basic - shown without "advanced": basic, or changed
  */
 import { html } from '../html.js';
@@ -22,7 +24,7 @@ import { useState } from 'preact/hooks';
 import { useFollow } from './follow.js';
 import {
   valueOf, isChanged, controlFor, validate, parseField, onValue, echoChoice,
-  browserDefaultNote, formatValue, optionName, SUPPLIED_TOOL, SUPPLIED_ITEMS,
+  browserDefaultNote, formatValue, SUPPLIED_TOOL,
 } from '../schema.js';
 import { readNifti } from '../nifti.js';
 import { Icon } from './icons.js';
@@ -49,7 +51,8 @@ export function sectionRows(schema, sections, config, view, skip = []) {
     .map((setting) => {
       const value = valueOf(setting, config);
       const changed = isChanged(setting, value);
-      return { setting, value, changed, forcedBy: view?.get(setting.path)?.forced_by ?? null, basic: setting.level === 'basic' || changed };
+      const v = view?.get(setting.path);
+      return { setting, value, changed, forcedBy: v?.forced_by ?? null, error: v?.error ?? null, basic: setting.level === 'basic' || changed || !!v?.error };
     });
 }
 
@@ -106,14 +109,18 @@ export function SettingRows({ session, store, schema, paths }) {
  */
 export function SettingRow({ row, session, store, byPath, depth = 0 }) {
   const { setting, value, changed, forcedBy } = row;
+  const label = setting.full_label ?? setting.label;
   const [helpOpen, setHelpOpen] = useState(false);
-  const [error, setError] = useState(/** @type {string | null} */ (null));
+  // What was typed and cannot be a value (not a number, ...): never written to the config.
+  const [typed, setError] = useState(/** @type {string | null} */ (null));
+  const error = typed ?? row.error;
   // Switched on but with no value yet: a setting whose "on" needs a value typed first.
   const [opening, setOpening] = useState(false);
   const control = controlFor(setting);
   const on = !control.toggled || !same(value, setting.off) || opening;
   const id = domId(setting.path);
-  const help = [setting.help, setting.value_help].filter(Boolean).join(' ');
+  const help = setting.browser === 'supplied-file' && setting.browser_help
+    ? setting.browser_help : [setting.help, setting.value_help].filter(Boolean).join(' ');
   const helpId = help ? `${id}-help` : undefined;
   const errorId = `${id}-error`;
   const badge = browserDefaultNote(setting);
@@ -138,7 +145,7 @@ export function SettingRow({ row, session, store, byPath, depth = 0 }) {
     'aria-invalid': error ? 'true' : undefined,
     'aria-errormessage': error ? errorId : undefined,
     // A setting's label names its on/off box; the value beside it is named by its own label.
-    ...(control.toggled ? { 'aria-label': setting.value_label ?? setting.label } : {}),
+    ...(control.toggled ? { 'aria-label': setting.value_label ?? label } : {}),
   };
   const props = { setting, value, control, id, error, setError, commit, session, store, aria, units, on, toggle, forced: !!forcedBy };
   const style = `--depth:${depth}`;
@@ -147,15 +154,15 @@ export function SettingRow({ row, session, store, byPath, depth = 0 }) {
     <div class=${`row${changed ? ' changed' : ''}`} style=${style} data-path=${setting.path} data-level=${setting.level} data-type=${setting.type}>
       <div class="lab">
         <span class="dot" aria-hidden="true"></span>
-        <label for=${control.toggled ? `${id}-on` : id} title=${setting.label}>${setting.label}</label>
+        <label for=${control.toggled ? `${id}-on` : id} title=${setting.context ? `${setting.context}: ${label}` : label}>${label}</label>
         ${changed && html`<span class="visually-hidden"> (changed)</span>`}
         ${help && html`
           <button type="button" class="info" aria-expanded=${helpOpen} aria-controls=${helpId} title=${help}
-            aria-label=${`About ${setting.label}`} onClick=${() => setHelpOpen(!helpOpen)}>${Icon.info}</button>`}
+            aria-label=${`About ${label}`} onClick=${() => setHelpOpen(!helpOpen)}>${Icon.info}</button>`}
       </div>
       <div class="ctl">
         <${Control} ...${props} />
-        <button type="button" class="reset" aria-label=${`Reset ${setting.label}`} title=${`Reset to ${formatValue(setting, setting.browser_default)}`}
+        <button type="button" class="reset" aria-label=${`Reset ${label}`} title=${`Reset to ${formatValue(setting, setting.browser_default)}`}
           hidden=${!changed} onClick=${() => { setError(null); setOpening(false); session.set(setting.path, setting.browser_default); }}>${Icon.reset}</button>
       </div>
     </div>
@@ -163,18 +170,19 @@ export function SettingRow({ row, session, store, byPath, depth = 0 }) {
     ${control.kind === 'echo' && html`<${EchoNumber} ...${props} style=${style} />`}
     ${control.kind === 'file' && html`<${SuppliedName} ...${props} style=${style} />`}
     ${help && html`<p class="sub help" id=${helpId} style=${style} hidden=${!helpOpen}>${help}</p>`}
-    ${forcer && html`<p class="sub note" style=${style} data-testid="forced">On because ${forcer.label} needs it.</p>`}
+    ${forcer && html`<p class="sub note" style=${style} data-testid="forced">On because ${forcer.full_label ?? forcer.label} needs it.</p>`}
     ${badge && html`
       <p class="sub browser-default" style=${style}>
         QSMxT's default is ${badge.native}; the browser uses ${badge.browser} to fit in memory. The exported command includes it.
       </p>`}
-    ${error && html`<p class="sub err" id=${errorId} style=${style} role="alert">${error}</p>`}
+    ${error && html`<p class="sub err" id=${errorId} style=${style} role="alert" data-testid=${typed ? 'typed-error' : 'engine-error'}>${error}</p>`}
   `;
 }
 
 /** The control for a setting. */
 function Control(props) {
   const { setting, control, id, value, aria, commit, setError, units, on, toggle, forced } = props;
+  const name = setting.full_label ?? setting.label;
   const check = (label) => html`<input type="checkbox" class=${control.toggled ? 'check' : 'switch'} id=${control.toggled ? `${id}-on` : id}
     aria-label=${label} checked=${control.toggled ? on : !!value || forced} disabled=${forced}
     aria-describedby=${aria['aria-describedby']} onChange=${(e) => toggle(e.currentTarget.checked)} />`;
@@ -182,7 +190,7 @@ function Control(props) {
     case 'checkbox':
       return check(undefined);
     case 'number':
-      return html`${control.toggled && check(`${setting.label} on`)}
+      return html`${control.toggled && check(`${name} on`)}
         ${on && html`<${NumberInput} ...${props} />`}${on && units && html`<span class="unit">${units}</span>`}`;
     case 'vec3':
       return html`<${Vec3Input} ...${props} />${units && html`<span class="unit">${units}</span>`}`;
@@ -193,16 +201,16 @@ function Control(props) {
         <select id=${id} class="sel" ...${aria}
           onChange=${(e) => { const i = Number(e.currentTarget.value); commit(i < 0 ? null : options[i].value); }}>
           ${setting.optional && html`<option value="-1" selected=${index < 0}>unset</option>`}
-          ${options.map((o, i) => html`<option value=${String(i)} selected=${i === index}>${optionName(o)}</option>`)}
+          ${options.map((o, i) => html`<option value=${String(i)} selected=${i === index}>${o.name}</option>`)}
         </select>`;
     }
     case 'echo': {
       const { named, numbered, echo } = echoChoice(setting, value);
       return html`
         <select id=${id} class="sel" ...${aria}
-          onChange=${(e) => commit(e.currentTarget.value === 'echo' ? String(echo ?? 1) : e.currentTarget.value)}>
-          ${named.map((o) => html`<option value=${String(o.value)} selected=${echo === null && value === o.value}>${o.label}</option>`)}
-          ${numbered && html`<option value="echo" selected=${echo !== null}>${numbered.label}</option>`}
+          onChange=${(e) => commit(e.currentTarget.value === 'echo' ? String(echo ?? numbered?.min ?? numbered?.value) : e.currentTarget.value)}>
+          ${named.map((o) => html`<option value=${String(o.value)} selected=${echo === null && value === o.value}>${o.name}</option>`)}
+          ${numbered && html`<option value="echo" selected=${echo !== null}>${numbered.name}</option>`}
         </select>`;
     }
     case 'file':
@@ -256,9 +264,9 @@ function Vec3Input({ setting, value, id, setError, commit, aria }) {
     if (!problem) commit(v);
   };
   return html`
-    <span class="vec3" role="group" aria-label=${setting.label}>
+    <span class="vec3" role="group" aria-label=${setting.full_label ?? setting.label}>
       ${['x', 'y', 'z'].map((axis, i) => html`
-        <input type="text" inputmode="decimal" id=${i === 0 ? id : `${id}-${axis}`} class="num v3" aria-label=${`${setting.label} ${axis}`}
+        <input type="text" inputmode="decimal" id=${i === 0 ? id : `${id}-${axis}`} class="num v3" aria-label=${`${setting.full_label ?? setting.label} ${axis}`}
           value=${texts[i]} data-committed=${shown[i]} ...${aria}
           onInput=${(e) => { const t = [...texts]; t[i] = e.currentTarget.value; setTexts(t); }}
           onChange=${(e) => change(i, e.currentTarget.value)} />`)}
@@ -277,9 +285,8 @@ function OptionHelp({ setting, value, style }) {
 }
 
 /** For "a given echo": the echo number, within the scan's echoes. */
-function EchoNumber({ setting, value, id, session, setError, commit, style }) {
+function EchoNumber({ setting, value, id, setError, commit, style }) {
   const { echo, named, numbered } = echoChoice(setting, value);
-  const max = session.facts.value?.n_echoes;
   const chosen = echo !== null ? numbered : named.find((o) => o.value === value);
   return html`
     ${echo !== null && html`
@@ -287,10 +294,10 @@ function EchoNumber({ setting, value, id, session, setError, commit, style }) {
         <div class="lab"><span class="dot" aria-hidden="true"></span><label for=${`${id}-echo`}>${setting.value_label ?? 'Echo'}</label></div>
         <div class="ctl">
           <input type="text" inputmode="numeric" id=${`${id}-echo`} class="num" value=${echo} data-committed=${String(echo)}
-            data-min="1" data-max=${max}
+            data-min=${numbered?.min}
             onChange=${(e) => {
-              const n = Number(e.currentTarget.value);
-              if (!Number.isInteger(n) || n < 1 || (max && n > max)) { setError(max ? `Enter an echo from 1 to ${max}.` : 'Enter an echo number from 1.'); return; }
+              const n = Number(e.currentTarget.value.trim());
+              if (e.currentTarget.value.trim() === '' || !Number.isInteger(n)) { setError('Enter an echo number.'); return; }
               setError(null);
               commit(String(n));
             }} />
@@ -307,7 +314,7 @@ function EchoNumber({ setting, value, id, session, setError, commit, style }) {
  * browser's derivatives tool, so the exported command reads it from derivatives/qsmbly/.
  */
 function SuppliedFile({ setting, value, id, session, store, setError, aria }) {
-  const item = SUPPLIED_ITEMS[setting.path];
+  const item = setting.item;
   store.version.value;
   const [busy, setBusy] = useState(false);
   const supplied = value === SUPPLIED_TOOL && !!item && store.has(item);
@@ -332,7 +339,7 @@ function SuppliedFile({ setting, value, id, session, store, setError, aria }) {
 
 /** Under a supplied-file setting: the file, or what the value asks for instead. */
 function SuppliedName({ setting, value, session, store, style }) {
-  const item = SUPPLIED_ITEMS[setting.path];
+  const item = setting.item;
   const names = session.ui.supplied.value;
   store.version.value;
   const supplied = value === SUPPLIED_TOOL && !!item && store.has(item);
@@ -365,7 +372,7 @@ function SuppliedName({ setting, value, session, store, style }) {
  * @param {{ name: string, arrayBuffer: () => Promise<ArrayBuffer> }} file
  */
 export async function supplyFile(session, store, setting, file) {
-  const item = SUPPLIED_ITEMS[setting.path];
+  const item = setting.item;
   if (!item) throw new Error('this setting takes no file');
   const bytes = new Uint8Array(await file.arrayBuffer());
   const vol = await readNifti(bytes);

@@ -1,115 +1,24 @@
 /**
- * Stand-ins for the engine until the workspace runs on it (U2): the engine's own answers about
- * the example data (fixtures/*.json, from scripts/next-fixtures.mjs), a planner that picks among
- * them, and volumes to look at; and the engine's settings schema, browser profile and recorded
- * settings views (from scripts/next-schema-fixtures.mjs).
+ * Stand-ins for data until the workspace loads scans (U4): the example dataset's scan, as the
+ * engine reads it from its sidecars, and volumes to look at.
  *
- * @typedef {import('./protocol.js').Plan} Plan
  * @typedef {import('./protocol.js').ScanFacts} ScanFacts
- * @typedef {import('./protocol.js').ModelEntry} ModelEntry
  * @typedef {import('./protocol.js').RunMetadata} RunMetadata
  * @typedef {import('./store/volumes.js').VolumeStore} VolumeStore
  */
 import { readNifti } from './nifti.js';
 
 /**
- * @typedef {object} Fixtures
- * @property {ScanFacts} facts - the example scan
- * @property {ModelEntry[]} models
- * @property {Record<string, any>} browserConfig - the browser profile: the session's defaults
- * @property {import('./schema.js').Schema} schema
- * @property {import('./settings-view.js').RecordedViews} views
- * @property {RecordedPlans} plans
- * @property {import('./mask.js').MaskKit} mask - the mask recipe's building blocks
+ * The example dataset (js/app/config.js EXAMPLE_DATA): 184×256×128 at 1 mm, five echoes, its
+ * sidecars' EchoTime and MagneticFieldStrength. The engine turns these into its facts
+ * (`scan_facts_wasm`); the sidecars carry no B0 direction, which for the example is axial.
  */
-
-/**
- * @param {string} [base] - where fixtures/ is
- * @returns {Promise<Fixtures>}
- */
-export async function loadFixtures(base = new URL('./fixtures/', import.meta.url).href) {
-  const get = async (name) => {
-    const res = await fetch(new URL(name, base));
-    if (!res.ok) throw new Error(`fixture ${name}: HTTP ${res.status}`);
-    return res.json();
-  };
-  const [facts, models, browserConfig, schema, views, plans, mask] = await Promise.all([
-    get('facts-example.json'),
-    get('models.json'),
-    get('config-browser.json'),
-    get('schema.json'),
-    get('settings-views.json'),
-    get('plans.json'),
-    get('mask.json'),
-  ]);
-  return { facts, models, browserConfig, schema, views, plans, mask };
-}
-
-/**
- * Plans the engine recorded (fixtures/plans.json, from scripts/next-schema-fixtures.mjs).
- * @typedef {object} RecordedPlans
- * @property {ScanFacts} scan
- * @property {Record<string, { stage: any, label: string }>} steps - each step name's stage and label
- * @property {({ name?: string, edits: [string, unknown][], scan?: Partial<ScanFacts>, steps: ([string] | [string, string[]])[] }
- *   & Omit<Plan, 'steps'>)[]} plans - plans[0] is the browser profile's
- */
-
-/**
- * A planner over recorded plans (TEMPORARY, until the workspace plans through the bindings in
- * U2): the engine's plan for a recorded config, else the browser profile's plan with the steps
- * each changed choice adds or removes on its own.
- * @param {RecordedPlans} recorded
- * @param {Record<string, any>} defaults - the browser profile
- * @returns {(config: Record<string, any>, facts: ScanFacts) => Plan}
- */
-export function recordedPlanner(recorded, defaults) {
-  const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-  const get = (o, p) => p.split('.').reduce((v, k) => (v == null ? undefined : v[k]), o);
-  const paths = [...new Set(recorded.plans.flatMap((p) => p.edits.map(([path]) => path)))];
-  const key = (edits) => edits.map(([p, v]) => `${p}=${JSON.stringify(v ?? null)}`).sort().join('&');
-  /** @param {RecordedPlans['plans'][number]} p @returns {Plan} */
-  const expand = (p) => {
-    const { steps, models, peak_memory_bytes, check, notes, two_pass, motion_corrected } = p;
-    return { models, peak_memory_bytes, check, notes, two_pass, motion_corrected, steps: steps.map(([name, models = []]) => ({ ...recorded.steps[name], name, models, host: false })) };
-  };
-  const base = expand(recorded.plans[0]);
-  return (config, facts) => {
-    const changes = paths.map((p) => /** @type {[string, unknown]} */ ([p, get(config, p) ?? null])).filter(([p, v]) => !same(v, get(defaults, p)));
-    const scanDiff = (p) => Object.entries(p.scan ?? {}).every(([k, v]) => facts?.[k] === v);
-    const noMagnitude = facts && facts.has_magnitude === false;
-    const exact = recorded.plans.find((p) => key(p.edits) === key(changes) && scanDiff(p) && (!noMagnitude || p.scan?.has_magnitude === false));
-    if (exact) return expand(exact);
-    const singles = changes.map((c) => recorded.plans.find((p) => p.edits.length === 1 && !p.scan && key(p.edits) === key([c]))).filter(Boolean);
-    let steps = [...base.steps];
-    const result = { ...base, check: { ...base.check, errors: [...base.check.errors], warnings: [...base.check.warnings], problems: [...(base.check.problems ?? [])] }, notes: [...base.notes] };
-    for (const single of singles) {
-      const s = expand(/** @type {any} */ (single));
-      const names = new Set(s.steps.map((x) => x.name));
-      const before = new Set(base.steps.map((x) => x.name));
-      steps = steps.filter((x) => !before.has(x.name) || names.has(x.name));
-      s.steps.forEach((x, i) => {
-        const at = steps.findIndex((y) => y.name === x.name);
-        if (at >= 0) { if (x.models.length) steps[at] = x; return; }
-        if (before.has(x.name)) return; // a step this choice keeps, which another one removed
-        // After the step it follows in its own plan, and after steps other choices added there.
-        const prev = s.steps.slice(0, i).reverse().find((y) => steps.some((z) => z.name === y.name));
-        let k = prev ? steps.findIndex((z) => z.name === prev.name) + 1 : 0;
-        while (k < steps.length && !before.has(steps[k].name) && !names.has(steps[k].name)) k++;
-        steps.splice(k, 0, x);
-      });
-      result.peak_memory_bytes = Math.max(result.peak_memory_bytes, s.peak_memory_bytes);
-      result.two_pass ||= s.two_pass;
-      result.motion_corrected ||= s.motion_corrected;
-      for (const e of s.check.errors) if (!result.check.errors.includes(e)) result.check.errors.push(e);
-      for (const w of s.check.warnings) if (!result.check.warnings.includes(w)) result.check.warnings.push(w);
-      for (const p of s.check.problems ?? []) if (!result.check.problems?.some((q) => same(q, p))) result.check.problems?.push(p);
-      for (const n of s.notes) if (!result.notes.includes(n)) result.notes.push(n);
-    }
-    result.steps = steps;
-    result.models = [...new Set(steps.flatMap((x) => x.models))];
-    return result;
-  };
-}
+export const EXAMPLE_SCAN = {
+  dims: /** @type {[number, number, number]} */ ([184, 256, 128]),
+  sidecars: [0.005, 0.011, 0.017, 0.023, 0.029].map((EchoTime) => ({ EchoTime, MagneticFieldStrength: 2.8946 })),
+  hasMagnitude: true,
+  b0Dir: /** @type {[number, number, number]} */ ([0, 0, 1]),
+};
 
 /**
  * The run grid of a scan on a 1 mm grid centred on the origin.
