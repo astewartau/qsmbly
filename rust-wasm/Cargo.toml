@@ -55,3 +55,7 @@ lto = true
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = ['-O2', '--enable-threads', '--enable-bulk-memory', '--enable-mutable-globals', '--enable-simd']
 
+
+# DEV ONLY (remove before pushing): the QSMxT schema stack before it merges.
+[patch."https://github.com/QSMxT/QSMxT.git"]
+qsmxt-engine = { path = "/scratch/user/uqaste15/src/qsmxt-wt-nextengine/crates/qsmxt-engine" }

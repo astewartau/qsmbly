@@ -61,8 +61,7 @@ fn js_message(e: &JsValue) -> String {
 // ============================================================================
 
 fn parse_config(config_json: &str) -> Result<PipelineConfig, JsValue> {
-    serde_json::from_str(config_json)
-        .map_err(|e| js_err(format!("config JSON is not a valid PipelineConfig: {e}")))
+    crate::settings::parse_config(config_json).map_err(js_err)
 }
 
 /// Each echo's sidecar, from a JSON array of BIDS sidecar objects (`EchoTime` in seconds,
@@ -97,17 +96,32 @@ pub fn scan_facts_wasm(
     serde_json::to_string(&facts).map_err(js_err)
 }
 
-/// A plan as JSON, each step carrying its name (`mask`, `invert-reliable`, ...), the name its
-/// events and cache use, and its label for a plan view (`Dipole inversion (reliable pass)`).
-fn plan_json(config: &PipelineConfig, facts: &ScanFacts) -> Result<String, JsValue> {
+/// A plan as JSON (`qsmxt_engine::plan::Plan`): each step's `name` (`mask`, `invert-reliable`,
+/// ...: the name its events and cache use), `label`, `algorithm` and `algorithm_label`, and the
+/// items it `reads` and `outputs` by their keys ([`item_key`]); `items` says what each of those
+/// is (`Item::meta`, with its `key`), in the order they first appear.
+pub(crate) fn plan_json(config: &PipelineConfig, facts: &ScanFacts) -> Result<String, String> {
     let plan = qsmxt_engine::plan::plan(config, facts);
-    let mut json = serde_json::to_value(&plan).map_err(js_err)?;
+    let mut json = serde_json::to_value(&plan).map_err(|e| e.to_string())?;
+    let mut items: Vec<Item> = Vec::new();
     if let Some(steps) = json.get_mut("steps").and_then(|s| s.as_array_mut()) {
         for (value, step) in steps.iter_mut().zip(&plan.steps) {
-            value["name"] = step.stage.name().into();
-            value["label"] = step.stage.label().into();
+            for (field, list) in [("reads", &step.reads), ("outputs", &step.outputs)] {
+                value[field] = list.iter().map(item_key).collect::<Vec<_>>().into();
+                items.extend(
+                    list.iter()
+                        .filter(|i| !items.contains(i))
+                        .copied()
+                        .collect::<Vec<_>>(),
+                );
+            }
         }
     }
+    json["items"] = items
+        .iter()
+        .map(crate::settings::item_info)
+        .collect::<Vec<_>>()
+        .into();
     Ok(json.to_string())
 }
 
@@ -117,9 +131,8 @@ fn plan_json(config: &PipelineConfig, facts: &ScanFacts) -> Result<String, JsVal
 /// (`check`), and notes. Pure: it reads nothing but its arguments.
 #[wasm_bindgen]
 pub fn plan_wasm(config_json: &str, facts_json: &str) -> Result<String, JsValue> {
-    let facts: ScanFacts = serde_json::from_str(facts_json)
-        .map_err(|e| js_err(format!("facts JSON is not valid ScanFacts: {e}")))?;
-    plan_json(&parse_config(config_json)?, &facts)
+    let facts = crate::settings::parse_facts(facts_json).map_err(js_err)?;
+    plan_json(&parse_config(config_json)?, &facts).map_err(js_err)
 }
 
 /// Hand over a deep-learning weight file (by its name in the model registry), for every run in
@@ -517,7 +530,16 @@ impl Engine {
 
     /// What a run of `config_json` (PipelineConfig JSON) on this scan will do: [`plan_wasm`].
     pub fn plan(&self, config_json: &str) -> Result<String, JsValue> {
-        plan_json(&parse_config(config_json)?, &self.facts)
+        plan_json(&parse_config(config_json)?, &self.facts).map_err(js_err)
+    }
+
+    /// The pipeline a run of `config_json` on this scan will take, as a graph
+    /// ([`crate::settings::pipeline_graph_wasm`]), drawn on the run's grid once a run has loaded
+    /// the scan (so the return to the acquired grid is drawn only when the run is resampled).
+    #[wasm_bindgen(js_name = pipelineGraph)]
+    pub fn pipeline_graph(&self, config_json: &str) -> Result<String, JsValue> {
+        crate::settings::graph_json(&parse_config(config_json)?, &self.facts, self.store.grid())
+            .map_err(js_err)
     }
 
     /// Supply the brain mask (a NIfTI file) for runs whose config names a custom mask tool

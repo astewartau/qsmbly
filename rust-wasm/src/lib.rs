@@ -14,6 +14,7 @@ use qsmxt_engine::qsm_core;
 use wasm_bindgen::prelude::*;
 
 pub mod engine;
+pub mod settings;
 
 #[cfg(feature = "debug-log")]
 #[wasm_bindgen]
@@ -1529,6 +1530,7 @@ pub fn rads_to_ppm_wasm(field_rads: &[f64], field_strength: f64) -> Result<Vec<f
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// JSON array describing every registered deep-learning model: `id`, `name`, `stage`,
+/// `description`, `paper`, `source`, `license` (the weights' licence or redistribution note),
 /// `size_divisor`, `inputs`/`outputs`, and per-file `{name, url, sha256, bytes}`. The JS
 /// layer uses this to fetch + cache weights (WASM can't download itself) and to size the
 /// download UI.
@@ -1548,6 +1550,8 @@ pub fn get_model_registry_wasm() -> String {
                 .collect();
             serde_json::json!({
                 "id": m.id, "name": m.name, "stage": format!("{:?}", m.stage),
+                "description": m.description, "paper": m.paper, "source": m.source,
+                "license": m.license,
                 "size_divisor": m.size_divisor, "available": m.is_available(),
                 "inputs": m.inputs, "outputs": m.outputs, "files": files,
             })
