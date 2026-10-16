@@ -263,6 +263,24 @@ export class FileIOController {
     }
   }
 
+  /**
+   * Each phase echo's BIDS sidecar, parsed, in the phase bucket's order ({} for an echo without
+   * a readable one). The run reads B0_dir, the slice geometry and the manufacturer from them, as
+   * `qsmxt run` does.
+   */
+  async getPhaseSidecars() {
+    const byName = new Map(this.buckets.json.map(entry => [entry.file.name.replace(/\.json$/i, ''), entry.file]));
+    return Promise.all(this.buckets.phase.map(async (entry) => {
+      const file = byName.get(entry.name.replace(/\.nii(\.gz)?$/i, ''));
+      if (!file) return {};
+      try {
+        return JSON.parse(await file.text());
+      } catch {
+        return {};
+      }
+    }));
+  }
+
   hasEchoTimes() {
     return this.getEchoTimesFromInputs().length > 0;
   }
