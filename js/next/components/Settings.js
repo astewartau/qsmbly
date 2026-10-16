@@ -67,7 +67,7 @@ export function SettingsPanel({ session, store, schema, sectionId, sections }) {
   const reset = (list) => session.setAll(list.map((r) => [r.setting.path, r.setting.browser_default]));
 
   return html`
-    <section class="settings" aria-label="Settings" data-section=${sectionId}>
+    <section class="settings" aria-label="Settings" data-settings=${sectionId}>
       <div class="settings-head">
         <h3>Settings</h3>
         ${more > 0 && html`
