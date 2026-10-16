@@ -3,6 +3,7 @@
  */
 import {
   createVolumeStore, engineSidecars, engineConfigJson, outputStage, createPlanProgress, SUPPLIED_MASK_TOOL,
+  displayRange, robustRange, ON_OWN_GRID,
 } from './EngineRelay.js';
 
 describe('createVolumeStore', () => {
@@ -59,6 +60,15 @@ describe('engineConfigJson', () => {
     expect(supplied.masking.custom_mask_tool).toBe(SUPPLIED_MASK_TOOL);
     expect(supplied.masking.inhomogeneity_correction).toBe(plain.masking.inhomogeneity_correction);
   });
+
+  test('makes QSM alone by default, or the outputs asked for', () => {
+    const settings = { dipole_inversion: 'tkd' };
+    const pipeline = (outputs) => JSON.parse(engineConfigJson(settings, outputs && { outputs })).pipeline;
+    expect(pipeline()).toMatchObject({ do_qsm: true, do_swi: false, do_t2starmap: false, do_r2starmap: false });
+    expect(pipeline({ qsm: false, swi: true })).toMatchObject({ do_qsm: false, do_swi: true, do_r2starmap: false });
+    expect(pipeline({ qsm: false, t2star: true, r2star: true }))
+      .toMatchObject({ do_qsm: false, do_swi: false, do_t2starmap: true, do_r2starmap: true });
+  });
 });
 
 describe('outputStage', () => {
@@ -77,9 +87,32 @@ describe('outputStage', () => {
     }
   });
 
+  test('lists SWI, its projection and the relaxometry maps', () => {
+    expect(outputStage('Swi').stage).toBe('swi');
+    expect(outputStage('SwiMip').stage).toBe('mip');
+    expect(outputStage('R2star').stage).toBe('r2star');
+    expect(outputStage('T2star').stage).toBe('t2star');
+    expect(ON_OWN_GRID).toEqual(['SwiMip']);
+  });
+
   test('lists the brain mask only when the engine computed it', () => {
     expect(outputStage('BrainMask')).toBeNull();
     expect(outputStage('BrainMask', { computedMask: true }).stage).toBe('mask');
+  });
+});
+
+describe('displayRange', () => {
+  test('shows a relaxometry map from 0 to a high percentile inside the brain mask', () => {
+    const r2 = Float32Array.from({ length: 101 }, (_, i) => i);
+    const mask = Uint8Array.from({ length: 101 }, (_, i) => (i <= 50 ? 1 : 0));
+    // 1..50 inside the mask (0 is left out as background).
+    expect(robustRange(r2, mask, 2, 98)).toEqual([2, 50]);
+    expect(displayRange('R2star', r2, mask)).toEqual([0, 50]);
+    expect(displayRange('T2star', r2, mask)).toEqual([0, 46]);
+    // A mask on another grid is not used.
+    expect(displayRange('R2star', r2, new Uint8Array(3))).toEqual([0, 99]);
+    expect(displayRange('Chi', r2, mask)).toBeNull();
+    expect(displayRange('R2star', new Float32Array(4), mask)).toBeNull();
   });
 });
 

@@ -76,10 +76,13 @@ export const SUPPLIED_MASK_TOOL = 'qsmbly';
 /**
  * The PipelineConfig JSON a run uses: the settings, as the exported config, command and methods
  * text describe them; with `suppliedMask`, the mask from the mask builder takes the place of
- * computing one.
+ * computing one. `outputs` says what the run makes (`{ qsm, swi, t2star, r2star }`; QSM alone by
+ * default).
  */
-export function engineConfigJson(pipelineSettings, { suppliedMask = false } = {}) {
-  const config = buildConfig(pipelineSettings);
+export function engineConfigJson(pipelineSettings, { suppliedMask = false, outputs = { qsm: true } } = {}) {
+  const config = buildConfig(pipelineSettings, {
+    doQsm: !!outputs.qsm, doSwi: !!outputs.swi, doT2star: !!outputs.t2star, doR2star: !!outputs.r2star,
+  });
   if (suppliedMask) config.masking = { ...config.masking, custom_mask_tool: SUPPLIED_MASK_TOOL };
   return JSON.stringify(
     config,
@@ -105,7 +108,47 @@ const OUTPUT_STAGES = {
   CombinedRawChi: ['chiTwoPass', 'Two-pass QSM, unreferenced (ppm)', false],
   SinglePassChi: ['chiSinglePass', 'Single-pass QSM (ppm)', false],
   Chi: ['final', 'QSM Result (ppm)', true],
+  Swi: ['swi', 'SWI', true],
+  SwiMip: ['mip', 'SWI mIP', true],
+  R2star: ['r2star', 'R2* Map (1/s)', true],
+  T2star: ['t2star', 'T2* Map (s)', true],
 };
+
+/**
+ * Engine outputs that are only ever on a grid of their own (a minimum-intensity projection's
+ * shorter one), which the engine does not pass to the observer's `output`: the worker asks for
+ * them once the run is done.
+ */
+export const ON_OWN_GRID = ['SwiMip'];
+
+/**
+ * The [low, high] percentiles of `data`'s non-zero, finite values, inside `mask` when there is
+ * one; null when there are none.
+ */
+export function robustRange(data, mask, lowPct = 2, highPct = 98) {
+  const values = [];
+  for (let i = 0; i < data.length; i++) {
+    if ((!mask || mask[i]) && data[i] !== 0 && Number.isFinite(data[i])) values.push(data[i]);
+  }
+  if (values.length === 0) return null;
+  values.sort((a, b) => a - b);
+  return [values[Math.floor(values.length * lowPct / 100)], values[Math.floor(values.length * highPct / 100)]];
+}
+
+/** Upper percentile the viewer's window for a relaxometry map stops at (it starts at 0). */
+const RELAXOMETRY_WINDOW = { R2star: 98, T2star: 90 };
+
+/**
+ * The viewer's display range for an engine output (`key`), or null for its own default: a
+ * relaxometry map is shown from 0 up to a high percentile inside the brain mask, so a few
+ * extreme voxels outside the tissue do not wash it out.
+ */
+export function displayRange(key, volume, mask) {
+  const high = RELAXOMETRY_WINDOW[key];
+  if (!high) return null;
+  const range = robustRange(volume, mask?.length === volume.length ? mask : null, 2, high);
+  return range ? [0, range[1]] : null;
+}
 
 /**
  * How the viewer lists an engine output (`key`, the engine's name for it), or null for one it

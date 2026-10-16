@@ -2518,65 +2518,58 @@ class QSMApp {
     }
   }
 
-  async _runRawPipeline() {
-    // Validation
+  /**
+   * The inputs of a magnitude/phase run through the engine, with the buffers to transfer, or
+   * null (after telling the user) if one is missing. `customMaskBuffer` is the mask from the
+   * masking panel, when there is one.
+   */
+  async _rawRunData() {
     const magCount = this.fileIOController.buckets.magnitude.length;
     const phaseCount = this.fileIOController.buckets.phase.length;
     const echoTimes = this.getEchoTimesFromInputs();
-    const echoTimeCount = echoTimes.length;
 
     if (magCount === 0 || phaseCount === 0) {
       this.updateOutput("Please upload both magnitude and phase files");
-      return;
+      return null;
     }
 
     if (magCount !== phaseCount) {
       this.updateOutput(`File count mismatch: ${magCount} magnitude, ${phaseCount} phase`);
-      return;
+      return null;
     }
 
-    if (echoTimeCount === 0) {
+    if (echoTimes.length === 0) {
       this.updateOutput("Please enter echo times");
-      return;
+      return null;
     }
 
-    // Get parameters
     const magField = parseFloat(document.getElementById('magField').value);
-
     if (!magField || magField <= 0) {
       this.updateOutput("Please enter a valid magnetic field strength");
-      return;
+      return null;
     }
 
-    try {
-      // Read file buffers
-      const magnitudeBuffers = [];
-      const phaseBuffers = [];
-
-      for (let i = 0; i < magCount; i++) {
-        const magFile = this.fileIOController.buckets.magnitude[i]?.file;
-        const phaseFile = this.fileIOController.buckets.phase[i]?.file;
-
-        if (magFile && phaseFile) {
-          magnitudeBuffers.push(await magFile.arrayBuffer());
-          phaseBuffers.push(await phaseFile.arrayBuffer());
-        }
+    const magnitudeBuffers = [];
+    const phaseBuffers = [];
+    for (let i = 0; i < magCount; i++) {
+      const magFile = this.fileIOController.buckets.magnitude[i]?.file;
+      const phaseFile = this.fileIOController.buckets.phase[i]?.file;
+      if (magFile && phaseFile) {
+        magnitudeBuffers.push(await magFile.arrayBuffer());
+        phaseBuffers.push(await phaseFile.arrayBuffer());
       }
+    }
 
-      // Prepare custom mask if available
-      let customMaskBuffer = null;
-      if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
-        const maskNifti = this.maskController.createMaskNifti(this.maskController.currentMaskData);
-        customMaskBuffer = maskNifti;
-        this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
-      }
+    let customMaskBuffer = null;
+    if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
+      customMaskBuffer = this.maskController.createMaskNifti(this.maskController.currentMaskData);
+      this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
+    }
 
-      // Show phase image at the start
-      await this.visualizePhase();
-
-      // Run pipeline via executor. The run computes its own combined magnitude, as `qsmxt run`
-      // does; the sidecars carry what the headers do not (B0 direction, slice geometry).
-      const started = await this.pipelineExecutor.run({
+    // The run computes its own combined magnitude, as `qsmxt run` does; the sidecars carry what
+    // the headers do not (B0 direction, slice geometry).
+    return {
+      data: {
         inputMode: 'raw',
         magnitudeBuffers,
         phaseBuffers,
@@ -2585,13 +2578,24 @@ class QSMApp {
         customMaskBuffer,
         sidecars: await this.fileIOController.getPhaseSidecars(),
         pipelineSettings: this.pipelineSettings
-      }, transferable(magnitudeBuffers, phaseBuffers, customMaskBuffer));
+      },
+      transfer: transferable(magnitudeBuffers, phaseBuffers, customMaskBuffer),
+    };
+  }
 
+  /**
+   * Start a magnitude/phase run with `start(data, transfer)` (one of the executor's run methods),
+   * disabling `buttonId` while it runs.
+   */
+  async _startRawRun(start, buttonId) {
+    try {
+      const run = await this._rawRunData();
+      if (!run) return;
+      const started = await start(run.data, run.transfer);
       if (started) {
         document.getElementById('cancelPipeline').disabled = false;
-        document.getElementById('runPipelineSidebar').disabled = true;
+        document.getElementById(buttonId).disabled = true;
       }
-
     } catch (error) {
       this.updateOutput(`Error: ${error.message}`);
       this.setProgress(0, 'Failed');
@@ -2599,6 +2603,14 @@ class QSMApp {
       this.updateEchoInfo();
       console.error(error);
     }
+  }
+
+  async _runRawPipeline() {
+    await this._startRawRun(async (data, transfer) => {
+      // Show phase image at the start
+      await this.visualizePhase();
+      return this.pipelineExecutor.run(data, transfer);
+    }, 'runPipelineSidebar');
   }
 
   /**
@@ -3426,54 +3438,7 @@ class QSMApp {
       this.updateOutput("SWI requires raw magnitude + phase data");
       return;
     }
-
-    const magCount = this.fileIOController.buckets.magnitude.length;
-    const phaseCount = this.fileIOController.buckets.phase.length;
-
-    if (magCount === 0 || phaseCount === 0) {
-      this.updateOutput("Please upload both magnitude and phase files");
-      return;
-    }
-
-    try {
-      const magnitudeBuffers = [];
-      const phaseBuffers = [];
-
-      // Only need first echo for SWI
-      const magFile = this.fileIOController.buckets.magnitude[0]?.file;
-      const phaseFile = this.fileIOController.buckets.phase[0]?.file;
-
-      if (magFile && phaseFile) {
-        magnitudeBuffers.push(await magFile.arrayBuffer());
-        phaseBuffers.push(await phaseFile.arrayBuffer());
-      }
-
-      let customMaskBuffer = null;
-      if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
-        customMaskBuffer = this.maskController.createMaskNifti(this.maskController.currentMaskData);
-      }
-
-      const preparedMagnitude = this.maskController.preparedMagnitudeData;
-
-      const started = await this.pipelineExecutor.runSWI({
-        magnitudeBuffers,
-        phaseBuffers,
-        maskThreshold: this.maskController.maskThreshold,
-        customMaskBuffer,
-        preparedMagnitude,
-        pipelineSettings: this.pipelineSettings
-      }, transferable(magnitudeBuffers, phaseBuffers, customMaskBuffer));
-
-      if (started) {
-        document.getElementById('cancelPipeline').disabled = false;
-        document.getElementById('runSWI').disabled = true;
-      }
-
-    } catch (error) {
-      this.updateOutput(`Error: ${error.message}`);
-      this.setProgress(0, 'Failed');
-      console.error(error);
-    }
+    await this._startRawRun((data, transfer) => this.pipelineExecutor.runSWI(data, transfer), 'runSWI');
   }
 
   async runT2starR2star() {
@@ -3485,7 +3450,7 @@ class QSMApp {
         && !(await this.loadCustomMaskFile())) return;
     const mode = this.fileIOController.getInputMode();
     if (mode !== 'raw') {
-      this.updateOutput("T2*/R2* requires raw magnitude data (current mode: " + mode + ")");
+      this.updateOutput("T2*/R2* requires raw magnitude and phase data (current mode: " + mode + ")");
       return;
     }
 
@@ -3494,46 +3459,8 @@ class QSMApp {
       this.updateOutput(`T2*/R2* mapping requires 3+ echo magnitudes (found ${magCount})`);
       return;
     }
-
-    try {
-      const magnitudeBuffers = [];
-      for (const entry of this.fileIOController.buckets.magnitude) {
-        if (entry?.file) {
-          magnitudeBuffers.push(await entry.file.arrayBuffer());
-        }
-      }
-
-      const echoTimes = this.getEchoTimesFromInputs();
-      if (echoTimes.length < 3) {
-        this.updateOutput(`T2*/R2* mapping requires echo times for 3+ echoes (found ${echoTimes.length}). Check that JSON sidecars with EchoTime are loaded.`);
-        return;
-      }
-
-      let customMaskBuffer = null;
-      if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
-        customMaskBuffer = this.maskController.createMaskNifti(this.maskController.currentMaskData);
-      }
-
-      const preparedMagnitude = this.maskController.preparedMagnitudeData;
-
-      const started = await this.pipelineExecutor.runT2starR2star({
-        magnitudeBuffers,
-        maskThreshold: this.maskController.maskThreshold,
-        customMaskBuffer,
-        preparedMagnitude,
-        echoTimes
-      }, transferable(magnitudeBuffers, customMaskBuffer));
-
-      if (started) {
-        document.getElementById('cancelPipeline').disabled = false;
-        document.getElementById('runT2starR2star').disabled = true;
-      }
-
-    } catch (error) {
-      this.updateOutput(`Error: ${error.message}`);
-      this.setProgress(0, 'Failed');
-      console.error(error);
-    }
+    await this._startRawRun(
+      (data, transfer) => this.pipelineExecutor.runT2starR2star(data, transfer), 'runT2starR2star');
   }
 
   // BET Settings Modal

@@ -16,7 +16,8 @@ import { scaleVoxelSize } from './modules/mask/RodentMask.js';
 import { createGridGuard, gridMismatch, requireVoxelCount } from './modules/file-io/GridAgreement.js';
 import { gunzipNifti, parseNiftiHeader, sameNiftiGrid } from './modules/file-io/NiftiUtils.js';
 import {
-  createVolumeStore, engineSidecars, engineConfigJson, outputStage, createPlanProgress,
+  createVolumeStore, engineSidecars, engineConfigJson, outputStage, createPlanProgress, displayRange,
+  ON_OWN_GRID,
 } from './worker/EngineRelay.js';
 import * as QSMConfig from './app/config.js';
 import { parseRegistry, fetchModelWeights, loadDlWasm } from './modules/ModelWeights.js';
@@ -198,20 +199,6 @@ function logRange(label, data, mask) {
   postLog(`${label}: [${lo.toFixed(4)}, ${hi.toFixed(4)}] ppm`);
 }
 
-function computeRobustRange(data, mask, lowPct = 2, highPct = 98) {
-  const values = [];
-  for (let i = 0; i < data.length; i++) {
-    if ((!mask || mask[i]) && data[i] !== 0 && isFinite(data[i])) {
-      values.push(data[i]);
-    }
-  }
-  if (values.length === 0) return null;
-  values.sort((a, b) => a - b);
-  const lo = values[Math.floor(values.length * lowPct / 100)];
-  const hi = values[Math.floor(values.length * highPct / 100)];
-  return [lo, hi];
-}
-
 /** The QSMxT and QSM.rs this bundle links (from its Cargo.lock; see rust-wasm/build.rs). */
 function buildVersions() {
   return JSON.parse(wasmModule.get_dependency_versions_wasm());
@@ -255,45 +242,6 @@ async function initializeWasm() {
   } catch (e) {
     // Reported once, by whichever handler called us (onmessage, or a request's own error reply).
     throw new Error(`WASM load failed: ${e.message}`, { cause: e });
-  }
-}
-
-// Shared SWI computation - called from any pipeline after phase unwrapping
-function computeSWI(pipelineSettings, unwrappedPhase, magnitude, mask, dims, voxelSize, affine) {
-  const [nx, ny, nz] = dims;
-  const [vsx, vsy, vsz] = voxelSize;
-
-  postLog('Computing Susceptibility Weighted Image...');
-
-  const swiSettings = pipelineSettings?.swi || QSMConfig.PIPELINE_DEFAULTS.swi;
-  const scalingMap = { 'tanh': 0, 'negative_tanh': 1, 'positive': 2, 'negative': 3, 'triangular': 4 };
-  const scalingType = scalingMap[swiSettings.scaling];
-  if (scalingType === undefined) {
-    throw new Error(`Unknown SWI scaling '${swiSettings.scaling}' (expected one of ${Object.keys(scalingMap).join(', ')})`);
-  }
-
-  const swiResult = new Float64Array(wasmModule.calculate_swi_wasm(
-    unwrappedPhase, magnitude, mask,
-    nx, ny, nz, vsx, vsy, vsz,
-    swiSettings.hp_sigma[0], swiSettings.hp_sigma[1], swiSettings.hp_sigma[2],
-    scalingType, swiSettings.strength
-  ));
-
-  sendStageData('swi', swiResult, dims, voxelSize, affine, 'SWI');
-  postLog('SWI complete');
-
-  // Minimum intensity projection
-  const mip_window = swiSettings.mip_window || 0;
-  if (mip_window > 0 && mip_window <= nz) {
-    // Each mIP slice stands for a slab, so the projection carries its own grid and affine
-    // (origin shifted (window - 1) / 2 slices) rather than reusing the source ones.
-    const mip = wasmModule.create_mip_wasm(
-      swiResult, nx, ny, nz, affine, mip_window
-    );
-    const mipResult = new Float64Array(mip.data);
-    const mipDims = Array.from(mip.dims);
-    sendStageData('mip', mipResult, mipDims, voxelSize, Array.from(mip.affine), 'SWI mIP');
-    postLog(`mIP complete (window=${mip_window}, output nz=${mipDims[2]})`);
   }
 }
 
@@ -359,9 +307,11 @@ async function provideWeights(mod, models) {
 /**
  * A magnitude/phase run through QSMxT's engine (rust-wasm/src/engine.rs): `qsmxt run`'s plan,
  * steps and numbers, with the volumes kept here, outside the WASM heap. Outputs reach the viewer
- * as each step produces them.
+ * as each step produces them; those on a grid of their own (a projection, or an output a
+ * resampled run returned to the acquired grid) once the run is done.
+ * @param {Object} [outputs] - what to make: `{ qsm, swi, t2star, r2star }` (QSM by default)
  */
-async function runEnginePipeline(data) {
+async function runEnginePipeline(data, outputs = { qsm: true }) {
   const { magnitudeBuffers, phaseBuffers, echoTimes, magField, customMaskBuffer, pipelineSettings, sidecars } = data;
   const b0 = requireFieldStrength(magField);
   const nEchoes = echoTimes.length;
@@ -383,7 +333,7 @@ async function runEnginePipeline(data) {
   }
   const sidecarsJson = JSON.stringify(engineSidecars(echoTimes, b0, sidecars));
   const suppliedMask = !!customMaskBuffer;
-  const configJson = engineConfigJson(pipelineSettings, { suppliedMask });
+  const configJson = engineConfigJson(pipelineSettings, { suppliedMask, outputs });
 
   // The plan says which models the run needs; the deep-learning bundle is loaded only for those.
   const facts = JSON.parse(wasmModule.scan_facts_wasm(new Uint32Array(grid.dims), sidecarsJson, hasMagnitude));
@@ -405,6 +355,15 @@ async function runEnginePipeline(data) {
     if (suppliedMask) engine.supplyMask(new Uint8Array(customMaskBuffer), 'the masking panel');
     const progress = createPlanProgress(plan);
     let doing = '';
+    const shown = new Set();
+    const show = (key, { dims, voxel_size: voxelSize, affine }) => {
+      const stage = outputStage(key, { computedMask: !suppliedMask });
+      const volume = volumes.get(key);
+      if (!stage || !(volume instanceof Float32Array || volume instanceof Uint8Array)) return;
+      shown.add(key);
+      sendStageData(stage.stage, Float64Array.from(volume), dims, voxelSize, affine,
+        stage.description, stage.display, displayRange(key, volume, volumes.get('BrainMask')));
+    };
     engine.run(configJson, {
       stage(step, algorithm, event, text) {
         self.postMessage({ type: 'stage', step, algorithm, event, text });
@@ -420,14 +379,14 @@ async function runEnginePipeline(data) {
         postLog(level === 'INFO' ? message : `${level === 'WARN' ? 'Warning' : level}: ${message}`);
       },
       output(key) {
-        const shown = outputStage(key, { computedMask: !suppliedMask });
-        const volume = volumes.get(key);
-        if (!shown || !(volume instanceof Float32Array || volume instanceof Uint8Array)) return;
-        const { dims, voxel_size: voxelSize, affine } = volumes.grid;
-        sendStageData(shown.stage, Float64Array.from(volume), dims, voxelSize, affine,
-          shown.description, shown.display);
+        show(key, volumes.grid);
       },
     });
+    // The engine passes `output` only volumes on the run's grid.
+    for (const key of new Set([...shown, ...ON_OWN_GRID])) {
+      const geometry = engine.geometry(key);
+      if (geometry) show(key, JSON.parse(geometry));
+    }
   } finally {
     engine.free();
   }
@@ -1363,176 +1322,6 @@ async function runQsmartFieldMapPipeline(data) {
   postComplete({ success: true });
 }
 
-// =========================================================================
-// SWI-only pipeline
-// =========================================================================
-async function runT2starR2starPipeline(data) {
-  const {
-    magnitudeBuffers, maskThreshold, customMaskBuffer, preparedMagnitude, echoTimes
-  } = data;
-
-  const nEchoes = magnitudeBuffers.length;
-  if (nEchoes < 3) {
-    throw new Error(`T2*/R2* mapping requires 3+ echoes, got ${nEchoes}`);
-  }
-
-  // Every volume this run loads has to sit on one grid, and the first one loaded sets it.
-  const runGrid = runGridGuard();
-
-  // Step 1: Load magnitude data
-  postProgress(0.05, 'Loading magnitude data...');
-  postLog(`T2*/R2*: Loading ${nEchoes} echo magnitudes...`);
-
-  const magnitude4d = [];
-  let dims, voxelSize, affine;
-  for (let i = 0; i < nEchoes; i++) {
-    const result = runGrid.load(magnitudeBuffers[i], `magnitude echo ${i + 1}`);
-    magnitude4d.push(new Float64Array(result.data));
-    if (i === 0) {
-      dims = Array.from(result.dims);
-      voxelSize = Array.from(result.voxelSize);
-      affine = Array.from(result.affine);
-    }
-  }
-
-  const [nx, ny, nz] = dims;
-  const voxelCount = nx * ny * nz;
-  postLog(`Data: ${nx}x${ny}x${nz}, ${nEchoes} echoes`);
-
-  // Step 2: Create mask
-  postProgress(0.15, 'Creating mask...');
-  const thresholdFraction = (maskThreshold || 15) / 100;
-  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
-  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
-  // The prepared masking input arrives as a bare array rather than a file, and goes stale if the
-  // files were changed after Prepare.
-  if (hasPreparedMagnitude) {
-    runGrid.requireVoxelCount(preparedMagnitude, 'the prepared masking input');
-  }
-
-  let mask;
-  if (hasCustomMask) {
-    const maskResult = runGrid.load(customMaskBuffer, 'the custom mask');
-    mask = new Uint8Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
-    }
-  } else {
-    const maskMagnitude = hasPreparedMagnitude
-      ? new Float64Array(preparedMagnitude)
-      : magnitude4d[0];
-    mask = createThresholdMask(maskMagnitude, thresholdFraction);
-  }
-
-  // Step 3: Compute R2* via ARLO
-  postProgress(0.30, 'Computing R2* map...');
-  postLog(`Computing R2* map (ARLO, ${nEchoes} echoes)...`);
-
-  const interleaved = new Float64Array(voxelCount * nEchoes);
-  for (let e = 0; e < nEchoes; e++) {
-    for (let v = 0; v < voxelCount; v++) {
-      interleaved[v * nEchoes + e] = magnitude4d[e][v];
-    }
-  }
-
-  const echoTimesSec = new Float64Array(echoTimes.map(t => t / 1000));
-
-  const r2starMap = new Float64Array(wasmModule.r2star_arlo_wasm(
-    interleaved, mask, echoTimesSec, nx, ny, nz
-  ));
-
-  const r2range = computeRobustRange(r2starMap, mask, 2, 98);
-  sendStageData('r2star', r2starMap, dims, voxelSize, affine, 'R2* Map (1/s)', true, r2range ? [0, r2range[1]] : null);
-  postLog('R2* map computed');
-
-  // Step 4: Compute T2* = 1/R2*
-  postProgress(0.80, 'Computing T2* map...');
-  const t2starMap = new Float64Array(voxelCount);
-  for (let i = 0; i < voxelCount; i++) {
-    t2starMap[i] = (mask[i] && r2starMap[i] > 0) ? (1.0 / r2starMap[i]) : 0;
-  }
-  const t2range = computeRobustRange(t2starMap, mask, 2, 90);
-  sendStageData('t2star', t2starMap, dims, voxelSize, affine, 'T2* Map (s)', true, t2range ? [0, t2range[1]] : null);
-  postLog('T2* map computed');
-
-  postProgress(1.0, 'T2*/R2* complete!');
-  postLog('T2*/R2* mapping completed successfully!');
-  postComplete({ success: true });
-}
-
-async function runSWIPipeline(data) {
-  const {
-    magnitudeBuffers, phaseBuffers,
-    maskThreshold, customMaskBuffer, preparedMagnitude, pipelineSettings
-  } = data;
-
-  const thresholdFraction = (maskThreshold || 15) / 100;
-  const hasCustomMask = customMaskBuffer !== null && customMaskBuffer !== undefined;
-  const hasPreparedMagnitude = preparedMagnitude !== null && preparedMagnitude !== undefined;
-
-  // Every volume this run loads has to sit on one grid, and the first one loaded sets it.
-  const runGrid = runGridGuard();
-
-  // Step 1: Load first echo NIfTI data
-  postProgress(0.05, 'Loading NIfTI data...');
-  postLog("SWI: Loading data...");
-
-  const magResult = runGrid.load(magnitudeBuffers[0], 'magnitude echo 1');
-  const magnitude = new Float64Array(magResult.data);
-  const dims = Array.from(magResult.dims);
-  const voxelSize = Array.from(magResult.voxelSize);
-  const affine = Array.from(magResult.affine);
-
-  const phaseResult = runGrid.load(phaseBuffers[0], 'phase echo 1');
-  const phase = scalePhaseToPi(phaseResult.data);
-
-  const [nx, ny, nz] = dims;
-  const [vsx, vsy, vsz] = voxelSize;
-  const voxelCount = nx * ny * nz;
-  // The prepared masking input arrives as a bare array rather than a file, and goes stale if the
-  // files were changed after Prepare.
-  if (hasPreparedMagnitude) {
-    runGrid.requireVoxelCount(preparedMagnitude, 'the prepared masking input');
-  }
-
-  postLog(`Data: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm`);
-
-  // Step 2: Create or load mask
-  postProgress(0.15, 'Creating mask...');
-  let mask;
-
-  if (hasCustomMask) {
-    const maskResult = runGrid.load(customMaskBuffer, 'the custom mask');
-    mask = new Uint8Array(voxelCount);
-    for (let i = 0; i < voxelCount; i++) {
-      mask[i] = maskResult.data[i] > 0.5 ? 1 : 0;
-    }
-  } else {
-    const maskMagnitude = hasPreparedMagnitude
-      ? new Float64Array(preparedMagnitude)
-      : magnitude;
-    mask = createThresholdMask(maskMagnitude, thresholdFraction);
-  }
-
-  const maskCount = mask.reduce((a, b) => a + b, 0);
-  postLog(`Mask: ${maskCount}/${voxelCount} voxels (${(100 * maskCount / voxelCount).toFixed(1)}%)`);
-
-  // Step 3: Laplacian phase unwrapping
-  postProgress(0.25, 'Unwrapping phase...');
-  postLog("Laplacian phase unwrapping...");
-  const unwrappedPhase = new Float64Array(wasmModule.laplacian_unwrap_wasm(
-    phase, mask, nx, ny, nz, vsx, vsy, vsz
-  ));
-
-  // Step 4: SWI computation
-  postProgress(0.50, 'Computing SWI...');
-  computeSWI(pipelineSettings, unwrappedPhase, magnitude, mask, dims, voxelSize, affine);
-
-  postProgress(1.0, 'SWI complete!');
-  postLog("SWI pipeline completed successfully!");
-  postComplete({ success: true });
-}
-
 // Handle messages from main thread
 /**
  * Run an export serializer and reply under `type` either way.
@@ -1579,11 +1368,11 @@ self.onmessage = async function (e) {
         break;
 
       case 'runSWI':
-        await runSWIPipeline(data);
+        await runEnginePipeline(data, { qsm: false, swi: true });
         break;
 
       case 'runT2starR2star':
-        await runT2starR2starPipeline(data);
+        await runEnginePipeline(data, { qsm: false, t2star: true, r2star: true });
         break;
 
       case 'biasCorrection':
