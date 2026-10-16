@@ -29,7 +29,7 @@ debug-log = []
 # Pinned by commit until a QSMxT release includes the engine; then it moves to a release tag, which
 # the bump-qsmxt-engine workflow maintains. TEMP: pinned to the head of QSMxT/QSMxT#347 (stacked on
 # #346 and #345); re-pin to QSMxT main once they are merged.
-qsmxt-engine = { git = "https://github.com/QSMxT/QSMxT.git", rev = "fa87d3e5a9470858d3e7622e538c2685c9a305b7" }
+qsmxt-engine = { git = "https://github.com/QSMxT/QSMxT.git", rev = "c40193f5042a5e9be94b67540062bc4c28d7bfc0" }
 
 # WASM bindings
 wasm-bindgen = "0.2"

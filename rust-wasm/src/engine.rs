@@ -31,6 +31,12 @@ pub fn item_key(item: &Item) -> String {
     item.key()
 }
 
+/// The name the working-grid version of `item` is kept aside under while `item` holds its version on
+/// the acquired grid.
+pub fn aside_key(item: &Item) -> String {
+    format!("WorkingGrid:{}", item.key())
+}
+
 /// A JS object's method `name`, if it has one.
 fn method(obj: &Object, name: &str) -> Result<Option<Function>, JsValue> {
     let value = Reflect::get(obj, &JsValue::from_str(name))?;
@@ -137,9 +143,13 @@ pub fn provide_weights_wasm(file_name: &str, bytes: Vec<u8>) -> Result<(), JsVal
 /// - `remove(key)`: forget it;
 /// - optionally `begin(grid)`: the run's grid (`RunMetadata` JSON) is known;
 /// - optionally `record(recorded)`: what the engine has recorded besides the volumes changed
-///   (`Recorded` JSON: completed steps and their keys, the load step's grid, reports). Kept beside
-///   the volumes, it lets a new [`Engine`] over them (after the worker was terminated, say) carry
-///   on with every completed step cached.
+///   (`Recorded` JSON: completed steps and their keys, the load step's grid, reports, the grids of
+///   volumes not on the run's). Kept beside the volumes, it lets a new [`Engine`] over them (after
+///   the worker was terminated, say) carry on with every completed step cached.
+///
+/// An output returned to the acquired grid replaces its working-grid version, which is kept aside
+/// under [`aside_key`] (`WorkingGrid:Chi`, ...), through `copy` and `remove`, until a later run
+/// needs it back.
 ///
 /// Inputs given as NIfTI files are decoded by qsm-core, as `qsmxt run` decodes its files. One whose
 /// values are all exact in float32 keeps its decoded values beside the file (`decoded`, a
@@ -194,6 +204,25 @@ impl PageVolumes {
         qsm_core::io::load_nifti(&bytes.to_vec())
             .map(Some)
             .map_err(|e| EngineError::InvalidInput(format!("{}: {e}", item_key(item))))
+    }
+
+    /// Keep `from`'s volume under `to` as well: `true` if there was one.
+    fn copy_key(&self, from: &str, to: &str) -> Result<bool, JsValue> {
+        self.copy
+            .call2(&self.this, &JsValue::from_str(from), &JsValue::from_str(to))
+            .map(|v| v.is_truthy())
+    }
+
+    /// Forget the volume under `key`: `true` if there was one.
+    fn remove_key(&self, key: &str) -> bool {
+        self.remove
+            .call1(&self.this, &JsValue::from_str(key))
+            .is_ok_and(|v| v.is_truthy())
+    }
+
+    /// Move the volume under `from` to `to`: `true` if there was one.
+    fn move_key(&self, from: &str, to: &str) -> bool {
+        matches!(self.copy_key(from, to), Ok(true)) && self.remove_key(from)
     }
 
     /// Keep `values` under `key` as float32.
@@ -280,20 +309,24 @@ impl Volumes for PageVolumes {
     }
 
     fn copy(&mut self, from: &Item, to: Item) -> Result<bool, EngineError> {
-        self.copy
-            .call2(
-                &self.this,
-                &JsValue::from_str(&item_key(from)),
-                &JsValue::from_str(&item_key(&to)),
-            )
-            .map(|v| v.is_truthy())
+        self.copy_key(&item_key(from), &item_key(&to))
             .map_err(|e| Self::failed(&to, e))
     }
 
     fn remove(&mut self, item: &Item) -> bool {
-        self.remove
-            .call1(&self.this, &JsValue::from_str(&item_key(item)))
-            .is_ok_and(|v| v.is_truthy())
+        self.remove_key(&item_key(item))
+    }
+
+    fn set_aside(&mut self, item: &Item) -> bool {
+        self.move_key(&item_key(item), &aside_key(item))
+    }
+
+    fn put_back(&mut self, item: &Item) -> bool {
+        self.move_key(&aside_key(item), &item_key(item))
+    }
+
+    fn drop_aside(&mut self, item: &Item) {
+        self.remove_key(&aside_key(item));
     }
 
     fn begin(&mut self, meta: &RunMetadata) {
