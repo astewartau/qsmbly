@@ -13,6 +13,9 @@ export default [
       'rust-wasm/**',
       'coverage/**',
       'deploy/**',
+      'vendor/**',
+      'test-results/**',
+      'playwright-report/**',
     ],
   },
   js.configs.recommended,
@@ -55,6 +58,13 @@ export default [
     files: ['js/**/*.test.js', 'js/test/**/*.js'],
     languageOptions: {
       globals: { ...globals.node, ...globals.jest },
+    },
+  },
+  {
+    // Playwright specs drive a browser from Node; page.evaluate callbacks run in the page.
+    files: ['tests/e2e/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
     },
   },
   {

@@ -1,0 +1,23 @@
+{
+  // Type-checks the new workspace (js/next) from its JSDoc, with no build step: `npm run typecheck`.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": false,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      // The bindings' generated types when a build is present (build.sh), else js/next's copy.
+      "qsm-wasm": ["wasm/qsm_wasm.d.ts", "js/next/types/qsm-wasm.d.ts"],
+      "@niivue/niivue": ["js/next/types/niivue.d.ts"]
+    }
+  },
+  "include": ["js/next/**/*.js", "js/next/types/*.d.ts"],
+  "exclude": ["js/next/**/*.test.js"]
+}
