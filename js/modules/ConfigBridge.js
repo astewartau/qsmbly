@@ -30,7 +30,7 @@ function nltvConfig(nltv) {
  * The returned object is JSON.stringify'd and handed to the WASM serializers; the
  * mask is passed separately as a CLI-style string (see maskSectionString).
  * @param {Object} settings - Pipeline settings from PipelineSettingsController.save()
- * @param {Object} options - { doSwi, doT2star, doR2star }
+ * @param {Object} options - { doQsm (default true), doSwi, doT2star, doR2star }
  * @returns {Object} config object matching the qsmxt-engine schema
  */
 export function buildConfig(settings, options = {}) {
@@ -42,7 +42,7 @@ export function buildConfig(settings, options = {}) {
 
   const config = {
     pipeline: {
-      do_qsm: true,
+      do_qsm: options.doQsm ?? true,
       do_swi: !!options.doSwi,
       do_t2starmap: !!options.doT2star,
       do_r2starmap: !!options.doR2star,

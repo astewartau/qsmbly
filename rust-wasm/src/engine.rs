@@ -564,4 +564,15 @@ impl Engine {
             .grid()
             .and_then(|m| serde_json::to_string(m).ok())
     }
+
+    /// The grid of the volume kept under `key` ([`item_key`]) when it is not the run's (Geometry
+    /// JSON: `dims`, `voxel_size`, `affine`): a minimum-intensity projection's, or an output's
+    /// once a resampled run has returned it to the acquired grid. `undefined` for a volume on the
+    /// run's grid. Outputs on a grid of their own are not passed to the observer's `output`.
+    pub fn geometry(&self, key: &str) -> Option<String> {
+        let item = Item::from_key(key)?;
+        self.store
+            .geometry(&item)
+            .and_then(|g| serde_json::to_string(g).ok())
+    }
 }
