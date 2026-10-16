@@ -49,6 +49,61 @@
  */
 
 /**
+ * A grid (qsmxt-engine `store::Geometry`): what a NIfTI header says (`nifti_geometry_wasm`), or
+ * the grid of a volume that is not on the run's.
+ * @typedef {object} Geometry
+ * @property {[number, number, number]} dims
+ * @property {[number, number, number]} voxel_size - mm
+ * @property {number[]} affine - 16 values, row-major
+ */
+
+/**
+ * Values the user typed in for what the files do not say (qsmxt-engine `inputs::FactOverrides`).
+ * @typedef {object} FactOverrides
+ * @property {number[] | null} [echo_times] - seconds
+ * @property {number | null} [field_strength] - tesla
+ * @property {[number, number, number] | null} [b0_dir]
+ */
+
+/**
+ * A scan as the page holds it (qsmxt-engine `inputs::ScanInputs`): each echo's headers and sidecar.
+ * @typedef {object} ScanInputs
+ * @property {{ phase: Geometry | null, magnitude: Geometry | null, sidecar: Record<string, any> | null }[]} echoes
+ * @property {FactOverrides} overrides
+ */
+
+/**
+ * One fact of a scan and where it came from (qsmxt-engine `inputs::Fact`).
+ * @typedef {object} Fact
+ * @property {'dims' | 'voxel_size' | 'echoes' | 'echo_times' | 'field_strength' | 'b0_dir' | 'magnitude' | 'manufacturer'} name
+ * @property {string} label
+ * @property {string | null} units
+ * @property {any} value - null when nothing gives it
+ * @property {'header' | 'sidecar' | 'typed' | 'files' | 'missing'} source
+ * @property {boolean} typed - whether the user can type a value in for it
+ * @property {string | null} note
+ */
+
+/**
+ * Something missing or inconsistent in a scan's files (qsmxt-engine `inputs::InputProblem`).
+ * @typedef {object} InputProblem
+ * @property {'error' | 'warning'} severity
+ * @property {Fact['name'] | null} fact
+ * @property {number | null} echo - from 1
+ * @property {'phase' | 'magnitude' | 'sidecar' | null} part
+ * @property {string} message
+ */
+
+/**
+ * What the engine makes of a scan's inputs (qsmxt-engine `inputs::ScanReport`, `scan_report_wasm`).
+ * @typedef {object} ScanReport
+ * @property {ScanFacts | null} facts - null while a fact a plan needs is missing
+ * @property {Fact[]} shown
+ * @property {InputProblem[]} problems
+ * @property {Record<string, any>[]} sidecars - each echo's sidecar as a run reads it
+ */
+
+/**
  * A plan step's stage as serde writes it: a unit variant is a string (`"Load"`), a pass variant an
  * object (`{ "Mask": "Main" }`, `{ "Inversion": "Reliable" }`).
  * @typedef {string | Record<string, 'Main' | 'Reliable'>} Stage
@@ -201,7 +256,7 @@
  * @typedef {object} EngineObserver
  * @property {(step: string, algorithm: string | null, event: StageEventKind, text: string | null) => void} [stage]
  * @property {(done: number, total: number) => void} [progress] - of the step being computed
- * @property {(level: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE', message: string) => void} [log]
+ * @property {(level: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE', message: string, step: string | null) => void} [log]
  * @property {(key: ItemKey) => void} [output] - a step kept a volume under `key`
  */
 

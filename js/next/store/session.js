@@ -13,17 +13,16 @@
  * @typedef {import('../protocol.js').Plan} Plan
  * @typedef {Record<string, any>} PipelineConfig
  *
- * @typedef {object} SessionInput
- * @property {string} name - file name
- * @property {'phase' | 'magnitude' | 'sidecar' | 'mask'} role
- * @property {number | null} echo - from 1
- * @property {number} bytes
+ * @typedef {import('../inputs.js').InputFile} InputFile
+ * @typedef {import('../protocol.js').ScanReport} ScanReport
+ * @typedef {import('../protocol.js').FactOverrides} FactOverrides
  *
  * @typedef {(config: PipelineConfig, facts: ScanFacts) => Plan | Promise<Plan>} Planner
  * @typedef {import('../protocol.js').SettingView} SettingView
  * @typedef {(config: PipelineConfig, facts: ScanFacts | null) => SettingView[] | Promise<SettingView[]>} SettingsViewFn
  */
 import { signal, computed, effect, batch } from '@preact/signals-core';
+import { scanInputs as scanInputsOf } from '../inputs.js';
 
 // v2: the defaults became the browser profile, so configs saved before are not comparable.
 export const CONFIG_STORAGE_KEY = 'qsmbly.next.config.v2';
@@ -85,7 +84,16 @@ export function configChanges(config, base, prefix = '') {
  * @param {(run: () => void) => void} [options.schedule] - when to re-plan after a change
  */
 export function createSession({ defaults, planner, settingsView = null, storage = null, schedule = (run) => queueMicrotask(run) }) {
-  const inputs = signal(/** @type {SessionInput[]} */ ([]));
+  /** The scan's files, each with its role (inputs.js). */
+  const files = signal(/** @type {InputFile[]} */ ([]));
+  /** What the user typed in for what the files do not say. */
+  const overrides = signal(/** @type {FactOverrides} */ ({}));
+  /** The scan as the engine reads it: the files' headers and sidecars, and the typed values. */
+  const scanInputs = computed(() => scanInputsOf(files.value, overrides.value));
+  /** What the engine made of the scan's inputs (`ScanInputs::facts`); null until files are loaded. */
+  const scan = signal(/** @type {ScanReport | null} */ (null));
+  /** Whether the facts are a loaded scan's, or the example's that the workspace plans with before any is loaded. */
+  const loaded = computed(() => files.value.length > 0);
   const facts = signal(/** @type {ScanFacts | null} */ (null));
   const config = signal(/** @type {PipelineConfig} */ (loadConfig(storage) ?? defaults));
   const undoStack = signal(/** @type {PipelineConfig[]} */ ([]));
@@ -188,7 +196,11 @@ export function createSession({ defaults, planner, settingsView = null, storage 
   });
 
   return {
-    inputs,
+    files,
+    overrides,
+    scanInputs,
+    scan,
+    loaded,
     facts,
     config,
     plan,

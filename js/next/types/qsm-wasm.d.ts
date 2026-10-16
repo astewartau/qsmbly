@@ -4,7 +4,7 @@
 
 export class Engine {
   free(): void;
-  constructor(volumes: object, sidecars_json: string, identity: string, recorded_json?: string | null);
+  constructor(volumes: object, inputs_json: string, identity: string, recorded_json?: string | null);
   facts(): string;
   grid(): string | undefined;
   plan(config_json: string): string;
@@ -34,6 +34,8 @@ export function get_model_registry_wasm(): string;
 export function plan_wasm(config_json: string, facts_json: string): string;
 export function provide_weights_wasm(file_name: string, bytes: Uint8Array): void;
 export function scan_facts_wasm(dims: Uint32Array, sidecars_json: string, has_magnitude: boolean): string;
+export function scan_report_wasm(inputs_json: string): string;
+export function nifti_geometry_wasm(nifti: Uint8Array): string;
 export function generate_command_wasm(config_json: string, mask_section: string): string;
 export function generate_methods_wasm(config_json: string, tool: string, mask_section: string): string;
 export function config_json_to_toml_wasm(config_json: string, mask_section: string): string;

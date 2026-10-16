@@ -2,6 +2,7 @@
 // UI still loading and running.
 import { test, expect } from '@playwright/test';
 import { readFileSync, rmSync } from 'node:fs';
+import { phantomFiles } from './phantom.js';
 
 /** Collect uncaught page errors and console errors, minus noise that is not ours. */
 function watchErrors(page) {
@@ -43,7 +44,8 @@ test.describe('next.html', () => {
 
     const pipeline = page.getByRole('navigation', { name: 'Pipeline' });
     await expect(pipeline).toBeVisible();
-    await expect(page.getByTestId('scan-summary')).toHaveText(/5 echoes · 2\.89 T · 184×256×128/);
+    // Until a scan is loaded, the plan is for the example's.
+    await expect(page.getByTestId('scan-summary')).toHaveText(/Example scan, not loaded: 5 echoes · 2\.89 T · 184×256×128/);
 
     // The steps in run order, each with its current choice; outputs that are off say so.
     await expect(pipeline.locator('.step')).toHaveCount(12);
@@ -60,13 +62,13 @@ test.describe('next.html', () => {
     await expect(page.getByTestId('memory')).toContainText('Peak 1.8 GB of 4.0 GB');
     await expect(page.getByTestId('downloads')).toHaveText('Downloads: none');
     await expect(page.getByTestId('problems')).toHaveText('No problems');
+    // Nothing to run until a scan is loaded.
+    await expect(page.getByTestId('run-button')).toBeDisabled();
 
-    // The viewer shows the synthetic χ map from the page's volume store.
+    // The viewer says how to start.
     const viewer = page.getByRole('region', { name: 'Viewer' });
-    await expect(viewer).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
-    await expect(viewer).toHaveAttribute('data-volume', 'Chi');
-    const canvasShot = await viewer.locator('canvas').screenshot();
-    expect(canvasShot.length).toBeGreaterThan(10_000); // a blank canvas compresses to far less
+    await expect(viewer).toHaveAttribute('data-state', 'empty');
+    await expect(viewer).toContainText('Load a scan in the Data step, or try the example.');
     const shot = await page.screenshot({ path: testInfo.outputPath('next-workspace.png') });
     await testInfo.attach('workspace', { body: shot, contentType: 'image/png' });
     expect(errors).toEqual([]);
@@ -377,14 +379,19 @@ test.describe('next.html', () => {
 
   test('switches the viewer between volumes in the store', async ({ page }) => {
     await page.goto('next.html');
+    await page.locator('[data-section="data"]').click();
+    await page.getByTestId('file-input').setInputFiles(phantomFiles());
     const viewer = page.getByRole('region', { name: 'Viewer' });
+    await expect(viewer).toHaveAttribute('data-volume', 'AcquiredMagnitude(1)', { timeout: 30_000 });
     await expect(viewer).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
-    await page.locator('.output-chip[data-key="CombinedMagnitude"]').click();
-    await expect(viewer).toHaveAttribute('data-volume', 'CombinedMagnitude');
+    await page.locator('.output-chip[data-key="AcquiredPhase(3)"]').click();
+    await expect(viewer).toHaveAttribute('data-volume', 'AcquiredPhase(3)');
     await expect(viewer).toHaveAttribute('data-state', 'ready');
+    const canvasShot = await viewer.locator('canvas').screenshot();
+    expect(canvasShot.length).toBeGreaterThan(10_000); // a blank canvas compresses to far less
     const shared = await page.evaluate(() => {
       const { store } = globalThis.qsmblyNext;
-      return { isolated: crossOriginIsolated, shared: store.get('Chi').buffer instanceof SharedArrayBuffer };
+      return { isolated: crossOriginIsolated, shared: store.entry('AcquiredPhase(3)').data.buffer instanceof SharedArrayBuffer };
     });
     expect(shared).toEqual({ isolated: true, shared: true });
   });
@@ -405,16 +412,18 @@ test.describe('next.html', () => {
 
   test('loads the example data into the store and shows it', async ({ page }) => {
     test.skip(!!process.env.QSMBLY_E2E_OFFLINE, 'needs the example data from Hugging Face');
+    test.setTimeout(5 * 60_000);
     const errors = watchErrors(page);
     await page.goto('next.html');
-    await page.getByRole('button', { name: /Load the example/ }).click();
+    await page.locator('[data-section="data"]').click();
+    await page.getByTestId('load-example').click();
     const viewer = page.getByRole('region', { name: 'Viewer' });
-    await expect(viewer).toHaveAttribute('data-volume', 'AcquiredMagnitude(1)', { timeout: 60_000 });
+    await expect(viewer).toHaveAttribute('data-volume', 'AcquiredMagnitude(1)', { timeout: 4 * 60_000 });
     await expect(viewer).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
     const grid = await page.evaluate(() => globalThis.qsmblyNext.store.entry('AcquiredPhase(1)').grid.dims);
     expect(grid).toEqual([184, 256, 128]);
-    await page.locator('[data-section="data"]').click();
-    await expect(page.locator('.files')).toContainText('Phase (as acquired), echo 1');
+    await expect(page.getByTestId('scan-summary')).toHaveText(/^\s*5 echoes · 2\.89 T · 184×256×128/);
+    await expect(page.locator('.files-roles > summary')).toContainText('20 files, 5 echoes');
     expect(errors).toEqual([]);
   });
 });

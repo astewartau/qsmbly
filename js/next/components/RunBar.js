@@ -41,7 +41,7 @@ export function RunBar({ session, store, models }) {
 
   return html`
     <footer class="runbar" aria-label="Run">
-      <button type="button" class="run-button" disabled title="Running comes to this workspace in a later step">Run</button>
+      <button type="button" class="run-button" data-testid="run-button" disabled title="Running comes to this workspace in a later step">Run</button>
       ${plan && !error
         ? html`<button type="button" class="runbar-item runbar-status plan-link" data-testid="plan-status" onClick=${showGraph}
             title="Show the pipeline graph">${status}</button>`

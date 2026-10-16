@@ -68,6 +68,19 @@ export function engineOps(wasm) {
     },
     /** The facts of a magnitude/phase scan from its matrix size and each echo's sidecar. @returns {ScanFacts} */
     scanFacts: (dims, sidecars, hasMagnitude) => JSON.parse(call(wasm.scan_facts_wasm, new Uint32Array(dims), json(sidecars), hasMagnitude)),
+    /**
+     * A scan's facts from what the page holds of it: each fact with its source, the input
+     * problems, and the sidecars a run reads (`ScanInputs::facts`).
+     * @param {import('../protocol.js').ScanInputs} inputs
+     * @returns {import('../protocol.js').ScanReport}
+     */
+    scanReport: (inputs) => JSON.parse(call(wasm.scan_report_wasm, json(inputs))),
+    /**
+     * A NIfTI file's grid, read as `qsmxt run` reads it.
+     * @param {Uint8Array} nifti
+     * @returns {import('../protocol.js').Geometry}
+     */
+    geometry: (nifti) => JSON.parse(call(wasm.nifti_geometry_wasm, nifti)),
     /** QSM.rs's model registry. @returns {ModelEntry[]} */
     models: () => JSON.parse(call(wasm.get_model_registry_wasm)),
   };

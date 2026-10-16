@@ -13,6 +13,7 @@
  * @property {import('../protocol.js').ModelEntry[]} models
  * @property {{ qsmxt: { version: string }, qsm_rs: { version: string } }} versions
  * @property {import('../engine/client.js').EngineClient} engine
+ * @property {import('../scan.js').ScanLoader} loader
  */
 import { html } from '../html.js';
 import { useState, useEffect } from 'preact/hooks';
@@ -22,7 +23,7 @@ import { GraphTab } from './GraphTab.js';
 import { CommandTab } from './CommandTab.js';
 import { Viewer } from '../viewer/Viewer.js';
 import { itemMeta } from '../items.js';
-import { putExampleEcho } from '../fixtures.js';
+import { decodeForViewer } from '../scan.js';
 import { installUndoKeys } from '../shortcuts.js';
 
 export const THEME_STORAGE_KEY = 'qsmbly.next.theme';
@@ -35,7 +36,7 @@ export function App({ session, store, workspace, providers }) {
     <div class="workspace">
       <${Header} session=${session} versions=${workspace.versions} />
       <div class="main">
-        <${Pipeline} session=${session} store=${store} schema=${workspace.schema} mask=${workspace.mask} />
+        <${Pipeline} session=${session} store=${store} schema=${workspace.schema} mask=${workspace.mask} loader=${workspace.loader} />
         <${TabbedPane} session=${session} store=${store} providers=${providers} />
       </div>
       <${RunBar} session=${session} store=${store} models=${workspace.models} />
@@ -72,7 +73,7 @@ function Header({ session, versions }) {
       <a class="brand" href="./">QSMbly</a>
       ${facts && html`
         <span class="scan-summary" data-testid="scan-summary">
-          ${facts.n_echoes} echoes · ${facts.field_strength.toFixed(2)} T · ${facts.dims.join('×')}
+          ${session.loaded.value ? '' : 'Example scan, not loaded: '}${facts.n_echoes} echoes · ${facts.field_strength.toFixed(2)} T · ${facts.dims.join('×')}
         </span>`}
       <span class="preview-badge" title=${`Plans with QSMxT ${versions?.qsmxt.version ?? ''}; it does not run anything yet`}>Preview</span>
       <span class="topbar-actions">
@@ -127,40 +128,37 @@ function TabbedPane({ session, store, providers }) {
 /** @param {{ session: Session, store: VolumeStore }} props */
 function ViewerPane({ session, store }) {
   store.version.value;
-  const keys = store.keys().filter((k) => store.entry(k)?.data);
-  const viewing = session.ui.viewing.value ?? keys[keys.length - 1] ?? null;
+  const keys = store.keys().filter((k) => store.entry(k)?.data || store.entry(k)?.nifti);
+  const viewing = session.ui.viewing.value;
   const entry = viewing ? store.entry(viewing) : undefined;
-  const volume = entry?.data && entry.grid ? { key: viewing, data: entry.data, grid: entry.grid, meta: itemMeta(viewing) } : null;
-  const [example, setExample] = useState({ busy: false, text: '' });
-
-  const loadExample = async () => {
-    setExample({ busy: true, text: 'Downloading…' });
+  const grid = entry?.grid;
+  // A volume whose grid does not match its voxels (yet) is not shown.
+  const fits = !!(entry?.data && grid?.dims && entry.data.length === grid.dims[0] * grid.dims[1] * grid.dims[2]);
+  const volume = fits && viewing && entry?.data && grid ? { key: viewing, data: entry.data, grid, meta: itemMeta(viewing) } : null;
+  const [error, setError] = useState('');
+  const view = async (k) => {
+    session.ui.viewing.value = k;
     try {
-      const added = await putExampleEcho(store, (text) => setExample({ busy: true, text }));
-      session.ui.viewing.value = added[0];
-      setExample({ busy: false, text: '' });
+      await decodeForViewer(store, k);
     } catch (e) {
-      setExample({ busy: false, text: `Could not download the example: ${e instanceof Error ? e.message : e}` });
+      setError(`Could not show ${itemMeta(k).label}: ${e instanceof Error ? e.message : e}`);
     }
   };
+  const empty = session.loaded.value ? 'Choose a volume below.' : 'Load a scan in the Data step, or try the example.';
 
   return html`
     <div class="viewer-body">
-      <${Viewer} volume=${volume} />
-      <section class="outputs" aria-label="Outputs">
-        <span class="outputs-title">Outputs</span>
-        <div class="outputs-list" role="listbox" aria-label="Volumes">
-          ${keys.map((k) => html`
-            <button type="button" role="option" class="chip output-chip" data-key=${k}
-              aria-selected=${k === viewing} onClick=${() => { session.ui.viewing.value = k; }}>
-              ${itemMeta(k).label}${store.entry(k)?.step === 'fixture' ? html` <span class="muted">(synthetic)</span>` : ''}
-            </button>`)}
-        </div>
-        <button type="button" class="btn small example-button" disabled=${example.busy} onClick=${loadExample}>
-          Load the example's first echo (15 MB)
-        </button>
-        ${example.text && html`<span class="muted small" role="status">${example.text}</span>`}
-      </section>
+      <${Viewer} volume=${volume} emptyText=${empty} />
+      ${keys.length > 0 && html`
+        <section class="outputs" aria-label="Volumes">
+          <span class="outputs-title">Volumes</span>
+          <div class="outputs-list" role="listbox" aria-label="Volumes">
+            ${keys.map((k) => html`
+              <button type="button" role="option" class="chip output-chip" data-key=${k}
+                aria-selected=${k === viewing} onClick=${() => view(k)}>${itemMeta(k).label}</button>`)}
+          </div>
+          ${error && html`<span class="problem-error small" role="alert">${error}</span>`}
+        </section>`}
     </div>
   `;
 }
