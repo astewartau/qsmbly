@@ -22,7 +22,7 @@ export class Superseded extends Error {
 }
 
 /** The ops that go through a lane (latest wins). */
-export const LATEST_WINS = /** @type {const} */ (['settingsView', 'plan', 'graph', 'command', 'toToml', 'pruneHidden']);
+export const LATEST_WINS = /** @type {const} */ (['settingsView', 'plan', 'graph', 'methods', 'command', 'toToml', 'pruneHidden']);
 
 /**
  * @param {WorkerLike} worker
@@ -97,6 +97,7 @@ export function createEngineClient(worker) {
     set: op('set'),
     plan: op('plan'),
     graph: op('graph'),
+    methods: op('methods'),
     command: op('command'),
     toToml: op('toToml'),
     fromToml: op('fromToml'),

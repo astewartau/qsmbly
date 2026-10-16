@@ -13,6 +13,8 @@ import { GraphTab } from './GraphTab.js';
 import { CommandTab } from './CommandTab.js';
 import { createSession, setPath } from '../store/session.js';
 import { recordedEngine, recordedProviders } from '../engine/recorded.js';
+import { methodsMarkdown, methodsPlainText } from '../methods.js';
+import { sectionOf } from '../outline.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`../fixtures/${name}`, import.meta.url), 'utf8'));
 const browser = fixture('config-browser.json');
@@ -116,6 +118,90 @@ describe('GraphTab', () => {
     expect(writeText).toHaveBeenCalledWith((await providers.graph(browser, facts)).mermaid);
     expect(root.querySelector('[role=menu]')).toBeNull(); // the menu closes
     expect(root.querySelector('.copy-status')?.textContent).toBe('Mermaid copied');
+  });
+});
+
+describe('GraphTab methods', () => {
+  const sentence = (root, start) => /** @type {HTMLElement} */ ([...root.querySelectorAll('.m-sentence')].find((e) => e.textContent?.startsWith(start)));
+
+  test('the engine\'s methods text beside the graph, with its references', async () => {
+    const { session, providers } = setup();
+    const root = await mount(html`<${GraphTab} session=${session} providers=${providers} />`);
+    const { methods } = await providers.methods(browser, facts);
+    expect(root.querySelector('[data-testid=methods-text]')?.textContent).toBe(methods.sentences.map((s) => s.text).join(' '));
+    expect([...root.querySelectorAll('.methods-refs li')].map((li) => li.getAttribute('data-key'))).toEqual(methods.references.map((r) => r.key));
+    expect(root.querySelector('.methods-refs em')).not.toBeNull(); // the journal, from the Markdown
+    // Only sentences about a step are focusable; the opening line is about the whole run.
+    expect(sentence(root, 'QSM processing').getAttribute('tabindex')).toBeNull();
+    expect(sentence(root, 'Dipole inversion').getAttribute('tabindex')).toBe('0');
+    expect(sentence(root, 'Dipole inversion').getAttribute('data-steps')).toBe('invert');
+  });
+
+  test('hovering a box lights up the sentences about it', async () => {
+    const { session, providers } = setup();
+    const root = await mount(html`<${GraphTab} session=${session} providers=${providers} />`);
+    await act(() => { root.querySelector('.g-node[data-step="unwrap"]')?.dispatchEvent(new MouseEvent('mouseenter')); });
+    const lit = [...root.querySelectorAll('.m-sentence.lit')].map((e) => e.textContent);
+    expect(lit.length).toBeGreaterThan(1);
+    expect(lit.some((t) => t?.startsWith('Phase unwrapping'))).toBe(true);
+    expect(lit.some((t) => t?.startsWith('Dipole inversion'))).toBe(false);
+    // and the works those sentences cite
+    expect(root.querySelector('.methods-refs li.lit[data-key="dymerska2021"]')).not.toBeNull();
+    await act(() => { root.querySelector('.g-node[data-step="unwrap"]')?.dispatchEvent(new MouseEvent('mouseleave')); });
+    expect(root.querySelectorAll('.m-sentence.lit')).toHaveLength(0);
+  });
+
+  test('hovering or focusing a sentence lights up its boxes; clicking or Enter opens the step', async () => {
+    const { session, providers } = setup();
+    const root = await mount(html`<${GraphTab} session=${session} providers=${providers} />`);
+    const bg = sentence(root, 'Background field removal');
+    await act(() => { bg.dispatchEvent(new MouseEvent('mouseenter')); });
+    expect([...root.querySelectorAll('.g-node.linked')].map((g) => g.getAttribute('data-step'))).toEqual(['bgremove']);
+    expect(bg.classList.contains('lit')).toBe(true);
+    await act(() => { bg.dispatchEvent(new MouseEvent('mouseleave')); });
+    expect(root.querySelectorAll('.g-node.linked')).toHaveLength(0);
+    await act(() => { bg.click(); });
+    expect(session.ui.section.value).toBe(sectionOf('bgremove')?.id);
+    const mask = sentence(root, 'A brain mask');
+    await act(() => { mask.dispatchEvent(new FocusEvent('focus')); });
+    expect([...root.querySelectorAll('.g-node.linked')].map((g) => g.getAttribute('data-step'))).toEqual(['mask']);
+    await act(() => { mask.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    expect(session.ui.section.value).toBe(sectionOf('mask')?.id);
+  });
+
+  test('a sentence names every box a method fills: two-pass inverts in both passes', async () => {
+    const { session, providers } = setup();
+    session.set('masking.two_pass', true);
+    const root = await mount(html`<${GraphTab} session=${session} providers=${providers} />`);
+    await act(() => { sentence(root, 'Dipole inversion').dispatchEvent(new MouseEvent('mouseenter')); });
+    expect([...root.querySelectorAll('.g-node.linked')].map((g) => g.getAttribute('data-step')).sort()).toEqual(['invert', 'invert-reliable']);
+  });
+
+  test('follows the settings', async () => {
+    const { session, providers } = setup();
+    const root = await mount(html`<${GraphTab} session=${session} providers=${providers} />`);
+    expect(root.querySelector('[data-testid=methods-text]')?.textContent).toContain('iLSQR');
+    await act(() => { session.set('inversion.algorithm', 'tgv'); });
+    await settle();
+    const text = root.querySelector('[data-testid=methods-text]')?.textContent;
+    expect(text).toContain('Total Generalized Variation');
+    expect(text).not.toContain('iLSQR');
+    expect(sentence(root, 'QSM was computed using the Total Generalized Variation').getAttribute('data-steps')).toBe('tgv');
+  });
+
+  test('copies the text with its references, plain or as Markdown', async () => {
+    const writeText = jest.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const { session, providers } = setup();
+    const root = await mount(html`<${GraphTab} session=${session} providers=${providers} />`);
+    const { methods } = await providers.methods(browser, facts);
+    await act(async () => { /** @type {HTMLButtonElement} */ (root.querySelector('[data-testid=copy-methods]')).click(); });
+    expect(writeText).toHaveBeenLastCalledWith(methodsPlainText(methods));
+    expect(writeText.mock.lastCall?.[0]).toContain('\n\nReferences\n\n');
+    await settle();
+    expect(root.querySelector('.methods .copy-status')?.textContent).toBe('Copied');
+    await act(async () => { /** @type {HTMLButtonElement} */ (root.querySelector('[data-testid=copy-methods-md]')).click(); });
+    expect(writeText).toHaveBeenLastCalledWith(methodsMarkdown(methods));
   });
 });
 

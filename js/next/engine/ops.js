@@ -11,6 +11,7 @@
  * @typedef {import('../protocol.js').Plan} Plan
  * @typedef {import('../protocol.js').SettingView} SettingView
  * @typedef {import('../protocol.js').PipelineGraph} PipelineGraph
+ * @typedef {import('../protocol.js').Methods} Methods
  * @typedef {import('../protocol.js').ItemMeta} ItemMeta
  * @typedef {import('../protocol.js').ModelEntry} ModelEntry
  * @typedef {import('../protocol.js').MaskDefaults} MaskDefaults
@@ -48,6 +49,12 @@ export function engineOps(wasm) {
     plan: (config, f) => JSON.parse(call(wasm.plan_wasm, json(config), json(f))),
     /** @param {PipelineConfig} config @param {ScanFacts} f @returns {PipelineGraph} */
     graph: (config, f) => JSON.parse(call(wasm.pipeline_graph_wasm, json(config), json(f), undefined)),
+    /**
+     * The methods text sentence by sentence, each with the graph's boxes it describes
+     * (`methods_structured` for "QSMbly", on the same plan as `graph`).
+     * @param {PipelineConfig} config @param {ScanFacts} f @returns {Methods}
+     */
+    methods: (config, f) => JSON.parse(call(wasm.methods_structured_wasm, json(config), json(f))),
     /** The `qsmxt run` command. @param {PipelineConfig} config @returns {string} */
     command: (config) => call(wasm.command_wasm, json(config)),
     /** The config as a QSMxT configuration file; `selected`: only the chosen algorithms' tables. */

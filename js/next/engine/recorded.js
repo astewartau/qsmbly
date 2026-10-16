@@ -91,7 +91,10 @@ export function recordedEngine(recorded) {
  * @typedef {object} RecordedExports - fixtures/engine-exports.json
  * @property {string[]} toml - the browser profile's settings file, by line
  * @property {object[]} nodes - every graph node once; a case's graph names its nodes by index
- * @property {{ changes: [string, unknown][], facts: ScanFacts, graph: Answer, command: Answer, toml: { span: any[] } | { error: string } }[]} cases
+ * @property {import('../protocol.js').Methods['sentences']} sentences - every methods sentence
+ *   once; a case's methods name their sentences by index
+ * @property {Record<string, string>} references - each cited work's text, by key
+ * @property {{ changes: [string, unknown][], facts: ScanFacts, graph: Answer, methods: Answer, command: Answer, toml: { span: any[] } | { error: string } }[]} cases
  *   - a case's settings file is the lines it changes in `toml`: `[start, deleted, ...added]`
  * @property {({ case?: number, text?: string } & ({ changes: [string, unknown][], warnings: string[] } | { error: string }))[]} imports
  *   - each case's settings file read back (`case`), and other files (`text`)
@@ -138,6 +141,14 @@ export function recordedProviders(recorded, exports) {
         graph: { ...graph, nodes: nodes.map((i) => exports.nodes[i]), items: items.map((key) => recorded.items[key]) },
         mermaid,
       };
+    },
+    async methods(config, facts) {
+      /** @type {number[]} */
+      const indices = unwrap(find(config, facts).methods);
+      const sentences = indices.map((i) => exports.sentences[i]);
+      // The references are the works the sentences cite, in the order they first cite them.
+      const keys = [...new Set(sentences.flatMap((s) => s.citations))];
+      return { methods: { sentences, references: keys.map((key) => ({ key, text: exports.references[key] })) } };
     },
     async command(config) {
       return { command: unwrap(find(config, null).command) };

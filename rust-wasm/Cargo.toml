@@ -28,7 +28,9 @@ debug-log = []
 # features, so qsmbly always runs the same qsm-core QSMxT was built and tested against.
 # Pinned by commit on QSMxT main until a QSMxT release includes QSMxT/QSMxT#331; then it moves to a
 # release tag, which the bump-qsmxt-engine workflow maintains.
-qsmxt-engine = { git = "https://github.com/QSMxT/QSMxT.git", rev = "2025be95a2fad9be75ee62692fd4db257cb1ec42" }
+# TEMPORARY: the head of QSMxT/QSMxT#380 (`methods_structured`, for the Pipeline tab's methods
+# text), on main 2025be95. Move it to QSMxT main once #380 merges.
+qsmxt-engine = { git = "https://github.com/QSMxT/QSMxT.git", rev = "d80b784d361a74be2c56d3e64993e8b1b3c3e433" }
 
 # WASM bindings
 wasm-bindgen = "0.2"

@@ -306,6 +306,26 @@ pub fn pipeline_graph_wasm(
     graph(config_json, facts_json, grid_json.as_deref()).map_err(js_err)
 }
 
+/// The methods text of a run of `config` on the scan `facts` describes, sentence by sentence
+/// (`methods::methods_structured` for "QSMbly", on the same plan as [`graph`]):
+/// `{ sentences: [{ text, steps, citations }], references: [{ key, text }] }`, each sentence's
+/// `steps` being the ids of the graph's boxes it describes.
+pub fn methods(config_json: &str, facts_json: &str) -> Result<String, String> {
+    let config = parse_config(config_json)?;
+    let facts = parse_facts(facts_json)?;
+    let plan = qsmxt_engine::plan::plan(&config, &facts);
+    serde_json::to_string(&qsmxt_engine::methods::methods_structured(
+        &config, &plan, "QSMbly",
+    ))
+    .map_err(|e| e.to_string())
+}
+
+/// [`methods`].
+#[wasm_bindgen]
+pub fn methods_structured_wasm(config_json: &str, facts_json: &str) -> Result<String, JsValue> {
+    methods(config_json, facts_json).map_err(js_err)
+}
+
 /// What the item kept under `key` is (`Item::meta`, with its `key` and serialised `item`):
 /// `{ key, item, label, units, kind, bids_name, published, echo, coil }`; `None` for a key that
 /// names no item.
@@ -485,6 +505,37 @@ mod tests {
             .unwrap()
             .iter()
             .any(|i| i["key"] == "Chi"));
+    }
+
+    #[test]
+    fn the_methods_name_the_graphs_boxes() {
+        let two_pass = set(&browser(), "masking.two_pass", json!(true));
+        let m: Value =
+            serde_json::from_str(&methods(&two_pass, &example_facts()).unwrap()).unwrap();
+        let g: Value =
+            serde_json::from_str(&graph(&two_pass, &example_facts(), None).unwrap()).unwrap();
+        let ids: Vec<&str> = g["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n["id"].as_str().unwrap())
+            .collect();
+        let sentences = m["sentences"].as_array().unwrap();
+        assert!(sentences[0]["text"].as_str().unwrap().contains("QSMbly"));
+        for s in sentences {
+            for id in s["steps"].as_array().unwrap() {
+                assert!(
+                    ids.contains(&id.as_str().unwrap()),
+                    "{id} is not a box: {ids:?}"
+                );
+            }
+        }
+        let inversion = sentences
+            .iter()
+            .find(|s| s["text"].as_str().unwrap().starts_with("Dipole inversion"))
+            .unwrap();
+        assert_eq!(inversion["steps"], json!(["invert", "invert-reliable"]));
+        assert!(!m["references"].as_array().unwrap().is_empty());
     }
 
     #[test]

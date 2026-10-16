@@ -311,6 +311,67 @@ test.describe('next.html', () => {
     expect(errors).toEqual([]);
   });
 
+  test('writes the methods beside the graph, each sentence linked to its boxes', async ({ page, context }) => {
+    const errors = watchErrors(page);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.setViewportSize({ width: 1700, height: 900 });
+    await page.goto('next.html');
+    await page.getByRole('tab', { name: 'Pipeline' }).click();
+    const graph = page.getByTestId('graph');
+    const box = (step) => graph.locator(`.g-node[data-step="${step}"]`);
+    const methods = page.getByTestId('methods');
+    const sentence = (start) => methods.locator('.m-sentence', { hasText: new RegExp(`^${start}`) });
+    await expect(methods.getByTestId('methods-text')).toContainText('Dipole inversion was performed using iLSQR');
+    await expect(methods.getByTestId('methods-refs')).toContainText('https://doi.org/');
+
+    // Wide: the methods beside the graph, not below it.
+    const g = await page.locator('.graph-scroll').boundingBox();
+    const m = await methods.boundingBox();
+    expect(m.x).toBeGreaterThanOrEqual(g.x + g.width - 1);
+
+    // Hovering a box lights up the sentences about it ...
+    await box('unwrap').hover();
+    await expect(sentence('Phase unwrapping')).toHaveClass(/\blit\b/);
+    await expect(sentence('Dipole inversion')).not.toHaveClass(/\blit\b/);
+    // ... and hovering a sentence its boxes.
+    await sentence('Background field removal').hover();
+    await expect(box('bgremove')).toHaveClass(/\blinked\b/);
+    await expect(graph.locator('.g-node.linked')).toHaveCount(1);
+    // Clicking it opens the step, as a box click does; so does Enter on a focused one.
+    await sentence('Background field removal').click();
+    await expect(stepRow(page, 'background')).toHaveAttribute('data-open', 'true');
+    await sentence('A brain mask').focus();
+    await expect(box('mask')).toHaveClass(/\blinked\b/);
+    await page.keyboard.press('Enter');
+    await expect(stepRow(page, 'masking')).toHaveAttribute('data-open', 'true');
+
+    // A change of algorithm rewrites the methods: TGV, in its own box.
+    await page.locator('[data-section="inversion"]').click();
+    await page.getByLabel('QSM Inversion', exact).selectOption({ label: 'TGV' });
+    await expect(methods.getByTestId('methods-text')).toContainText('Total Generalized Variation');
+    await expect(methods.getByTestId('methods-text')).not.toContainText('iLSQR');
+    await sentence('QSM was computed using the Total Generalized Variation').hover();
+    await expect(box('tgv')).toHaveClass(/\blinked\b/);
+
+    // Copy: the text and its references; Copy Markdown: the engine's Markdown.
+    await methods.getByTestId('copy-methods').click();
+    await expect(methods.locator('.copy-status')).toHaveText('Copied');
+    const text = await page.evaluate(() => navigator.clipboard.readText());
+    expect(text).toMatch(/^QSM processing was performed using QSMbly/);
+    expect(text).toContain('Total Generalized Variation');
+    expect(text).toContain('\n\nReferences\n\nStewart');
+    expect(text).not.toContain('*');
+    await methods.getByTestId('copy-methods-md').click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^# Methods\n\nQSM processing[^]*\n## References\n\n- /);
+
+    // Narrow: the methods below the graph.
+    await page.setViewportSize({ width: 1100, height: 900 });
+    const g2 = await page.locator('.graph-scroll').boundingBox();
+    const m2 = await methods.boundingBox();
+    expect(m2.y).toBeGreaterThanOrEqual(g2.y + g2.height - 1);
+    expect(errors).toEqual([]);
+  });
+
   test('switches the viewer between volumes in the store', async ({ page }) => {
     await page.goto('next.html');
     const viewer = page.getByRole('region', { name: 'Viewer' });

@@ -15,7 +15,8 @@
 // - engine-cases.json: settings_view and the plan for each config in scripts/next-engine/cases.mjs
 //   (read by js/next/engine/recorded.js).
 // - engine-exports.json: for the same configs, what the Pipeline and Command tabs show (the
-//   pipeline graph and its Mermaid, the `qsmxt run` command, the settings file), and the settings
+//   pipeline graph and its Mermaid, the methods text sentence by sentence, the `qsmxt run` command,
+//   the settings file), and the settings
 //   files in IMPORTS read back as the workspace reads them (read by js/next/engine/recorded.js).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -82,6 +83,7 @@ const cases = CASES.map(({ name, edits, scan }) => {
     changes: changesFrom(config, browser),
     facts: f,
     graph,
+    methods: answer(() => engine.methods(config, f)),
     command: answer(() => engine.command(config)),
     toml: answer(() => engine.toToml(config, true)),
   });
@@ -114,6 +116,11 @@ const imports = [
 // it changes in the browser profile's: [start, deleted, ...added].
 const nodes = [];
 const nodeIndex = new Map();
+// Each methods sentence once (cases name them by index), and each cited work's text once by key.
+const sentences = [];
+const sentenceIndex = new Map();
+/** @type {Record<string, string>} */
+const references = {};
 const baseToml = /** @type {string} */ (exportCases[0].toml.ok).split('\n');
 for (const c of exportCases) {
   if (c.graph.ok) {
@@ -121,6 +128,14 @@ for (const c of exportCases) {
       const k = JSON.stringify(n);
       if (!nodeIndex.has(k)) nodeIndex.set(k, nodes.push(n) - 1);
       return nodeIndex.get(k);
+    });
+  }
+  if (c.methods.ok) {
+    for (const r of c.methods.ok.references) references[r.key] = r.text;
+    c.methods.ok = c.methods.ok.sentences.map((s) => {
+      const k = JSON.stringify(s);
+      if (!sentenceIndex.has(k)) sentenceIndex.set(k, sentences.push(s) - 1);
+      return sentenceIndex.get(k);
     });
   }
   if (c.toml.ok) {
@@ -133,4 +148,4 @@ for (const c of exportCases) {
     c.toml = { span: [start, baseToml.length - start - end, ...lines.slice(start, lines.length - end)] };
   }
 }
-write('engine-exports.json', { toml: baseToml, nodes, cases: exportCases, imports }, true);
+write('engine-exports.json', { toml: baseToml, nodes, sentences, references, cases: exportCases, imports }, true);

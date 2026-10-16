@@ -116,6 +116,15 @@
  */
 
 /**
+ * The methods text of a run, sentence by sentence (qsmxt-engine `methods::Methods`): joined by
+ * spaces the sentences are the paragraph; each names the graph's boxes it describes (none, or
+ * several) and the works it cites, which `references` lists in the order they are first cited.
+ * @typedef {object} Methods
+ * @property {{ text: string, steps: string[], citations: string[] }[]} sentences
+ * @property {{ key: string, text: string }[]} references - `text` is Markdown
+ */
+
+/**
  * The mask recipe's parts as a browser run takes them (the bindings' `browser_mask_defaults`):
  * each preset's recipe and each step type's default with the browser profile applied, and the
  * reliable mask a run uses while `masking.two_pass_sections` is unset.

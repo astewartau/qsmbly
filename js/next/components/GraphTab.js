@@ -5,6 +5,9 @@
  * a step that runs a deep-learning model is marked. Clicking a box opens that step in the
  * pipeline column; hovering it highlights its arrows. Laid out by graph-layout.js.
  *
+ * Beside the graph (below it on a narrow pane) is the methods text (MethodsPanel), linked both
+ * ways: hovering a box lights up the sentences about it, and hovering a sentence its boxes.
+ *
  * @typedef {import('../store/session.js').Session} Session
  * @typedef {import('../exports.js').Providers} Providers
  * @typedef {import('../exports.js').GraphResult} GraphResult
@@ -17,6 +20,8 @@ import { layoutGraph, roundedPath } from '../graph-layout.js';
 import { sectionOf } from '../outline.js';
 import { useProvided, useCopy, saveFile } from './provided.js';
 import { Icon } from './icons.js';
+import { MethodsPanel } from './MethodsPanel.js';
+import { methodsLinks, linked } from '../methods.js';
 
 /** next.css's graph colours, written into an exported SVG so it stands alone. */
 const EXPORT_VARS = ['--panel', '--panel-2', '--border', '--text', '--text-2', '--muted', '--accent', '--accent-soft', '--graph-edge', '--graph-group', '--graph-label'];
@@ -33,7 +38,7 @@ export function standaloneSvg(svg) {
   const vars = EXPORT_VARS.map((v) => `${v}: ${style.getPropertyValue(v).trim() || 'currentColor'};`).join(' ');
   copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   copy.removeAttribute('class');
-  copy.querySelectorAll('.hi, .dim, .current').forEach((el) => el.classList.remove('hi', 'dim', 'current'));
+  copy.querySelectorAll('.hi, .dim, .current, .linked').forEach((el) => el.classList.remove('hi', 'dim', 'current', 'linked'));
   // Boxes are placed by a CSS transform (so they glide when the plan changes); an SVG file says
   // it as an attribute, which every reader understands.
   copy.querySelectorAll('[style*="translate"]').forEach((el) => {
@@ -98,8 +103,17 @@ export function GraphTab({ session, providers }) {
     () => (facts ? providers.graph(config, facts) : Promise.resolve(null)),
     [config, facts, providers],
   );
+  const methods = useProvided(
+    () => (facts ? providers.methods(config, facts) : Promise.resolve(null)),
+    [config, facts, providers],
+  );
   const layout = useMemo(() => (value ? layoutGraph(value.graph) : null), [value]);
+  const links = useMemo(() => methodsLinks(methods.value?.methods ?? { sentences: [], references: [] }, value?.graph ?? null),
+    [methods.value, value]);
   const [hover, setHover] = useState(/** @type {string | null} */ (null));
+  const [hoverSentence, setHoverSentence] = useState(/** @type {number | null} */ (null));
+  const lit = linked(links, { step: hover, sentence: hoverSentence });
+  const cited = new Set([...lit.sentences].flatMap((i) => methods.value?.methods.sentences[i]?.citations ?? []));
   const svgRef = useRef(/** @type {SVGSVGElement | null} */ (null));
   const openSection = session.ui.section.value;
 
@@ -119,6 +133,7 @@ export function GraphTab({ session, providers }) {
         ${error && html`<span class="problem-error small" role="alert">${error}</span>`}
         <${ExportMenu} result=${value} svgRef=${svgRef} />
       </div>
+      <div class="graph-body">
       <div class="graph-scroll">
         <svg ref=${svgRef} class="graph" data-testid="graph" width=${layout.width} height=${layout.height}
           viewBox=${`0 0 ${layout.width} ${layout.height}`} role="group" aria-label="Pipeline graph">
@@ -142,6 +157,7 @@ export function GraphTab({ session, providers }) {
               <text x=${g.x + 8} y=${g.y + 13}>${g.title}</text>
             </g>`)}
           ${layout.nodes.map((n) => html`<${Node} key=${n.id} n=${n} current=${sectionOf(n.id)?.id === openSection}
+            linked=${hoverSentence !== null && lit.steps.has(n.id)}
             onHover=${setHover} onOpen=${() => openStep(session, n.id)} />`)}
           ${layout.edges.map((e) => html`
             <g key=${`label-${e.from}>${e.to}`} class=${`g-label${hover ? (near(e.from) || near(e.to) ? ' hi' : ' dim') : ''}`}
@@ -152,15 +168,18 @@ export function GraphTab({ session, providers }) {
             </g>`)}
         </svg>
       </div>
+      <${MethodsPanel} result=${methods.value} error=${methods.error} stepsOf=${links.stepsOf} lit=${lit.sentences} cited=${cited}
+        onHover=${setHoverSentence} onOpen=${(id) => openStep(session, id)} />
+      </div>
     </div>
   `;
 }
 
 /**
  * One step's box.
- * @param {{ n: LaidNode, current: boolean, onHover: (id: string | null) => void, onOpen: () => void }} props
+ * @param {{ n: LaidNode, current: boolean, linked: boolean, onHover: (id: string | null) => void, onOpen: () => void }} props
  */
-function Node({ n, current, onHover, onOpen }) {
+function Node({ n, current, linked: isLinked, onHover, onOpen }) {
   let y = 8;
   const texts = n.lines.map((l) => {
     y += LINE_Y[l.cls];
@@ -170,7 +189,7 @@ function Node({ n, current, onHover, onOpen }) {
   const title = [node.label, node.algorithm_label, ...node.settings, node.only_when && `Only when ${node.only_when}`,
     node.models.length && `Models: ${node.models.join(', ')}`].filter(Boolean).join('\n');
   return html`
-    <g class=${`g-node${n.optional ? ' optional' : ''}${n.conditional ? ' conditional' : ''}${current ? ' current' : ''}`}
+    <g class=${`g-node${n.optional ? ' optional' : ''}${n.conditional ? ' conditional' : ''}${current ? ' current' : ''}${isLinked ? ' linked' : ''}`}
       data-step=${n.id} style=${{ transform: `translate(${n.x}px, ${n.y}px)` }}
       tabindex="0" role="button" aria-label=${`${node.label}${node.algorithm_label ? `, ${node.algorithm_label}` : ''}: open in the pipeline`}
       onMouseEnter=${() => onHover(n.id)} onMouseLeave=${() => onHover(null)} onFocus=${() => onHover(n.id)} onBlur=${() => onHover(null)}
