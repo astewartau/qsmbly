@@ -37,6 +37,8 @@ export const CASES = [
   { name: 'motion reference echo 3', edits: [['motion_correction.reference', '3']] },
   // Optional outputs
   { name: 'χ-separation', edits: [['pipeline.do_chi_separation', true]] },
+  { name: 'SWI', edits: [['pipeline.do_swi', true]] },
+  { name: 'SWI without magnitude', edits: [['pipeline.do_swi', true]], scan: { has_magnitude: false } },
   { name: 'SWI and SMWI', edits: [['pipeline.do_swi', true], ['pipeline.do_smwi', true]] },
   { name: 'T2* and R2*', edits: [['pipeline.do_t2starmap', true], ['pipeline.do_r2starmap', true]] },
   { name: 'segmentation', edits: [['pipeline.do_segmentation', true]] },
@@ -52,4 +54,15 @@ export const CASES = [
   { name: 'no magnitude', edits: [], scan: { has_magnitude: false } },
   { name: 'one echo', edits: [], scan: { n_echoes: 1, echo_times: [0.005] } },
   { name: 'one echo, motion correction', edits: [['motion_correction.enabled', true]], scan: { n_echoes: 1, echo_times: [0.005] } },
+];
+
+/**
+ * Settings files read back for the Command tab's import, besides each case's own: ones QSMxT
+ * refuses, and one an older QSMxT wrote (read with a warning, and given the browser profile).
+ * @type {string[]}
+ */
+export const IMPORTS = [
+  'this is not toml {{{\n',
+  '[inversion]\nalgorithm = "no-such-method"\n',
+  '[pipeline]\nobliquity_threshold = -1\n',
 ];

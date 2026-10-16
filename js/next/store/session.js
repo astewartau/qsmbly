@@ -99,6 +99,8 @@ export function createSession({ defaults, planner, settingsView = null, storage 
   const ui = {
     /** The open pipeline step, or none. */
     section: signal(/** @type {string | null} */ (null)),
+    /** The tab beside the pipeline column: the viewer, the pipeline graph or the command. */
+    tab: signal(/** @type {'viewer' | 'pipeline' | 'command'} */ ('viewer')),
     /** The volume shown in the viewer (an ItemKey). */
     viewing: signal(/** @type {string | null} */ (null)),
     /** The file name of each supplied-file setting's file, by setting path. */
