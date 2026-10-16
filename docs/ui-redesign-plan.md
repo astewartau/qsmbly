@@ -5,6 +5,11 @@ Status: accepted 2026-10-16, with every recommendation in §7. It settles how th
 3.5 (re-run from here), 3.6 (plan before running), 4.2 (settings renderer) and the UI side of
 phase 5. It also lists what the engine has to provide for them.
 
+Revised 2026-10-16, during U3: the settings sit inline in the pipeline column instead of in an
+inspector on the right (§3.3, §3.5, §7 Q1). The three-pane layout made the eye cross the page
+between choosing a step (far left) and editing it (far right). The mask builder's editor moved
+into U3; its engine-backed previews stay in U5.
+
 Sources:
 
 - Screenshots of `main` @ 8d685b0 (QSMxT engine d5b71c6, QSM.rs 8a3afda), taken with a threaded
@@ -16,13 +21,12 @@ Sources:
 
 ## Summary
 
-1. **One workspace with three panes.**
-   - A **pipeline outline** on the left. It is at once the settings index, the plan and the
-     run's progress.
-   - A **viewer** in the centre, with an outputs browser in which every intermediate is
-     first-class.
-   - An **inspector** on the right, showing the selected section's settings rendered from the
-     engine's schema.
+1. **One workspace: the pipeline beside the viewer.**
+   - The **pipeline column** on the left is the plan as an accordion of steps in run order.
+     Each step's settings, rendered from the engine's schema, open inline under it. It is at
+     once the settings, the plan and the run's progress.
+   - The **viewer** takes the rest of the width, with an outputs browser under it in which every
+     intermediate is first-class.
    - A **run bar** across the bottom. It carries the plan (memory against the 4 GB heap,
      model downloads, problems) and the Run / Re-run / Cancel button.
 2. **The session is a `PipelineConfig` plus inputs.**
@@ -180,7 +184,7 @@ The decisions needed are in §7.
 | Area | Today (lines) | Duplicates | Replaced by |
 |---|---|---|---|
 | Pipeline wiring | `qsm-worker-pure.js` (1,976) | QSMxT's stage wiring | `plan`/`run` (2.3) |
-| Settings | settings HTML (~1,300), `PipelineSettingsController.js` (1,255), sidebar dropdowns | QSMxT config and TUI rows | schema-rendered inspector (4.1/4.2) |
+| Settings | settings HTML (~1,300), `PipelineSettingsController.js` (1,255), sidebar dropdowns | QSMxT config and TUI rows | settings rendered from the schema, inline in the pipeline (4.1/4.2) |
 | Config mapping | `ConfigBridge.js` (252), `config.js` (513), generated `qsm-defaults.js` (283) | `PipelineConfig` and its defaults | session state *is* a `PipelineConfig`; browser profile (2.5) |
 | Requirement rules | `updateVisibility`, `updateEchoInfo`, worker checks | `requirements.rs` | `plan().check` |
 | Mask building | numerics in `MaskController.js` (threshold, RSS, prepare), `ThresholdUtils` (103), `MaskUtils` (63), `RodentMask` (120), `HdBetEstimate` (50), op history → `--mask` string | QSM.rs masking, QSMxT mask recipes | mask recipe in config, engine mask step and previews |
@@ -201,9 +205,9 @@ qsmbly keeps these:
 
 | Capability | Engine | What the UI does with it |
 |---|---|---|
-| **Plan before run** | `plan(config, facts) -> Plan { steps, models, peak_memory_bytes, check, notes, two_pass, motion_corrected }` (#338/#339) | The outline shows the steps that will run; the default is `load scale_phase magnitude mask motion unwrap bgremove invert reference output_space`. The run bar shows peak memory against the budget, plus the models to download with sizes from QSM.rs's registry (`find_model(id).files[].bytes`, e.g. xQSM 21 MB, HD-BET 123 MB CC-BY-NC). Requirement errors and warnings appear before any compute. |
+| **Plan before run** | `plan(config, facts) -> Plan { steps, models, peak_memory_bytes, check, notes, two_pass, motion_corrected }` (#338/#339) | The pipeline shows the steps that will run; the default is `load scale_phase magnitude mask motion unwrap bgremove invert reference output_space`. The run bar shows peak memory against the budget, plus the models to download with sizes from QSM.rs's registry (`find_model(id).files[].bytes`, e.g. xQSM 21 MB, HD-BET 123 MB CC-BY-NC). Requirement errors and warnings appear before any compute. |
 | **Streamed outputs** | `Observer::output(&Item, VolumeRef)` on every `put` | The viewer follows the run. Combined magnitude, mask, total field, local field, raw χ, χ and QSMART's five intermediates are all there as they are produced. |
-| **Progress per step** | `Observer::stage(step, algorithm, Started(text) \| Cached \| Finished(label))`, `progress(done, total)` | Each outline row shows its status and a progress bar. A cached step says so. |
+| **Progress per step** | `Observer::stage(step, algorithm, Started(text) \| Cached \| Finished(label))`, `progress(done, total)` | Each pipeline row shows its status and a progress bar. A cached step says so. |
 | **Re-run from here** | Cache keys (`step_cache_key`), `graph::downstream_of`, store semantics (a changed key recomputes that step and everything downstream) | Edits mark steps stale. The button reads "Re-run 2 steps". The previous outputs stay for comparison. |
 | **Mask recipes with previews** | `MaskSection` / `MaskOp` / `MaskRecipe`, `mask_presets()`, `stages::mask`, `run_step`; QSM.rs `resolve_masking_input` + `apply_mask_ops` (cheap for threshold and morphology) | A recipe editor whose previews are computed by the code the run uses. |
 | **Settings from the schema** | 4.1 (planned) | Settings are always in step with QSMxT: the TUI's labels and help, and new QSMxT options appear without qsmbly changes. |
@@ -247,9 +251,10 @@ Session
 └─ Store    volumes by Item + step keys, shared by runs (cached steps are reused)
 ```
 
-The outline follows the TUI's tabs and sub-tabs. Each row is annotated with the plan's state:
+The pipeline column lists the run's steps in order, following the TUI's tabs and sub-tabs. Each
+row shows its current choice and the plan's state:
 
-| TUI tab › sub-tab | Outline row | Plan steps | Typical outputs |
+| TUI tab › sub-tab | Pipeline row | Plan steps | Typical outputs |
 |---|---|---|---|
 | Input | **Data** (files, roles, scan facts) | load, scale_phase | phase and magnitude per echo |
 | Preprocessing › Geometry | Geometry | (resampling inside load / output_space) | — |
@@ -261,81 +266,78 @@ The outline follows the TUI's tabs and sub-tabs. Each row is annotated with the 
 | QSM › Reference | Reference | reference(-singlepass) | χ, χ support |
 | χ-separation | χ-separation | chi_separation | χ+, χ−, χtotal |
 | Other outputs › SWI/SMWI, Relaxometry, Segmentation | SWI/SMWI, Relaxometry, Segmentation | swi, smwi, t2star_r2star, r2_r2prime, segmentation, analysis | SWI, mIP, T2*, R2*, R2, R2′, labels, statistics |
-| Execution | Performance (threads, memory kept for earlier runs) | — | — |
-| Methods | **Export** | — | methods, command, TOML, files |
+| Execution | Performance (threads, memory kept for earlier runs), in the run bar | — | — |
+| Methods | **Export**, in the header | — | methods, command, TOML, files |
 
-- Rows whose steps are not in the plan stay listed but greyed, with the engine's reason ("TGV
-  does its own background removal").
-- Output toggles (SWI, T2*, χ-separation…) are switches on their rows. Turning one on adds its
-  steps to the plan.
+- A step the plan does not run has no row: choosing TGV, which removes the background itself,
+  takes Background removal out of the pipeline.
+- Optional outputs (χ-separation, SWI/SMWI, relaxometry, segmentation, and motion correction)
+  are rows with a switch. Turning one on adds its steps to the plan. Compute QSM is the switch
+  on the Dipole inversion row.
 - Multi-orientation is out of scope (single run), so it has no row. Neither has DICOM export
   (Other outputs › Export), which the parity plan leaves open.
 
 ### 3.3 Layout
 
-Desktop (≥1280 px), during a re-run. Numbers in the wireframes are illustrative.
+Desktop (≥900 px). Numbers in the wireframes are illustrative.
 
 ```
 +--------------------------------------------------------------------------------------------+
-| QSMbly  sub-1 | 5 echoes | 2.89 T | 184x256x128 @ 1 mm   [Import] [Export v] [?]           |
-+----------------------+--------------------------------------------+------------------------+
-| PIPELINE      [find] | [3-plane v]  chi   -0.10 [==|==] 0.10 ppm  | INVERSION    [basic v] |
-|                      |                                            |                        |
-| Data            ok   |                                            | Algorithm         (*)  |
-| PREPROCESSING        |                                            | [ RTS              v ] |
-|  Geometry       -    |                                            |  rapid two-step with a |
-|  Masking        ok   |          viewer (NiiVue)                   |  sparsity prior        |
-|  Motion         off  |                                            | Delta            0.15  |
-| QSM                  |                                            | Max iterations     20  |
-|  Field map      ok   |                                            | Tolerance        0.01  |
-|  Background     ok   |                                            | > all settings (6)     |
-|  Inversion  62% [## ]|                                            |                        |
-|  Reference      next |                                            | changed from default:  |
-| CHI-SEPARATION  off  |--------------------------------------------|  algorithm ilsqr->rts  |
-| OTHER OUTPUTS        | OUTPUTS  run 2 v   [x] follow  [compare]   |                        |
-|  SWI / SMWI     off  | magnitude  mask  field  local field  chi   | qsmxt run <bids_dir>   |
-|  Relaxometry T2*,R2* | run 1: chi (iLSQR)                         |  --qsm-algorithm rts   |
-|  Segmentation   off  |                                            |                        |
-| EXPORT               |                                            |                        |
-+----------------------+--------------------------------------------+------------------------+
-| [Cancel]  re-running 2 of 10 steps | peak 2.3/4 GB [#####   ] | downloads: none | ok [Log] |
+| QSMbly  5 echoes · 2.89 T · 184×256×128             [Undo] [Redo] [Theme] [Export v] [?]   |
++--------------------------------------+-----------------------------------------------------+
+| [ Search settings                  ] | [3-plane v]  χ                  -0.10 … 0.10 ppm   |
+| > Data            5 echoes · 2.89 T *|                                                     |
+| > Geometry                 acquired *|                                                     |
+| > Brain mask       robust-threshold *|                                                     |
+| > Motion correction           off o [ ]                                                  |
+| > Field map                   ROMEO *|              viewer (NiiVue)                       |
+| v Background removal        V-SHARP *|                                                     |
+|     BG Removal      [V-SHARP     v]  |                                                     |
+|     Variable-kernel SHARP  Reference |                                                     |
+|     Max Radius  (i)  * [  10 ] mm  ⟲ |                                                     |
+|     Min Radius  (i)    [   1 ] mm    |                                                     |
+|     + 3 advanced                     |                                                     |
+| > Dipole inversion  62% [##   ]  [x] |-----------------------------------------------------|
+| > Reference                    mean *| OUTPUTS  magnitude  mask  field  local field  χ     |
+| OPTIONAL OUTPUTS                     |                                                     |
+| > χ-separation                off o [ ]                                                  |
+| > SWI / SMWI                  off o  |                                                     |
++--------------------------------------+-----------------------------------------------------+
+| [Run]  Plan: 10 steps | peak 1.8 / 4.0 GB [####    ] | downloads: none | no problems | Log |
 +--------------------------------------------------------------------------------------------+
 ```
 
-Empty state (first visit):
+- **One row per setting**, label left and control right: small number fields with the unit
+  beside them, three small fields for a vector, compact selects and switches. Help sits behind
+  an ⓘ and opens one line under the row. A value changed from its default carries a dot, with a
+  reset on hover. Notes (forced on, browser default, out of range) are muted lines under the
+  row.
+- **One step open at a time.** Its basic settings show first, then "+ n advanced".
+- **Light and dark** follow the system, or the header's theme button.
 
-```
-+--------------------+----------------------------------------------------------------+
-| PIPELINE           |                                                                |
-| Data         (!)   |     Start with data. Files stay on this computer.              |
-| Masking            |                                                                |
-| Field map          |   +------------------------+   +--------------------------+    |
-| Background         |   | Try the example        |   | Open your data           |    |
-| Inversion          |   | 5-echo GRE, 3 T, 1 mm  |   | DICOM folder, NIfTI and  |    |
-| Reference          |   | 104 MB download        |   | JSON files, or BIDS      |    |
-| ...                |   +------------------------+   +--------------------------+    |
-+--------------------+----------------------------------------------------------------+
-| [Run]  needs data  |  plan: QSMxT defaults (browser), 10 steps                      |
-+-------------------------------------------------------------------------------------+
-```
-
-Small screens (<1024 px): one pane at a time, switched with tabs. The run bar stays.
+Small screens (<900 px): the viewer on top, the pipeline under it, the run bar always visible.
 
 ```
 +----------------------+
-| QSMbly        [Run]  |
-|                      |
-|   (one pane)         |
-|                      |
-| Inversion 62% [##  ] |
-| [Pipeline|View|Log]  |
+| QSMbly  [Undo][Redo] |
+|   viewer             |
+| OUTPUTS  χ  mask ... |
+| [ Search settings  ] |
+| > Data               |
+| v Field map    ROMEO |
+|   Unwrapping [ROMEO] |
+| ...                  |
+| [Run] Plan: 10 steps |
 +----------------------+
 ```
 
-A rendered sketch of the desktop workspace (static HTML; the images are a χ map today's qsmbly
-computed from the example data):
+The workspace as built in U3 (recorded plans; the viewer shows a synthetic head until U2):
 
-<a href="ui-redesign/proposed-workspace.png"><img src="ui-redesign/proposed-workspace.png" width="900"></a>
+<a href="ui-redesign/u3-workspace-light.png"><img src="ui-redesign/u3-workspace-light.png" width="440"></a>
+<a href="ui-redesign/u3-workspace-dark.png"><img src="ui-redesign/u3-workspace-dark.png" width="440"></a>
+
+The first sketch, with an inspector on the right, before the revision:
+[proposed-workspace.png](ui-redesign/proposed-workspace.png).
 
 ### 3.4 Main flows
 
@@ -353,12 +355,12 @@ There is no mask step to discover, and nothing to configure.
 **B. Researcher with their own data.**
 1. Drop a DICOM folder, NIfTI and JSON files, or a BIDS folder.
 2. If the drop holds several runs (BIDS, or DICOM with several series), pick one.
-3. The Data inspector shows each file's role and the scan facts, with their sources (header,
+3. The Data step shows each file's role and the scan facts, with their sources (header,
    sidecar, typed). Missing facts are fields to fill ("No echo times: add JSON sidecars or type
    them"). Problems are attached to the files they concern (grid mismatch, unknown phase
    scaling).
 4. Optionally import their QSMxT TOML. Migration warnings are shown.
-5. Change settings in the inspector. The plan updates live: a deep-learning inversion adds
+5. Change settings in the pipeline column. The plan updates live: a deep-learning inversion adds
    "xQSM weights 21 MB", and HD-BET adds "123 MB, CC-BY-NC-4.0, ~1.9 GB peak (low-memory
    patch)".
 6. Run.
@@ -387,7 +389,7 @@ There is no mask step to discover, and nothing to configure.
 
 ### 3.5 Components
 
-**Data panel.** Opening the Data row shows it in the inspector.
+**Data panel.** Opening the Data row shows it under the row.
 
 - **Run picker**, when the drop holds more than one run.
 - **DICOM:** conversion progress per series, then a series table (description, TEs, and a type
@@ -399,31 +401,35 @@ There is no mask step to discover, and nothing to configure.
   missing or overridden facts are editable.
 - **Problems**, attached to the file or fact they concern.
 
-**Pipeline outline.**
+**Pipeline column.**
 
 - Each row shows its name, a one-line summary of the current choice, and a status. The summary
-  comes from the config through the schema, e.g. "V-SHARP, 12→1 mm".
-- The statuses are: off, will run, cached, running n%, done, stale, error, can't run.
-- Selecting a row opens its settings and points the outputs browser at that step's outputs.
-- Keyboard: arrows move, Enter opens.
+  comes from the config through the schema, e.g. "V-SHARP" or "robust-threshold · two-pass".
+- The statuses are: off, will run, changed, cached, running n%, done, stale, error, can't run.
+- Opening a row shows its settings under it and points the outputs browser at that step's
+  outputs. One row is open at a time.
+- Keyboard: Tab moves between rows, Enter or Space opens one.
 
-**Inspector.**
+**Settings, inline.**
 
-- Renders the section's schema rows: label, control, units, inline help (no hover-only
-  tooltips) and the per-option help of a select.
-- **Basic / all.** Shows the basic rows by default. "All settings" reveals the rest; the choice
-  is remembered per section. Any value changed from its default is always shown, with a reset
-  button.
-- **Browser-default badge** where the browser profile departs from QSMxT's native default:
-  "QSMxT uses 128/8; the browser uses 56/4 to fit in memory. The exported command includes
-  this."
-- **Footer:** "changed from default" and the live command line. This is the TUI's command
-  preview in a GUI.
+- A step renders its section's schema rows: label, control, units, help behind an ⓘ (also the
+  hover title, so never hover-only) and the per-option help of a select, with its reference.
+- **Basic / advanced.** Shows the basic rows by default. "+ n advanced" reveals the rest; the
+  choice is remembered per step. Any value changed from its default is always shown, with a
+  reset.
+- **Ranges** are the schema's, enforced by QSMxT (exclusive bounds included). A value out of
+  range is refused at the row, with the reason, and nothing is written.
+- **Browser-default note** where the browser profile departs from QSMxT's native default:
+  "QSMxT's default is off; the browser uses 56 voxels to fit in memory. The exported command
+  includes it."
+- **Supplied files** (custom mask, χ, R2, R2′, segmentation): a file input that puts the file in
+  the store and names it as the derivatives tool `qsmbly`.
 - **Search across all settings**, by label, help text, CLI flag or config path. Choosing a
-  result jumps to that row.
-- Undo/redo, reset section, reset all.
-- An advanced "Edit TOML" view (paste or import a QSMxT config). It is also the interim settings
-  UI before 4.2 lands (§5).
+  result opens its step and focuses the row.
+- Undo/redo: the header's buttons, Ctrl+Z and Ctrl+Shift+Z (a field mid-edit keeps its own).
+- The live command line (the TUI's command preview) and an advanced "Edit TOML" view (paste or
+  import a QSMxT config) come with the bindings' command and TOML functions; until then
+  settings are edited only here.
 
 **Run bar and plan drawer.**
 
@@ -457,7 +463,7 @@ There is no mask step to discover, and nothing to configure.
 ```
 
 - While running, it shows elapsed time and the current step's text from the engine (e.g.
-  "Dipole inversion… iteration 34/100"). The outline rows show their progress, and an
+  "Dipole inversion… iteration 34/100"). The pipeline rows show their progress, and an
   aria-live region announces step changes.
 - Cancel keeps every finished step and drops only the one in progress. The next Run resumes
   from the cache.
@@ -489,7 +495,12 @@ There is no mask step to discover, and nothing to configure.
   ("inversion.algorithm: ilsqr → rts"). Outputs of earlier runs are kept within a memory budget,
   and can be pinned (§7, Q9).
 
-**Mask builder** (the inspector of the Masking row):
+**Mask builder** (inline in the Brain mask step). Its editor is built in U3; previews, hand
+edits and uploads with alignment repair come in U5, on the engine's masking. As built in U3:
+
+<a href="ui-redesign/u3-mask-recipe.png"><img src="ui-redesign/u3-mask-recipe.png" width="600"></a>
+
+The design, with the previews U5 adds:
 
 ```
 MASKING                                  preset [robust-threshold v]
@@ -544,7 +555,7 @@ the error and browser details, and no image data.
 
 | Kind | Where it shows | Effect |
 |---|---|---|
-| Requirement error (`plan.check.errors`) | Inline at the settings involved, a red mark on the outline row, the plan drawer | Run is disabled; the button reads "Fix n problems" |
+| Requirement error (`plan.check.errors`) | Inline at the settings involved, a red mark on the pipeline row, the plan drawer | Run is disabled; the button reads "Fix n problems" |
 | Requirement warning (an implied output that cannot be made) | Inline, amber, in the plan drawer | The run continues without that output |
 | Input problem (missing TE, grid mismatch, unreadable file) | The Data panel, on the file or fact | Blocks the plan until resolved |
 | Memory over budget | The gauge turns red, and the drawer names the step responsible and the settings that reduce it | Run asks for confirmation ("Run anyway"), since the estimate is conservative; above 75 % the gauge turns amber |
@@ -561,8 +572,8 @@ what to change.
   - Help is attached with `aria-describedby`.
   - Errors use `aria-invalid` and `aria-errormessage`.
   - No help is hover-only.
-- **The outline is a list with a roving tabindex.** The run status is announced through
-  `aria-live`.
+- **The pipeline is a list of disclosure buttons** (`aria-expanded`). The run status is
+  announced through `aria-live`.
 - **Status never relies on colour alone.** Each status has an icon and text.
 - **Contrast meets WCAG 2.2 AA** in both themes. Light and dark follow the system; today there
   is only dark.
@@ -572,9 +583,8 @@ what to change.
 
   | Width | Layout |
   |---|---|
-  | ≥1280 px | three panes |
-  | 1024–1279 px | the inspector becomes a drawer over the viewer |
-  | <1024 px | tabs (Pipeline, View, Log), with the run bar always visible |
+  | ≥900 px | the pipeline column beside the viewer |
+  | <900 px | the viewer above the pipeline, with the run bar always visible |
 
 - **Phones:** viewing results and small runs. The plan's memory check warns on devices that
   report little memory (`navigator.deviceMemory`, where available).
@@ -583,8 +593,8 @@ what to change.
 
 | # | Choice | Options | Recommendation |
 |---|---|---|---|
-| D1 | Layout | A: today's sidebar and modals, restyled. B: three-pane workspace. C: a wizard (Data → Mask → Settings → Run → Results). | **B**, with guided empty states for first-time users. A keeps the hidden ordering and the modal settings. C suits a first run, but makes tweak-and-re-run a chain of back buttons. |
-| D2 | Settings surface | A: modal with tabs. B: inspector bound to the outline. C: one long form with a table of contents. | **B**, plus search and the live command. A separates settings from results. C loses the link between a setting and its step and outputs. |
+| D1 | Layout | A: today's sidebar and modals, restyled. B: a workspace with the pipeline beside the viewer. C: a wizard (Data → Mask → Settings → Run → Results). | **B**, with guided empty states for first-time users. A keeps the hidden ordering and the modal settings. C suits a first run, but makes tweak-and-re-run a chain of back buttons. |
+| D2 | Settings surface | A: modal with tabs. B: an inspector on the right, bound to the outline. C: one long form with a table of contents. D: each step's settings inline under it, in the pipeline. | **D** (revised in U3 from B), plus search. B put choosing a step and editing it at opposite edges of the screen. A separates settings from results. C loses the link between a setting and its step and outputs. |
 | D3 | Basic vs advanced | A: a `level` field in the schema. B: a separate simple mode. C: presets only. | **A**, plus mask presets. B builds the UI twice. C has nothing between a preset and 311 settings. |
 | D4 | Mask | A: a manual pre-step (today). B: a recipe step with previews. C: B plus an escape to a supplied mask. | **C**. B alone has no answer for hand edits. |
 | D5 | Runs and outputs | A: a re-run replaces the outputs (today). B: run history with compare, bounded by memory. C: one run; compare by downloading. | **B**. |
@@ -651,10 +661,10 @@ starts.
 |---|---|---|---|---|
 | U0 | Settle §7; file E1–E20 as QSMxT / QSM.rs issues; add E5's fields to 4.1's scope | — | — | S |
 | U1 | Foundations: vendored Preact/htm/signals; the session store; worker protocol types (JSDoc, plus `.d.ts` from the bindings); a viewer component on NiiVue that loads typed arrays; a Playwright smoke harness on the example data (headless Chrome with SwiftShader runs NiiVue, as used for these screenshots); `next.html` on staging | none. Start now, on fixtures | — | M |
-| U2 | The shell on the engine: Data panel (files → roles → ScanFacts); outline from `plan`; run bar and plan drawer (memory, models with sizes and licences, problems); run with streamed outputs; outputs browser; model downloads before the run; the store (D6); the "Edit TOML" view as the interim settings UI | 2.3 merged; 3.1; engine side of 3.2; E1, E3, E4, E6, E7, E12–E16 | **3.6** | L |
-| U3 | The schema-rendered inspector (basic/all, search, browser-default badges, live command, undo, TOML import/export) | 4.1 with E5; 2.5 | **4.2** | M |
+| U2 | The shell on the engine: Data panel (files → roles → ScanFacts); pipeline from `plan`; run bar and plan drawer (memory, models with sizes and licences, problems); run with streamed outputs; outputs browser; model downloads before the run; the store (D6); the "Edit TOML" view as the interim settings UI | 2.3 merged; 3.1; engine side of 3.2; E1, E3, E4, E6, E7, E12–E16 | **3.6** | L |
+| U3 | Settings from the schema, inline in the pipeline column (basic/advanced, ranges, search, browser-default notes, supplied files, undo and its shortcuts), and the mask builder's recipe editor. The live command and TOML import/export follow with the bindings' command and TOML functions | 4.1 with E5; 2.5 | **4.2** | M |
 | U4 | Re-run from here: stale markers, the "Re-run n steps" button, run history, compare view | E2, E9 | **3.5** | M |
-| U5 | Mask builder: recipe editor with previews; hand edits and uploads become a supplied mask; derivative export | E10, E11 | **3.4** | M |
+| U5 | Mask builder on the engine: previews of the recipe; hand edits and uploads (with alignment repair) become a supplied mask; derivative export | E10, E11 | **3.4** | M |
 | U6 | Export panel and bundle (methods, command, TOML, outputs with sidecars) | E19 (optional) | — | S |
 | U7 | Switch: the new UI becomes `index.html#app`. Delete the old UI and everything only it used: `MaskController`'s numerics, `PipelineSettingsController`, `ConfigBridge`, the settings HTML, the old worker paths and JS numerics | §5.3 checklist; E8 for SWI, T2*/R2* and resampling | rest of **3.3** | M |
 | U8 | Phase 5 features as the engine gains them (2.4): SWI/SMWI, relaxometry, χ-separation, SynthSeg with region reference and a statistics table, motion, real/imaginary, uncombined coils. Per feature: display hints and the odd widget | 2.4 | phase 5, UI side | S per feature |
@@ -720,7 +730,7 @@ The new UI must cover what today's UI does:
 Constraints that shape this choice:
 
 - **Size.** Today: about 13,300 lines of JS (plus 3,900 of tests), 3,600 of CSS and 2,950 of HTML.
-  About 6,000 lines go away with the engine (§1.4). The new UI's own code (outline, inspector
+  About 6,000 lines go away with the engine (§1.4). The new UI's own code (pipeline, settings
   renderer, mask editor, run bar, outputs browser, store) is a similar amount of new code.
 - **No build step today.** The site is static ES modules on GitHub Pages, with CDN libraries
   under SRI and vendored dcm2niix and nifti-js.
@@ -808,7 +818,8 @@ Decided 2026-10-16: each question below is answered as recommended.
 
 1. **Layout.** Adopt the three-pane workspace (outline | viewer | inspector, plus the run bar)
    rather than restyling today's sidebar or building a wizard?
-   *Decided: yes.*
+   *Decided: yes. Revised in U3: the settings sit inline in the pipeline column, beside the
+   viewer, with no inspector (§3.3); signed off from a clickable mockup.*
 2. **Migration.** Build the new UI as a parallel app (`next.html` on staging), give today's UI
    fixes only, and switch in one release once the checklist passes?
    *Decided: yes.*

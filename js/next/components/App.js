@@ -1,58 +1,63 @@
 /**
- * The workspace (redesign §3.3): outline | viewer | inspector, with the run bar below. Under
- * 1024 px one pane shows at a time, picked with tabs.
+ * The workspace (redesign §3.3): the pipeline column, with each step's settings inline, beside
+ * the viewer and its outputs, and the run bar below. Under 900 px the viewer sits above the
+ * pipeline.
  *
  * @typedef {import('../store/session.js').Session} Session
  * @typedef {import('../store/volumes.js').VolumeStore} VolumeStore
  * @typedef {import('../fixtures.js').Fixtures} Fixtures
  */
 import { html } from '../html.js';
-import { useState } from 'preact/hooks';
-import { Outline } from './Outline.js';
-import { Inspector } from './Inspector.js';
+import { useState, useEffect } from 'preact/hooks';
+import { Pipeline } from './Pipeline.js';
 import { RunBar } from './RunBar.js';
 import { Viewer } from '../viewer/Viewer.js';
 import { itemMeta } from '../items.js';
 import { putExampleEcho } from '../fixtures.js';
+import { installUndoKeys } from '../shortcuts.js';
 
-/** The recorded plans the shell can switch between, and the edits that select each. */
-const FIXTURE_CHOICES = [
-  { id: 'default', label: 'Defaults', apply: (s) => s.reset() },
-  { id: 'xqsm', label: 'xQSM inversion', apply: (s) => { s.set('pipeline.do_swi', false); s.set('inversion.algorithm', 'xqsm'); } },
-  { id: 'swi', label: 'SWI, no magnitude', apply: (s) => { s.set('inversion.algorithm', s.defaults.inversion.algorithm); s.set('pipeline.do_swi', true); } },
-];
+export const THEME_STORAGE_KEY = 'qsmbly.next.theme';
+const THEMES = /** @type {const} */ (['auto', 'light', 'dark']);
 
 /** @param {{ session: Session, store: VolumeStore, fixtures: Fixtures }} props */
 export function App({ session, store, fixtures }) {
-  const pane = session.ui.pane.value;
+  useEffect(() => installUndoKeys(window, session), [session]);
   return html`
-    <div class="workspace" data-pane=${pane}>
-      <${Header} session=${session} fixtures=${fixtures} />
-      <div class="panes">
-        <${Outline} session=${session} />
+    <div class="workspace">
+      <${Header} session=${session} />
+      <div class="main">
+        <${Pipeline} session=${session} store=${store} schema=${fixtures.schema} mask=${fixtures.mask} />
         <${ViewerPane} session=${session} store=${store} />
-        <${Inspector} session=${session} store=${store} />
       </div>
-      <nav class="pane-tabs" aria-label="Panes">
-        ${[['outline', 'Pipeline'], ['viewer', 'View'], ['inspector', 'Settings']].map(([id, label]) => html`
-          <button type="button" aria-pressed=${pane === id} onClick=${() => { session.ui.pane.value = /** @type {any} */ (id); }}>${label}</button>`)}
-      </nav>
       <${RunBar} session=${session} store=${store} models=${fixtures.models} />
     </div>
   `;
 }
 
-/** @param {{ session: Session, fixtures: Fixtures }} props */
-function Header({ session, fixtures }) {
+/** The theme kept for this browser: auto (the system's), light or dark. */
+function savedTheme() {
+  try {
+    const t = globalThis.localStorage?.getItem(THEME_STORAGE_KEY);
+    return THEMES.includes(/** @type {any} */ (t)) ? /** @type {typeof THEMES[number]} */ (t) : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+/** @param {{ session: Session }} props */
+function Header({ session }) {
   const facts = session.facts.value;
-  const cfg = session.config.value;
-  const current = !facts?.has_magnitude && cfg.pipeline?.do_swi ? 'swi' : cfg.inversion?.algorithm === 'xqsm' ? 'xqsm' : 'default';
-  const choose = (id) => {
-    const choice = FIXTURE_CHOICES.find((c) => c.id === id);
-    if (!choice) return;
-    session.facts.value = { ...fixtures.facts, has_magnitude: id !== 'swi' };
-    choice.apply(session);
-  };
+  const [theme, setTheme] = useState(savedTheme);
+  useEffect(() => {
+    if (theme === 'auto') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    try {
+      globalThis.localStorage?.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // Not kept: the theme lasts as long as the page.
+    }
+  }, [theme]);
+  const next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
   return html`
     <header class="topbar">
       <a class="brand" href="./">QSMbly</a>
@@ -60,17 +65,13 @@ function Header({ session, fixtures }) {
         <span class="scan-summary" data-testid="scan-summary">
           ${facts.n_echoes} echoes · ${facts.field_strength.toFixed(2)} T · ${facts.dims.join('×')}
         </span>`}
-      <span class="preview-badge" title="This workspace shows recorded plans; it does not run anything yet">Preview</span>
-      <label class="fixture-choice">
-        <span>Recorded plan</span>
-        <select value=${current} onChange=${(e) => choose(e.currentTarget.value)}>
-          ${FIXTURE_CHOICES.map((c) => html`<option value=${c.id}>${c.label}</option>`)}
-        </select>
-      </label>
+      <span class="preview-badge" title="This workspace plans from recorded engine answers; it does not run anything yet">Preview</span>
       <span class="topbar-actions">
-        <button type="button" onClick=${() => session.undo()} disabled=${!session.canUndo.value}>Undo</button>
-        <button type="button" onClick=${() => session.redo()} disabled=${!session.canRedo.value}>Redo</button>
-        <a href="index.html#app">Current interface</a>
+        <button type="button" class="btn" onClick=${() => session.undo()} disabled=${!session.canUndo.value} title="Undo (Ctrl+Z)">Undo</button>
+        <button type="button" class="btn" onClick=${() => session.redo()} disabled=${!session.canRedo.value} title="Redo (Ctrl+Shift+Z)">Redo</button>
+        <button type="button" class="btn" onClick=${() => setTheme(next)} title=${`Theme: ${theme} (switch to ${next})`}
+          aria-label=${`Theme: ${theme}`}>${theme === 'auto' ? 'Auto' : theme === 'light' ? 'Light' : 'Dark'}</button>
+        <a class="btn" href="index.html#app">Current interface</a>
       </span>
     </header>
   `;
@@ -100,15 +101,15 @@ function ViewerPane({ session, store }) {
     <main class="viewer-pane">
       <${Viewer} volume=${volume} />
       <section class="outputs" aria-label="Outputs">
-        <h2 class="pane-title">Outputs</h2>
+        <span class="outputs-title">Outputs</span>
         <div class="outputs-list" role="listbox" aria-label="Volumes">
           ${keys.map((k) => html`
-            <button type="button" role="option" class="output-chip" data-key=${k}
+            <button type="button" role="option" class="chip output-chip" data-key=${k}
               aria-selected=${k === viewing} onClick=${() => { session.ui.viewing.value = k; }}>
               ${itemMeta(k).label}${store.entry(k)?.step === 'fixture' ? html` <span class="muted">(synthetic)</span>` : ''}
             </button>`)}
         </div>
-        <button type="button" class="example-button" disabled=${example.busy} onClick=${loadExample}>
+        <button type="button" class="btn small example-button" disabled=${example.busy} onClick=${loadExample}>
           Load the example's first echo (15 MB)
         </button>
         ${example.text && html`<span class="muted small" role="status">${example.text}</span>`}

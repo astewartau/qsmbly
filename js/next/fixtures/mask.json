@@ -1,0 +1,264 @@
+{
+ "presets": [
+  {
+   "name": "robust-threshold",
+   "sections": [
+    {
+     "input": "phase-quality",
+     "generator": {
+      "op": "threshold",
+      "method": "otsu",
+      "value": null
+     },
+     "refinements": [
+      {
+       "op": "dilate",
+       "iterations": 1
+      },
+      {
+       "op": "fill-holes",
+       "max_size": 0
+      },
+      {
+       "op": "erode",
+       "iterations": 1
+      }
+     ]
+    }
+   ],
+   "combine": "or",
+   "refinements": []
+  },
+  {
+   "name": "bet",
+   "sections": [
+    {
+     "input": "magnitude",
+     "generator": {
+      "op": "bet",
+      "fractional_intensity": 0.5,
+      "voxel_scale": 1
+     },
+     "refinements": [
+      {
+       "op": "erode",
+       "iterations": 2
+      }
+     ]
+    }
+   ],
+   "combine": "or",
+   "refinements": []
+  },
+  {
+   "name": "hd-bet",
+   "sections": [
+    {
+     "input": "magnitude",
+     "generator": {
+      "op": "hd-bet",
+      "patch": null,
+      "tta": false,
+      "tile_step": 0.5
+     },
+     "refinements": [
+      {
+       "op": "signal-erode",
+       "threshold": 0.8,
+       "depth_cap": 5,
+       "global_erosions": 1,
+       "bias_sigma": 12,
+       "min_component": 1000
+      }
+     ]
+    }
+   ],
+   "combine": "or",
+   "refinements": []
+  },
+  {
+   "name": "bet-and-phase",
+   "sections": [
+    {
+     "input": "magnitude-first",
+     "generator": {
+      "op": "bet",
+      "fractional_intensity": 0.5,
+      "voxel_scale": 1
+     },
+     "refinements": []
+    },
+    {
+     "input": "phase-quality",
+     "generator": {
+      "op": "threshold",
+      "method": "otsu",
+      "value": null
+     },
+     "refinements": [
+      {
+       "op": "dilate",
+       "iterations": 1
+      },
+      {
+       "op": "fill-holes",
+       "max_size": 0
+      },
+      {
+       "op": "erode",
+       "iterations": 1
+      }
+     ]
+    }
+   ],
+   "combine": "and",
+   "refinements": [
+    {
+     "op": "fill-holes",
+     "max_size": 0
+    },
+    {
+     "op": "erode",
+     "iterations": 1
+    }
+   ]
+  },
+  {
+   "name": "rs2-net",
+   "sections": [
+    {
+     "input": "magnitude",
+     "generator": {
+      "op": "rs2-net",
+      "tta": false,
+      "tile_step": 0.5
+     },
+     "refinements": []
+    }
+   ],
+   "combine": "or",
+   "refinements": []
+  },
+  {
+   "name": "mindgrab",
+   "sections": [
+    {
+     "input": "magnitude",
+     "generator": {
+      "op": "mindgrab",
+      "tta": false
+     },
+     "refinements": []
+    }
+   ],
+   "combine": "or",
+   "refinements": []
+  }
+ ],
+ "ops": [
+  {
+   "op": "threshold",
+   "method": "otsu",
+   "value": null
+  },
+  {
+   "op": "bet",
+   "fractional_intensity": 0.5,
+   "voxel_scale": 1
+  },
+  {
+   "op": "hd-bet",
+   "patch": null,
+   "tta": false,
+   "tile_step": 0.5
+  },
+  {
+   "op": "rs2-net",
+   "tta": false,
+   "tile_step": 0.5
+  },
+  {
+   "op": "mindgrab",
+   "tta": false
+  },
+  {
+   "op": "erode",
+   "iterations": 1
+  },
+  {
+   "op": "dilate",
+   "iterations": 1
+  },
+  {
+   "op": "close",
+   "radius": 1
+  },
+  {
+   "op": "fill-holes",
+   "max_size": 0
+  },
+  {
+   "op": "gaussian-smooth",
+   "sigma_mm": 4
+  },
+  {
+   "op": "signal-erode",
+   "threshold": 0.8,
+   "depth_cap": 5,
+   "global_erosions": 1,
+   "bias_sigma": 12,
+   "min_component": 1000
+  }
+ ],
+ "generators": [
+  {
+   "op": "threshold",
+   "method": "otsu",
+   "value": null
+  },
+  {
+   "op": "bet",
+   "fractional_intensity": 0.5,
+   "voxel_scale": 1
+  },
+  {
+   "op": "hd-bet",
+   "patch": null,
+   "tta": false,
+   "tile_step": 0.5
+  },
+  {
+   "op": "rs2-net",
+   "tta": false,
+   "tile_step": 0.5
+  },
+  {
+   "op": "mindgrab",
+   "tta": false
+  }
+ ],
+ "two_pass_sections": [
+  {
+   "input": "phase-quality",
+   "generator": {
+    "op": "threshold",
+    "method": "otsu",
+    "value": null
+   },
+   "refinements": []
+  }
+ ],
+ "hd_bet_patches": {
+  "native": [
+   192,
+   192,
+   96
+  ],
+  "low_memory": [
+   128,
+   128,
+   64
+  ]
+ },
+ "hd_bet_tile_step": 0.5
+}

@@ -8,7 +8,8 @@ import { html } from './html.js';
 import { App } from './components/App.js';
 import { createSession } from './store/session.js';
 import { VolumeStore } from './store/volumes.js';
-import { loadFixtures, fixturePlanner, putPhantom } from './fixtures.js';
+import { loadFixtures, recordedPlanner, putPhantom } from './fixtures.js';
+import { recordedSettingsView } from './settings-view.js';
 
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
 
@@ -24,8 +25,11 @@ try {
   const fixtures = await loadFixtures();
   const store = new VolumeStore();
   const session = createSession({
-    defaults: fixtures.config,
-    planner: fixturePlanner(fixtures),
+    defaults: fixtures.browserConfig,
+    // Recorded plans until the workspace plans through the bindings (U2).
+    planner: recordedPlanner(fixtures.plans, fixtures.browserConfig),
+    // The seam for the engine's settings_view: recorded views until the bindings export it.
+    settingsView: recordedSettingsView(fixtures.views, fixtures.browserConfig),
     storage: storage(),
     schedule: (run) => requestAnimationFrame(() => run()),
   });
