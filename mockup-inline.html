@@ -193,6 +193,42 @@
     .flash { animation: flash 1.2s ease-out; }
     @keyframes flash { from { background: var(--accent-soft); } to { background: transparent; } }
 
+    /* Mask recipe */
+    .seg { display: inline-flex; border: 1px solid var(--input-border); border-radius: var(--r); overflow: hidden; gap: 0; }
+    .seg button { height: 22px; padding: 0 8px; border: 0; background: var(--input-bg); cursor: pointer; font-size: 12px; }
+    .seg button + button { border-left: 1px solid var(--input-border); }
+    .seg button[aria-checked='true'] { background: var(--accent); color: #fff; }
+    .mask-sec { margin: 6px 0; padding: 0 8px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
+    .mask-sec.reliable { margin-left: 12px; }
+    .mask-sec .mask-sec { border: 0; padding: 0; margin: 0; }
+    .mask-sec-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 26px;
+      font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--muted);
+    }
+    .mask-sec-head .muted { text-transform: none; font-weight: 400; letter-spacing: 0; }
+    .steps-lbl { font-size: 11px; color: var(--muted); padding: 4px 0 0; }
+    .ops { list-style: none; margin: 0; padding: 0; }
+    .row.op .lab { color: var(--text); }
+    .n { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--panel-2); font-size: 10px; color: var(--muted); margin-right: 2px; }
+    .icons { display: inline-flex; gap: 0; }
+    .ib { width: 18px; height: 18px; padding: 0; border: 0; background: none; color: var(--muted); cursor: pointer; display: inline-grid; place-items: center; border-radius: 3px; }
+    .ib svg { width: 12px; height: 12px; }
+    .ib:hover:not(:disabled) { color: var(--text); background: var(--hover); }
+    .ib:disabled { opacity: .3; cursor: default; }
+    .row.op .icons { opacity: .35; }
+    .row.op:hover .icons, .row.op:focus-within .icons, .mask-sec-head .icons { opacity: 1; }
+    .combine { display: flex; justify-content: center; margin: 2px 0; font-size: 12px; color: var(--muted); }
+    .add-op { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px 0; }
+    .add-op .chip { height: 22px; padding: 0 8px; }
+    .mask-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; }
+    .tbtn.small { height: 24px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+    .tbtn.small svg { width: 14px; height: 14px; }
+    .numwrap { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+    .more { white-space: nowrap; }
+    .more svg { width: 12px; height: 12px; }
+    .combine { gap: 8px; align-items: center; }
+    .sub.opt-help { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
     /* Viewer */
     .viewer { display: grid; grid-template-rows: 34px minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
     .vtool {
@@ -245,8 +281,8 @@
 
     const params = new URLSearchParams(location.search);
     if (params.get('theme')) document.documentElement.dataset.theme = params.get('theme');
-    const [schema, browser] = await Promise.all(
-      ['schema.json', 'config-browser.json'].map((f) => fetch(`js/next/fixtures/${f}`).then((r) => r.json())));
+    const [schema, browser, maskKit] = await Promise.all(
+      ['schema.json', 'config-browser.json', 'mask.json'].map((f) => fetch(`js/next/fixtures/${f}`).then((r) => r.json())));
     const byPath = new Map(schema.settings.map((s) => [s.path, s]));
 
     // ---- Stand-ins (the engine provides these in the app) ----------------------------------
@@ -319,10 +355,72 @@
       if (s.max !== undefined && (s.exclusive_max ? v >= s.max : v > s.max)) return `Must be ${s.exclusive_max ? 'less than' : 'at most'} ${s.max}.`;
       return null;
     };
+    // ---- The mask recipe (masking.sections, .combine, .refinements, .two_pass_sections) ----
+    // The ops, their defaults and the presets are the engine's (fixtures/mask.json). Their labels,
+    // help and ranges are stand-ins in the TUI's wording: the schema's mask-sections / mask-ops
+    // types do not describe their parts yet (schema feedback).
+    const INPUTS = [
+      ['phase-quality', 'Phase quality', 'A phase-quality map from every echo: high where the phase is reliable'],
+      ['magnitude', 'Magnitude', 'The magnitude, combined over echoes'],
+      ['magnitude-first', 'First-echo magnitude', 'The first echo\'s magnitude (best SNR)'],
+      ['magnitude-last', 'Last-echo magnitude', 'The last echo\'s magnitude'],
+    ];
+    const OPS = {
+      threshold: { label: 'Threshold', help: 'Keep voxels above a threshold of the input' },
+      bet: { label: 'BET', help: 'Brain extraction (BET) on the magnitude', params: [
+        ['fractional_intensity', 'Fractional intensity', '', { min: 0, max: 1, xmin: true, xmax: true }, 'Smaller keeps a larger brain (0 to 1)'],
+        ['voxel_scale', 'Voxel scale', '×', { min: 0, xmin: true }, 'Inflates the voxel sizes for rodent data (10 for mouse); 1 is the scan\'s own geometry'],
+      ] },
+      'hd-bet': { label: 'HD-BET', help: 'HD-BET deep-learning brain extraction (123 MB weights, CC-BY-NC 4.0)' },
+      'rs2-net': { label: 'RS2-Net', help: 'RS2-Net deep-learning rodent brain extraction', params: [
+        ['tta', 'Mirroring TTA', 'bool', {}, 'Test-time augmentation by mirroring: more passes, slower'],
+        ['tile_step', 'Patch step', '', { min: 0, max: 1, xmin: true }, 'Sliding-window stride, as a fraction of the patch'],
+      ] },
+      mindgrab: { label: 'MindGrab', help: 'MindGrab deep-learning brain extraction, for any contrast', params: [
+        ['tta', 'Flip TTA', 'bool', {}, 'A second, left-right flipped pass; about 2× slower'],
+      ] },
+      erode: { label: 'Erode', help: 'Peel voxels off the mask surface', params: [['iterations', 'Iterations', 'vox', { min: 1, int: true }, 'Erosion iterations']] },
+      dilate: { label: 'Dilate', help: 'Grow the mask outwards', params: [['iterations', 'Iterations', 'vox', { min: 1, int: true }, 'Dilation iterations']] },
+      close: { label: 'Close', help: 'Morphological closing: dilate, then erode', params: [['radius', 'Radius', 'vox', { min: 1, int: true }, 'Closing radius']] },
+      'fill-holes': { label: 'Fill holes', help: 'Fill enclosed holes', params: [['max_size', 'Max hole size', 'vox', { min: 0, int: true }, 'Largest hole to fill; 0 fills any size']] },
+      'gaussian-smooth': { label: 'Smooth', help: 'Gaussian smoothing of the mask edge', params: [['sigma_mm', 'Sigma', 'mm', { min: 0, xmin: true }, 'Gaussian sigma']] },
+      'signal-erode': { label: 'Signal erode', help: 'Peel only low-signal boundary voxels (sinus, skull-base dropout)', params: [
+        ['threshold', 'Signal gate', '', { min: 0, max: 1, xmin: true }, 'Fraction of the in-mask median magnitude; above ~0.85 it over-carves'],
+        ['depth_cap', 'Depth cap', 'vox', { min: 0, int: true }, 'Never peel deeper than this below the original surface (0 = no cap)'],
+        ['global_erosions', 'Plain erosions', '', { min: 0, int: true }, 'Plain erosions inside signal-erode, before the gate'],
+        ['bias_sigma', 'Bias sigma', 'vox', { min: 0, xmin: true }, 'Scale of the receive-coil bias estimate divided out of the magnitude'],
+        ['min_component', 'Min component', 'vox', { min: 0, int: true }, 'Keep every component with at least this many voxels'],
+      ] },
+    };
+    const opDefault = (op) => structuredClone(maskKit.ops.find((o) => o.op === op));
+    const GENERATORS = maskKit.generators.map((g) => g.op);
+    const REFINERS = maskKit.ops.map((o) => o.op).filter((op) => !GENERATORS.includes(op));
+    const opText = (o) => {
+      switch (o.op) {
+        case 'threshold': return o.method === 'otsu' ? 'otsu' : `${o.method} ${o.value ?? (o.method === 'fixed' ? 0.5 : 75)}`;
+        case 'bet': return `BET ${o.fractional_intensity}`;
+        case 'hd-bet': return `HD-BET${o.patch ? ` ${o.patch.join('×')}` : ''}`;
+        case 'erode': case 'dilate': return `${o.op} ${o.iterations}`;
+        case 'fill-holes': return 'fill holes';
+        default: return OPS[o.op]?.label.toLowerCase() ?? o.op;
+      }
+    };
+    const recipeOf = (c) => ({ sections: c.masking.sections, combine: c.masking.combine, refinements: c.masking.refinements });
+    const presetOf = (c) => maskKit.presets.find((p) => same(p.sections, c.masking.sections) && p.combine === c.masking.combine && same(p.refinements, c.masking.refinements))?.name;
     const maskSummary = (c) => {
-      if (c.masking.custom_mask_tool) return 'supplied file';
-      const sec = c.masking.sections[0];
-      return [sec.generator.method ?? sec.generator.op, ...sec.refinements.map((r) => r.op)].join(' · ');
+      if (c.masking.custom_mask_tool) return 'your own file';
+      const preset = presetOf(c);
+      if (preset) return `${preset}${c.masking.two_pass ? ' · two-pass' : ''}`;
+      const secs = c.masking.sections.map((sec) => [opText(sec.generator), ...sec.refinements.map(opText)].join(', '));
+      const after = c.masking.sections.length > 1 && c.masking.refinements.length ? ` → ${c.masking.refinements.map(opText).join(', ')}` : '';
+      return secs.join(` ${c.masking.combine.toUpperCase()} `) + after;
+    };
+    const checkRange = (r, v) => {
+      if (typeof v !== 'number' || !Number.isFinite(v)) return 'Enter a number.';
+      if (r.int && !Number.isInteger(v)) return 'Enter a whole number.';
+      if (r.min !== undefined && (r.xmin ? v <= r.min : v < r.min)) return `Must be ${r.xmin ? 'greater than' : 'at least'} ${r.min}.`;
+      if (r.max !== undefined && (r.xmax ? v >= r.max : v > r.max)) return `Must be ${r.xmax ? 'less than' : 'at most'} ${r.max}.`;
+      return null;
     };
 
     // ---- Icons -----------------------------------------------------------------------------
@@ -330,6 +428,11 @@
       chev: html`<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 4l4 4-4 4"/></svg>`,
       info: html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.3"/><path d="M8 7.2v4M8 4.9v.1"/></svg>`,
       reset: html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3.5 8a4.5 4.5 0 1 0 1.4-3.3M3.5 2.8v2.6h2.6"/></svg>`,
+      up: html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10l4-4 4 4"/></svg>`,
+      down: html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6l4 4 4-4"/></svg>`,
+      x: html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>`,
+      plus: html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3.5v9M3.5 8h9"/></svg>`,
+      eye: html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>`,
       search: html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>`,
     };
 
@@ -468,13 +571,227 @@
           ${open && html`
             <div class="step-body">
               ${toggle && !on && html`<div class="sub" style="padding:6px 0">${toggle.help}</div>`}
-              ${(on || step.toggles) && shown.map((s) => html`<${Row} key=${s.path} s=${s} config=${config} edit=${edit} depth=${depth(s)}
+              ${step.id === 'masking' && html`<${MaskEditor} config=${config} edit=${edit} files=${files} setFiles=${setFiles}
+                advanced=${advanced} focus=${focus} clearFocus=${clearFocus} />`}
+              ${step.id !== 'masking' && (on || step.toggles) && shown.map((s) => html`<${Row} key=${s.path} s=${s} config=${config} edit=${edit} depth=${depth(s)}
                 files=${files} setFiles=${setFiles} focus=${focus === s.path} clearFocus=${clearFocus} />`)}
-              ${(on || step.toggles) && (hidden > 0 || advanced) && rows.some((s) => s.level === 'advanced') && html`
+              ${step.id !== 'masking' && (on || step.toggles) && (hidden > 0 || advanced) && rows.some((s) => s.level === 'advanced') && html`
                 <button class="more" onClick=${() => setAdvanced(!advanced)}>${advanced ? '− Fewer settings' : `+ ${hidden} advanced`}</button>`}
             </div>`}
         </li>`;
     }
+
+    function MaskEditor({ config, edit, files, setFiles, focus, clearFocus }) {
+      const m = config.masking;
+      const own = !!m.custom_mask_tool;
+      const preset = presetOf(config);
+      const recipeChanged = !same(recipeOf(config), recipeOf(browser));
+      const setSections = (key, secs) => edit(`masking.${key}`, secs);
+      const usesBet = [...m.sections, ...(m.two_pass ? m.two_pass_sections ?? [] : [])].some((sec) => [sec.generator, ...sec.refinements].some((o) => o.op === 'bet'));
+      const twoPass = byPath.get('masking.two_pass');
+      return html`
+        <div class="mask">
+          <div class="row">
+            <div class="lab"><span class="dot"></span><span>Mask from</span></div>
+            <div class="ctl seg" role="radiogroup" aria-label="Mask from">
+              <button role="radio" aria-checked=${!own} onClick=${() => { if (own) { setFiles({}); edit('masking.custom_mask_tool', null); } }}>Recipe</button>
+              <button role="radio" aria-checked=${own} onClick=${() => { if (!own) edit('masking.custom_mask_tool', 'qsmbly'); }}>Your own file</button>
+            </div>
+          </div>
+          ${own && html`<${Row} s=${byPath.get('masking.custom_mask_tool')} config=${config} edit=${edit} depth=${0} files=${files} setFiles=${setFiles}
+              focus=${focus === 'masking.custom_mask_tool'} clearFocus=${clearFocus} />
+            <div class="sub">The file is exported as a BIDS derivative (derivatives/qsmbly/), so QSMxT uses the same mask.</div>`}
+          ${!own && html`
+            <div class=${`row${recipeChanged ? ' changed' : ''}`}>
+              <div class="lab"><span class="dot"></span><label for="mask-preset">Preset</label></div>
+              <div class="ctl">
+                <select class="sel" id="mask-preset" onChange=${(e) => {
+                  const p = maskKit.presets.find((x) => x.name === e.currentTarget.value);
+                  if (p) edit('masking', { ...m, sections: structuredClone(p.sections), combine: p.combine, refinements: structuredClone(p.refinements) });
+                }}>
+                  ${maskKit.presets.map((p) => html`<option value=${p.name} selected=${p.name === preset}>${p.name}</option>`)}
+                  ${!preset && html`<option selected>custom</option>`}
+                </select>
+                <button class="reset" title="Reset the recipe" aria-label="Reset the mask recipe"
+                  onClick=${() => edit('masking', { ...m, ...structuredClone(recipeOf(browser)) })}>${recipeChanged ? ICON.reset : ''}</button>
+              </div>
+            </div>
+            <${Sections} sections=${m.sections} combine=${m.combine} setSections=${(x) => setSections('sections', x)}
+              setCombine=${(v) => edit('masking.combine', v)} />
+            ${m.sections.length > 1 && html`
+              <div class="mask-sec">
+                <div class="mask-sec-head"><span>After combining</span></div>
+                <${OpList} ops=${m.refinements} setOps=${(ops) => edit('masking.refinements', ops)} choices=${REFINERS} />
+              </div>`}
+            ${usesBet && html`
+              <div class="mask-sec">
+                <div class="mask-sec-head"><span>BET surface (every BET step)</span></div>
+                ${['bet.smoothness', 'bet.gradient_threshold', 'bet.iterations', 'bet.subdivisions'].map((p) => html`<${Row} key=${p} s=${byPath.get(p)}
+                  config=${config} edit=${edit} depth=${0} files=${files} setFiles=${setFiles} focus=${focus === p} clearFocus=${clearFocus} />`)}
+              </div>`}
+            <${Row} s=${twoPass} config=${config} edit=${(path, v) => edit('masking', { ...m, two_pass: v,
+              two_pass_sections: v ? (m.two_pass_sections ?? structuredClone(maskKit.two_pass_sections)) : m.two_pass_sections })}
+              depth=${0} files=${files} setFiles=${setFiles} focus=${focus === 'masking.two_pass'} clearFocus=${clearFocus} />
+            ${m.two_pass && html`
+              <div class="mask-sec reliable">
+                <div class="mask-sec-head"><span>Reliable mask</span><span class="muted">combined with ${m.combine.toUpperCase()}, like the main mask</span></div>
+                <${Sections} sections=${m.two_pass_sections ?? maskKit.two_pass_sections} combine=${m.combine} fixedCombine
+                  setSections=${(x) => setSections('two_pass_sections', x)} />
+              </div>`}
+            <div class="mask-actions">
+              <button class="tbtn small" title="Computes the mask from this recipe and overlays it in the viewer (with the engine's masking, in the app)"
+                onClick=${(e) => { e.currentTarget.textContent = 'Preview: in the app'; }}>${ICON.eye} Preview mask</button>
+              <span class="muted">Shows the mask on the viewer before running.</span>
+            </div>`}
+        </div>`;
+    }
+
+    function Sections({ sections, combine, setSections, setCombine, fixedCombine }) {
+      const put = (i, sec) => setSections(sections.map((x, j) => (j === i ? sec : x)));
+      const move = (i, d) => { const a = [...sections]; [a[i], a[i + d]] = [a[i + d], a[i]]; setSections(a); };
+      return html`
+        ${sections.map((sec, i) => html`
+          ${i > 0 && html`
+            <div class="combine">
+              ${fixedCombine ? html`<span>${combine.toUpperCase()}</span>`
+                : html`<select class="sel" aria-label="Combine sections with" onChange=${(e) => setCombine(e.currentTarget.value)}>
+                    <option value="or" selected=${combine === 'or'}>OR</option>
+                    <option value="and" selected=${combine === 'and'}>AND</option>
+                  </select><span>${combine === 'or' ? 'a voxel is kept when any section keeps it' : 'a voxel is kept when every section keeps it'}</span>`}
+            </div>`}
+          <div class="mask-sec" data-section=${i}>
+            <div class="mask-sec-head">
+              <span>${sections.length > 1 ? `Section ${i + 1}` : 'Section'}</span>
+              <span class="icons">
+                ${sections.length > 1 && html`
+                  <button class="ib" aria-label=${`Move section ${i + 1} up`} disabled=${i === 0} onClick=${() => move(i, -1)}>${ICON.up}</button>
+                  <button class="ib" aria-label=${`Move section ${i + 1} down`} disabled=${i === sections.length - 1} onClick=${() => move(i, 1)}>${ICON.down}</button>
+                  <button class="ib" aria-label=${`Remove section ${i + 1}`} onClick=${() => setSections(sections.filter((_, j) => j !== i))}>${ICON.x}</button>`}
+              </span>
+            </div>
+            <div class="row">
+              <div class="lab"><label for=${`in-${i}`}>Input</label></div>
+              <div class="ctl"><select class="sel" id=${`in-${i}`} onChange=${(e) => put(i, { ...sec, input: e.currentTarget.value })}>
+                ${INPUTS.map(([v, l]) => html`<option value=${v} selected=${sec.input === v}>${l}</option>`)}
+              </select></div>
+            </div>
+            <div class="sub opt-help">${INPUTS.find(([v]) => v === sec.input)?.[2]}</div>
+            <${Generator} op=${sec.generator} set=${(g) => put(i, { ...sec, generator: g })} id=${`gen-${i}`} />
+            <div class="steps-lbl">Then</div>
+            <${OpList} ops=${sec.refinements} setOps=${(ops) => put(i, { ...sec, refinements: ops })} choices=${REFINERS} />
+          </div>`)}
+        <button class="more" onClick=${() => setSections([...sections, { input: 'magnitude', generator: opDefault('bet'), refinements: [] }])}>
+          ${ICON.plus} Add a section</button>`;
+    }
+
+    function Generator({ op, set, id }) {
+      const params = OPS[op.op]?.params ?? [];
+      const [terr, setTerr] = useState(null);
+      return html`
+        <div class="row">
+          <div class="lab"><label for=${id}>Method</label></div>
+          <div class="ctl"><select class="sel" id=${id} onChange=${(e) => {
+            const g = opDefault(e.currentTarget.value);
+            // The browser profile runs HD-BET as a low-memory sliding window.
+            if (g.op === 'hd-bet') g.patch = maskKit.hd_bet_patches.low_memory;
+            set(g);
+          }}>${GENERATORS.map((g) => html`<option value=${g} selected=${op.op === g}>${OPS[g]?.label ?? g}</option>`)}</select></div>
+        </div>
+        <div class="sub opt-help">${OPS[op.op]?.help}</div>
+        ${op.op === 'threshold' && html`
+          <div class="row" style="--depth:1">
+            <div class="lab"><label for=${`${id}-m`}>Threshold</label></div>
+            <div class="ctl">
+              <select class="sel" id=${`${id}-m`} onChange=${(e) => { const method = e.currentTarget.value; set({ ...op, method, value: method === 'otsu' ? null : method === 'fixed' ? 0.5 : 75 }); }}>
+                ${[['otsu', 'Otsu (automatic)'], ['fixed', 'Fixed value'], ['percentile', 'Percentile']].map(([v, l]) => html`<option value=${v} selected=${op.method === v}>${l}</option>`)}
+              </select>
+              ${op.method !== 'otsu' && html`<${Num} value=${op.value} range=${op.method === 'fixed' ? { min: 0 } : { min: 0, max: 100 }}
+                unit=${op.method === 'percentile' ? '%' : ''} label="Threshold value" set=${(v) => set({ ...op, value: v })} err=${terr} setErr=${setTerr} />`}
+            </div>
+          </div>
+          <${Err} err=${terr} depth=${1} />`}
+        ${op.op === 'hd-bet' && html`
+          <div class="row" style="--depth:1">
+            <div class="lab"><label for=${`${id}-inf`}>Inference</label></div>
+            <div class="ctl"><select class="sel" id=${`${id}-inf`} onChange=${(e) => {
+              const k = e.currentTarget.value; set({ ...op, patch: k === 'full' ? null : maskKit.hd_bet_patches[k] }); }}>
+              <option value="full" selected=${!op.patch}>Whole volume (~6–8 GB)</option>
+              <option value="native" selected=${same(op.patch, maskKit.hd_bet_patches.native)}>192×192×96 window (~3.6 GB)</option>
+              <option value="low_memory" selected=${same(op.patch, maskKit.hd_bet_patches.low_memory)}>128×128×64 window (~1.5 GB)</option>
+            </select></div>
+          </div>
+          ${!op.patch && html`<div class="sub err" style="--depth:1">The whole volume needs more than the browser's 4 GB.</div>`}
+          ${op.patch && html`<${ParamRow} op=${op} set=${set} depth=${1} p=${['tile_step', 'Patch step', '', { min: 0, max: 1, xmin: true }, 'Window stride as a fraction of the patch: larger is faster, with softer seams']} />`}
+          <${ParamRow} op=${op} set=${set} depth=${1} p=${['tta', 'Mirroring TTA', 'bool', {}, 'Test-time augmentation by mirroring; slower']} />`}
+        ${params.map((p) => html`<${ParamRow} op=${op} set=${set} depth=${1} p=${p} />`)}`;
+    }
+
+    function OpList({ ops, setOps, choices }) {
+      const [adding, setAdding] = useState(false);
+      const put = (i, o) => setOps(ops.map((x, j) => (j === i ? o : x)));
+      const move = (i, d) => { const a = [...ops]; [a[i], a[i + d]] = [a[i + d], a[i]]; setOps(a); };
+      return html`
+        <ol class="ops">
+          ${ops.map((o, i) => html`<${OpItem} key=${i} o=${o} i=${i} n=${ops.length} put=${put} move=${move}
+              remove=${() => setOps(ops.filter((_, j) => j !== i))} />`)}
+        </ol>
+        ${adding
+          ? html`<div class="add-op">${choices.map((c) => html`<button class="chip" title=${OPS[c]?.help}
+              onClick=${() => { setOps([...ops, opDefault(c)]); setAdding(false); }}>${OPS[c]?.label ?? c}</button>`)}
+              <button class="ib" aria-label="Cancel" onClick=${() => setAdding(false)}>${ICON.x}</button></div>`
+          : html`<button class="more" onClick=${() => setAdding(true)}>${ICON.plus} Add a step</button>`}`;
+    }
+
+    function OpItem({ o, i, n, put, move, remove }) {
+            const [err, setErr] = useState(null);
+            const params = OPS[o.op]?.params ?? [];
+            const [first, ...rest] = params;
+            return html`<li>
+              <div class="row op">
+                <div class="lab"><span class="n">${i + 1}</span><span title=${OPS[o.op]?.help}>${OPS[o.op]?.label ?? o.op}</span></div>
+                <div class="ctl">
+                  ${first && first[2] !== 'bool' && html`<${Num} value=${o[first[0]]} range=${first[3]} unit=${first[2]} label=${`${OPS[o.op].label} ${first[1]}`}
+                    set=${(v) => put(i, { ...o, [first[0]]: v })} title=${first[4]} err=${err} setErr=${setErr} />`}
+                  <span class="icons">
+                    <button class="ib" aria-label=${`Move step ${i + 1} up`} disabled=${i === 0} onClick=${() => move(i, -1)}>${ICON.up}</button>
+                    <button class="ib" aria-label=${`Move step ${i + 1} down`} disabled=${i === n - 1} onClick=${() => move(i, 1)}>${ICON.down}</button>
+                    <button class="ib" aria-label=${`Remove step ${i + 1}`} onClick=${remove}>${ICON.x}</button>
+                  </span>
+                </div>
+              </div>
+              <${Err} err=${err} depth=${1} />
+              ${o.op === 'fill-holes' && o.max_size === 0 && html`<div class="sub" style="--depth:1">0: any size</div>`}
+              ${rest.map((p) => html`<${ParamRow} op=${o} set=${(x) => put(i, x)} depth=${1} p=${p} />`)}
+            </li>`;
+    }
+
+    function ParamRow({ op, set, p, depth }) {
+      const [key, label, unit, range, help] = p;
+      const [open, setOpen] = useState(false);
+      const [err, setErr] = useState(null);
+      return html`
+        <div class="row" style=${`--depth:${depth}`}>
+          <div class="lab"><span>${label}</span>
+            ${help && html`<button class="info" aria-expanded=${open} aria-label=${`About ${label}`} onClick=${() => setOpen(!open)}>${ICON.info}</button>`}</div>
+          <div class="ctl">${unit === 'bool'
+            ? html`<input type="checkbox" class="switch" aria-label=${label} checked=${!!op[key]} onChange=${(e) => set({ ...op, [key]: e.currentTarget.checked })} />`
+            : html`<${Num} value=${op[key]} range=${range} unit=${unit} label=${label} set=${(v) => set({ ...op, [key]: v })} err=${err} setErr=${setErr} />`}</div>
+        </div>
+        <${Err} err=${err} depth=${depth} />
+        ${open && html`<div class="sub help" style=${`--depth:${depth}`}>${help}</div>`}`;
+    }
+
+    function Num({ value: v, range, unit, label, set, title, err, setErr }) {
+      const [text, setText] = useState(v ?? '');
+      useEffect(() => setText(v ?? ''), [v]);
+      return html`<span class="numwrap">
+        <input class="num" value=${text} aria-label=${label} title=${title ?? ''} aria-invalid=${err ? 'true' : undefined}
+          onInput=${(e) => setText(e.currentTarget.value)}
+          onChange=${(e) => { const n = Number(e.currentTarget.value); const x = e.currentTarget.value.trim() === '' ? 'A value is needed.' : checkRange(range, n); setErr(x); if (!x) set(n); }} />
+        <span class="unit">${unit}</span>
+      </span>`;
+    }
+    const Err = ({ err, depth = 0 }) => err && html`<div class="sub err" style=${`--depth:${depth}`} role="alert">${err}</div>`;
 
     function Row({ s, config, edit, depth, files, setFiles, focus, clearFocus }) {
       const v = value(config, s);
