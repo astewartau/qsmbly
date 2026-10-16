@@ -1,0 +1,30 @@
+{
+  "dims": [
+    184,
+    256,
+    128
+  ],
+  "n_echoes": 5,
+  "echo_times": [
+    0.005,
+    0.011,
+    0.017,
+    0.023,
+    0.029
+  ],
+  "has_magnitude": true,
+  "n_coils": 1,
+  "real_imaginary": false,
+  "field_strength": 2.8946,
+  "b0_dir": [
+    0,
+    0,
+    1
+  ],
+  "mese_echo_times": null,
+  "custom_mask": false,
+  "custom_dseg": false,
+  "custom_qsm": false,
+  "custom_r2": false,
+  "custom_r2prime": false
+}

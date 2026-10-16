@@ -1,0 +1,44 @@
+[
+  {
+    "id": "xqsm",
+    "name": "xQSM",
+    "stage": "DipoleInversion",
+    "size_divisor": 8,
+    "available": true,
+    "inputs": [
+      "field"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "xqsm.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/xqsm.onnx",
+        "sha256": "81854ec2ca85bba25c2f9aae05efdcac299d0efffb03fe6a0e6797019e46b487",
+        "bytes": 20901826
+      }
+    ]
+  },
+  {
+    "id": "hd-bet",
+    "name": "HD-BET",
+    "stage": "BrainExtraction",
+    "size_divisor": 32,
+    "available": true,
+    "inputs": [
+      "image"
+    ],
+    "outputs": [
+      "logits"
+    ],
+    "files": [
+      {
+        "name": "hd-bet.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/hd-bet.onnx",
+        "sha256": "f15200f9a0697cf53b151e316a0c4fe2cacfdbe2220deb36cb56184be4a227f9",
+        "bytes": 123168028
+      }
+    ]
+  }
+]

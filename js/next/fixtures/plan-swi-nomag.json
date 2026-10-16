@@ -1,0 +1,92 @@
+{
+  "steps": [
+    {
+      "stage": "Load",
+      "models": [],
+      "host": false,
+      "name": "load",
+      "label": "Load"
+    },
+    {
+      "stage": "ScalePhase",
+      "models": [],
+      "host": false,
+      "name": "scale_phase",
+      "label": "Phase scaling"
+    },
+    {
+      "stage": {
+        "Mask": "Main"
+      },
+      "models": [],
+      "host": false,
+      "name": "mask",
+      "label": "Brain mask"
+    },
+    {
+      "stage": "Motion",
+      "models": [],
+      "host": true,
+      "name": "motion",
+      "label": "Motion correction"
+    },
+    {
+      "stage": "FieldMap",
+      "models": [],
+      "host": false,
+      "name": "unwrap",
+      "label": "Field map"
+    },
+    {
+      "stage": {
+        "BackgroundRemoval": "Main"
+      },
+      "models": [],
+      "host": false,
+      "name": "bgremove",
+      "label": "Background-field removal"
+    },
+    {
+      "stage": {
+        "Inversion": "Main"
+      },
+      "models": [],
+      "host": false,
+      "name": "invert",
+      "label": "Dipole inversion"
+    },
+    {
+      "stage": "Reference",
+      "models": [],
+      "host": false,
+      "name": "reference",
+      "label": "Referencing"
+    },
+    {
+      "stage": "OutputSpace",
+      "models": [],
+      "host": true,
+      "name": "output_space",
+      "label": "Return to the acquired grid"
+    }
+  ],
+  "models": [],
+  "peak_memory_bytes": 1896821555,
+  "check": {
+    "errors": [
+      "--do-swi needs magnitude images, and this run has none"
+    ],
+    "warnings": [],
+    "problems": [
+      {
+        "severity": "error",
+        "setting": "pipeline.do_swi",
+        "implied_by": null,
+        "reason": "needs magnitude images, and this run has none"
+      }
+    ]
+  },
+  "notes": [],
+  "two_pass": false,
+  "motion_corrected": false
+}
