@@ -1,9 +1,10 @@
 /**
  * The workspace (redesign §3.3): the pipeline column, with each step's settings inline, beside
  * the viewer and its outputs, and the run bar below. Under 900 px the viewer sits above the
- * pipeline.
+ * pipeline. Tabs over the viewer switch it for the pipeline graph or the command.
  *
  * @typedef {import('../store/session.js').Session} Session
+ * @typedef {import('../exports.js').Providers} Providers
  * @typedef {import('../store/volumes.js').VolumeStore} VolumeStore
  *
  * @typedef {object} Workspace - what the engine said at start-up (main.js)
@@ -17,6 +18,8 @@ import { html } from '../html.js';
 import { useState, useEffect } from 'preact/hooks';
 import { Pipeline } from './Pipeline.js';
 import { RunBar } from './RunBar.js';
+import { GraphTab } from './GraphTab.js';
+import { CommandTab } from './CommandTab.js';
 import { Viewer } from '../viewer/Viewer.js';
 import { itemMeta } from '../items.js';
 import { putExampleEcho } from '../fixtures.js';
@@ -25,15 +28,15 @@ import { installUndoKeys } from '../shortcuts.js';
 export const THEME_STORAGE_KEY = 'qsmbly.next.theme';
 const THEMES = /** @type {const} */ (['auto', 'light', 'dark']);
 
-/** @param {{ session: Session, store: VolumeStore, workspace: Workspace }} props */
-export function App({ session, store, workspace }) {
+/** @param {{ session: Session, store: VolumeStore, workspace: Workspace, providers: Providers }} props */
+export function App({ session, store, workspace, providers }) {
   useEffect(() => installUndoKeys(window, session), [session]);
   return html`
     <div class="workspace">
       <${Header} session=${session} versions=${workspace.versions} />
       <div class="main">
         <${Pipeline} session=${session} store=${store} schema=${workspace.schema} mask=${workspace.mask} />
-        <${ViewerPane} session=${session} store=${store} />
+        <${TabbedPane} session=${session} store=${store} providers=${providers} />
       </div>
       <${RunBar} session=${session} store=${store} models=${workspace.models} />
     </div>
@@ -83,6 +86,44 @@ function Header({ session, versions }) {
   `;
 }
 
+const TABS = /** @type {const} */ ([['viewer', 'Viewer'], ['pipeline', 'Pipeline'], ['command', 'Command']]);
+
+/**
+ * Viewer | Pipeline | Command. The viewer stays mounted behind the other tabs, so it keeps its
+ * volume and view.
+ * @param {{ session: Session, store: VolumeStore, providers: Providers }} props
+ */
+function TabbedPane({ session, store, providers }) {
+  const tab = session.ui.tab.value;
+  const onKey = (e) => {
+    const k = TABS.findIndex(([id]) => id === tab);
+    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const next = TABS[(k + step + TABS.length) % TABS.length][0];
+    session.ui.tab.value = next;
+    /** @type {HTMLElement | null} */ (document.getElementById(`tab-${next}`))?.focus();
+  };
+  return html`
+    <main class="viewer-pane">
+      <div class="pane-tabs" role="tablist" aria-label="View" onKeyDown=${onKey}>
+        ${TABS.map(([id, label]) => html`
+          <button type="button" role="tab" id=${`tab-${id}`} class="pane-tab" aria-selected=${tab === id}
+            aria-controls=${`panel-${id}`} tabindex=${tab === id ? 0 : -1} onClick=${() => { session.ui.tab.value = id; }}>${label}</button>`)}
+      </div>
+      <section class="tab-panel viewer-panel" role="tabpanel" id="panel-viewer" aria-labelledby="tab-viewer" hidden=${tab !== 'viewer'}>
+        <${ViewerPane} session=${session} store=${store} />
+      </section>
+      <section class="tab-panel" role="tabpanel" id="panel-pipeline" aria-labelledby="tab-pipeline" hidden=${tab !== 'pipeline'}>
+        ${tab === 'pipeline' && html`<${GraphTab} session=${session} providers=${providers} />`}
+      </section>
+      <section class="tab-panel" role="tabpanel" id="panel-command" aria-labelledby="tab-command" hidden=${tab !== 'command'}>
+        ${tab === 'command' && html`<${CommandTab} session=${session} providers=${providers} />`}
+      </section>
+    </main>
+  `;
+}
+
 /** @param {{ session: Session, store: VolumeStore }} props */
 function ViewerPane({ session, store }) {
   store.version.value;
@@ -104,7 +145,7 @@ function ViewerPane({ session, store }) {
   };
 
   return html`
-    <main class="viewer-pane">
+    <div class="viewer-body">
       <${Viewer} volume=${volume} />
       <section class="outputs" aria-label="Outputs">
         <span class="outputs-title">Outputs</span>
@@ -120,6 +161,6 @@ function ViewerPane({ session, store }) {
         </button>
         ${example.text && html`<span class="muted small" role="status">${example.text}</span>`}
       </section>
-    </main>
+    </div>
   `;
 }

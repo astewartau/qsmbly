@@ -69,7 +69,7 @@ try {
   const workspace = { schema, mask: { schema: schema.mask, defaults: maskDefaults }, models, versions, engine };
   // The graph, command and settings-file answers, for the Pipeline and Command tabs.
   const providers = engineProviders(engine);
-  render(html`<${App} session=${session} store=${store} workspace=${workspace} />`, root);
+  render(html`<${App} session=${session} store=${store} workspace=${workspace} providers=${providers} />`, root);
   // For the smoke tests and for poking at it from the console.
   Object.assign(globalThis, { qsmblyNext: { session, store, workspace, providers, Superseded } });
 } catch (e) {

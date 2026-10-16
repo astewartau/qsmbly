@@ -1,6 +1,7 @@
 /**
  * The run bar (bottom): the plan's cost before it is paid (memory against the WASM heap, model
- * downloads, problems), what the page holds, and the Run button.
+ * downloads, problems), what the page holds, and the Run button. The plan's step count opens the
+ * Pipeline tab.
  *
  * @typedef {import('../store/session.js').Session} Session
  * @typedef {import('../store/volumes.js').VolumeStore} VolumeStore
@@ -36,11 +37,15 @@ export function RunBar({ session, store, models }) {
   let status = 'Needs data';
   if (error) status = `No plan: ${error}`;
   else if (plan) status = `Plan: ${plan.steps.length} steps`;
+  const showGraph = () => { session.ui.tab.value = 'pipeline'; };
 
   return html`
     <footer class="runbar" aria-label="Run">
       <button type="button" class="run-button" disabled title="Running comes to this workspace in a later step">Run</button>
-      <span class="runbar-item runbar-status" data-testid="plan-status">${status}</span>
+      ${plan && !error
+        ? html`<button type="button" class="runbar-item runbar-status plan-link" data-testid="plan-status" onClick=${showGraph}
+            title="Show the pipeline graph">${status}</button>`
+        : html`<span class="runbar-item runbar-status" data-testid="plan-status">${status}</span>`}
       ${plan && html`
         <span class="runbar-item" data-testid="memory">
           <span>Peak ${formatBytes(peak)} of ${formatBytes(WASM_HEAP_BYTES)}</span>

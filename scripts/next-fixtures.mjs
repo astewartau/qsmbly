@@ -14,13 +14,16 @@
 // - models.json: QSM.rs's model registry (`get_model_registry_wasm`).
 // - engine-cases.json: settings_view and the plan for each config in scripts/next-engine/cases.mjs
 //   (read by js/next/engine/recorded.js).
+// - engine-exports.json: for the same configs, what the Pipeline and Command tabs show (the
+//   pipeline graph and its Mermaid, the `qsmxt run` command, the settings file), and the settings
+//   files in IMPORTS read back as the workspace reads them (read by js/next/engine/recorded.js).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { engineOps } from '../js/next/engine/ops.js';
 import { changesFrom } from '../js/next/engine/recorded.js';
 import { EXAMPLE_SCAN } from '../js/next/fixtures.js';
-import { CASES } from './next-engine/cases.mjs';
+import { CASES, IMPORTS } from './next-engine/cases.mjs';
 
 const bundle = process.argv[2];
 if (!bundle) {
@@ -55,11 +58,33 @@ write('models.json', engine.models());
 const paths = engine.settingsView(browser, facts).map((v) => v.path);
 // Each item's meta once; a case's plan names its items by key.
 const items = {};
+/** @type {object[]} */
+const exportCases = [];
+/** Keep `fn`'s answer, or the engine's reason it has none. */
+const answer = (fn) => {
+  try {
+    return { ok: fn() };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+};
 const cases = CASES.map(({ name, edits, scan }) => {
   const config = edits.reduce((c, [path, value]) => engine.set(c, path, value), browser);
   const f = { ...facts, ...scan };
   const view = engine.settingsView(config, f);
   if (JSON.stringify(view.map((v) => v.path)) !== JSON.stringify(paths)) throw new Error(`${name}: settings_view lists other settings`);
+  const graph = answer(() => engine.graph(config, f));
+  if (graph.ok) {
+    for (const meta of graph.ok.items) items[meta.key] = meta;
+    graph.ok = { ...graph.ok, items: graph.ok.items.map((meta) => meta.key) };
+  }
+  exportCases.push({
+    changes: changesFrom(config, browser),
+    facts: f,
+    graph,
+    command: answer(() => engine.command(config)),
+    toml: answer(() => engine.toToml(config, true)),
+  });
   return {
     name,
     changes: changesFrom(config, browser),
@@ -76,3 +101,36 @@ const cases = CASES.map(({ name, edits, scan }) => {
   };
 });
 write('engine-cases.json', { browser, paths, items, cases }, true);
+// Settings files read back: each recorded case's own (by its index), and IMPORTS.
+const read = (text) => {
+  const r = answer(() => engine.fromToml(text));
+  return r.ok ? { changes: changesFrom(r.ok.config, browser), warnings: r.ok.warnings } : { error: r.error };
+};
+const imports = [
+  ...exportCases.flatMap((c, i) => (c.toml.ok ? [{ case: i, ...read(c.toml.ok) }] : [])),
+  ...IMPORTS.map((text) => ({ text, ...read(text) })),
+];
+// Kept small: each node once (cases name them by index), and each settings file as the lines
+// it changes in the browser profile's: [start, deleted, ...added].
+const nodes = [];
+const nodeIndex = new Map();
+const baseToml = /** @type {string} */ (exportCases[0].toml.ok).split('\n');
+for (const c of exportCases) {
+  if (c.graph.ok) {
+    c.graph.ok.nodes = c.graph.ok.nodes.map((n) => {
+      const k = JSON.stringify(n);
+      if (!nodeIndex.has(k)) nodeIndex.set(k, nodes.push(n) - 1);
+      return nodeIndex.get(k);
+    });
+  }
+  if (c.toml.ok) {
+    const lines = c.toml.ok.split('\n');
+    let start = 0;
+    while (start < lines.length && start < baseToml.length && lines[start] === baseToml[start]) start++;
+    let end = 0;
+    while (end < lines.length - start && end < baseToml.length - start
+      && lines[lines.length - 1 - end] === baseToml[baseToml.length - 1 - end]) end++;
+    c.toml = { span: [start, baseToml.length - start - end, ...lines.slice(start, lines.length - end)] };
+  }
+}
+write('engine-exports.json', { toml: baseToml, nodes, cases: exportCases, imports }, true);

@@ -1,6 +1,7 @@
 // Smoke tests: the new workspace (next.html) on QSMxT's engine (the built WASM bundle), and today's
 // UI still loading and running.
 import { test, expect } from '@playwright/test';
+import { readFileSync, rmSync } from 'node:fs';
 
 /** Collect uncaught page errors and console errors, minus noise that is not ours. */
 function watchErrors(page) {
@@ -217,6 +218,96 @@ test.describe('next.html', () => {
     await page.getByRole('radio', { name: 'Recipe' }).click();
     expect(await page.evaluate(() => globalThis.qsmblyNext.store.has('SuppliedMask'))).toBe(false);
     expect(await get(page, 'masking.custom_mask_tool')).toBe(null);
+    expect(errors).toEqual([]);
+  });
+
+  test('draws the pipeline graph and gives the command, following the settings', async ({ page, context }, testInfo) => {
+    const errors = watchErrors(page);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
+    await page.goto('next.html');
+
+    // "Plan: N steps" opens the Pipeline tab; the viewer is hidden behind it, not unmounted.
+    await page.getByTestId('plan-status').click();
+    await expect(page.getByRole('tab', { name: 'Pipeline' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('region', { name: 'Viewer' })).toBeHidden();
+    const graph = page.getByTestId('graph');
+    const box = (step) => graph.locator(`.g-node[data-step="${step}"]`);
+    await expect(graph.locator('.g-node')).toHaveCount(9);
+    await expect(box('bgremove')).toContainText('V-SHARP');
+    await expect(graph.locator('.g-edge.collapsed')).toHaveCount(1);
+
+    // Clicking a box opens its step in the pipeline column.
+    await box('unwrap').click();
+    await expect(stepRow(page, 'fieldmap')).toHaveAttribute('data-open', 'true');
+    await expect(row(page, 'field_mapping.unwrapping_algorithm')).toBeVisible();
+
+    // Hovering highlights the box's arrows.
+    await box('mask').hover();
+    await expect(graph.locator('.g-edge.hi[data-from="mask"]').first()).toBeVisible();
+
+    // A change of algorithm redraws the graph: TGV removes the background itself.
+    await page.locator('[data-section="inversion"]').click();
+    await page.getByLabel('QSM Inversion', exact).selectOption({ label: 'TGV' });
+    await expect(box('bgremove')).toHaveCount(0);
+    await expect(box('tgv')).toContainText('TGV');
+
+    // Export: the engine's Mermaid, and the drawing as an SVG file.
+    await page.getByRole('button', { name: 'Export' }).click();
+    await page.getByRole('menuitem', { name: 'Copy Mermaid' }).click();
+    expect(await clipboard()).toMatch(/^flowchart/);
+    await page.getByRole('button', { name: 'Export' }).click();
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: 'Download SVG' }).click()]);
+    expect(download.suggestedFilename()).toBe('pipeline.svg');
+    const svgPath = testInfo.outputPath('pipeline.svg');
+    await download.saveAs(svgPath);
+    const svg = readFileSync(svgPath, 'utf8');
+    rmSync(svgPath);
+    await download.delete();
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
+    expect(svg).toContain('TGV-QSM');
+    expect(svg).not.toContain('translate(0px');
+
+    // The Command tab: the command and the settings file for these settings, to copy.
+    await page.getByRole('tab', { name: 'Command' }).click();
+    const command = page.getByTestId('command');
+    const tgv = 'qsmxt run <bids_dir> <output_dir> \\\n  --qsm-algorithm tgv';
+    await expect(command).toHaveText(tgv);
+    await page.getByTestId('copy-command').click();
+    await expect(page.getByTestId('copy-command')).toHaveText('Copied');
+    expect(await clipboard()).toBe(tgv);
+    await expect(page.getByTestId('toml')).toContainText('algorithm = "tgv"');
+    await page.getByTestId('copy-toml').click();
+    expect(await clipboard()).toContain('algorithm = "tgv"');
+
+    // Undo puts iLSQR back; the command follows.
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect(command).toHaveText('qsmxt run <bids_dir> <output_dir>');
+
+    // Import: a file the engine cannot read is refused inline; a good one replaces the settings.
+    const input = page.getByTestId('import-toml');
+    await input.setInputFiles({ name: 'broken.toml', mimeType: 'application/toml', buffer: Buffer.from('this is not toml {{{') });
+    await expect(page.getByTestId('import-status')).toContainText('broken.toml could not be read');
+    await expect(page.getByTestId('import-status')).toContainText('TOML parse error');
+    const swiToml = await page.evaluate(async () => {
+      const { providers, session } = globalThis.qsmblyNext;
+      const config = session.config.value;
+      return (await providers.toml({ ...config, pipeline: { ...config.pipeline, do_swi: true } })).toml;
+    });
+    await input.setInputFiles({ name: 'swi.toml', mimeType: 'application/toml', buffer: Buffer.from(swiToml) });
+    await expect(page.getByTestId('import-status')).toContainText('Read swi.toml');
+    expect(await get(page, 'pipeline.do_swi')).toBe(true);
+    await expect(command).toContainText('--do-swi');
+    // A file written for QSMxT on a workstation: read with the engine's warning, and given the
+    // browser profile (tiled inversion networks), as a browser run needs.
+    const tile = await get(page, 'inversion.tile_size');
+    expect(tile).toBeGreaterThan(0);
+    await input.setInputFiles({ name: 'old.toml', mimeType: 'application/toml', buffer: Buffer.from('[pipeline]\nobliquity_threshold = -1\n') });
+    await expect(page.getByTestId('import-status')).toContainText('Read old.toml');
+    await expect(page.getByTestId('import-status').locator('.problem-warning')).toContainText('deprecated');
+    expect(await get(page, 'pipeline.do_swi')).toBe(false);
+    expect(await get(page, 'inversion.tile_size')).toBe(tile);
     expect(errors).toEqual([]);
   });
 
