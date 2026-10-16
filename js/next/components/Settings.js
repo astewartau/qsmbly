@@ -109,12 +109,12 @@ export function SettingRow({ row, session, store, byPath, child }) {
   const control = controlFor(setting);
   const on = !control.toggled || !same(value, setting.off) || opening;
   const id = domId(setting.path);
-  const helpId = `${id}-help`;
+  const help = [setting.help, setting.value_help].filter(Boolean).join(' ');
+  const helpId = help ? `${id}-help` : undefined;
   const errorId = `${id}-error`;
   const badge = browserDefaultNote(setting);
   const forcer = forcedBy ? byPath.get(forcedBy) : null;
   const units = setting.units ? ` (${setting.units})` : '';
-  const help = [setting.help, setting.value_help].filter(Boolean).join(' ');
 
   /** @param {unknown} next */
   const commit = (next) => {
@@ -280,6 +280,7 @@ function EchoField({ setting, value, id, session, setError, commit, aria }) {
   const { named, numbered, echo } = echoChoice(setting, value);
   const max = session.facts.value?.n_echoes;
   const choice = echo !== null ? 'echo' : String(value);
+  const chosen = echo !== null ? numbered : named.find((o) => o.value === value);
   return html`
     <select id=${id} class="setting-input" ...${aria}
       onChange=${(e) => commit(e.currentTarget.value === 'echo' ? String(echo ?? 1) : e.currentTarget.value)}>
@@ -294,8 +295,7 @@ function EchoField({ setting, value, id, session, setError, commit, aria }) {
           if (!Number.isInteger(n) || n < 1 || (max && n > max)) { setError(max ? `Enter an echo from 1 to ${max}.` : 'Enter an echo number from 1.'); return; }
           commit(String(n));
         }} />`}
-    ${[...named, numbered].find((o) => o && (o.value === value || (o === numbered && echo !== null)))?.help && html`
-      <p class="option-help">${[...named, numbered].find((o) => o && (o.value === value || (o === numbered && echo !== null)))?.help}</p>`}
+    ${chosen?.help && html`<p class="option-help">${chosen.help}</p>`}
   `;
 }
 

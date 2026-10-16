@@ -25,7 +25,8 @@
  */
 import { signal, computed, effect, batch } from '@preact/signals-core';
 
-export const CONFIG_STORAGE_KEY = 'qsmbly.next.config';
+// v2: the defaults became the browser profile, so configs saved before are not comparable.
+export const CONFIG_STORAGE_KEY = 'qsmbly.next.config.v2';
 export const UI_STORAGE_KEY = 'qsmbly.next.ui';
 const HISTORY_LIMIT = 100;
 
