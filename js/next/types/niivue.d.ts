@@ -3,6 +3,9 @@
 export class NVImage {
   constructor(dataBuffer?: ArrayBufferLike | null, name?: string, colormap?: string, opacity?: number,
     pairedImgData?: ArrayBuffer | null, cal_min?: number, cal_max?: number, trustCalMinMax?: boolean);
+  static new(dataBuffer: ArrayBufferLike | null, name?: string, colormap?: string, opacity?: number,
+    pairedImgData?: ArrayBuffer | null, cal_min?: number, cal_max?: number, trustCalMinMax?: boolean,
+    percentileFrac?: number, ignoreZeroVoxels?: boolean): Promise<NVImage>;
   static createNiftiArray(dims?: number[], pixDims?: number[], affine?: number[], datatypeCode?: number,
     img?: ArrayBufferView): Uint8Array;
   name: string;
