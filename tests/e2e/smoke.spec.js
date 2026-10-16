@@ -1,4 +1,5 @@
-// Smoke tests: the new workspace (next.html) on fixtures, and today's UI still loading.
+// Smoke tests: the new workspace (next.html) on QSMxT's engine (the built WASM bundle), and today's
+// UI still loading and running.
 import { test, expect } from '@playwright/test';
 
 /** Collect uncaught page errors and console errors, minus noise that is not ours. */
@@ -35,7 +36,7 @@ test.describe('next.html', () => {
   const get = (page, path) => page.evaluate((p) => globalThis.qsmblyNext.session.get(p) ?? null, path);
   const exact = { exact: true };
 
-  test('shows the pipeline beside the viewer, on the recorded plan', async ({ page }, testInfo) => {
+  test('shows the pipeline beside the viewer, planned by the engine', async ({ page }, testInfo) => {
     const errors = watchErrors(page);
     await page.goto('next.html');
 
@@ -46,9 +47,12 @@ test.describe('next.html', () => {
     // The steps in run order, each with its current choice; outputs that are off say so.
     await expect(pipeline.locator('.step')).toHaveCount(12);
     await expect(stepRow(page, 'inversion').getByTestId('summary')).toHaveText('iLSQR');
-    await expect(stepRow(page, 'masking').getByTestId('summary')).toHaveText('robust-threshold');
+    await expect(stepRow(page, 'masking').getByTestId('summary')).toHaveText('Robust threshold');
     await expect(stepRow(page, 'motion').getByTestId('summary')).toHaveText('off');
     await expect(stepRow(page, 'swi').getByTestId('summary')).toHaveText('off');
+
+    // The engine worker loaded the bindings, which link QSMxT.
+    expect(await page.evaluate(() => globalThis.qsmblyNext.workspace.versions.qsmxt.version)).toBeTruthy();
 
     // The run bar: the plan's memory against the 4 GB heap, no downloads, no problems.
     await expect(page.getByTestId('plan-status')).toHaveText('Plan: 10 steps');
@@ -67,7 +71,7 @@ test.describe('next.html', () => {
     expect(errors).toEqual([]);
   });
 
-  test('edits settings inline, with ranges, undo and redo from the keyboard', async ({ page }) => {
+  test('edits settings inline, re-planning live, with the engine\'s errors, undo and redo', async ({ page }) => {
     const errors = watchErrors(page);
     await page.goto('next.html');
 
@@ -83,22 +87,28 @@ test.describe('next.html', () => {
     await expect(stepRow(page, 'background').getByTestId('option-help').first()).toContainText('V-SHARP');
     await expect(stepRow(page, 'background').getByRole('link', { name: 'Reference' })).toHaveAttribute('href', /doi\.org/);
 
-    // A value out of range is refused inline (an exclusive bound), and the config keeps its value.
-    const minRadius = page.getByLabel('Min Radius', exact);
+    // A value out of range (an exclusive bound) is written, and the engine says what is wrong.
+    const minRadius = page.getByLabel('Minimum Radius', exact);
     await minRadius.fill('0');
     await minRadius.press('Enter');
-    await expect(stepRow(page, 'background').locator('.sub.err')).toHaveText('Must be greater than 0.');
+    await expect(stepRow(page, 'background').getByTestId('engine-error')).toHaveText('Must be greater than 0');
     await expect(minRadius).toHaveAttribute('aria-invalid', 'true');
-    expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(1);
+    expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(0);
+    // Text that is no number is not written at all.
+    await minRadius.fill('two');
+    await minRadius.press('Enter');
+    await expect(stepRow(page, 'background').getByTestId('typed-error')).toHaveText('Enter a number.');
+    expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(0);
     await minRadius.fill('2');
     await minRadius.press('Enter');
     await expect(row(page, 'bg_removal.vsharp.min_radius')).toHaveClass(/changed/);
+    await expect(stepRow(page, 'background').locator('.sub.err')).toHaveCount(0);
 
     // Another method: its own settings replace V-SHARP's.
-    await page.getByLabel('BG Removal', exact).selectOption({ label: 'Projection onto Dipole Fields' });
+    await page.getByLabel('Background Removal', exact).selectOption({ label: 'PDF' });
     await expect(row(page, 'bg_removal.pdf.tol')).toBeVisible();
     await expect(row(page, 'bg_removal.vsharp.max_radius')).toHaveCount(0);
-    await expect(stepRow(page, 'background').getByTestId('summary')).toHaveText('Projection onto Dipole Fields');
+    await expect(stepRow(page, 'background').getByTestId('summary')).toHaveText('PDF');
 
     // Ctrl+Z undoes from anywhere, Ctrl+Shift+Z redoes.
     await page.locator('.viewer-canvas').click();
@@ -107,14 +117,18 @@ test.describe('next.html', () => {
     await page.keyboard.press('Control+Shift+z');
     await expect(row(page, 'bg_removal.pdf.tol')).toBeVisible();
     await page.keyboard.press('Control+z');
-    // With the focus in a committed field too.
-    await page.getByLabel('Min Radius', exact).focus();
+    // With the focus in a committed field too: back to 0, which the engine refuses again.
+    await page.getByLabel('Minimum Radius', exact).focus();
+    await page.keyboard.press('Control+z');
+    await expect(page.getByLabel('Minimum Radius', exact)).toHaveValue('0');
+    await expect(stepRow(page, 'background').getByTestId('engine-error')).toHaveText('Must be greater than 0');
     await page.keyboard.press('Control+z');
     expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(1);
-    await expect(page.getByLabel('Min Radius', exact)).toHaveValue('1');
+    await expect(page.getByLabel('Minimum Radius', exact)).toHaveValue('1');
+    await page.keyboard.press('Control+Shift+z');
     await page.keyboard.press('Control+Shift+z');
     await row(page, 'bg_removal.vsharp.min_radius').hover();
-    await row(page, 'bg_removal.vsharp.min_radius').getByRole('button', { name: 'Reset Min Radius' }).click();
+    await row(page, 'bg_removal.vsharp.min_radius').getByRole('button', { name: 'Reset Minimum Radius' }).click();
     expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(1);
 
     // An inversion that removes the background itself: the Background step leaves the pipeline.
@@ -135,16 +149,17 @@ test.describe('next.html', () => {
 
     // An output another one needs is forced on, and says why.
     await stepRow(page, 'segmentation').locator('.step-head').click();
-    await page.getByLabel('Per-structure statistics', exact).check();
+    await page.getByLabel('Per-structure Statistics', exact).check();
     await expect(page.getByLabel('Segmentation', exact)).toBeDisabled();
     await expect(page.getByLabel('Segmentation', exact)).toBeChecked();
-    await expect(stepRow(page, 'segmentation').getByTestId('forced')).toHaveText('On because Per-structure statistics needs it.');
+    await expect(stepRow(page, 'segmentation').getByTestId('forced')).toHaveText('On because Per-structure Statistics needs it.');
+    await expect(page.getByTestId('plan-status')).toHaveText('Plan: 11 steps');
 
     // Search finds an advanced setting by its flag and opens it.
     await page.getByLabel('Search settings').fill('--vsharp-max-radius');
     await page.getByRole('list', { name: 'Matching settings' }).getByRole('button').first().click();
     await expect(stepRow(page, 'background')).toHaveAttribute('data-open', 'true');
-    await expect(page.getByLabel('Max Radius', exact)).toBeFocused();
+    await expect(page.getByLabel('Maximum Radius', exact)).toBeFocused();
     expect(errors).toEqual([]);
   });
 
@@ -157,17 +172,17 @@ test.describe('next.html', () => {
     await page.locator('#mask-preset').selectOption('bet-and-phase');
     await expect(editor.locator('.mask-sec[data-section]')).toHaveCount(2);
     await expect(editor.getByRole('region', { name: 'After combining' })).toBeVisible();
-    await expect(editor.getByRole('region', { name: 'BET surface' })).toBeVisible();
+    await expect(editor.getByRole('region', { name: 'BET settings' })).toBeVisible();
 
-    // A step added to section 2, then a bad value refused.
+    // A step added to section 2, then a value out of range, which the engine reports.
     const section2 = editor.getByRole('region', { name: 'Mask, section 2', exact: true });
     await section2.getByRole('button', { name: 'Add a step' }).click();
-    await section2.getByRole('button', { name: 'Signal erode' }).click();
-    await expect(stepRow(page, 'masking').getByTestId('summary')).toContainText('signal erode');
-    const fi = editor.getByLabel('Fractional intensity', exact);
+    await section2.getByRole('button', { name: 'Signal-gated erosion' }).click();
+    await expect(stepRow(page, 'masking').getByTestId('summary')).toContainText('Signal-gated erosion');
+    const fi = editor.getByLabel('Fractional Intensity', exact);
     await fi.fill('1.2');
     await fi.press('Enter');
-    await expect(editor.locator('.sub.err')).toHaveText('Must be less than 1.');
+    await expect(editor.getByTestId('engine-error')).toContainText('Fractional Intensity');
     const shot = await page.screenshot({ path: testInfo.outputPath('mask-recipe.png') });
     await testInfo.attach('mask recipe', { body: shot, contentType: 'image/png' });
 
@@ -186,7 +201,7 @@ test.describe('next.html', () => {
     await page.goto('next.html');
     await page.locator('[data-section="masking"]').click();
     await page.getByRole('radio', { name: 'Your own file' }).click();
-    await page.getByLabel('Use custom masks', exact).setInputFiles({ name: 'mask.nii', mimeType: 'application/octet-stream', buffer: tinyNifti() });
+    await page.getByLabel('Custom Mask', exact).setInputFiles({ name: 'mask.nii', mimeType: 'application/octet-stream', buffer: tinyNifti() });
     await expect(stepRow(page, 'masking').getByTestId('supplied-name')).toHaveText('mask.nii');
     await expect(stepRow(page, 'masking').getByTestId('summary')).toHaveText('your own file');
     const state = await page.evaluate(() => {
@@ -239,7 +254,7 @@ test.describe('next.html', () => {
     const grid = await page.evaluate(() => globalThis.qsmblyNext.store.entry('AcquiredPhase(1)').grid.dims);
     expect(grid).toEqual([184, 256, 128]);
     await page.locator('[data-section="data"]').click();
-    await expect(page.locator('.files')).toContainText('Phase, echo 1');
+    await expect(page.locator('.files')).toContainText('Phase (as acquired), echo 1');
     expect(errors).toEqual([]);
   });
 });
