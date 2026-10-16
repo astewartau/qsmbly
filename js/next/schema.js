@@ -26,6 +26,8 @@
  * @property {string} [units]
  * @property {number} [min]
  * @property {number} [max]
+ * @property {boolean} [exclusive_min] - `min` itself is out of range (QSMxT #368)
+ * @property {boolean} [exclusive_max] - `max` itself is out of range
  * @property {number} [step]
  * @property {unknown} default - QSMxT's
  * @property {unknown} browser_default
@@ -104,6 +106,19 @@ export function browserDefaultNote(setting) {
 }
 
 /**
+ * An option's name for a select or a summary. The schema's option label is the `qsmxt run` value
+ * (`ilsqr`); where its help starts with the method's name (`iLSQR (default) — …`), that name.
+ * A stop-gap until the schema gives options a display name (QSMxT #364 feedback).
+ * @param {SchemaOption} option
+ * @returns {string}
+ */
+export function optionName(option) {
+  const head = (option.help || '').split(/ — | \(|: |; /)[0].trim();
+  // A method's name has capitals past its first letter (iLSQR, V-SHARP); a sentence does not.
+  return head && head.length <= 30 && /.[A-Z]/.test(head) ? head : option.label;
+}
+
+/**
  * A value as the inspector writes it in text (badges, the changes list).
  * @param {Setting} setting
  * @param {unknown} value
@@ -115,7 +130,7 @@ export function formatValue(setting, value) {
   if (setting.type === 'bool') return value ? 'on' : 'off';
   if (setting.type === 'enum' || setting.type === 'echo-reference') {
     const option = setting.options?.find((o) => same(o.value, value));
-    if (option) return option.label;
+    if (option) return optionName(option);
     if (setting.type === 'echo-reference') return `echo ${value}`;
   }
   if (Array.isArray(value)) {
@@ -178,8 +193,12 @@ export function validate(setting, value) {
   const number = (v) => {
     if (typeof v !== 'number' || !Number.isFinite(v)) return 'Enter a number.';
     if ((setting.type === 'int' || setting.type === 'int-vec3') && !Number.isInteger(v)) return 'Enter a whole number.';
-    if (setting.min !== undefined && v < setting.min) return `Must be at least ${setting.min}.`;
-    if (setting.max !== undefined && v > setting.max) return `Must be at most ${setting.max}.`;
+    if (setting.min !== undefined && (setting.exclusive_min ? v <= setting.min : v < setting.min)) {
+      return `Must be ${setting.exclusive_min ? 'greater than' : 'at least'} ${setting.min}.`;
+    }
+    if (setting.max !== undefined && (setting.exclusive_max ? v >= setting.max : v > setting.max)) {
+      return `Must be ${setting.exclusive_max ? 'less than' : 'at most'} ${setting.max}.`;
+    }
     return null;
   };
   switch (setting.type) {

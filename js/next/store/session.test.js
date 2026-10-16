@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createSession, setPath, getPath, configChanges, CONFIG_STORAGE_KEY } from './session.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`../fixtures/${name}`, import.meta.url), 'utf8'));
-const defaults = fixture('config-default.json');
+const defaults = fixture('config-browser.json');
 const facts = fixture('facts-example.json');
 
 /** A planner that records what it was asked, and a schedule the test runs by hand. */
@@ -123,7 +123,7 @@ describe('session', () => {
     const pending = [];
     const session = createSession({
       defaults,
-      planner: () => { if (fail) throw new Error('no plan'); return fixture('plan-default.json'); },
+      planner: () => { if (fail) throw new Error('no plan'); return { steps: [{ name: 'load' }], models: [], peak_memory_bytes: 1, check: { errors: [], warnings: [] }, notes: [], two_pass: false, motion_corrected: false }; },
       schedule: (run) => pending.push(run),
     });
     session.facts.value = facts;
@@ -135,5 +135,45 @@ describe('session', () => {
     expect(session.planError.value).toBeNull();
     expect(session.plan.value.steps.length).toBeGreaterThan(0);
     session.dispose();
+  });
+});
+
+describe('settings view and UI state', () => {
+  test('which settings apply is asked with each plan, and kept by path', async () => {
+    const pending = [];
+    const asked = [];
+    const session = createSession({
+      defaults,
+      planner: () => ({ steps: [], models: [], peak_memory_bytes: 0, check: { errors: [], warnings: [] }, notes: [], two_pass: false, motion_corrected: false }),
+      settingsView: (config) => { asked.push(config); return [{ path: 'a', visible: false }, { path: 'b', visible: true, forced_by: 'a' }]; },
+      schedule: (run) => pending.push(run),
+    });
+    while (pending.length) await pending.shift()();
+    expect(asked).toHaveLength(1);
+    expect(session.view.value.get('b')).toEqual({ path: 'b', visible: true, forced_by: 'a' });
+    session.set('inversion.algorithm', 'rts');
+    while (pending.length) await pending.shift()();
+    expect(asked).toHaveLength(2);
+    session.dispose();
+  });
+
+  test('setAll is one undoable change', () => {
+    const { session } = harness();
+    session.setAll([['inversion.algorithm', 'rts'], ['pipeline.do_swi', true]]);
+    expect(session.get('pipeline.do_swi')).toBe(true);
+    session.undo();
+    expect(session.get('inversion.algorithm')).toBe('ilsqr');
+    expect(session.get('pipeline.do_swi')).toBe(false);
+    session.dispose();
+  });
+
+  test('the advanced choice per step is kept in storage', () => {
+    const storage = memoryStorage();
+    const first = harness(storage);
+    first.session.ui.advanced.value = { background: true };
+    first.session.dispose();
+    const second = harness(storage);
+    expect(second.session.ui.advanced.value).toEqual({ background: true });
+    second.session.dispose();
   });
 });

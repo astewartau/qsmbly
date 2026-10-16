@@ -9,6 +9,11 @@
 //
 // - js/next/fixtures/schema.json: `qsmxt_engine::schema::schema_json()`.
 // - js/next/fixtures/config-browser.json: `PipelineConfig::browser()`, the session's defaults.
+// - js/next/fixtures/mask.json: the mask recipe's building blocks (presets, each step with its
+//   defaults, the two-pass default, HD-BET's windows), for the mask builder.
+// - js/next/fixtures/plans.json: `plan::plan` for the example scan, for the browser profile, each
+//   basic switch or method on its own and the configs the tests use. fixtures.js composes them
+//   into a plan for any config until the workspace plans through the bindings (U2).
 // - js/next/fixtures/settings-views.json: `settings_view` outputs for the example scan (five echoes,
 //   one coil). They back js/next/settings-view.js until the bindings export `settings_view`:
 //   the view of the browser profile, of each basic switch or method on its own (the contexts), the
@@ -19,12 +24,13 @@
 // deleted afterwards). The script also checks the composed views against the engine on random
 // configs and prints how many agree.
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { recordedSettingsView } from '../js/next/settings-view.js';
 import { setPath } from '../js/next/store/session.js';
+import { recordedPlanner } from '../js/next/fixtures.js';
 
 const checkout = process.argv[2];
 if (!checkout || !existsSync(join(checkout, 'crates', 'qsmxt-engine', 'Cargo.toml'))) {
@@ -123,7 +129,46 @@ try {
     checks.push(edits);
   }
 
-  const res = ask({ facts, contexts, variants: variants.map((v) => [v.path, v.value]), exact: [...Object.values(exact), ...checks] });
+  // Plans for the example scan: the browser profile, each basic switch or method on its own, the
+  // configs the tests use, and random pairs of those to check the composition with.
+  const scan = JSON.parse(readFileSync(join(out, 'facts-example.json'), 'utf8'));
+  const SUPPLIED = { 'masking.custom_mask_tool': 'custom_mask', 'segmentation.custom_dseg_tool': 'custom_dseg',
+    'separation.custom_qsm_tool': 'custom_qsm', 'separation.custom_r2_tool': 'custom_r2', 'separation.custom_r2prime_tool': 'custom_r2prime' };
+  // A supplied file is on hand when its setting names one.
+  const scanFor = (edits, extra = {}) => ({ ...scan, ...extra,
+    ...Object.fromEntries(edits.filter(([p, v]) => SUPPLIED[p] && v).map(([p]) => [SUPPLIED[p], true])) });
+  const planExact = { 'swi-no-magnitude': { edits: [['pipeline.do_swi', true]], scan: { has_magnitude: false } } };
+  const pairs = [];
+  for (let i = 0; i < 200; i++) {
+    const a = contexts[1 + Math.floor(random() * (contexts.length - 1))];
+    const b = contexts[1 + Math.floor(random() * (contexts.length - 1))];
+    if (a[0][0] !== b[0][0]) pairs.push([...a, ...b]);
+  }
+  const planRequests = [
+    ...contexts.map((edits) => ({ edits, facts: scanFor(edits) })),
+    ...Object.values(planExact).map((e) => ({ edits: e.edits, facts: scanFor(e.edits, e.scan) })),
+    ...pairs.map((edits) => ({ edits, facts: scanFor(edits) })),
+  ];
+
+  const res = ask({ facts, contexts, variants: variants.map((v) => [v.path, v.value]), exact: [...Object.values(exact), ...checks], plans: planRequests });
+  const planOut = res.plans;
+  const failedPlans = planOut.slice(0, contexts.length + Object.keys(planExact).length).filter((p) => p.error);
+  if (failedPlans.length) throw new Error(`plans the engine could not make: ${failedPlans.map((p) => p.error).join('; ')}`);
+  // Steps as [name, models], with each name's stage and label once.
+  const stepInfo = {};
+  const compact = (plan) => {
+    const { steps, ...rest } = plan;
+    for (const st of steps) stepInfo[st.name] = { stage: st.stage, label: st.label };
+    return { steps: steps.map((st) => (st.models.length ? [st.name, st.models] : [st.name])), ...rest };
+  };
+  const recordedPlans = {
+    scan,
+    steps: stepInfo,
+    plans: [
+      ...contexts.map((edits, i) => ({ edits, ...compact(planOut[i]) })),
+      ...Object.entries(planExact).map(([name, e], k) => ({ name, edits: e.edits, scan: e.scan, ...compact(planOut[contexts.length + k]) })),
+    ],
+  };
   const ok = (v) => v && !v.error;
   const recorded = {
     facts,
@@ -178,11 +223,28 @@ try {
   };
   write('schema.json', schema);
   write('config-browser.json', browser);
+  write('mask.json', first.mask);
+  writeFileSync(join(out, 'plans.json'), JSON.stringify(recordedPlans) + '\n');
+  console.log('js/next/fixtures/plans.json');
+  // How well composed plans match the engine's on pairs of choices.
+  const composePlan = recordedPlanner(recordedPlans, browser);
+  let planAgree = 0;
+  let planTried = 0;
+  pairs.forEach((edits, k) => {
+    const want = planOut[contexts.length + Object.keys(planExact).length + k];
+    if (!want || want.error) return;
+    planTried++;
+    let config = structuredClone(browser);
+    for (const [path, value] of edits) config = setPath(config, path, value);
+    const got = composePlan(config, scanFor(edits));
+    if (JSON.stringify(got.steps.map((x) => x.name)) === JSON.stringify(want.steps.map((x) => x.name))) planAgree++;
+  });
   writeFileSync(join(out, 'settings-views.json'), JSON.stringify(recorded) + '\n');
   console.log('js/next/fixtures/settings-views.json');
   const nativeDiffers = JSON.stringify(native) !== JSON.stringify(browser);
   console.log(`${settings.length} settings; ${recorded.contexts.length} contexts, ${variants.length} variants, ${recorded.deltas.length} deltas; browser profile ${nativeDiffers ? 'differs from' : 'equals'} QSMxT's defaults`);
   console.log(`composed views match the engine on ${agree} of ${tried} random configs`);
+  console.log(`composed plans have the engine's steps on ${planAgree} of ${planTried} random pairs of choices`);
 } finally {
   if (!process.env.KEEP_CRATE) rmSync(crate, { recursive: true, force: true });
 }

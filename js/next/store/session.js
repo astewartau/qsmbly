@@ -97,11 +97,10 @@ export function createSession({ defaults, planner, settingsView = null, storage 
   const view = signal(/** @type {Map<string, SettingView> | null} */ (null));
   /** UI state that is not part of the run. */
   const ui = {
-    section: signal('data'),
+    /** The open pipeline step, or none. */
+    section: signal(/** @type {string | null} */ (null)),
     /** The volume shown in the viewer (an ItemKey). */
     viewing: signal(/** @type {string | null} */ (null)),
-    /** The pane shown on small screens. */
-    pane: signal(/** @type {'outline' | 'viewer' | 'inspector'} */ ('viewer')),
     /** The file name of each supplied-file setting's file, by setting path. */
     supplied: signal(/** @type {Record<string, string>} */ ({})),
     /** Inspector sections showing every setting rather than the basic ones, by section id. */

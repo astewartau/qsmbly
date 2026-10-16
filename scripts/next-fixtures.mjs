@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Regenerates js/next/fixtures/ from a built bundle of the engine bindings, so the new workspace's
-// fixtures are what the engine really says about the example data.
+// Regenerates the example scan's facts and the model registry entries in js/next/fixtures/ from a
+// built bundle of the engine bindings (plans, schema and settings: scripts/next-schema-fixtures.mjs).
 //
 //   node scripts/next-fixtures.mjs <bundle-dir>
 //
@@ -37,23 +37,10 @@ const facts = JSON.parse(wasm.scan_facts_wasm(dims, JSON.stringify(sidecars), tr
 // example is axial.
 facts.b0_dir ??= [0, 0, 1];
 
-const config = JSON.parse(wasm.get_default_config_json_wasm());
-const plan = (cfg, f = facts) => JSON.parse(wasm.plan_wasm(JSON.stringify(cfg), JSON.stringify(f)));
-const edit = (fn) => {
-  const cfg = structuredClone(config);
-  fn(cfg);
-  return cfg;
-};
-
 write('facts-example.json', facts);
-write('config-default.json', config);
-write('plan-default.json', plan(config));
-write('plan-xqsm.json', plan(edit((c) => { c.inversion.algorithm = 'xqsm'; })));
-write(
-  'plan-swi-nomag.json',
-  plan(edit((c) => { c.pipeline.do_swi = true; }), { ...facts, has_magnitude: false }),
-);
 
-// The registry entries the fixtures use: the plans' models, and HD-BET (a masking net).
-const wanted = new Set(['xqsm', 'hd-bet']);
+// The registry entries the fixtures use: the recorded plans' models (plans.json, from
+// scripts/next-schema-fixtures.mjs), and HD-BET (a masking net).
+const recorded = JSON.parse(readFileSync(join(out, 'plans.json'), 'utf8'));
+const wanted = new Set(['hd-bet', ...recorded.plans.flatMap((p) => p.models)]);
 write('models.json', JSON.parse(wasm.get_model_registry_wasm()).filter((m) => wanted.has(m.id)));

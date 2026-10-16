@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import {
   settingsIn, valueOf, isChanged, browserDefaultNote, formatValue, controlFor, validate, parseField,
-  onValue, echoChoice, searchSettings, SUPPLIED_ITEMS,
+  onValue, echoChoice, searchSettings, optionName, SUPPLIED_ITEMS,
 } from './schema.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
@@ -52,7 +52,8 @@ describe('controlFor', () => {
   });
 
   test('ranges become input constraints; whole numbers step by 1', () => {
-    expect(controlFor(setting('bg_removal.vsharp.max_radius')).range).toEqual({ min: 0, max: undefined, step: 'any' });
+    expect(controlFor(setting('bg_removal.vsharp.min_radius')).range).toEqual({ min: 0, max: undefined, step: 'any' });
+    expect(controlFor(setting('bg_removal.vsharp.max_radius')).range).toEqual({ min: undefined, max: undefined, step: 'any' });
     expect(controlFor(setting('bet.iterations')).range?.step).toBe(1);
     expect(controlFor(setting('bet.iterations')).integer).toBe(true);
   });
@@ -72,7 +73,16 @@ describe('validate', () => {
     expect(validate(int, 0)).toBe('Must be at least 1.');
     expect(validate(int, 11)).toBe('Must be at most 10.');
     expect(validate(int, Number.NaN)).toBe('Enter a number.');
-    expect(validate(setting('bg_removal.vsharp.max_radius'), -1)).toBe('Must be at least 0.');
+  });
+  test('exclusive bounds (QSMxT #368)', () => {
+    const tkd = setting('inversion.tkd.threshold');
+    expect(tkd.exclusive_min).toBe(true);
+    expect(validate(tkd, 0)).toBe('Must be greater than 0.');
+    expect(validate(tkd, 0.15)).toBeNull();
+    const rts = setting('inversion.rts.delta');
+    expect(rts.exclusive_max).toBe(true);
+    expect(validate(rts, rts.max)).toBe(`Must be less than ${rts.max}.`);
+    expect(validate(setting('bg_removal.vsharp.min_radius'), 0)).toBe('Must be greater than 0.');
   });
   test('null only where the setting may be unset', () => {
     expect(validate(int, null)).toBe('A value is needed.');
@@ -99,7 +109,7 @@ describe('parseField', () => {
     expect(parseField(setting('bet.iterations'), '')).toEqual({ value: undefined, error: 'A value is needed.' });
     expect(parseField(setting('masking.custom_mask_tool'), ' ')).toEqual({ value: null, error: null });
     expect(parseField(setting('bg_removal.vsharp.max_radius'), '10')).toEqual({ value: 10, error: null });
-    expect(parseField(setting('bg_removal.vsharp.max_radius'), '-2').error).toBe('Must be at least 0.');
+    expect(parseField(setting('homogeneity.nbox'), '0').error).toBe('Must be at least 1.');
   });
 });
 
@@ -118,9 +128,18 @@ describe('defaults', () => {
   test('formatValue', () => {
     expect(formatValue(setting('bg_removal.vsharp.max_radius'), 12)).toBe('12 mm');
     expect(formatValue(setting('pipeline.do_swi'), true)).toBe('on');
-    expect(formatValue(setting('bg_removal.algorithm'), 'pdf')).toBe('pdf');
+    expect(formatValue(setting('bg_removal.algorithm'), 'vsharp')).toBe('Variable-kernel SHARP');
     expect(formatValue(setting('motion_correction.reference'), '3')).toBe('echo 3');
     expect(formatValue(setting('qsm.reference_region'), null)).toBe('unset');
+  });
+});
+
+describe('optionName', () => {
+  test('a method\'s name from its help; the label otherwise', () => {
+    const opt = (v) => setting('inversion.algorithm').options.find((o) => o.value === v);
+    expect(optionName(opt('ilsqr'))).toBe('iLSQR');
+    expect(optionName(opt('rts'))).toBe('RTS');
+    expect(optionName(setting('bg_removal.vsharp.grid').options[0])).toBe(setting('bg_removal.vsharp.grid').options[0].label);
   });
 });
 
