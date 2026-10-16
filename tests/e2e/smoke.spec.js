@@ -340,6 +340,9 @@ test.describe('next.html', () => {
     // Clicking it opens the step, as a box click does; so does Enter on a focused one.
     await sentence('Background field removal').click();
     await expect(stepRow(page, 'background')).toHaveAttribute('data-open', 'true');
+    // The step takes the focus, as after a box click; then the keyboard path.
+    await expect(stepRow(page, 'background').locator('.step-head')).toBeFocused();
+    await page.mouse.move(0, 0);
     await sentence('A brain mask').focus();
     await expect(box('mask')).toHaveClass(/\blinked\b/);
     await page.keyboard.press('Enter');
