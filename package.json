@@ -15,16 +15,24 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@playwright/test": "1.64.1",
+    "@preact/signals": "2.11.3",
+    "@preact/signals-core": "1.14.4",
     "@types/jest": "^29.5.12",
     "eslint": "^9.39.5",
     "globals": "^17.13.0",
+    "htm": "3.1.1",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
-    "smol-toml": "^1.9.0"
+    "preact": "10.29.8",
+    "smol-toml": "^1.9.0",
+    "typescript": "5.9.3"
   },
   "keywords": [
     "qsm",
