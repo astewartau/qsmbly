@@ -25,6 +25,15 @@
  * @property {string[]} models
  * @property {string[]} reads - item keys
  * @property {string[]} writes
+ * @property {NodeRun} [run] - what the step did, on the graph after a run
+ *
+ * @typedef {object} Decision - qsmxt-engine `record::Decision`: something a run decided as it ran
+ * @property {string} topic - `mask_source`, `reconstruction_box`, …
+ * @property {string} choice - `supplied`, `computed`, `skipped`, …
+ * @property {string} reason - what was done and why, in plain words
+ * @property {string} [detail] - what this run's data said (a file, a box's size)
+ *
+ * @typedef {{ state: 'computed' | 'cached' | 'skipped', decisions?: Decision[] }} NodeRun
  *
  * @typedef {{ from: string, to: string, items: string[] }} GraphEdge
  *
@@ -44,16 +53,19 @@
  *
  * @typedef {import('./protocol.js').Methods} Methods
  *
- * @typedef {{ graph: PipelineGraph, mermaid: string }} GraphResult
+ * @typedef {{ graph: PipelineGraph, mermaid: string, differs?: boolean }} GraphResult - `differs`, on
+ *   the graph after a run: whether it differs from the planned one
  * @typedef {{ methods: Methods }} MethodsResult
  * @typedef {{ command: string }} CommandResult
  * @typedef {{ toml: string }} TomlResult
  * @typedef {{ config: PipelineConfig, warnings: string[] }} ImportResult
  *
  * @typedef {object} Providers
- * @property {(config: PipelineConfig, facts: ScanFacts) => Promise<GraphResult>} graph
- * @property {(config: PipelineConfig, facts: ScanFacts) => Promise<MethodsResult>} methods - the
- *   methods text of a run of `config` on the scan, each sentence with the graph's boxes it describes
+ * @property {(config: PipelineConfig, facts: ScanFacts, record?: string | null) => Promise<GraphResult>} graph -
+ *   the planned graph, or given a run's record (`Engine.run`'s answer), the graph the run took
+ * @property {(config: PipelineConfig, facts: ScanFacts, record?: string | null) => Promise<MethodsResult>} methods -
+ *   the methods text of a run of `config` on the scan (given its record, of what the run did),
+ *   each sentence with the graph's boxes it describes
  * @property {(config: PipelineConfig) => Promise<CommandResult>} command - `qsmxt run <bids_dir> …`
  * @property {(config: PipelineConfig) => Promise<TomlResult>} toml - the settings file
  * @property {(text: string) => Promise<ImportResult>} importToml - rejects with the reason a file

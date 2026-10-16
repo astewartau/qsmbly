@@ -8,6 +8,12 @@
  * Beside the graph (below it on a narrow pane) is the methods text (MethodsPanel), linked both
  * ways: hovering a box lights up the sentences about it, and hovering a sentence its boxes.
  *
+ * After a run (while the settings are the ones it ran), the boxes say what each step did
+ * (computed, reused from the cache, skipped) and what it decided, and the methods text says what
+ * was done (`pipeline_graph_after`, `methods_for_run`). Where the run took the pipeline otherwise
+ * than planned (a supplied mask it could not use, a step with nothing to work on), the graph is
+ * the one it took, and "As planned" shows the planned one.
+ *
  * @typedef {import('../store/session.js').Session} Session
  * @typedef {import('../exports.js').Providers} Providers
  * @typedef {import('../exports.js').GraphResult} GraphResult
@@ -16,7 +22,7 @@
  */
 import { html } from '../html.js';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { layoutGraph, roundedPath } from '../graph-layout.js';
+import { layoutGraph, roundedPath, RUN_STATES, decisionNote } from '../graph-layout.js';
 import { sectionOf } from '../outline.js';
 import { useProvided, useCopy, saveFile } from './provided.js';
 import { Icon } from './icons.js';
@@ -68,12 +74,16 @@ const GRAPH_SVG_CSS = `
 .g-node text.title { fill: var(--text); font-size: 12.5px; font-weight: 600; }
 .g-node text.algorithm { fill: var(--text); font-style: italic; font-size: 11.5px; }
 .g-node text.when { fill: var(--muted); font-style: italic; }
+.g-node text.run { fill: var(--accent); font-size: 10.5px; font-weight: 600; }
+.g-node text.note { fill: var(--text-2); font-size: 10px; }
+.g-node.run-skipped rect.box { stroke-dasharray: 2 3; opacity: 0.7; }
+.g-node.run-skipped text.run { fill: var(--muted); }
 .g-node .model rect { fill: var(--accent-soft); stroke: var(--accent); }
 .g-node .model text { fill: var(--accent); font-size: 9.5px; font-weight: 600; }
 #g-arrow path { fill: var(--graph-edge); }
 `;
 
-const LINE_Y = { title: 17, algorithm: 15, setting: 14, when: 14 };
+const LINE_Y = { title: 17, algorithm: 15, setting: 14, when: 14, run: 14, note: 13 };
 
 /**
  * Open a step in the pipeline column and bring it into view.
@@ -95,17 +105,55 @@ export function openStep(session, stepId) {
   });
 }
 
+/**
+ * `value` as JSON with its keys in order, to compare configs.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/**
+ * The last run's record (`Engine.run`'s answer), while `config` is the config it ran (or which
+ * config it ran is not known); otherwise null.
+ * @param {Session} session
+ * @param {Record<string, any>} config
+ * @returns {string | null}
+ */
+export function runRecord(session, config) {
+  const last = session.runs?.last;
+  const record = last?.record.value ?? null;
+  if (!record) return null;
+  const ran = last?.config?.value ?? null;
+  return ran === null || canonical(ran) === canonical(config) ? record : null;
+}
+
 /** @param {{ session: Session, providers: Providers }} props */
 export function GraphTab({ session, providers }) {
   const config = session.config.value;
   const facts = session.facts.value;
-  const { value, error } = useProvided(
-    () => (facts ? providers.graph(config, facts) : Promise.resolve(null)),
-    [config, facts, providers],
+  const record = runRecord(session, config);
+  const [asPlanned, setAsPlanned] = useState(false);
+  const after = useProvided(
+    () => (facts && record ? providers.graph(config, facts, record) : Promise.resolve(null)),
+    [config, facts, providers, record],
   );
+  // The planned graph: before a run, or asked for beside a graph the run took otherwise.
+  const differs = !!(record && after.value?.differs);
+  const wantPlanned = !record || (differs && asPlanned);
+  const planned = useProvided(
+    () => (facts && wantPlanned ? providers.graph(config, facts) : Promise.resolve(null)),
+    [config, facts, providers, wantPlanned],
+  );
+  const { value, error } = wantPlanned ? planned : after;
   const methods = useProvided(
-    () => (facts ? providers.methods(config, facts) : Promise.resolve(null)),
-    [config, facts, providers],
+    () => (facts ? providers.methods(config, facts, record) : Promise.resolve(null)),
+    [config, facts, providers, record],
   );
   const layout = useMemo(() => (value ? layoutGraph(value.graph) : null), [value]);
   const links = useMemo(() => methodsLinks(methods.value?.methods ?? { sentences: [], references: [] }, value?.graph ?? null),
@@ -130,6 +178,12 @@ export function GraphTab({ session, providers }) {
           <span class="key key-conditional">only in some runs</span>
           <span class="key key-model">model</span>
         </span>
+        ${record && !wantPlanned && html`<span class="muted small" data-testid="graph-ran">${differs ? 'As the last run took it' : 'With what the last run did'}</span>`}
+        ${differs && html`
+          <span class="seg" role="radiogroup" aria-label="Which graph">
+            <button type="button" role="radio" aria-checked=${!asPlanned} onClick=${() => setAsPlanned(false)}>As run</button>
+            <button type="button" role="radio" aria-checked=${asPlanned} onClick=${() => setAsPlanned(true)}>As planned</button>
+          </span>`}
         ${error && html`<span class="problem-error small" role="alert">${error}</span>`}
         <${ExportMenu} result=${value} svgRef=${svgRef} />
       </div>
@@ -187,9 +241,11 @@ function Node({ n, current, linked: isLinked, onHover, onOpen }) {
   });
   const node = n.node;
   const title = [node.label, node.algorithm_label, ...node.settings, node.only_when && `Only when ${node.only_when}`,
-    node.models.length && `Models: ${node.models.join(', ')}`].filter(Boolean).join('\n');
+    node.models.length && `Models: ${node.models.join(', ')}`,
+    node.run && (RUN_STATES[node.run.state] ?? node.run.state), ...(node.run?.decisions ?? []).map(decisionNote)].filter(Boolean).join('\n');
+  const run = node.run ? ` run-${node.run.state}` : '';
   return html`
-    <g class=${`g-node${n.optional ? ' optional' : ''}${n.conditional ? ' conditional' : ''}${current ? ' current' : ''}${isLinked ? ' linked' : ''}`}
+    <g class=${`g-node${n.optional ? ' optional' : ''}${n.conditional ? ' conditional' : ''}${run}${current ? ' current' : ''}${isLinked ? ' linked' : ''}`}
       data-step=${n.id} style=${{ transform: `translate(${n.x}px, ${n.y}px)` }}
       tabindex="0" role="button" aria-label=${`${node.label}${node.algorithm_label ? `, ${node.algorithm_label}` : ''}: open in the pipeline`}
       onMouseEnter=${() => onHover(n.id)} onMouseLeave=${() => onHover(null)} onFocus=${() => onHover(n.id)} onBlur=${() => onHover(null)}

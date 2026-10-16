@@ -121,6 +121,57 @@ describe('GraphTab', () => {
   });
 });
 
+describe('GraphTab after a run', () => {
+  const runs = [fixture('run-as-planned.json'), fixture('run-mask-computed.json')];
+  /** The workspace after the recorded run `r` (fixtures/run-*.json). */
+  function afterRun(r) {
+    const { session } = setup();
+    session.facts.value = r.facts;
+    session.config.value = r.config;
+    session.runs.last.record.value = JSON.stringify(r.record);
+    session.runs.last.config.value = r.config;
+    return { session, providers: recordedProviders(cases, recorded, runs) };
+  }
+  const text = (root, step) => root.querySelector(`.g-node[data-step="${step}"]`)?.textContent ?? '';
+
+  test('each box says what its step did; the methods text is the run\'s', async () => {
+    const { session, providers } = afterRun(runs[0]);
+    const root = await mount(html`<${GraphTab} session=${session} providers=${providers} />`);
+    expect(text(root, 'invert')).toContain('Computed');
+    expect(root.querySelector('.g-node[data-step="invert"]')?.classList.contains('run-computed')).toBe(true);
+    expect(root.querySelector('[data-testid="graph-ran"]')?.textContent).toBe('With what the last run did');
+    // Nothing differed from the plan: there is one graph.
+    expect(root.querySelector('[aria-label="Which graph"]')).toBeNull();
+    expect(root.querySelector('.m-sentence')?.textContent).toBe(runs[0].methods.sentences[0].text);
+  });
+
+  test('a change of settings shows the planned graph again', async () => {
+    const { session, providers } = afterRun(runs[0]);
+    session.ui.tab.value = 'pipeline';
+    const root = await mount(html`<${GraphTab} session=${session} providers=${providers} />`);
+    expect(text(root, 'invert')).toContain('Computed');
+    await act(() => { session.config.value = browser; session.set('inversion.algorithm', 'tgv'); });
+    await settle();
+    expect(root.textContent).toContain('TGV');
+    expect(root.querySelector('.g-node.run-computed')).toBeNull();
+    expect(root.querySelector('[data-testid="graph-ran"]')).toBeNull();
+  });
+
+  test('a run that went otherwise than planned shows the graph it took, with the reason, and the plan on request', async () => {
+    const r = runs[1];
+    const { session, providers } = afterRun(r);
+    const root = await mount(html`<${GraphTab} session=${session} providers=${providers} />`);
+    expect(root.querySelector('[data-testid="graph-ran"]')?.textContent).toBe('As the last run took it');
+    expect(text(root, 'mask')).toContain('The supplied mask could not');
+    expect(root.querySelector('.g-node[data-step="mask"] title')?.textContent).toContain('so the mask was computed. (drawn mask)');
+    const methods = [...root.querySelectorAll('.m-sentence')].map((e) => e.textContent);
+    expect(methods.some((t) => t?.startsWith('A brain mask was generated'))).toBe(true);
+    expect(methods.some((t) => t?.startsWith('Where available'))).toBe(false);
+    const asPlanned = /** @type {HTMLButtonElement} */ ([...root.querySelectorAll('[aria-label="Which graph"] button')].find((b) => b.textContent === 'As planned'));
+    expect(asPlanned.getAttribute('aria-checked')).toBe('false');
+  });
+});
+
 describe('GraphTab methods', () => {
   const sentence = (root, start) => /** @type {HTMLElement} */ ([...root.querySelectorAll('.m-sentence')].find((e) => e.textContent?.startsWith(start)));
 

@@ -377,6 +377,59 @@ test.describe('next.html', () => {
     expect(errors).toEqual([]);
   });
 
+  test('after a run, the graph and the methods say what ran', async ({ page }) => {
+    const errors = watchErrors(page);
+    // Runs recorded in memory by rust-wasm's tests (settings.rs `recorded_run`), until the page runs.
+    const run = (name) => JSON.parse(readFileSync(new URL(`../../js/next/fixtures/${name}`, import.meta.url), 'utf8'));
+    const [planned, maskComputed] = [run('run-as-planned.json'), run('run-mask-computed.json')];
+    await page.setViewportSize({ width: 1700, height: 900 });
+    await page.goto('next.html');
+    await page.getByRole('tab', { name: 'Pipeline' }).click();
+    const graph = page.getByTestId('graph');
+    const box = (step) => graph.locator(`.g-node[data-step="${step}"]`);
+    const methods = page.getByTestId('methods-text');
+    await expect(box('invert')).toContainText('iLSQR');
+    await expect(box('invert')).not.toContainText('Computed');
+    const finish = (record) => page.evaluate((r) => {
+      const { session } = globalThis.qsmblyNext;
+      session.runs.last.config.value = session.config.value;
+      session.runs.last.record.value = JSON.stringify(r);
+    }, record);
+
+    // A run that went as planned: the same graph, each box saying what its step did.
+    await finish(planned.record);
+    await expect(page.getByTestId('graph-ran')).toHaveText('With what the last run did');
+    await expect(box('invert')).toContainText('Computed');
+    await expect(graph.locator('.g-node.run-computed')).toHaveCount(8);
+    await expect(page.getByRole('radiogroup', { name: 'Which graph' })).toHaveCount(0);
+    await expect(methods).toContainText('Dipole inversion was performed using iLSQR');
+
+    // A run whose supplied mask could not be used: the graph it took, with the reason on the box,
+    // and the methods text without "where available"; the planned graph on request.
+    await page.evaluate(() => {
+      const { session } = globalThis.qsmblyNext;
+      session.set('masking.custom_mask_tool', 'qsmbly');
+      session.facts.value = { ...session.facts.value, custom_mask: true };
+    });
+    await expect(methods).toContainText('Where available');
+    await finish(maskComputed.record);
+    await expect(page.getByTestId('graph-ran')).toHaveText('As the last run took it');
+    await expect(box('mask')).toContainText('The supplied mask could not');
+    await expect(methods).not.toContainText('Where available');
+    await expect(methods).toContainText('A brain mask was generated');
+    await page.getByRole('radio', { name: 'As planned' }).click();
+    await expect(box('mask')).not.toContainText('could not');
+    await expect(box('mask')).toContainText('supplied');
+    await page.getByRole('radio', { name: 'As run' }).click();
+    await expect(box('mask')).toContainText('The supplied mask could not');
+
+    // Changing a setting leaves the run behind: the planned graph again.
+    await page.evaluate(() => globalThis.qsmblyNext.session.set('inversion.algorithm', 'tgv'));
+    await expect(page.getByTestId('graph-ran')).toHaveCount(0);
+    await expect(graph.locator('.g-node.run-computed')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
   test('switches the viewer between volumes in the store', async ({ page }) => {
     await page.goto('next.html');
     await page.locator('[data-section="data"]').click();

@@ -98,7 +98,7 @@ export function createSession({ defaults, planner, settingsView = null, storage 
   /**
    * Runs (redesign §3.2). `last.record` is what the engine recorded of the last finished run, as
    * `Engine.run` returns it (JSON), for the methods and graph to describe what ran; `last.config`
-   * is the config it ran (null: not known).
+   * is the config it ran (null: not known), so they describe it only while the settings are that.
    */
   const runs = {
     last: {

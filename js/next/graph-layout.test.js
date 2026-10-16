@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { layoutGraph, drawnEdges, nodeLines, wrap, roundedPath, RETURN_STEP, NODE_W, CHAR } from './graph-layout.js';
+import { layoutGraph, drawnEdges, nodeLines, wrap, roundedPath, RETURN_STEP, NODE_W, CHAR, decisionNote } from './graph-layout.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
 const engine = fixture('engine-cases.json');
@@ -173,4 +173,17 @@ describe('helpers', () => {
     expect(roundedPath([[0, 0], [0, 0], [0, 20], [20, 20]])).toBe('M0,0 L0,15 Q0,20 5,20 L20,20');
     expect(roundedPath([])).toBe('');
   });
+
+test('after a run, a box says what its step did and each reason on at most two lines', () => {
+  const node = /** @type {any} */ ({
+    id: 'mask', label: 'Brain mask', algorithm_label: null, settings: [], only_when: null, models: [],
+    run: { state: 'cached', decisions: [{ topic: 'mask_source', choice: 'computed', reason: 'The supplied mask could not be brought onto the working grid, so the mask was computed, and this goes on.', detail: 'x.nii' }] },
+  });
+  const lines = nodeLines(node);
+  expect(lines.filter((l) => l.cls === 'run').map((l) => l.text)).toEqual(['Reused from the cache']);
+  const notes = lines.filter((l) => l.cls === 'note');
+  expect(notes.length).toBe(2);
+  expect(notes[0].text.startsWith('The supplied mask')).toBe(true);
+  expect(decisionNote(node.run.decisions[0])).toMatch(/computed, and this goes on\. \(x\.nii\)$/);
+});
 });

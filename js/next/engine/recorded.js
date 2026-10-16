@@ -101,13 +101,28 @@ export function recordedEngine(recorded) {
  */
 
 /**
+ * A recorded run (fixtures/run-*.json, written by rust-wasm's tests from a run in memory): its
+ * config, the facts it is shown on, the record `Engine.run` returned, and the graph and methods
+ * the bindings give for it.
+ * @typedef {{ config: PipelineConfig, facts: ScanFacts, record: object, graph: any, methods: any }} RecordedRun
+ */
+
+/**
  * The Pipeline and Command tabs' providers (`Providers` of js/next/exports.js) on recorded engine
- * answers, for the jest tests: each config looked up exactly, as {@link recordedEngine} does.
+ * answers, for the jest tests: each config looked up exactly, as {@link recordedEngine} does;
+ * given a run's record, one of the recorded `runs`.
  * @param {RecordedEngine} recorded - fixtures/engine-cases.json, for the browser profile and items
  * @param {RecordedExports} exports - fixtures/engine-exports.json
+ * @param {RecordedRun[]} [runs] - fixtures/run-*.json
  * @returns {import('../exports.js').Providers}
  */
-export function recordedProviders(recorded, exports) {
+export function recordedProviders(recorded, exports, runs = []) {
+  /** @param {PipelineConfig} config @param {ScanFacts} facts @param {string} record */
+  const ran = (config, facts, record) => {
+    const found = runs.find((r) => canonical([r.config, r.facts, r.record]) === canonical([config, facts, JSON.parse(record)]));
+    if (!found) throw new Error('no recorded run for this record, config and scan: see rust-wasm/src/settings.rs recorded_run');
+    return found;
+  };
   const byKey = new Map(exports.cases.map((c) => [canonical([c.changes, c.facts]), c]));
   /** @param {Answer} a */
   const unwrap = (a) => {
@@ -135,14 +150,19 @@ export function recordedProviders(recorded, exports) {
   };
   const textOf = (/** @type {RecordedExports['imports'][number]} */ i) => (i.case !== undefined ? tomlOf(exports.cases[i.case]) : i.text);
   return {
-    async graph(config, facts) {
+    async graph(config, facts, record) {
+      if (record) {
+        const { mermaid, differs, ...graph } = ran(config, facts, record).graph;
+        return { graph, mermaid, differs };
+      }
       const { items, mermaid, nodes, ...graph } = unwrap(find(config, facts).graph);
       return {
         graph: { ...graph, nodes: nodes.map((i) => exports.nodes[i]), items: items.map((key) => recorded.items[key]) },
         mermaid,
       };
     },
-    async methods(config, facts) {
+    async methods(config, facts, record) {
+      if (record) return { methods: ran(config, facts, record).methods };
       /** @type {number[]} */
       const indices = unwrap(find(config, facts).methods);
       const sentences = indices.map((i) => exports.sentences[i]);
