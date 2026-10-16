@@ -18,7 +18,8 @@
  * @property {boolean} basic - shown without "advanced": basic, or changed
  */
 import { html } from '../html.js';
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
+import { useFollow } from './follow.js';
 import {
   valueOf, isChanged, controlFor, validate, parseField, onValue, echoChoice,
   browserDefaultNote, formatValue, optionName, SUPPLIED_TOOL, SUPPLIED_ITEMS,
@@ -221,7 +222,7 @@ function Control(props) {
 function NumberInput({ setting, value, control, id, setError, commit, aria }) {
   const shown = value === null || value === undefined ? '' : String(value);
   const [text, setText] = useState(shown);
-  useEffect(() => { setText(shown); }, [shown]);
+  useFollow(shown, setText);
   const range = control.range ?? {};
   return html`
     <input type="text" inputmode="decimal" id=${id} class="num" value=${text} data-committed=${shown}
@@ -240,7 +241,7 @@ function Vec3Input({ setting, value, id, setError, commit, aria }) {
   const current = Array.isArray(value) ? value : [null, null, null];
   const shown = current.map((v) => (v === null ? '' : String(v)));
   const [texts, setTexts] = useState(shown);
-  useEffect(() => { setTexts(shown); }, [shown.join(',')]);
+  useFollow(shown.join(','), () => setTexts(shown));
   const change = (i, text) => {
     const next = texts.map((t, j) => (j === i ? text : t));
     setTexts(next);

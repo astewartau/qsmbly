@@ -14,7 +14,8 @@
  * @typedef {import('../mask.js').OpParam} OpParam
  */
 import { html } from '../html.js';
-import { useState, useEffect } from 'preact/hooks';
+import { useState } from 'preact/hooks';
+import { useFollow } from './follow.js';
 import { INPUTS, OPS, HD_BET_INFERENCE, checkRange, defaultOp, presetOf, presetRecipe, usesBet } from '../mask.js';
 import { SettingRow, sectionRows } from './Settings.js';
 import { Icon } from './icons.js';
@@ -293,7 +294,7 @@ function ParamRow({ op, set, p, depth }) {
 function Num({ value, range, label, set, title, error, setError }) {
   const shown = value === null || value === undefined ? '' : String(value);
   const [text, setText] = useState(shown);
-  useEffect(() => { setText(shown); }, [shown]);
+  useFollow(shown, setText);
   return html`
     <input type="text" inputmode="decimal" class="num" value=${text} data-committed=${shown} aria-label=${label} title=${title}
       aria-invalid=${error ? 'true' : undefined}
