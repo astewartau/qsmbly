@@ -80,6 +80,15 @@ jobs:
           QSMBLY_REQUIRE_WASM: '1'
         run: npm test -- js/modules/ConfigBridge.roundtrip.test.js
 
+      # The browser smoke tests run the new workspace on this bundle.
+      - name: Keep the bundle for the smoke tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm
+          path: wasm/
+          retention-days: 1
+          if-no-files-found: error
+
   js:
     name: JS lint + tests (jest)
     runs-on: ubuntu-latest
@@ -102,8 +111,15 @@ jobs:
   e2e:
     name: Browser smoke tests (Playwright)
     runs-on: ubuntu-latest
+    # next.html asks QSMxT's engine through the bundle the deploy build made.
+    needs: deploy-build
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: wasm/
 
       - uses: actions/setup-node@v4
         with:

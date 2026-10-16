@@ -1,60 +1,62 @@
 /**
- * Names, units and display kinds for the engine's items (`Item::key()` in qsmxt-engine
- * `store.rs`), until the engine provides them (E1: `Item::meta()`). Replace this table with the
- * engine's metadata when it lands; nothing else should name items.
+ * What the engine's items are (qsmxt-engine `Item::meta()`): their names, units and kinds, for
+ * the viewer and the outputs. Nothing here names an item: the plan brings the meta of every item
+ * it touches (`plan.items`), and any other key is asked of the engine once.
  *
  * @typedef {import('./protocol.js').ItemKey} ItemKey
- * @typedef {{ label: string, units: string | null, kind: 'magnitude' | 'phase' | 'field' | 'chi' | 'mask' | 'labels' | 'other' }} ItemMeta
+ * @typedef {import('./protocol.js').ItemMeta} ItemMeta
  */
+import { signal } from '@preact/signals-core';
 
-/** @type {Record<string, Omit<ItemMeta, 'label'> & { label: string | ((arg: string) => string) }>} */
-const ITEMS = {
-  AcquiredPhase: { label: (n) => `Phase, echo ${n}`, units: null, kind: 'phase' },
-  AcquiredMagnitude: { label: (n) => `Magnitude, echo ${n}`, units: null, kind: 'magnitude' },
-  Phase: { label: (n) => `Phase, echo ${n} (rad)`, units: 'rad', kind: 'phase' },
-  Magnitude: { label: (n) => `Magnitude, echo ${n}`, units: null, kind: 'magnitude' },
-  CorrectedPhase: { label: (n) => `Phase, echo ${n}, motion-corrected`, units: 'rad', kind: 'phase' },
-  CorrectedMagnitude: { label: (n) => `Magnitude, echo ${n}, motion-corrected`, units: null, kind: 'magnitude' },
-  CombinedMagnitude: { label: 'Combined magnitude', units: null, kind: 'magnitude' },
-  BrainMask: { label: 'Brain mask', units: null, kind: 'mask' },
-  SuppliedMask: { label: 'Supplied mask', units: null, kind: 'mask' },
-  CoverageMask: { label: 'Coverage mask', units: null, kind: 'mask' },
-  FieldPpm: { label: 'Total field', units: 'ppm', kind: 'field' },
-  TotalFieldHz: { label: 'Total field', units: 'Hz', kind: 'field' },
-  TotalFieldMagnitude: { label: 'Magnitude beside the total field', units: null, kind: 'magnitude' },
-  RobustFitReport: { label: 'Echo fit report', units: null, kind: 'other' },
-  LocalField: { label: (p) => `Local field${pass(p)}`, units: 'ppm', kind: 'field' },
-  LocalFieldMask: { label: (p) => `Local-field mask${pass(p)}`, units: null, kind: 'mask' },
-  RawChi: { label: (p) => `Unreferenced χ${pass(p)}`, units: 'ppm', kind: 'chi' },
-  ReliableMask: { label: 'Reliable-phase mask', units: null, kind: 'mask' },
-  QsmartIntermediate: { label: (a) => qsmart(a), units: null, kind: 'other' },
-  CombinedRawChi: { label: 'Combined unreferenced χ', units: 'ppm', kind: 'chi' },
-  Chi: { label: 'χ', units: 'ppm', kind: 'chi' },
-  ChiSupport: { label: 'χ support', units: null, kind: 'mask' },
-  SinglePassChi: { label: 'Single-pass χ', units: 'ppm', kind: 'chi' },
-  Segmentation: { label: 'Segmentation', units: null, kind: 'labels' },
-};
+/** @type {Map<ItemKey, ItemMeta>} */
+const known = new Map();
+/** Bumped when an item's meta arrives, so what showed its key re-renders with its name. */
+export const itemsVersion = signal(0);
+/** @type {((key: ItemKey) => Promise<ItemMeta | null>) | null} */
+let lookup = null;
+/** @type {Set<ItemKey>} */
+const asked = new Set();
 
-/** @param {string} p */
-function pass(p) {
-  return p.trim() === 'Reliable' ? ' (reliable pass)' : '';
-}
-
-/** @param {string} args - `Main, "vessel_mask"` */
-function qsmart(args) {
-  const [p, name = ''] = args.split(',');
-  return `QSMART ${name.trim().replace(/^"|"$/g, '').replace(/_/g, ' ')}${pass(p)}`;
+/**
+ * Where meta the workspace has not seen comes from (the engine client's `itemMeta`).
+ * @param {((key: ItemKey) => Promise<ItemMeta | null>) | null} fn
+ */
+export function setItemLookup(fn) {
+  lookup = fn;
+  asked.clear();
 }
 
 /**
+ * Keep the meta of these items (a plan's `items`).
+ * @param {ItemMeta[] | undefined} items
+ */
+export function learnItems(items) {
+  let added = false;
+  for (const meta of items ?? []) {
+    if (!known.has(meta.key)) added = true;
+    known.set(meta.key, meta);
+  }
+  if (added) itemsVersion.value++;
+}
+
+/**
+ * An item's meta, with its echo and coil in its label (`Phase (as acquired), echo 2`). Until the
+ * engine has said what a key is, its key stands in.
  * @param {ItemKey} key
  * @returns {ItemMeta}
  */
 export function itemMeta(key) {
-  const open = key.indexOf('(');
-  const name = open < 0 ? key : key.slice(0, open);
-  const arg = open < 0 ? '' : key.slice(open + 1, key.lastIndexOf(')'));
-  const entry = ITEMS[name];
-  if (!entry) return { label: key, units: null, kind: 'other' };
-  return { ...entry, label: typeof entry.label === 'function' ? entry.label(arg) : entry.label };
+  itemsVersion.value;
+  const meta = known.get(key);
+  if (!meta) {
+    if (lookup && !asked.has(key)) {
+      asked.add(key);
+      lookup(key).then((m) => { if (m) learnItems([m]); }, () => {});
+    }
+    return { key, label: key, units: null, kind: 'other' };
+  }
+  const parts = [meta.label];
+  if (meta.echo != null) parts.push(`echo ${meta.echo}`);
+  if (meta.coil != null) parts.push(`coil ${meta.coil}`);
+  return { ...meta, label: parts.join(', ') };
 }

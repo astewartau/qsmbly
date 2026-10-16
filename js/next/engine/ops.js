@@ -1,0 +1,70 @@
+/**
+ * What the workspace asks QSMxT's engine, over a loaded bundle of the bindings
+ * (rust-wasm/src/settings.rs, rust-wasm/src/engine.rs): each op parses its arguments into the
+ * bindings' JSON, calls one export and parses its answer. Nothing here decides anything; the
+ * engine's error comes back as a thrown Error with its message.
+ *
+ * The engine worker (worker.js) runs these off the main thread; the fixture and parity scripts
+ * call them on a Node bundle directly, so the browser and the scripts ask the same questions.
+ *
+ * @typedef {import('../protocol.js').ScanFacts} ScanFacts
+ * @typedef {import('../protocol.js').Plan} Plan
+ * @typedef {import('../protocol.js').SettingView} SettingView
+ * @typedef {import('../protocol.js').PipelineGraph} PipelineGraph
+ * @typedef {import('../protocol.js').ItemMeta} ItemMeta
+ * @typedef {import('../protocol.js').ModelEntry} ModelEntry
+ * @typedef {import('../protocol.js').MaskDefaults} MaskDefaults
+ * @typedef {Record<string, any>} PipelineConfig
+ */
+
+/**
+ * The ops over a bundle's exports.
+ * @param {Record<string, any>} wasm - the bundle's module, initialised
+ */
+export function engineOps(wasm) {
+  const call = (fn, ...args) => {
+    try {
+      return fn(...args);
+    } catch (e) {
+      throw new Error(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const json = (value) => JSON.stringify(value);
+  const facts = (f) => (f ? json(f) : null);
+  return {
+    /** The settings schema (`schema_json()`, with `mask`). */
+    schema: () => JSON.parse(call(wasm.schema_json_wasm)),
+    /** The browser profile: the session's defaults. @returns {PipelineConfig} */
+    browserConfig: () => JSON.parse(call(wasm.browser_config_wasm)),
+    /** The mask recipe's presets, step defaults and reliable mask, as the browser runs them. @returns {MaskDefaults} */
+    maskDefaults: () => JSON.parse(call(wasm.browser_mask_defaults_wasm)),
+    /** @param {PipelineConfig} config @param {ScanFacts | null} f @returns {SettingView[]} */
+    settingsView: (config, f) => JSON.parse(call(wasm.settings_view_wasm, json(config), facts(f))),
+    /** @param {PipelineConfig} config @param {ScanFacts | null} f @returns {PipelineConfig} */
+    pruneHidden: (config, f) => JSON.parse(call(wasm.prune_hidden_wasm, json(config), facts(f))),
+    /** `config` with `path` set through the config's own serde; throws the engine's reason. */
+    set: (config, path, value) => JSON.parse(call(wasm.set_setting_wasm, json(config), path, json(value))),
+    /** @param {PipelineConfig} config @param {ScanFacts} f @returns {Plan} */
+    plan: (config, f) => JSON.parse(call(wasm.plan_wasm, json(config), json(f))),
+    /** @param {PipelineConfig} config @param {ScanFacts} f @returns {PipelineGraph} */
+    graph: (config, f) => JSON.parse(call(wasm.pipeline_graph_wasm, json(config), json(f), undefined)),
+    /** The `qsmxt run` command. @param {PipelineConfig} config @returns {string} */
+    command: (config) => call(wasm.command_wasm, json(config)),
+    /** The config as a QSMxT configuration file; `selected`: only the chosen algorithms' tables. */
+    toToml: (config, selected = true) => call(wasm.config_to_toml_wasm, json(config), selected),
+    /** A QSMxT configuration file read as `qsmxt run --config` does, with the browser profile. */
+    fromToml: (text) => /** @type {{ config: PipelineConfig, warnings: string[] }} */ (JSON.parse(call(wasm.config_from_toml_wasm, text))),
+    /** What the item kept under `key` is; null for a key that names no item. @returns {ItemMeta | null} */
+    itemMeta: (key) => {
+      const meta = call(wasm.item_meta_wasm, key);
+      return meta ? JSON.parse(meta) : null;
+    },
+    /** The facts of a magnitude/phase scan from its matrix size and each echo's sidecar. @returns {ScanFacts} */
+    scanFacts: (dims, sidecars, hasMagnitude) => JSON.parse(call(wasm.scan_facts_wasm, new Uint32Array(dims), json(sidecars), hasMagnitude)),
+    /** QSM.rs's model registry. @returns {ModelEntry[]} */
+    models: () => JSON.parse(call(wasm.get_model_registry_wasm)),
+  };
+}
+
+/** @typedef {ReturnType<typeof engineOps>} EngineOps */
+/** @typedef {keyof EngineOps} EngineOp */

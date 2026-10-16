@@ -1,11 +1,14 @@
 # Browser smoke tests
 
-Playwright tests that load the site in headless Chrome: the new workspace (`next.html`) on its
-fixtures, and today's UI (`index.html`) still loading. WebGL runs on SwiftShader, so NiiVue renders
-without a GPU. `playwright.config.js` starts `serve.py` (cross-origin isolated, like the deployed
-site) on port 8173.
+Playwright tests that load the site in headless Chrome: the new workspace (`next.html`) on QSMxT's
+engine, and today's UI (`index.html`) still loading and running. WebGL runs on SwiftShader, so NiiVue
+renders without a GPU. `playwright.config.js` starts `serve.py` (cross-origin isolated, like the
+deployed site) on port 8173.
+
+The workspace needs the built bundle in `wasm/` (CI hands the tests the deploy build's):
 
 ```sh
+./build.sh --simd
 npm run test:e2e
 ```
 

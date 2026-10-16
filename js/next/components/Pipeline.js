@@ -8,6 +8,7 @@
  * @typedef {import('../store/volumes.js').VolumeStore} VolumeStore
  * @typedef {import('../schema.js').Schema} Schema
  * @typedef {import('../mask.js').MaskKit} MaskKit
+ * @typedef {import('../schema.js').Setting} Setting
  * @typedef {import('../outline.js').OutlineRow} OutlineRow
  */
 import { html } from '../html.js';
@@ -20,6 +21,9 @@ import { formatBytes, formatMs } from '../format.js';
 import { StepSettings } from './Settings.js';
 import { MaskEditor } from './MaskEditor.js';
 import { Icon } from './icons.js';
+
+/** @param {Setting | undefined} s */
+const nameOf = (s) => s?.full_label ?? s?.label;
 
 /** @param {{ session: Session, store: VolumeStore, schema: Schema, mask: MaskKit }} props */
 export function Pipeline({ session, store, schema, mask }) {
@@ -85,7 +89,7 @@ function Step({ row, session, store, schema, mask, open, forcedBy }) {
   else if (section.id === 'masking') summary = maskSummary(mask, config.masking);
   else if (section.toggles) {
     summary = section.toggles.filter((p) => session.get(p) || forcedBy(p))
-      .map((p) => schema.settings.find((s) => s.path === p)?.label.replace(/^Compute /, '') ?? p).join(', ');
+      .map((p) => nameOf(schema.settings.find((s) => s.path === p))?.replace(/^Compute /, '') ?? p).join(', ');
   } else if (section.summary) {
     const s = schema.settings.find((x) => x.path === section.summary);
     if (s) summary = formatValue(s, valueOf(s, config));
@@ -104,13 +108,13 @@ function Step({ row, session, store, schema, mask, open, forcedBy }) {
           <span class=${`state-dot ${stateText.replace(' ', '-')}`} title=${stateText}><span class="visually-hidden">${stateText}</span></span>
         </button>
         ${toggle && html`
-          <input type="checkbox" class="switch step-switch" aria-label=${toggle.label} checked=${!!session.get(toggle.path) || !!forced}
-            disabled=${!!forced} title=${forced ? `On because ${schema.settings.find((s) => s.path === forced)?.label} needs it` : toggle.label}
+          <input type="checkbox" class="switch step-switch" aria-label=${nameOf(toggle)} checked=${!!session.get(toggle.path) || !!forced}
+            disabled=${!!forced} title=${forced ? `On because ${nameOf(schema.settings.find((s) => s.path === forced))} needs it` : nameOf(toggle)}
             onChange=${(e) => session.set(toggle.path, e.currentTarget.checked)} />`}
       </div>
       ${open && html`
         <div class="step-body" id=${`step-${section.id}`}>
-          ${forced && html`<p class="sub note" data-testid="forced">On because ${schema.settings.find((s) => s.path === forced)?.label} needs it.</p>`}
+          ${forced && html`<p class="sub note" data-testid="forced">On because ${nameOf(schema.settings.find((s) => s.path === forced))} needs it.</p>`}
           ${toggle && !on && html`<p class="sub">${toggle.help}</p>`}
           ${problems.length > 0 && html`
             <ul class="problems">
@@ -176,7 +180,7 @@ function Search({ session, schema, rows, onPick }) {
         <ul class="results" aria-label="Matching settings">
           ${results.map((s) => html`
             <li><button type="button" data-path=${s.path} onClick=${() => open(s)}>
-              <span>${s.label}</span><span class="muted">${stepOf(s)?.label}</span>
+              <span>${s.context ? `${s.context}: ` : ''}${nameOf(s)}</span><span class="muted">${stepOf(s)?.label}</span>
             </button></li>`)}
           ${results.length === 0 && html`<li class="muted none">No setting matches.</li>`}
         </ul>`}

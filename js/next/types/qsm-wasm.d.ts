@@ -8,11 +8,27 @@ export class Engine {
   facts(): string;
   grid(): string | undefined;
   plan(config_json: string): string;
+  pipelineGraph(config_json: string): string;
   run(config_json: string, observer: object): void;
   supplyMask(nifti: Uint8Array, origin: string): void;
 }
 
 export function get_default_config_json_wasm(): string;
+export function get_dependency_versions_wasm(): string;
+// The settings bindings (rust-wasm/src/settings.rs), which js/next/engine/ops.js calls.
+export function schema_json_wasm(): string;
+export function browser_config_wasm(): string;
+export function apply_browser_profile_wasm(config_json: string): string;
+export function browser_mask_defaults_wasm(): string;
+export function settings_view_wasm(config_json: string, facts_json?: string | null): string;
+export function prune_hidden_wasm(config_json: string, facts_json?: string | null): string;
+export function get_setting_wasm(config_json: string, path: string): string | undefined;
+export function set_setting_wasm(config_json: string, path: string, value_json: string): string;
+export function command_wasm(config_json: string): string;
+export function config_to_toml_wasm(config_json: string, selected: boolean): string;
+export function config_from_toml_wasm(toml: string): string;
+export function pipeline_graph_wasm(config_json: string, facts_json: string, grid_json?: string | null): string;
+export function item_meta_wasm(key: string): string | undefined;
 export function get_model_registry_wasm(): string;
 export function plan_wasm(config_json: string, facts_json: string): string;
 export function provide_weights_wasm(file_name: string, bytes: Uint8Array): void;

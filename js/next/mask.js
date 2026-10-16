@@ -2,148 +2,175 @@
  * The mask recipe (`masking.sections`, `.combine`, `.refinements`, `.two_pass_sections`): its
  * parts, presets and summary, for the mask builder (components/MaskEditor.js).
  *
- * The steps, their defaults, the presets, the two-pass default and HD-BET's windows are the
- * engine's (fixtures/mask.json, from scripts/next-schema-fixtures.mjs). The names, help and
- * ranges of inputs, steps and step parameters below are STAND-INS in the TUI's wording: the
- * schema's mask-sections / mask-ops types do not describe their parts yet (QSMxT #364 feedback).
- * When they do, read them from the schema and delete INPUTS and OPS.
+ * Everything here is the engine's: the inputs, step types, their parameters (wording, types,
+ * ranges), HD-BET's inference choices and the presets come from the schema's `mask`; each step's
+ * and preset's values as a browser run takes them, and the reliable mask's default, from the
+ * bindings' `browser_mask_defaults` (HD-BET as the low-memory window). Whether a parameter is in
+ * range is the engine's to say, through `settings_view`; the checks here only parse what was typed.
  *
  * @typedef {{ op: string, [param: string]: any }} MaskOp
  * @typedef {{ input: string, generator: MaskOp, refinements: MaskOp[] }} MaskSection
+ * @typedef {import('./protocol.js').MaskDefaults} MaskDefaults
+ * @typedef {import('./schema.js').SchemaOption} SchemaOption
  *
- * @typedef {object} MaskKit - fixtures/mask.json
- * @property {{ name: string, sections: MaskSection[], combine: 'or' | 'and', refinements: MaskOp[] }[]} presets
- * @property {MaskOp[]} ops - every step with its defaults
- * @property {MaskOp[]} generators - the steps that start a section
- * @property {MaskSection[]} two_pass_sections - the reliable mask's default
- * @property {{ native: number[], low_memory: number[] }} hd_bet_patches
- * @property {number} hd_bet_tile_step
- *
- * @typedef {object} Range
+ * @typedef {object} MaskParam - qsmxt-engine `schema::mask::MaskParam`
+ * @property {string} key - the field it is written as
+ * @property {string} label
+ * @property {string} help
+ * @property {import('./schema.js').SettingType} type
+ * @property {SchemaOption[]} [options]
+ * @property {boolean} optional
+ * @property {string} [units]
  * @property {number} [min]
  * @property {number} [max]
- * @property {boolean} [xmin] - min itself is out of range
- * @property {boolean} [xmax]
- * @property {boolean} [int]
+ * @property {boolean} [exclusive_min]
+ * @property {boolean} [exclusive_max]
+ * @property {unknown} default
+ * @property {string} [only_with] - applies only while this other parameter is set (not null)
  *
- * @typedef {[key: string, label: string, unit: string, range: Range, help: string]} OpParam - unit `bool` is a switch
+ * @typedef {object} MaskStep - qsmxt-engine `schema::mask::MaskStep`
+ * @property {string} kind - `threshold-otsu`, `bet`, ...
+ * @property {string} op - as written in the config
+ * @property {string} label
+ * @property {string} name
+ * @property {string} help
+ * @property {boolean} starts_section
+ * @property {boolean} needs_magnitude
+ * @property {boolean} deep_learning
+ * @property {MaskOp} default
+ * @property {MaskParam[]} params
+ * @property {string[]} [settings] - settings that apply to every step of the type, by path
+ *
+ * @typedef {object} MaskSchema - the schema's `mask`
+ * @property {{ value: string, label: string, help: string }[]} inputs
+ * @property {MaskStep[]} steps
+ * @property {{ value: number[] | null, label: string, name: string, help: string, budget_bytes: number }[]} hd_bet_inference
+ * @property {{ value: string, name: string, help: string, sections: MaskSection[], combine: 'or' | 'and', refinements: MaskOp[] }[]} presets
+ *
+ * @typedef {object} MaskKit
+ * @property {MaskSchema} schema
+ * @property {MaskDefaults} defaults
  */
-
-/** @type {[string, string, string][]} value, name, help */
-export const INPUTS = [
-  ['phase-quality', 'Phase quality', 'A phase-quality map from every echo: high where the phase is reliable'],
-  ['magnitude', 'Magnitude', 'The magnitude, combined over echoes'],
-  ['magnitude-first', 'First-echo magnitude', 'The first echo\'s magnitude (best SNR)'],
-  ['magnitude-last', 'Last-echo magnitude', 'The last echo\'s magnitude'],
-];
-
-/** @type {Record<string, { label: string, help: string, params?: OpParam[] }>} */
-export const OPS = {
-  threshold: { label: 'Threshold', help: 'Keep voxels above a threshold of the input' },
-  bet: { label: 'BET', help: 'Brain extraction (BET) on the magnitude', params: [
-    ['fractional_intensity', 'Fractional intensity', '', { min: 0, max: 1, xmin: true, xmax: true }, 'Smaller keeps a larger brain (0 to 1)'],
-    ['voxel_scale', 'Voxel scale', '×', { min: 0, xmin: true }, 'Inflates the voxel sizes for rodent data (10 for mouse); 1 is the scan\'s own geometry'],
-  ] },
-  'hd-bet': { label: 'HD-BET', help: 'HD-BET deep-learning brain extraction' },
-  'rs2-net': { label: 'RS2-Net', help: 'RS2-Net deep-learning rodent brain extraction', params: [
-    ['tta', 'Mirroring TTA', 'bool', {}, 'Test-time augmentation by mirroring: more passes, slower'],
-    ['tile_step', 'Patch step', '', { min: 0, max: 1, xmin: true }, 'Sliding-window stride, as a fraction of the patch'],
-  ] },
-  mindgrab: { label: 'MindGrab', help: 'MindGrab deep-learning brain extraction, for any contrast', params: [
-    ['tta', 'Flip TTA', 'bool', {}, 'A second, left-right flipped pass; about 2× slower'],
-  ] },
-  erode: { label: 'Erode', help: 'Peel voxels off the mask surface', params: [['iterations', 'Iterations', 'vox', { min: 1, int: true }, 'Erosion iterations']] },
-  dilate: { label: 'Dilate', help: 'Grow the mask outwards', params: [['iterations', 'Iterations', 'vox', { min: 1, int: true }, 'Dilation iterations']] },
-  close: { label: 'Close', help: 'Morphological closing: dilate, then erode', params: [['radius', 'Radius', 'vox', { min: 1, int: true }, 'Closing radius']] },
-  'fill-holes': { label: 'Fill holes', help: 'Fill enclosed holes', params: [['max_size', 'Max hole size', 'vox', { min: 0, int: true }, 'Largest hole to fill; 0 fills any size']] },
-  'gaussian-smooth': { label: 'Smooth', help: 'Gaussian smoothing of the mask edge', params: [['sigma_mm', 'Sigma', 'mm', { min: 0, xmin: true }, 'Gaussian sigma']] },
-  'signal-erode': { label: 'Signal erode', help: 'Peel only low-signal boundary voxels (sinus, skull-base dropout)', params: [
-    ['threshold', 'Signal gate', '', { min: 0, max: 1, xmin: true }, 'Fraction of the in-mask median magnitude; above ~0.85 it over-carves'],
-    ['depth_cap', 'Depth cap', 'vox', { min: 0, int: true }, 'Never peel deeper than this below the original surface (0 = no cap)'],
-    ['global_erosions', 'Plain erosions', '', { min: 0, int: true }, 'Plain erosions inside signal-erode, before the gate'],
-    ['bias_sigma', 'Bias sigma', 'vox', { min: 0, xmin: true }, 'Scale of the receive-coil bias estimate divided out of the magnitude'],
-    ['min_component', 'Min component', 'vox', { min: 0, int: true }, 'Keep every component with at least this many voxels'],
-  ] },
-};
-
-/** HD-BET's inference choices: the whole volume, or a sliding window. */
-export const HD_BET_INFERENCE = [
-  ['full', 'Whole volume (~6–8 GB)'],
-  ['native', '192×192×96 window (~3.6 GB)'],
-  ['low_memory', '128×128×64 window (~1.5 GB)'],
-];
 
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 /** A copy of plain JSON data. @template T @param {T} v @returns {T} */
 const copy = (v) => JSON.parse(JSON.stringify(v));
 
 /**
- * Why a step parameter's value is out of range, or null.
- * @param {Range} r
- * @param {number} v
+ * The step type a step is: the one with its `op`, and where several share it (the thresholds),
+ * the one whose default agrees with it on the text fields that tell them apart (`method`).
+ * @param {MaskKit} kit
+ * @param {MaskOp} op
+ * @returns {MaskStep | undefined}
  */
-export function checkRange(r, v) {
-  if (typeof v !== 'number' || !Number.isFinite(v)) return 'Enter a number.';
-  if (r.int && !Number.isInteger(v)) return 'Enter a whole number.';
-  if (r.min !== undefined && (r.xmin ? v <= r.min : v < r.min)) return `Must be ${r.xmin ? 'greater than' : 'at least'} ${r.min}.`;
-  if (r.max !== undefined && (r.xmax ? v >= r.max : v > r.max)) return `Must be ${r.xmax ? 'less than' : 'at most'} ${r.max}.`;
-  return null;
+export function stepOf(kit, op) {
+  const candidates = kit.schema.steps.filter((s) => s.op === op.op);
+  if (candidates.length <= 1) return candidates[0];
+  const first = candidates[0].default;
+  const telling = Object.keys(first).filter((k) => k !== 'op' && typeof first[k] === 'string'
+    && candidates.some((c) => !same(c.default[k], first[k])));
+  return candidates.find((c) => telling.every((k) => same(c.default[k], op[k])));
+}
+
+/** The step types that start a section, and those that refine a mask. @param {MaskKit} kit */
+export function stepKinds(kit) {
+  return {
+    generators: kit.schema.steps.filter((s) => s.starts_section),
+    refiners: kit.schema.steps.filter((s) => !s.starts_section),
+  };
 }
 
 /**
- * A fresh copy of a step with the engine's defaults. HD-BET starts as the browser profile runs
- * it: the low-memory sliding window (qsmxt-engine `apply_browser_profile`).
+ * A fresh step of a type, with its values as a browser run takes them.
  * @param {MaskKit} kit
- * @param {string} op
+ * @param {string} kind
  * @returns {MaskOp}
  */
-export function defaultOp(kit, op) {
-  const found = kit.ops.find((o) => o.op === op);
-  if (!found) throw new Error(`no mask step ${op}`);
-  const fresh = copy(found);
-  if (fresh.op === 'hd-bet' && fresh.patch == null) fresh.patch = kit.hd_bet_patches.low_memory;
-  return fresh;
+export function defaultOp(kit, kind) {
+  const found = kit.defaults.steps[kind];
+  if (!found) throw new Error(`no mask step ${kind}`);
+  return copy(found);
 }
 
 /**
- * A step in a few words, for summaries.
+ * Whether a parameter applies to the step as it is (`only_with`).
+ * @param {MaskParam} param
+ * @param {MaskOp} op
+ */
+export function paramApplies(param, op) {
+  return !param.only_with || op[param.only_with] != null;
+}
+
+/**
+ * The value a parameter's typed text stands for, or why it cannot be one (not a number, not a
+ * whole number). The range is the engine's to check.
+ * @param {MaskParam} param
+ * @param {string} text
+ * @returns {{ value: unknown, error: string | null }}
+ */
+export function parseParam(param, text) {
+  const t = text.trim();
+  if (t === '') return param.optional ? { value: null, error: null } : { value: undefined, error: 'A value is needed.' };
+  const v = Number(t);
+  if (!Number.isFinite(v)) return { value: undefined, error: 'Enter a number.' };
+  if (param.type === 'int' && !Number.isInteger(v)) return { value: undefined, error: 'Enter a whole number.' };
+  return { value: v, error: null };
+}
+
+/**
+ * A parameter's value in text: an option's name, a number with its units.
+ * @param {MaskParam} param
+ * @param {unknown} value
+ */
+export function paramText(param, value) {
+  if (param.options) return param.options.find((o) => same(o.value, value))?.name ?? String(value);
+  if (param.type === 'bool') return value ? 'on' : 'off';
+  if (value === null || value === undefined) return 'unset';
+  return `${value}${param.units ? ` ${param.units}` : ''}`;
+}
+
+/**
+ * HD-BET's inference choice for a step's `patch`.
+ * @param {MaskKit} kit
+ * @param {unknown} patch
+ */
+export function hdBetChoice(kit, patch) {
+  return kit.schema.hd_bet_inference.find((c) => same(c.value, patch ?? null));
+}
+
+/**
+ * A step in a few words, for summaries: its name, and its first number or choice.
+ * @param {MaskKit} kit
  * @param {MaskOp} o
  */
-export function opText(o) {
-  switch (o.op) {
-    case 'threshold': return o.method === 'otsu' ? 'otsu' : `${o.method} ${o.value ?? (o.method === 'fixed' ? 0.5 : 75)}`;
-    case 'bet': return `BET ${o.fractional_intensity}`;
-    case 'hd-bet': return `HD-BET${o.patch ? ` ${o.patch.join('×')}` : ''}`;
-    case 'erode': case 'dilate': return `${o.op} ${o.iterations}`;
-    default: return OPS[o.op]?.label.toLowerCase() ?? o.op;
-  }
+export function opText(kit, o) {
+  const step = stepOf(kit, o);
+  if (!step) return o.op;
+  const first = step.params.find((p) => p.type !== 'bool' && paramApplies(p, o));
+  if (!first || (o[first.key] == null && !first.options)) return step.name;
+  return `${step.name} ${paramText(first, o[first.key])}`;
 }
 
 /**
- * The preset a masking config is, if any. Its recipe, with HD-BET as the browser runs it, must
- * match.
+ * The preset a masking config is, if any.
  * @param {MaskKit} kit
  * @param {Record<string, any>} masking
  */
 export function presetOf(kit, masking) {
-  const asBrowser = (sections) => sections.map((s) => ({
-    ...s, generator: s.generator.op === 'hd-bet' && s.generator.patch == null ? { ...s.generator, patch: kit.hd_bet_patches.low_memory } : s.generator,
-  }));
-  return kit.presets.find((p) => same(asBrowser(p.sections), masking.sections) && p.combine === masking.combine
-    && same(p.refinements, masking.refinements))?.name ?? null;
+  return kit.schema.presets.find((p) => {
+    const r = kit.defaults.presets[p.value];
+    return r && same(r.sections, masking.sections) && r.combine === masking.combine && same(r.refinements, masking.refinements);
+  }) ?? null;
 }
 
 /**
  * A preset's recipe, as the browser runs it.
  * @param {MaskKit} kit
- * @param {string} name
+ * @param {string} value - the preset's `--mask-preset` name
  */
-export function presetRecipe(kit, name) {
-  const p = kit.presets.find((x) => x.name === name);
-  if (!p) return null;
-  const sections = copy(p.sections).map((s) => (s.generator.op === 'hd-bet' && s.generator.patch == null
-    ? { ...s, generator: { ...s.generator, patch: kit.hd_bet_patches.low_memory } } : s));
-  return { sections, combine: p.combine, refinements: copy(p.refinements) };
+export function presetRecipe(kit, value) {
+  const r = kit.defaults.presets[value];
+  return r ? copy(r) : null;
 }
 
 /**
@@ -155,18 +182,23 @@ export function maskSummary(kit, masking) {
   if (masking.custom_mask_tool) return 'your own file';
   const preset = presetOf(kit, masking);
   const twoPass = masking.two_pass ? ' · two-pass' : '';
-  if (preset) return `${preset}${twoPass}`;
-  const sections = masking.sections.map((s) => [opText(s.generator), ...s.refinements.map(opText)].join(', '));
-  const after = masking.sections.length > 1 && masking.refinements.length ? ` → ${masking.refinements.map(opText).join(', ')}` : '';
+  if (preset) return `${preset.name}${twoPass}`;
+  const text = (o) => opText(kit, o);
+  const sections = masking.sections.map((s) => [text(s.generator), ...s.refinements.map(text)].join(', '));
+  const after = masking.sections.length > 1 && masking.refinements.length ? ` → ${masking.refinements.map(text).join(', ')}` : '';
   return `${sections.join(` ${String(masking.combine).toUpperCase()} `)}${after}${twoPass}`;
 }
 
 /**
- * Whether any step of the recipe the run uses is BET (BET's surface settings then apply).
+ * The step types in the recipe a run uses that bring settings of their own (BET's surface
+ * settings), each once.
+ * @param {MaskKit} kit
  * @param {Record<string, any>} masking
+ * @returns {MaskStep[]}
  */
-export function usesBet(masking) {
-  const sections = [...masking.sections, ...(masking.two_pass ? masking.two_pass_sections ?? [] : [])];
-  return sections.some((s) => [s.generator, ...s.refinements].some((o) => o.op === 'bet'))
-    || masking.refinements.some((o) => o.op === 'bet');
+export function recipeSettings(kit, masking) {
+  const sections = [...masking.sections, ...(masking.two_pass ? masking.two_pass_sections ?? kit.defaults.two_pass_sections : [])];
+  const ops = [...sections.flatMap((s) => [s.generator, ...s.refinements]), ...masking.refinements];
+  const steps = new Set(ops.map((o) => stepOf(kit, o)).filter((s) => s?.settings?.length));
+  return /** @type {MaskStep[]} */ ([...steps]);
 }

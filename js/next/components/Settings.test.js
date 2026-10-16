@@ -13,24 +13,23 @@ import { StepSettings, sectionRows, supplyFile } from './Settings.js';
 import { Pipeline } from './Pipeline.js';
 import { createSession } from '../store/session.js';
 import { VolumeStore } from '../store/volumes.js';
-import { recordedSettingsView } from '../settings-view.js';
-import { recordedPlanner } from '../fixtures.js';
+import { recordedEngine } from '../engine/recorded.js';
 import { SECTIONS } from '../outline.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`../fixtures/${name}`, import.meta.url), 'utf8'));
 const schema = fixture('schema.json');
 const browser = fixture('config-browser.json');
-const views = fixture('settings-views.json');
 const facts = fixture('facts-example.json');
-const plans = fixture('plans.json');
-const mask = fixture('mask.json');
+const mask = { schema: schema.mask, defaults: fixture('mask-defaults.json') };
+/** The engine's recorded answers; a config a test reaches that was not recorded is a failure. */
+const engine = recordedEngine(fixture('engine-cases.json'));
 
-/** A session on the browser profile, with recorded plans and views, run when `flush` is called. */
-export function setup({ settingsView = recordedSettingsView(views, browser) } = {}) {
+/** A session on the browser profile, with the engine's recorded plans and views, run when `flush` is called. */
+export function setup({ settingsView = (c, f) => engine.settingsView(c, f) } = {}) {
   const pending = [];
   const session = createSession({
     defaults: browser,
-    planner: recordedPlanner(plans, browser),
+    planner: (c, f) => engine.plan(c, f),
     settingsView,
     schedule: (run) => pending.push(run),
   });
@@ -72,6 +71,7 @@ async function change(el, value) {
 afterEach(() => {
   render(null, document.body);
   document.body.replaceChildren();
+  expect(engine.misses.splice(0)).toEqual([]);
 });
 
 describe('every setting renders', () => {
@@ -90,8 +90,9 @@ describe('every setting renders', () => {
     // Labels and help are the schema's own words.
     for (const path of expected) {
       const setting = schema.settings.find((s) => s.path === path);
-      expect(row(root, path).textContent).toContain(setting.label);
-      if (setting.help) expect(root.querySelector(`#${row(root, path).querySelector('.info').getAttribute('aria-controls')}`).textContent).toContain(setting.help);
+      expect(row(root, path).textContent).toContain(setting.full_label);
+      if (setting.browser === 'supplied-file') expect(root.textContent).toContain(setting.browser_help);
+      else if (setting.help) expect(root.querySelector(`#${row(root, path).querySelector('.info').getAttribute('aria-controls')}`).textContent).toContain(setting.help);
     }
   });
 
@@ -162,35 +163,54 @@ describe('basic and advanced', () => {
 });
 
 describe('editing', () => {
-  test('a valid value writes the config (undoably); an invalid one shows why and writes nothing', async () => {
+  test('a value writes the config (undoably); the engine says what is wrong with one out of range', async () => {
     const { session, store, flush } = setup();
     session.ui.advanced.value = { background: true };
     await flush();
     const root = await step(session, store, 'background');
     const input = row(root, 'bg_removal.vsharp.min_radius').querySelector('input');
     await change(input, '0');
-    expect(root.querySelector('.sub.err').textContent).toBe('Must be greater than 0.');
+    expect(session.get('bg_removal.vsharp.min_radius')).toBe(0);
+    await flush();
+    const error = root.querySelector('[data-testid="engine-error"]');
+    expect(error.textContent).toBe('Must be greater than 0');
     expect(input.getAttribute('aria-invalid')).toBe('true');
-    expect(input.value).toBe('0'); // what was typed stays, to correct
-    expect(session.get('bg_removal.vsharp.min_radius')).toBe(1);
-    expect(session.canUndo.value).toBe(false);
     await change(input, '2');
+    await flush();
     expect(session.get('bg_removal.vsharp.min_radius')).toBe(2);
     expect(root.querySelector('.sub.err')).toBeNull();
     await act(() => session.undo());
+    await flush();
+    expect(session.get('bg_removal.vsharp.min_radius')).toBe(0);
+    await act(() => session.undo());
+    await flush();
     expect(session.get('bg_removal.vsharp.min_radius')).toBe(1);
     expect(row(root, 'bg_removal.vsharp.min_radius').querySelector('input').value).toBe('1');
   });
 
-  test('ranges from the engine, exclusive bounds included: TKD\'s threshold must be above 0', async () => {
+  test('what cannot be a value shows why and writes nothing', async () => {
+    const { session, store, flush } = setup();
+    session.ui.advanced.value = { background: true };
+    await flush();
+    const root = await step(session, store, 'background');
+    const input = row(root, 'bg_removal.vsharp.min_radius').querySelector('input');
+    await change(input, 'two');
+    expect(root.querySelector('[data-testid="typed-error"]').textContent).toBe('Enter a number.');
+    expect(input.value).toBe('two'); // what was typed stays, to correct
+    expect(session.get('bg_removal.vsharp.min_radius')).toBe(1);
+    expect(session.canUndo.value).toBe(false);
+  });
+
+  test('exclusive bounds from the engine: TKD\'s threshold must be above 0', async () => {
     const { session, store, flush } = setup();
     session.set('inversion.algorithm', 'tkd');
     session.ui.advanced.value = { inversion: true };
     await flush();
     const root = await step(session, store, 'inversion');
     await change(row(root, 'inversion.tkd.threshold').querySelector('input'), '0');
-    expect(root.querySelector('.sub.err').textContent).toBe('Must be greater than 0.');
-    expect(session.get('inversion.tkd.threshold')).toBe(0.15);
+    await flush();
+    expect(root.querySelector('[data-testid="engine-error"]').textContent).toBe('Must be greater than 0');
+    expect(session.get('inversion.tkd.threshold')).toBe(0);
   });
 
   test('changed marker and reset', async () => {
@@ -242,7 +262,7 @@ describe('editing', () => {
     expect(info.getAttribute('aria-expanded')).toBe('true');
   });
 
-  test('an echo reference: a named choice, or a given echo within the scan\'s echoes', async () => {
+  test('an echo reference: a named choice, or an echo by its number', async () => {
     const { session, store, flush } = setup({ settingsView: null });
     session.ui.advanced.value = { motion: true };
     await flush();
@@ -250,12 +270,13 @@ describe('editing', () => {
     await change(row(root, 'motion_correction.reference').querySelector('select'), 'echo');
     expect(session.get('motion_correction.reference')).toBe('1');
     const echo = root.querySelector('#setting-motion-correction-reference-echo');
-    expect(echo.dataset.max).toBe('5');
+    expect(echo.dataset.min).toBe('1');
     await change(echo, '3');
     expect(session.get('motion_correction.reference')).toBe('3');
-    await change(root.querySelector('#setting-motion-correction-reference-echo'), '9');
-    expect(root.querySelector('.sub.err').textContent).toBe('Enter an echo from 1 to 5.');
+    await change(root.querySelector('#setting-motion-correction-reference-echo'), 'x');
+    expect(root.querySelector('.sub.err').textContent).toBe('Enter an echo number.');
     expect(session.get('motion_correction.reference')).toBe('3');
+    await flush();
   });
 });
 
@@ -300,7 +321,7 @@ describe('the pipeline column', () => {
     const root = await show(session, store);
     const box = row(root, 'pipeline.do_segmentation').querySelector('input');
     expect([box.checked, box.disabled]).toEqual([true, true]);
-    expect(root.querySelector('[data-testid="forced"]').textContent).toBe('On because Per-structure statistics needs it.');
+    expect(root.querySelector('[data-testid="forced"]').textContent).toBe('On because Per-structure Statistics needs it.');
   });
 
   test('search opens the step of an advanced setting and shows it', async () => {
@@ -310,7 +331,7 @@ describe('the pipeline column', () => {
     const search = root.querySelector('input[type="search"]');
     await change(search, '--vsharp-min-radius');
     const hit = root.querySelector('.results button');
-    expect(hit.textContent).toContain('Min Radius');
+    expect(hit.textContent).toContain('V-SHARP: Minimum Radius');
     await act(() => hit.click());
     await flush();
     expect(session.ui.section.value).toBe('background');
