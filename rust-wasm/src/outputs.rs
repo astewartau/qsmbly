@@ -85,7 +85,7 @@ mod tests {
             "dims": [4, 4, 4], "n_echoes": 1, "echo_times": [0.02], "has_magnitude": true,
             "n_coils": 1, "real_imaginary": false, "field_strength": 3.0,
             "b0_dir": [0.0, 0.0, 1.0], "mese_echo_times": null, "custom_mask": false,
-            "custom_dseg": false, "custom_qsm": false,
+            "custom_dseg": false, "custom_qsm": false, "custom_r2": false, "custom_r2prime": false,
         })
     }
 
