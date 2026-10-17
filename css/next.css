@@ -496,3 +496,26 @@ label.btn.disabled { opacity: 0.45; pointer-events: none; }
   .example-button { margin-left: 0; }
 }
 .chip.overlaid { border-style: dashed; border-color: var(--error); }
+
+/* Export panel (header): methods, command, settings file, graph, files and the bundle */
+.export-panel {
+  position: fixed; top: 41px; right: 0; bottom: 41px; z-index: 9; width: min(640px, 100vw);
+  display: flex; flex-direction: column; background: var(--panel);
+  border-left: 1px solid var(--border); box-shadow: -8px 0 24px rgba(0, 0, 0, 0.14);
+}
+.export-panel .drawer-head { flex-wrap: wrap; padding-bottom: 0; }
+.export-tabs { height: 30px; padding: 0; border-bottom: 0; background: none; }
+.export-body { flex: 1; min-height: 0; overflow: auto; background: var(--bg); padding-bottom: 16px; }
+.export-toolbar { position: sticky; top: 0; z-index: 1; }
+.export-text { margin: 10px 12px 0; }
+.export-choice { margin: 8px 12px 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.export-files { list-style: none; margin: 8px 12px 0; padding: 0; font-size: 12px; }
+.export-files li { padding: 3px 0; border-bottom: 1px solid var(--divider); }
+.export-files label { display: grid; grid-template-columns: auto 180px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.export-file-path { font-family: var(--mono); font-size: 11px; color: var(--text-2); overflow-wrap: anywhere; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (max-width: 899px) {
+  .export-panel { top: 0; bottom: 0; }
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }

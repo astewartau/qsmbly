@@ -1,7 +1,9 @@
 /**
  * The workspace (redesign §3.3): the pipeline column, with each step's settings inline, beside
  * the viewer and its outputs, and the run bar below. Under 900 px the viewer sits above the
- * pipeline. Tabs over the viewer switch it for the pipeline graph or the command.
+ * pipeline. Tabs over the viewer switch it for the pipeline graph or the command. The header's
+ * Export opens the export panel (methods, command, settings file, graph, and the outputs as a
+ * bundle).
  *
  * @typedef {import('../store/session.js').Session} Session
  * @typedef {import('../exports.js').Providers} Providers
@@ -17,11 +19,12 @@
  * @property {import('../scan.js').ScanLoader} loader
  */
 import { html } from '../html.js';
-import { useState, useEffect } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import { Pipeline } from './Pipeline.js';
 import { RunBar } from './RunBar.js';
 import { GraphTab } from './GraphTab.js';
 import { CommandTab } from './CommandTab.js';
+import { ExportPanel } from './ExportPanel.js';
 import { Viewer } from '../viewer/Viewer.js';
 import { itemMeta } from '../items.js';
 import { installUndoKeys } from '../shortcuts.js';
@@ -36,7 +39,7 @@ export function App({ session, store, workspace, providers }) {
   useEffect(() => installUndoKeys(window, session), [session]);
   return html`
     <div class="workspace">
-      <${Header} session=${session} versions=${workspace.versions} />
+      <${Header} session=${session} store=${store} providers=${providers} workspace=${workspace} />
       <div class="main">
         <${Pipeline} session=${session} store=${store} schema=${workspace.schema} mask=${workspace.mask}
           runner=${workspace.runner} loader=${workspace.loader} />
@@ -57,10 +60,17 @@ function savedTheme() {
   }
 }
 
-/** @param {{ session: Session, versions?: Workspace['versions'] }} props */
-function Header({ session, versions }) {
+/** @param {{ session: Session, store: VolumeStore, providers: Providers, workspace: Workspace }} props */
+function Header({ session, store, providers, workspace }) {
+  const versions = workspace.versions;
   const facts = session.facts.value;
   const [theme, setTheme] = useState(savedTheme);
+  const [exporting, setExporting] = useState(false);
+  const exportButton = useRef(/** @type {HTMLButtonElement | null} */ (null));
+  const closeExport = () => {
+    setExporting(false);
+    exportButton.current?.focus();
+  };
   useEffect(() => {
     if (theme === 'auto') delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = theme;
@@ -84,8 +94,12 @@ function Header({ session, versions }) {
         <button type="button" class="btn" onClick=${() => session.redo()} disabled=${!session.canRedo.value} title="Redo (Ctrl+Shift+Z)">Redo</button>
         <button type="button" class="btn" onClick=${() => setTheme(next)} title=${`Theme: ${theme} (switch to ${next})`}
           aria-label=${`Theme: ${theme}`}>${theme === 'auto' ? 'Auto' : theme === 'light' ? 'Light' : 'Dark'}</button>
+        <button type="button" class="btn" ref=${exportButton} aria-expanded=${exporting} aria-haspopup="dialog"
+          data-testid="export-button" onClick=${() => (exporting ? closeExport() : setExporting(true))}>Export</button>
         <a class="btn" href="index.html#app">Current interface</a>
       </span>
+      ${exporting && html`<${ExportPanel} session=${session} store=${store} providers=${providers} engine=${workspace.engine}
+        versions=${versions} onClose=${closeExport} />`}
     </header>
   `;
 }
