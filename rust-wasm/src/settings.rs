@@ -250,7 +250,7 @@ pub fn config_to_toml_wasm(config_json: &str, selected: bool) -> Result<String, 
 /// command), so `qsmxt run --config` reproduces it.
 pub fn config_to_toml_changed(config_json: &str) -> Result<String, String> {
     parse_config(config_json)?
-        .to_toml_changed(&PipelineConfig::default())
+        .to_toml_changed()
         .map_err(|e| e.to_string())
 }
 

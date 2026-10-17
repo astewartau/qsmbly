@@ -55,7 +55,8 @@ struct Published {
 /// `{ run, files: [{ key, path, sidecar_path, sidecar }] }`, `run` being the run's BIDS name
 /// (`sub-1`).
 pub fn output_files(request_json: &str) -> Result<String, String> {
-    let request: Request = serde_json::from_str(request_json).map_err(|e| format!("output request is not valid: {e}"))?;
+    let request: Request = serde_json::from_str(request_json)
+        .map_err(|e| format!("output request is not valid: {e}"))?;
     let key = entities::run_key(request.scan_file.as_deref().unwrap_or(""));
     let basename = key.basename();
     let facts = outputs::SidecarFacts {
@@ -66,10 +67,22 @@ pub fn output_files(request_json: &str) -> Result<String, String> {
     };
     let mut files = Vec::new();
     for held in request.outputs {
-        let Some(item) = Item::from_key(&held.key) else { continue };
-        let Some(path) = outputs::published_path(&item, &key, request.space.as_deref()) else { continue };
-        let generated_by = held.step.as_deref().map(|step| outputs::activity_iri(step, &basename));
-        let sidecar = outputs::sidecar(&item, held.annotations.unwrap_or_default(), generated_by.as_deref(), &facts);
+        let Some(item) = Item::from_key(&held.key) else {
+            continue;
+        };
+        let Some(path) = outputs::published_path(&item, &key, request.space.as_deref()) else {
+            continue;
+        };
+        let generated_by = held
+            .step
+            .as_deref()
+            .map(|step| outputs::activity_iri(step, &basename));
+        let sidecar = outputs::sidecar(
+            &item,
+            held.annotations.unwrap_or_default(),
+            generated_by.as_deref(),
+            &facts,
+        );
         files.push(Published {
             key: held.key,
             sidecar_path: sidecar.as_ref().and_then(|_| outputs::sidecar_name(&path)),
@@ -77,7 +90,8 @@ pub fn output_files(request_json: &str) -> Result<String, String> {
             path,
         });
     }
-    serde_json::to_string(&serde_json::json!({ "run": basename, "files": files })).map_err(|e| e.to_string())
+    serde_json::to_string(&serde_json::json!({ "run": basename, "files": files }))
+        .map_err(|e| e.to_string())
 }
 
 /// [`output_files`].
@@ -111,10 +125,15 @@ mod tests {
                 { "key": "LocalField(Main)", "step": "bgremove" },
             ],
         });
-        let out: Value = serde_json::from_str(&output_files(&request.to_string()).unwrap()).unwrap();
+        let out: Value =
+            serde_json::from_str(&output_files(&request.to_string()).unwrap()).unwrap();
         assert_eq!(out["run"], "sub-1");
         let files = out["files"].as_array().unwrap();
-        assert_eq!(files.len(), 2, "the local field is not published: {files:?}");
+        assert_eq!(
+            files.len(),
+            2,
+            "the local field is not published: {files:?}"
+        );
         assert_eq!(files[0]["path"], "sub-1/anat/sub-1_Chimap.nii");
         assert_eq!(files[0]["sidecar_path"], "sub-1/anat/sub-1_Chimap.json");
         let sidecar: Value = serde_json::from_str(files[0]["sidecar"].as_str().unwrap()).unwrap();
