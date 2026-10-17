@@ -230,7 +230,7 @@ function FilesExport({ session, store, engine, providers, methods, command, merm
       const config = session.config.peek();
       const [{ toml }, extra] = await Promise.all([
         providers.toml(config, 'full'),
-        Promise.all(bundleContributors.map((c) => c({ session, store, engine }))).then((all) => all.flat()),
+        Promise.all(bundleContributors.map((c) => c({ session, store, engine, run: files.value?.run ?? '' }))).then((all) => all.flat()),
       ]);
       const entries = await bundleEntries({
         command, methods: methodsMarkdown(methods), toml, mermaid: mermaid ?? '', files: chosen,

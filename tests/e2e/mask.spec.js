@@ -7,6 +7,7 @@ import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { phantomFiles, niftiFloat32 } from './phantom.js';
+import { unzip } from './unzip.js';
 
 function watchErrors(page) {
   const errors = [];
@@ -141,6 +142,17 @@ test.describe('the mask builder in next.html', () => {
     const offset = Math.round(nifti.readFloatLE(108));
     const voxels = Array.from(new Float32Array(nifti.buffer.slice(nifti.byteOffset + offset, nifti.byteOffset + offset + supplied.length * 4)), (v) => (v > 0.5 ? 1 : 0));
     expect(voxels).toEqual(supplied);
+
+    // The Export bundle carries the same file beside qsmxt's derivatives, for --use-custom-masks qsmbly.
+    await page.getByTestId('export-button').click();
+    const panel = page.getByTestId('export-panel');
+    await panel.getByRole('tab', { name: 'Files' }).click();
+    const [bundle] = await Promise.all([page.waitForEvent('download'), panel.getByTestId('download-bundle').click()]);
+    const archive = await unzip(new Uint8Array(readFileSync(await bundle.path())));
+    const inBundle = archive.get('qsmbly-sub-phantom/derivatives/qsmbly/sub-phantom/anat/sub-phantom_mask.nii.gz');
+    expect(inBundle).toBeDefined();
+    expect(Buffer.compare(gunzipSync(Buffer.from(/** @type {Uint8Array} */ (inBundle))), nifti)).toBe(0);
+    await expect(panel.getByTestId('bundle-status')).toContainText('Saved');
     expect(errors).toEqual([]);
   });
 

@@ -21,6 +21,8 @@ import { createScanLoader, withSupplied } from './scan.js';
 import { createHistory } from './history.js';
 import { createExpectations } from './rerun.js';
 import { createMaskPreview, recipeKey } from './mask-preview.js';
+import { bundleContributors } from './bundle.js';
+import { suppliedMaskFiles } from './supplied-mask.js';
 
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
 
@@ -117,6 +119,9 @@ try {
     schedule: (run) => requestAnimationFrame(() => run()),
     superseded: (e) => e instanceof Superseded,
   });
+
+  // The bundle carries a supplied mask as the derivative `qsmxt run --use-custom-masks qsmbly` reads.
+  bundleContributors.push(suppliedMaskFiles);
 
   const workspace = { schema, mask, models, versions, engine, runner, loader, history, expect, maskPreview };
   // The graph, command and settings-file answers, for the Pipeline and Command tabs.

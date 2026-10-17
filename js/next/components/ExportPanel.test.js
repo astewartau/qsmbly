@@ -10,6 +10,7 @@ import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { html } from '../html.js';
 import { ExportPanel } from './ExportPanel.js';
+import { bundleContributors } from '../bundle.js';
 import { createSession } from '../store/session.js';
 import { VolumeStore } from '../store/volumes.js';
 import { recordedEngine, recordedProviders } from '../engine/recorded.js';
@@ -97,6 +98,25 @@ describe('ExportPanel', () => {
     const rows = [...root.querySelectorAll('[data-testid="export-file-list"] li')];
     expect(rows.map((r) => r.querySelector('code')?.textContent)).toEqual(['sub-1/anat/sub-1_Chimap.nii']);
     expect(/** @type {HTMLButtonElement} */ (root.querySelector('[data-testid="download-bundle"]')).disabled).toBe(false);
+  });
+
+  test('the bundle asks its contributors for their files with the engine\'s run name', async () => {
+    const { session, providers, store, engine } = setup();
+    /** @type {any[]} */
+    const contexts = [];
+    const contributor = async (context) => { contexts.push(context); return []; };
+    bundleContributors.push(contributor);
+    try {
+      engine.niftiFile = async () => new Uint8Array([0]);
+      providers.toml = async () => ({ toml: CHANGED });
+      const root = await mount(html`<${ExportPanel} session=${session} store=${store} providers=${providers} engine=${engine} onClose=${() => {}} />`);
+      await click(tab(root, 'Files'));
+      await click(/** @type {HTMLElement} */ (root.querySelector('[data-testid="download-bundle"]')));
+      expect(contexts).toHaveLength(1);
+      expect(contexts[0]).toMatchObject({ session, store, engine, run: 'sub-1' });
+    } finally {
+      bundleContributors.splice(bundleContributors.indexOf(contributor), 1);
+    }
   });
 
   test('Escape closes it, and the arrow keys move between tabs', async () => {

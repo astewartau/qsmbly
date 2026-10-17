@@ -20,7 +20,8 @@
  * @typedef {import('./engine/client.js').EngineClient} EngineClient
  * @typedef {import('./protocol.js').OutputFiles} OutputFiles
  * @typedef {import('./zip.js').ZipEntry} ZipEntry
- * @typedef {(context: { session: Session, store: VolumeStore, engine: EngineClient }) => Promise<ZipEntry[]>} BundleContributor
+ * @typedef {(context: { session: Session, store: VolumeStore, engine: EngineClient, run: string }) => Promise<ZipEntry[]>} BundleContributor
+ *   `run`: the run's BIDS name, as the engine names its outputs ({@link OutputFiles}`.run`)
  */
 import { echoes } from './inputs.js';
 import { zip } from './zip.js';
