@@ -96,7 +96,7 @@ a:hover { text-decoration: underline; }
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--warn); border: 1px solid currentColor; border-radius: 999px; padding: 0 8px;
 }
-.topbar-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.topbar-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
 /* Pipeline column */
 .pipeline { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }

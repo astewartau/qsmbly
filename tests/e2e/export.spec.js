@@ -26,6 +26,8 @@ test('after a run, Export shows the engine\'s methods, command and settings, and
   await page.locator('[data-section="data"]').click();
   await page.getByTestId('file-input').setInputFiles(phantomFiles());
   await expect(page.getByTestId('scan-summary')).toHaveText(/3 echoes/, { timeout: 30_000 });
+  // A setting changed from QSMxT's default, so the short settings file has something to say.
+  await page.evaluate(() => globalThis.qsmblyNext.session.set('inversion.algorithm', 'rts'));
   await page.getByTestId('run-button').click();
   await expect.poll(() => page.evaluate(() => globalThis.qsmblyNext.runner.status.value), { timeout: 4 * 60_000 }).toBe('done');
 
@@ -62,12 +64,16 @@ test('after a run, Export shows the engine\'s methods, command and settings, and
   const panel = page.getByTestId('export-panel');
   await expect(panel.getByTestId('export-methods-text')).toHaveText(want.paragraph);
   await expect(panel.getByTestId('export-methods-scope')).toHaveText('What the last run did.');
+  await page.screenshot({ path: testInfo.outputPath('next-export-methods.png') });
   await panel.getByRole('tab', { name: 'Command' }).click();
   const shown = await panel.getByTestId('export-command').textContent();
   expect(shown?.replace(/ \\\n\s+/g, ' ').replace(' <output_dir>', '')).toBe(want.command);
   await panel.getByRole('tab', { name: 'Settings file' }).click();
   await expect(panel.getByTestId('export-toml')).toHaveText(want.changed);
+  await page.screenshot({ path: testInfo.outputPath('next-export-settings.png') });
+  expect(want.changed).toContain('rts');
   expect(want.changed.length).toBeLessThan(want.full.length / 4);
+  expect(want.command).toContain('--qsm-algorithm rts');
   await panel.getByRole('tab', { name: 'Graph' }).click();
   await expect(panel.getByTestId('export-graph')).toHaveText(want.mermaid);
   await panel.getByRole('tab', { name: 'Files' }).click();

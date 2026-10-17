@@ -183,7 +183,8 @@ function TomlExport({ config, providers }) {
         <label><input type="radio" name="toml-form" checked=${form === 'selected'} onChange=${() => setForm('selected')} />
           Every setting of the chosen algorithms</label>
       </fieldset>
-      <pre class="code toml" data-testid="export-toml">${text || (toml.error ? '' : '…')}</pre>
+      <pre class="code toml" data-testid="export-toml">${toml.value ? text : toml.error ? '' : '…'}</pre>
+      ${toml.value && !text.trim() && html`<p class="export-note" data-testid="export-toml-empty">Every setting is QSMxT's default: the file is empty.</p>`}
       ${toml.error && html`<p class="problem-error small" role="alert">No settings file: ${toml.error}</p>`}
       <p class="export-note"><code>qsmxt run ${'<bids_dir>'} ${'<output_dir>'} --config ${TOML_FILE}</code> runs with these settings.</p>
     </section>

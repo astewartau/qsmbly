@@ -255,10 +255,10 @@ test.describe('next.html', () => {
     await expect(box('tgv')).toContainText('TGV');
 
     // Export: the engine's Mermaid, and the drawing as an SVG file.
-    await page.getByRole('button', { name: 'Export' }).click();
+    await page.getByRole('tabpanel', { name: 'Pipeline' }).getByRole('button', { name: 'Export' }).click();
     await page.getByRole('menuitem', { name: 'Copy Mermaid' }).click();
     expect(await clipboard()).toMatch(/^flowchart/);
-    await page.getByRole('button', { name: 'Export' }).click();
+    await page.getByRole('tabpanel', { name: 'Pipeline' }).getByRole('button', { name: 'Export' }).click();
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: 'Download SVG' }).click()]);
     expect(download.suggestedFilename()).toBe('pipeline.svg');
     const svgPath = testInfo.outputPath('pipeline.svg');
