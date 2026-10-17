@@ -173,7 +173,8 @@ export function recordedProviders(recorded, exports, runs = []) {
     async command(config) {
       return { command: unwrap(find(config, null).command) };
     },
-    async toml(config) {
+    async toml(config, form = 'selected') {
+      if (form !== 'selected') throw new Error(`no recorded engine answer for the ${form} settings file`);
       return { toml: tomlOf(find(config, null)) };
     },
     async importToml(text) {

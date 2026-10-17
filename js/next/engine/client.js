@@ -22,7 +22,7 @@ export class Superseded extends Error {
 }
 
 /** The ops that go through a lane (latest wins). */
-export const LATEST_WINS = /** @type {const} */ (['settingsView', 'plan', 'graph', 'methods', 'graphAfter', 'methodsAfter', 'command', 'toToml', 'pruneHidden']);
+export const LATEST_WINS = /** @type {const} */ (['settingsView', 'plan', 'graph', 'methods', 'graphAfter', 'methodsAfter', 'command', 'toToml', 'toTomlChanged', 'pruneHidden']);
 
 /**
  * @param {WorkerLike} worker
@@ -102,12 +102,15 @@ export function createEngineClient(worker) {
     methodsAfter: op('methodsAfter'),
     command: op('command'),
     toToml: op('toToml'),
+    toTomlChanged: op('toTomlChanged'),
+    toTomlFull: op('toTomlFull'),
     fromToml: op('fromToml'),
     itemMeta: op('itemMeta'),
     scanFacts: op('scanFacts'),
     scanReport: op('scanReport'),
     geometry: op('geometry'),
     niftiFile: op('niftiFile'),
+    outputFiles: op('outputFiles'),
     models: op('models'),
   };
 }

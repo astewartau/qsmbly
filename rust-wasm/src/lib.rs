@@ -14,6 +14,7 @@ use qsmxt_engine::qsm_core;
 use wasm_bindgen::prelude::*;
 
 pub mod engine;
+pub mod outputs;
 pub mod settings;
 
 #[cfg(feature = "debug-log")]
