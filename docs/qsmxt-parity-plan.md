@@ -231,7 +231,8 @@ the engine and QSMxT has released the engine; there is no interim port of today'
 
 Status (2026-10-16): phase 1 is merged (QSM.rs #190–#194, QSMxT #329 #330, qsmbly #147–#151).
 Phase 2: 2.0 (QSMxT #331), 2.1 (#332), 2.2 (#333–#336) and 2.3 (#337–#339) are merged; 2.4 is in
-progress. Phase 3: 3.1 and 3.2 are in progress.
+progress. Phase 3: 3.1 and 3.2 are in progress. Step 3.6 (the
+plan before running) is built in the new workspace, in U2 (qsmbly #171 and #172).
 
 ### UI redesign
 

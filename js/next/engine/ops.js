@@ -81,6 +81,13 @@ export function engineOps(wasm) {
      * @returns {import('../protocol.js').Geometry}
      */
     geometry: (nifti) => JSON.parse(call(wasm.nifti_geometry_wasm, nifti)),
+    /**
+     * A volume as a NIfTI-1 file, written by qsm-core as `qsmxt run` writes its outputs.
+     * @param {Float32Array | Uint8Array} data
+     * @param {{ dims: number[], voxel_size: number[], affine: number[] }} grid
+     * @returns {Uint8Array}
+     */
+    niftiFile: (data, grid) => call(wasm.save_nifti_wasm, Float64Array.from(data), ...grid.dims, ...grid.voxel_size, new Float64Array(grid.affine)),
     /** QSM.rs's model registry. @returns {ModelEntry[]} */
     models: () => JSON.parse(call(wasm.get_model_registry_wasm)),
   };

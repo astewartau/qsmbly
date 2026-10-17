@@ -10,6 +10,7 @@
  * @typedef {import('../mask.js').MaskKit} MaskKit
  * @typedef {import('../schema.js').Setting} Setting
  * @typedef {import('../outline.js').OutlineRow} OutlineRow
+ * @typedef {import('../run.js').Runner} Runner
  * @typedef {import('../scan.js').ScanLoader} ScanLoader
  */
 import { html } from '../html.js';
@@ -25,12 +26,41 @@ import { Icon } from './icons.js';
 /** @param {Setting | undefined} s */
 const nameOf = (s) => s?.full_label ?? s?.label;
 
-/** @param {{ session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, loader?: ScanLoader }} props */
-export function Pipeline({ session, store, schema, mask, loader }) {
+/**
+ * What a row shows of the last run: its steps' states, the one running with its progress.
+ * @param {OutlineRow} row
+ * @param {Runner | undefined} runner
+ * @returns {{ state: string, text: string, error?: string } | null}
+ */
+export function rowRunState(row, runner) {
+  if (!runner) return null;
+  const steps = runner.steps.value;
+  const error = runner.error.value;
+  const states = row.steps.map((s) => steps.get(s.name)).filter((s) => !!s);
+  if (!states.length) return null;
+  const running = states.find((s) => s.state === 'running');
+  if (running) {
+    const p = running.progress;
+    return { state: 'running', text: p && p.total ? `${Math.round((100 * p.done) / p.total)}%` : 'running' };
+  }
+  if (states.some((s) => s.state === 'failed')) {
+    return { state: 'failed', text: 'failed', error: error && row.steps.some((s) => s.name === error.step) ? error.message : undefined };
+  }
+  if (states.some((s) => s.state === 'cancelled')) return { state: 'cancelled', text: 'cancelled' };
+  if (states.length < row.steps.length) return null;
+  if (states.every((s) => s.state === 'skipped')) return { state: 'skipped', text: 'not needed' };
+  if (states.every((s) => s.state === 'cached' || s.state === 'skipped')) return { state: 'cached', text: 'reused' };
+  return { state: 'done', text: 'done' };
+}
+
+/** @param {{ session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, runner?: Runner, loader?: ScanLoader }} props */
+export function Pipeline({ session, store, schema, mask, runner, loader }) {
   const plan = session.plan.value;
   const view = session.view.value;
   const forcedBy = (p) => view?.get(p)?.forced_by ?? null;
   const rows = visibleRows(outlineRows(plan, (p) => session.get(p), forcedBy), plan);
+  const status = runner?.status.value;
+  const busy = status === 'downloading' || status === 'starting' || status === 'running';
   const open = session.ui.section.value;
   const extra = unplacedSteps(plan);
   const [focus, setFocus] = useState(/** @type {string | null} */ (null));
@@ -53,7 +83,7 @@ export function Pipeline({ session, store, schema, mask, loader }) {
       items.push(html`<li class="group" aria-hidden="true">${group}</li>`);
     }
     items.push(html`<${Step} key=${row.section.id} row=${row} session=${session} store=${store} schema=${schema} mask=${mask}
-      open=${open === row.section.id} forcedBy=${forcedBy} loader=${loader} />`);
+      open=${open === row.section.id} forcedBy=${forcedBy} run=${rowRunState(row, runner)} loader=${loader} busy=${busy} />`);
   }
 
   return html`
@@ -68,9 +98,9 @@ export function Pipeline({ session, store, schema, mask, loader }) {
 /**
  * One step: its row (and switch), and its settings when open.
  * @param {{ row: OutlineRow, session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, open: boolean,
- *   forcedBy: (path: string) => string | null, loader?: ScanLoader }} props
+ *   forcedBy: (path: string) => string | null, run: { state: string, text: string, error?: string } | null, loader?: ScanLoader, busy: boolean }} props
  */
-function Step({ row, session, store, schema, mask, open, forcedBy, loader }) {
+function Step({ row, session, store, schema, mask, open, forcedBy, run, loader, busy }) {
   const { section, state } = row;
   const config = session.config.value;
   const facts = session.facts.value;
@@ -110,13 +140,16 @@ function Step({ row, session, store, schema, mask, open, forcedBy, loader }) {
           ${Icon.chevron}
           <span class="step-title">${section.label}</span>
           <span class="step-sum" data-testid="summary">${summary}</span>
-          <span class=${`state-dot ${stateText.replace(' ', '-')}`} title=${stateText}><span class="visually-hidden">${stateText}</span></span>
+          ${run
+            ? html`<span class=${`run-state ${run.state}`} data-testid="run-state" title=${run.text}>${run.text}</span>`
+            : html`<span class=${`state-dot ${stateText.replace(' ', '-')}`} title=${stateText}><span class="visually-hidden">${stateText}</span></span>`}
         </button>
         ${toggle && html`
           <input type="checkbox" class="switch step-switch" aria-label=${nameOf(toggle)} checked=${!!session.get(toggle.path) || !!forced}
             disabled=${!!forced} title=${forced ? `On because ${nameOf(schema.settings.find((s) => s.path === forced))} needs it` : nameOf(toggle)}
             onChange=${(e) => session.set(toggle.path, e.currentTarget.checked)} />`}
       </div>
+      ${run?.error && html`<p class="step-error" role="alert" data-testid="step-error">${run.error}</p>`}
       ${open && html`
         <div class="step-body" id=${`step-${section.id}`}>
           ${forced && html`<p class="sub note" data-testid="forced">On because ${nameOf(schema.settings.find((s) => s.path === forced))} needs it.</p>`}
@@ -125,7 +158,7 @@ function Step({ row, session, store, schema, mask, open, forcedBy, loader }) {
             <ul class="problems">
               ${problems.map((p) => html`<li class=${`problem-${p.severity}`} role=${p.severity === 'error' ? 'alert' : undefined}>${p.reason}</li>`)}
             </ul>`}
-          ${section.id === 'data' && loader && html`<${DataPanel} session=${session} loader=${loader} busy=${false} />`}
+          ${section.id === 'data' && loader && html`<${DataPanel} session=${session} loader=${loader} busy=${busy} />`}
           ${section.id === 'masking'
             ? html`<${MaskEditor} session=${session} store=${store} schema=${schema} kit=${mask} />`
             : (on || section.toggles) && html`<${StepSettings} session=${session} store=${store} schema=${schema} id=${section.id} sections=${section.schema}

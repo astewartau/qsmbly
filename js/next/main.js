@@ -1,8 +1,9 @@
 /**
  * Entry point of the new workspace (next.html). Everything it says about settings, plans, scans
  * and items is QSMxT's engine's, asked through the engine worker (engine/worker.js) as the user
- * edits. Until a scan is loaded, the workspace plans for the example dataset's scan, as the
- * engine reads its sidecars.
+ * edits; runs are the engine's too, in the run worker (engine/run-worker.js), on the volumes
+ * the page keeps. Until a scan is loaded, the workspace plans for the example dataset's scan, as
+ * the engine reads its sidecars.
  */
 import '@preact/signals'; // lets components re-render on the signals they read
 import { render } from 'preact';
@@ -15,6 +16,7 @@ import { EXAMPLE_SCAN } from './fixtures.js';
 import { createEngineClient, Superseded } from './engine/client.js';
 import { engineProviders } from './engine/providers.js';
 import { learnItems, setItemLookup } from './items.js';
+import { createRunner } from './run.js';
 import { createScanLoader, withSupplied } from './scan.js';
 
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
@@ -65,7 +67,15 @@ try {
   effect(() => learnItems(session.plan.value?.items));
   session.facts.value = facts;
 
-  const loader = createScanLoader({ session, store, engine, preview: facts });
+  const runWorkerUrl = new URL('./engine/run-worker.js', import.meta.url);
+  if (v) runWorkerUrl.searchParams.set('v', v);
+  const runner = createRunner({
+    session,
+    store,
+    registry: models,
+    createWorker: () => /** @type {any} */ (new Worker(runWorkerUrl, { type: 'module' })),
+  });
+  const loader = createScanLoader({ session, store, engine, preview: facts, onNewInputs: () => runner.reset() });
   // A supplied file (a brain mask, χ, ...) put in or taken out of the store is a fact found or not.
   let supplied = '';
   effect(() => {
@@ -76,13 +86,14 @@ try {
     const f = session.facts.peek();
     if (f && session.loaded.peek()) session.facts.value = withSupplied(f, (k) => store.has(k));
   });
+  runner.warm();
 
-  const workspace = { schema, mask: { schema: schema.mask, defaults: maskDefaults }, models, versions, engine, loader };
+  const workspace = { schema, mask: { schema: schema.mask, defaults: maskDefaults }, models, versions, engine, runner, loader };
   // The graph, command and settings-file answers, for the Pipeline and Command tabs.
   const providers = engineProviders(engine);
   render(html`<${App} session=${session} store=${store} workspace=${workspace} providers=${providers} />`, root);
   // For the smoke tests and for poking at it from the console.
-  Object.assign(globalThis, { qsmblyNext: { session, store, workspace, providers, loader, Superseded } });
+  Object.assign(globalThis, { qsmblyNext: { session, store, workspace, providers, runner, loader, Superseded } });
 } catch (e) {
   root.textContent = `The workspace could not start: ${e instanceof Error ? e.message : e}`;
   throw e;

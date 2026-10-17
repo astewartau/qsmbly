@@ -95,6 +95,17 @@ export function createSession({ defaults, planner, settingsView = null, storage 
   /** Whether the facts are a loaded scan's, or the example's that the workspace plans with before any is loaded. */
   const loaded = computed(() => files.value.length > 0);
   const facts = signal(/** @type {ScanFacts | null} */ (null));
+  /**
+   * Runs (redesign §3.2). `last.record` is what the engine recorded of the last finished run, as
+   * `Engine.run` returns it (JSON), for the methods and graph to describe what ran; `last.config`
+   * is the config it ran (null: not known).
+   */
+  const runs = {
+    last: {
+      record: signal(/** @type {string | null} */ (null)),
+      config: signal(/** @type {PipelineConfig | null} */ (null)),
+    },
+  };
   const config = signal(/** @type {PipelineConfig} */ (loadConfig(storage) ?? defaults));
   const undoStack = signal(/** @type {PipelineConfig[]} */ ([]));
   const redoStack = signal(/** @type {PipelineConfig[]} */ ([]));
@@ -111,6 +122,8 @@ export function createSession({ defaults, planner, settingsView = null, storage 
     tab: signal(/** @type {'viewer' | 'pipeline' | 'command'} */ ('viewer')),
     /** The volume shown in the viewer (an ItemKey). */
     viewing: signal(/** @type {string | null} */ (null)),
+    /** A mask drawn over it (an ItemKey), or none. */
+    overlay: signal(/** @type {string | null} */ (null)),
     /** The file name of each supplied-file setting's file, by setting path. */
     supplied: signal(/** @type {Record<string, string>} */ ({})),
     /** Inspector sections showing every setting rather than the basic ones, by section id. */
@@ -201,6 +214,7 @@ export function createSession({ defaults, planner, settingsView = null, storage 
     scanInputs,
     scan,
     loaded,
+    runs,
     facts,
     config,
     plan,
