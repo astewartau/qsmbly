@@ -5,7 +5,8 @@
  *
  * The button reads, in order: Cancel (a run is under way), Run, disabled (no scan is loaded), Fix
  * n problems (the scan's files or the plan have errors; it opens the drawer), Download n MB and
- * run (weights are not cached yet), Run.
+ * run (weights are not cached yet), Re-run n steps (some steps are cached: the engine's dry run
+ * says how many it computes), Up to date (disabled: every step is cached), Run.
  *
  * @typedef {import('../store/session.js').Session} Session
  * @typedef {import('../store/volumes.js').VolumeStore} VolumeStore
@@ -13,6 +14,8 @@
  * @typedef {import('../protocol.js').Plan} Plan
  * @typedef {import('../run.js').Runner} Runner
  * @typedef {import('../models.js').ModelDownload} ModelDownload
+ * @typedef {import('../rerun.js').Expectations} Expectations
+ * @typedef {import('../history.js').History} History
  */
 import { html } from '../html.js';
 import { useEffect, useState } from 'preact/hooks';
@@ -20,6 +23,7 @@ import { WASM_HEAP_BYTES } from '../protocol.js';
 import { formatBytes } from '../format.js';
 import { planModels, withCacheState, downloadModels } from '../models.js';
 import { families } from './Outputs.js';
+import { runLabel, expectedCounts, rowStatus, ROW_STATES } from '../rerun.js';
 
 /**
  * The networks a plan downloads, from QSM.rs's registry: each one's name, size and licence.
@@ -87,9 +91,9 @@ export function formatElapsed(ms) {
 
 /**
  * @param {{ session: Session, store: VolumeStore, models: ModelEntry[], runner: Runner,
- *   schema?: { settings: { path: string, label: string, full_label?: string }[] } }} props
+ *   schema?: { settings: { path: string, label: string, full_label?: string }[] }, expect?: Expectations, history?: History }} props
  */
-export function RunBar({ session, store, models, runner, schema }) {
+export function RunBar({ session, store, models, runner, schema, expect, history }) {
   const plan = session.plan.value;
   const error = session.planError.value;
   const status = runner.status.value;
@@ -109,6 +113,8 @@ export function RunBar({ session, store, models, runner, schema }) {
   useEffect(() => { if (!busy) setBump((n) => n + 1); }, [busy]);
 
   const loaded = session.loaded.value;
+  const expected = loaded ? expect?.list.value ?? null : null;
+  const counts = expectedCounts(expected);
   const problems = runProblems(session, schema);
   const errors = problems.filter((p) => p.severity === 'error').length;
   const warnings = problems.length - errors;
@@ -134,18 +140,28 @@ export function RunBar({ session, store, models, runner, schema }) {
     disabled = false;
     title = 'Show what has to change';
   } else if (missing > 0) {
-    label = `Download ${formatBytes(missing)} and run`;
+    const again = runLabel(expected);
+    label = `Download ${formatBytes(missing)} and ${again.label.startsWith('Re-run') ? again.label.toLowerCase() : 'run'}`;
     title = 'Download the networks this pipeline uses (once; the browser keeps them), then run';
+  } else {
+    const again = runLabel(expected);
+    label = again.label;
+    if (again.nothing) {
+      disabled = true;
+      title = "Every step's outputs are up to date with these settings; change a setting to re-run";
+    } else if (counts.cached) {
+      title = `Compute ${counts.compute} step${counts.compute === 1 ? '' : 's'} and reuse the other ${counts.cached}`;
+    }
   }
 
   let statusText = 'Needs data';
   if (error) statusText = `No plan: ${error}`;
-  else if (plan) statusText = `Plan: ${plan.steps.length} steps`;
+  else if (plan) statusText = `Plan: ${plan.steps.length} steps${counts.known && counts.cached ? (counts.compute ? ` · ${counts.compute} to run` : ' · all cached') : ''}`;
   const showGraph = () => { session.ui.tab.value = 'pipeline'; };
   const ran = status === 'done' || status === 'failed' || status === 'cancelled';
 
   return html`
-    ${drawer && html`<${PlanDrawer} session=${session} runner=${runner} plan=${plan} dl=${dl} problems=${problems}
+    ${drawer && html`<${PlanDrawer} session=${session} runner=${runner} expect=${expect} plan=${plan} dl=${dl} problems=${problems}
       onClose=${() => setDrawer(false)} onDownloaded=${() => setBump((n) => n + 1)} models=${models} />`}
     ${logOpen && html`<${LogPanel} runner=${runner} onClose=${() => setLogOpen(false)} />`}
     <footer class="runbar" aria-label="Run">
@@ -174,7 +190,9 @@ export function RunBar({ session, store, models, runner, schema }) {
           onClick=${() => setDrawer(!drawer)}>Details</button>`}
         <button type="button" class="btn small" aria-expanded=${logOpen} data-testid="log-toggle" onClick=${() => setLogOpen(!logOpen)}>
           Log${runner.log.value.length ? ` (${runner.log.value.length})` : ''}</button>
-        <span class="runbar-store" data-testid="store">Held in this page: ${formatBytes(store.bytes.value)}</span>
+        <span class="runbar-store" data-testid="store" title="The volumes this page keeps: the current ones, and the earlier runs' kept for comparison">
+          Held in this page: ${formatBytes(store.bytes.value + (history?.extraBytes.value ?? 0))}${history?.extraBytes.value
+            ? html` <span class="muted">(earlier runs ${formatBytes(history.extraBytes.value)})</span>` : ''}</span>
       </span>
     </footer>
   `;
@@ -229,12 +247,13 @@ function Progress({ runner }) {
 }
 
 /**
- * The plan in full: each step, its method, its state in the last run, the networks it downloads
- * and what it makes; the problems and notes; the networks to download.
- * @param {{ session: Session, runner: Runner, plan: Plan | null, dl: ModelDownload[], models: ModelEntry[],
+ * The plan in full: each step, its method, its state (in the run under way, or what the next run
+ * does with it), the networks it downloads and what it makes; the problems and notes; the
+ * networks to download.
+ * @param {{ session: Session, runner: Runner, expect?: Expectations, plan: Plan | null, dl: ModelDownload[], models: ModelEntry[],
  *   problems: ReturnType<typeof runProblems>, onClose: () => void, onDownloaded: () => void }} props
  */
-function PlanDrawer({ session, runner, plan, dl, models, problems, onClose, onDownloaded }) {
+function PlanDrawer({ session, runner, expect, plan, dl, models, problems, onClose, onDownloaded }) {
   const steps = runner.steps.value;
   const [busy, setBusy] = useState(/** @type {string | null} */ (null));
   if (!plan) return null;
@@ -249,11 +268,13 @@ function PlanDrawer({ session, runner, plan, dl, models, problems, onClose, onDo
       setBusy(`Could not download: ${e instanceof Error ? e.message : e}`);
     }
   };
-  const stateText = (name) => {
-    const s = steps.get(name)?.state;
-    return s === 'cached' ? 'reused' : s === 'done' ? 'done' : s === 'running' ? 'running' : s === 'failed' ? 'failed'
-      : s === 'cancelled' ? 'cancelled' : s === 'skipped' ? 'not needed' : 'will run';
-  };
+  const expected = session.loaded.value ? expect?.expected.value ?? null : null;
+  /** The step's state as its row would show it, if it were a row of its own. @param {string} name */
+  const stateOf = (name) => rowStatus({
+    row: { section: /** @type {any} */ ({ id: name }), steps: [/** @type {any} */ ({ name })], state: 'planned' },
+    expected, status: runner.status.value, steps, error: runner.error.value,
+  });
+  const stateText = (name) => stateOf(name)?.text ?? '—';
   const openData = () => { session.ui.section.value = 'data'; onClose(); };
   return html`
     <section class="plan-drawer" aria-label="Plan" data-testid="plan-drawer">
@@ -273,7 +294,8 @@ function PlanDrawer({ session, runner, plan, dl, models, problems, onClose, onDo
                 <td>${i + 1}</td>
                 <td>${s.label}</td>
                 <td>${s.algorithm_label ?? '—'}</td>
-                <td data-testid="step-state">${stateText(s.name)}</td>
+                <td data-testid="step-state" data-state=${stateOf(s.name)?.state ?? ''} title=${stateOf(s.name)?.title ?? ''}>
+                  <span aria-hidden="true">${ROW_STATES[stateOf(s.name)?.state ?? 'will-run'].icon} </span>${stateText(s.name)}</td>
                 <td class="muted">${steps.get(s.name)?.heap ? formatBytes(/** @type {number} */ (steps.get(s.name)?.heap)) : '—'}</td>
                 <td>${s.models.length ? s.models.map((id) => {
                   const m = dl.find((d) => d.id === id);

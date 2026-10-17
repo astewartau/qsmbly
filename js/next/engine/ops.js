@@ -47,6 +47,18 @@ export function engineOps(wasm) {
     set: (config, path, value) => JSON.parse(call(wasm.set_setting_wasm, json(config), path, json(value))),
     /** @param {PipelineConfig} config @param {ScanFacts} f @returns {Plan} */
     plan: (config, f) => JSON.parse(call(wasm.plan_wasm, json(config), json(f))),
+    /**
+     * What a run of `config` would do with each step, given what the page holds (`run::dry_run`
+     * over the page's record and the keys of the volumes it keeps): the steps it would reuse and
+     * the ones it would compute, and why.
+     * @param {PipelineConfig} config @param {ScanFacts} f
+     * @param {import('../protocol.js').ScanInputs} inputs @param {string} identity - the scan's, as a run is given it
+     * @param {string | null} recorded - the engine's record of the page's volumes
+     * @param {string[]} held - the keys of the volumes the page keeps
+     * @returns {import('../protocol.js').Expected[]}
+     */
+    planState: (config, f, inputs, identity, recorded, held) =>
+      JSON.parse(call(wasm.plan_state_wasm, json(config), json(f), json(inputs), identity, recorded ?? undefined, json(held))),
     /** @param {PipelineConfig} config @param {ScanFacts} f @returns {PipelineGraph} */
     graph: (config, f) => JSON.parse(call(wasm.pipeline_graph_wasm, json(config), json(f), undefined)),
     /**

@@ -18,6 +18,8 @@ import { engineProviders } from './engine/providers.js';
 import { learnItems, setItemLookup } from './items.js';
 import { createRunner } from './run.js';
 import { createScanLoader, withSupplied } from './scan.js';
+import { createHistory } from './history.js';
+import { createExpectations } from './rerun.js';
 
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
 
@@ -69,9 +71,11 @@ try {
 
   const runWorkerUrl = new URL('./engine/run-worker.js', import.meta.url);
   if (v) runWorkerUrl.searchParams.set('v', v);
+  const history = createHistory({ store });
   const runner = createRunner({
     session,
     store,
+    history,
     registry: models,
     createWorker: () => /** @type {any} */ (new Worker(runWorkerUrl, { type: 'module' })),
   });
@@ -87,13 +91,22 @@ try {
     if (f && session.loaded.peek()) session.facts.value = withSupplied(f, (k) => store.has(k));
   });
   runner.warm();
+  // What the next run would do with each step: the engine's dry run over what the page holds.
+  const expect = createExpectations({
+    session,
+    store,
+    planState: (...args) => engine.planState(...args),
+    paused: () => ['downloading', 'starting', 'running'].includes(runner.status.value),
+    schedule: (run) => requestAnimationFrame(() => run()),
+    superseded: (e) => e instanceof Superseded,
+  });
 
-  const workspace = { schema, mask: { schema: schema.mask, defaults: maskDefaults }, models, versions, engine, runner, loader };
+  const workspace = { schema, mask: { schema: schema.mask, defaults: maskDefaults }, models, versions, engine, runner, loader, history, expect };
   // The graph, command and settings-file answers, for the Pipeline and Command tabs.
   const providers = engineProviders(engine);
   render(html`<${App} session=${session} store=${store} workspace=${workspace} providers=${providers} />`, root);
   // For the smoke tests and for poking at it from the console.
-  Object.assign(globalThis, { qsmblyNext: { session, store, workspace, providers, runner, loader, Superseded } });
+  Object.assign(globalThis, { qsmblyNext: { session, store, workspace, providers, runner, loader, history, expect, Superseded } });
 } catch (e) {
   root.textContent = `The workspace could not start: ${e instanceof Error ? e.message : e}`;
   throw e;

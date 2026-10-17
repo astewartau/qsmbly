@@ -343,6 +343,13 @@ the viewer, and after it with the plan drawer open:
 <a href="ui-redesign/u2-running.png"><img src="ui-redesign/u2-running.png" width="290"></a>
 <a href="ui-redesign/u2-done-drawer.png"><img src="ui-redesign/u2-done-drawer.png" width="290"></a>
 
+As built in U4, on the example: after a run, the inversion changed to RTS marks Dipole inversion
+"changed" and Reference "stale" (the engine's dry run), and the button reads "Re-run 2 steps";
+after the re-run, χ of both runs side by side with their difference:
+
+<a href="ui-redesign/u4-rerun-stale.png"><img src="ui-redesign/u4-rerun-stale.png" width="440"></a>
+<a href="ui-redesign/u4-rerun-compare.png"><img src="ui-redesign/u4-rerun-compare.png" width="440"></a>
+
 The first sketch, with an inspector on the right, before the revision:
 [proposed-workspace.png](ui-redesign/proposed-workspace.png).
 
@@ -684,6 +691,10 @@ progress, the plan drawer and model downloads). Still open for U2: a per-step me
 for the browser (E3), requirement problems in neutral words (E4), config normalisation (E6), the
 χ-separation patch sizes (E12), and the plan's models when a supplied mask is unreadable (E13).
 Until E3, the run bar shows the engine's estimate for a disk-backed run.
+
+U4 is qsmbly `next-rerun`, on QSMxT #388 (E9) and #389 (E2, `run::dry_run`): row statuses and the
+"Re-run n steps" button from the engine's dry run over the page's record and volumes, run history
+(the latest two runs plus pinned ones, with the memory only they hold), and the compare view.
 
 Order and parallelism:
 
