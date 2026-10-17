@@ -12,7 +12,8 @@
  *   engine's.
  *
  * Protocol: `{ type: 'run', job }` in (protocol.js `RunJob`); `RunMessage`s out, ending with
- * `done` or `failed`. One run at a time.
+ * `done` or `failed`. `{ type: 'preview', job }` (`PreviewJob`) previews a mask recipe instead,
+ * ending with `previewed` or `failed`. One job at a time.
  */
 import { workerVolumes } from './run-volumes.js';
 
@@ -92,8 +93,15 @@ async function provideWeights(mod, registry, models, weightBase) {
   }
 }
 
-/** @param {RunJob} job */
-async function run(job) {
+/** The input objects of the last job, for the next job on the same scan (its identity). */
+let inputs = { identity: /** @type {string | null} */ (null), held: new Map() };
+
+/**
+ * The bundle a job needs (the deep-learning one when it names models, with their weights
+ * provided), and an engine over the page's volumes.
+ * @param {RunJob} job
+ */
+async function engineFor(job) {
   const { mod: baseMod, memory: baseMemory } = await base;
   let mod = baseMod;
   let memory = baseMemory;
@@ -102,27 +110,72 @@ async function run(job) {
     const registry = Object.fromEntries(JSON.parse(baseMod.get_model_registry_wasm()).map((m) => [m.id, m]));
     await provideWeights(mod, registry, job.models, job.weightBase);
   }
-  const volumes = workerVolumes(job.volumes, post, allocate);
+  // Inputs decoded for an earlier job on the same scan are not decoded again.
+  if (inputs.identity !== job.identity) inputs = { identity: job.identity, held: new Map() };
+  const volumes = workerVolumes(job.volumes, post, allocate, inputs.held);
   const engine = new mod.Engine(volumes, JSON.stringify(job.inputs), job.identity, job.recorded ?? undefined);
+  return { mod, memory, volumes, engine };
+}
+
+/**
+ * What the engine reports, posted to the page.
+ * @param {ReturnType<typeof workerVolumes>} volumes
+ * @param {WebAssembly.Memory | undefined} memory
+ */
+function observer(volumes, memory) {
+  return {
+    stage(step, algorithm, event, text) {
+      volumes.setStep(event === 'finished' ? null : step);
+      // The heap only grows: its size when a step finishes is the run's high-water mark so far.
+      post({ type: 'stage', step, algorithm, event, text, heap: event === 'finished' ? memory?.buffer.byteLength ?? null : null });
+    },
+    progress(done, total) {
+      post({ type: 'progress', done, total });
+    },
+    log(level, message, step) {
+      post({ type: 'log', level, message, step: step ?? null });
+    },
+    output(key) {
+      post({ type: 'output', key });
+    },
+  };
+}
+
+/** @param {RunJob} job */
+async function run(job) {
+  const { memory, volumes, engine } = await engineFor(job);
   try {
-    const record = engine.run(JSON.stringify(job.config), {
-      stage(step, algorithm, event, text) {
-        volumes.setStep(event === 'finished' ? null : step);
-        // The heap only grows: its size when a step finishes is the run's high-water mark so far.
-        post({ type: 'stage', step, algorithm, event, text, heap: event === 'finished' ? memory?.buffer.byteLength ?? null : null });
-      },
-      progress(done, total) {
-        post({ type: 'progress', done, total });
-      },
-      log(level, message, step) {
-        post({ type: 'log', level, message, step: step ?? null });
-      },
-      output(key) {
-        post({ type: 'output', key });
-      },
-    });
+    const record = engine.run(JSON.stringify(job.config), observer(volumes, memory));
     // The WASM heap only grows, so its size after the run is the run's high-water mark.
     post({ type: 'done', record: typeof record === 'string' ? record : null, grid: engine.grid() ?? null, heap: memory?.buffer.byteLength ?? null });
+  } finally {
+    engine.free();
+  }
+}
+
+/**
+ * The images mask sections work from, kept between previews in each bundle that made them
+ * (`MaskPreviewInputs`): a threshold or morphology edit reuses them.
+ * @type {Map<any, any>}
+ */
+const previewInputs = new Map();
+
+/**
+ * A mask preview: the recipe's mask computed by the run's own masking, which writes nothing but
+ * the steps before the mask (as a run would). Posts `previewed`.
+ * @param {import('../protocol.js').PreviewJob} job
+ */
+async function preview(job) {
+  const { mod, volumes, engine, memory } = await engineFor(job);
+  try {
+    if (!previewInputs.has(mod)) previewInputs.set(mod, new mod.MaskPreviewInputs());
+    const sections = job.sections ? JSON.stringify(job.sections) : undefined;
+    const out = engine.previewMask(JSON.stringify(job.config), sections, JSON.stringify(job.upto), previewInputs.get(mod), observer(volumes, memory));
+    const mask = new Uint8Array(allocate(out.mask.length));
+    mask.set(out.mask);
+    const image = new Float32Array(allocate(out.image.length * 4));
+    image.set(out.image);
+    post({ type: 'previewed', mask, image, input: out.input, otsu: out.otsu, voxels: out.voxels, grid: engine.grid() ?? null });
   } finally {
     engine.free();
   }
@@ -136,14 +189,14 @@ base.then(
 let busy = false;
 self.onmessage = async (/** @type {MessageEvent} */ event) => {
   const { type, job } = event.data ?? {};
-  if (type !== 'run') return;
+  if (type !== 'run' && type !== 'preview') return;
   if (busy) {
     post({ type: 'failed', message: 'A run is already in progress', kind: null, step: null });
     return;
   }
   busy = true;
   try {
-    await run(job);
+    await (type === 'run' ? run(job) : preview(job));
   } catch (e) {
     const err = /** @type {any} */ (e);
     post({

@@ -112,6 +112,12 @@ export function engineOps(wasm) {
      * @returns {Uint8Array}
      */
     niftiFile: (data, grid) => call(wasm.save_nifti_wasm, Float64Array.from(data), ...grid.dims, ...grid.voxel_size, new Float64Array(grid.affine)),
+    /**
+     * Where a mask supplied for a run is written as a BIDS derivative of `tool`, for the run named
+     * `run` (its BIDS prefix): `derivatives/<tool>/sub-X/[ses-Y/]anat/<run>_mask.nii.gz`.
+     * @param {string} tool @param {string} run @returns {string}
+     */
+    suppliedMaskPath: (tool, run) => call(wasm.supplied_mask_path_wasm, tool, run),
     /** QSM.rs's model registry. @returns {ModelEntry[]} */
     models: () => JSON.parse(call(wasm.get_model_registry_wasm)),
   };

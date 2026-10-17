@@ -33,7 +33,7 @@ const nameOf = (s) => s?.full_label ?? s?.label;
  * @param {{ session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, runner?: Runner, loader?: ScanLoader,
  *   expect?: Expectations }} props
  */
-export function Pipeline({ session, store, schema, mask, runner, loader, expect }) {
+export function Pipeline({ session, store, schema, mask, runner, loader, expect, maskPreview, engine }) {
   const plan = session.plan.value;
   const view = session.view.value;
   const forcedBy = (p) => view?.get(p)?.forced_by ?? null;
@@ -62,7 +62,8 @@ export function Pipeline({ session, store, schema, mask, runner, loader, expect 
       items.push(html`<li class="group" aria-hidden="true">${group}</li>`);
     }
     items.push(html`<${Step} key=${row.section.id} row=${row} session=${session} store=${store} schema=${schema} mask=${mask}
-      open=${open === row.section.id} forcedBy=${forcedBy} runner=${runner} expect=${expect} loader=${loader} busy=${busy} />`);
+      open=${open === row.section.id} forcedBy=${forcedBy} runner=${runner} expect=${expect} loader=${loader} busy=${busy}
+      maskPreview=${maskPreview} engine=${engine} />`);
   }
 
   return html`
@@ -77,9 +78,10 @@ export function Pipeline({ session, store, schema, mask, runner, loader, expect 
 /**
  * One step: its row (and switch), its status, and its settings when open.
  * @param {{ row: OutlineRow, session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, open: boolean,
- *   forcedBy: (path: string) => string | null, runner?: Runner, expect?: Expectations, loader?: ScanLoader, busy: boolean }} props
+ *   forcedBy: (path: string) => string | null, runner?: Runner, expect?: Expectations, loader?: ScanLoader, busy: boolean,
+ *   maskPreview?: import('../mask-preview.js').MaskPreview, engine?: any }} props
  */
-function Step({ row, session, store, schema, mask, open, forcedBy, runner, expect, loader, busy }) {
+function Step({ row, session, store, schema, mask, open, forcedBy, runner, expect, loader, busy, maskPreview, engine }) {
   const { section, state } = row;
   const config = session.config.value;
   const facts = session.facts.value;
@@ -145,7 +147,7 @@ function Step({ row, session, store, schema, mask, open, forcedBy, runner, expec
             </ul>`}
           ${section.id === 'data' && loader && html`<${DataPanel} session=${session} loader=${loader} busy=${busy} />`}
           ${section.id === 'masking'
-            ? html`<${MaskEditor} session=${session} store=${store} schema=${schema} kit=${mask} />`
+            ? html`<${MaskEditor} session=${session} store=${store} schema=${schema} kit=${mask} preview=${maskPreview} engine=${engine} busy=${busy} />`
             : (on || section.toggles) && html`<${StepSettings} session=${session} store=${store} schema=${schema} id=${section.id} sections=${section.schema}
                 skip=${section.toggle ? [section.toggle] : []} />`}
         </div>`}

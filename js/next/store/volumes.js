@@ -18,11 +18,13 @@
 import { signal, computed } from '@preact/signals-core';
 
 /**
- * Whether `key` is the working-grid copy of an output the engine keeps aside while the output
- * holds its version on the acquired grid (`WorkingGrid:<key>`, rust-wasm/src/engine.rs).
+ * Whether `key` is a volume kept aside rather than an output: the working-grid copy of an output
+ * the engine keeps while the output holds its version on the acquired grid (`WorkingGrid:<key>`,
+ * rust-wasm/src/engine.rs), or the mask builder's preview and its input (`MaskPreview*`,
+ * mask-preview.js).
  * @param {ItemKey} key
  */
-export const isAside = (key) => key.startsWith('WorkingGrid:');
+export const isAside = (key) => key.startsWith('WorkingGrid:') || key.startsWith('MaskPreview');
 
 /**
  * Whether volumes can live in SharedArrayBuffers here.

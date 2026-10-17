@@ -11,7 +11,17 @@ export class Engine {
   pipelineGraph(config_json: string): string;
   run(config_json: string, observer: object): void;
   supplyMask(nifti: Uint8Array, origin: string): void;
+  previewMask(config_json: string, sections_json: string | null | undefined, upto_json: string, inputs: MaskPreviewInputs,
+    observer: object): { mask: Uint8Array, image: Float32Array, input: string, otsu: number, voxels: number };
 }
+
+export class MaskPreviewInputs {
+  free(): void;
+  constructor();
+  bytes(): number;
+}
+
+export function supplied_mask_path_wasm(tool: string, prefix: string): string;
 
 export function get_default_config_json_wasm(): string;
 export function get_dependency_versions_wasm(): string;

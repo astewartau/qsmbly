@@ -22,6 +22,13 @@ export class Niivue {
   updateGLVolume(): void;
   drawScene(): void;
   volumes: NVImage[];
+  opts: Record<string, any>;
+  loadDrawing(drawing: NVImage): boolean;
+  setDrawingEnabled(on: boolean): void;
+  setDrawOpacity(opacity: number): void;
+  setPenValue(value: number, isFilledPen?: boolean): void;
+  closeDrawing(): void;
+  saveImage(options: { filename: string, isSaveDrawing?: boolean, volumeByIndex?: number }): Promise<Uint8Array | boolean>;
   sliceTypeAxial: number;
   sliceTypeCoronal: number;
   sliceTypeSagittal: number;
