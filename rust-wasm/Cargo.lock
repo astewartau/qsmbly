@@ -938,7 +938,7 @@ dependencies = [
 [[package]]
 name = "qsmxt-engine"
 version = "0.0.0"
-source = "git+https://github.com/QSMxT/QSMxT.git?rev=481ea36a1a3236ec38cb5181d4cd08a2cfe7fb2c#481ea36a1a3236ec38cb5181d4cd08a2cfe7fb2c"
+source = "git+https://github.com/QSMxT/QSMxT.git?rev=ce5013801e7425ad41d8b16a7c5f7c661e6fcf9b#ce5013801e7425ad41d8b16a7c5f7c661e6fcf9b"
 dependencies = [
  "getrandom",
  "log",
