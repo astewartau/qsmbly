@@ -336,6 +336,18 @@
  */
 
 /**
+ * A mask preview (`Engine.previewMask`), as the page asks the run worker for one: a run's job,
+ * with the sections to preview (the config's `masking.sections` when null) and how much of them.
+ * @typedef {RunJob & { sections: any[] | null, upto: MaskPreviewUpto }} PreviewJob
+ */
+
+/**
+ * How much of a mask recipe a preview shows: the whole recipe (the mask a run makes), or one
+ * section (from 0) after its first `ops` steps (its method is the first).
+ * @typedef {'recipe' | { section: { index: number, ops: number } }} MaskPreviewUpto
+ */
+
+/**
  * What the run worker posts while it runs. `put`, `copy` and `remove` keep the page's store in
  * step with the engine's volumes; a terminated worker loses only the step in progress.
  * @typedef {{ type: 'ready', versions: object, threads: number }
@@ -351,7 +363,10 @@
  *   | { type: 'output', key: ItemKey }
  *   | { type: 'done', record: string | null, grid: string | null, heap?: number | null }
  *   | { type: 'failed', message: string, kind: string | null, step: string | null }
+ *   | { type: 'previewed', mask: Uint8Array, image: Float32Array, input: string, otsu: number, voxels: number, grid: string | null }
  * } RunMessage
+ * `previewed` ends a preview: the mask, the image of the section shown and its input
+ * (`phase-quality`, ...), Otsu's threshold of that image, and the voxels in the mask.
  */
 
 /** The stage events, in the order a computed step reports them. */

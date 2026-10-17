@@ -194,3 +194,53 @@ describe('runs from the page', () => {
     expect(runner.log.peek().at(-1)).toMatchObject({ level: 'ERROR', step: 'invert' });
   });
 });
+
+describe('mask previews from the page', () => {
+  const previewed = { type: 'previewed', mask: new Uint8Array([1, 0]), image: new Float32Array([0.9, 0.1]), input: 'phase-quality', otsu: 0.5, voxels: 1, grid };
+
+  test('a preview keeps the steps before the mask in the store, and leaves the run\'s state alone', async () => {
+    const { store, runner, workers } = await setup((job) => (job.upto ? [
+      { type: 'begin', grid },
+      { type: 'stage', step: 'scale_phase', algorithm: null, event: 'started', text: 'Scaling' },
+      { type: 'put', key: 'Phase(1)', data: new Float32Array([0, 1]), step: 'scale_phase' },
+      { type: 'stage', step: 'scale_phase', algorithm: null, event: 'finished', text: 'Scaled' },
+      { type: 'recorded', recorded: '{"steps":{"scale_phase":["k",["Phase(1)"]]}}' },
+      previewed,
+    ] : [{ type: 'done', record: null, grid, heap: null }]));
+    const out = await runner.preview({ config: { masking: {} }, upto: { section: { index: 0, ops: 1 } }, models: [] });
+    expect(out).toBe(previewed);
+    const job = workers.made[0].jobs[0];
+    expect(job.upto).toEqual({ section: { index: 0, ops: 1 } });
+    expect(job.sections).toBeNull();
+    expect(job.volumes['AcquiredPhase(1)']).toEqual({ nifti: new Uint8Array([9]) });
+    expect(store.entry('Phase(1)')?.step).toBe('scale_phase');
+    expect(store.recorded.peek()).toContain('scale_phase');
+    expect(runner.status.peek()).toBe('idle');
+    expect(runner.steps.peek().size).toBe(0);
+    expect(runner.previewing()).toBe(false);
+  });
+
+  test('a failed preview rejects with the engine\'s error and is not the run\'s', async () => {
+    const { runner } = await setup(() => [{ type: 'failed', message: 'masking: no sections', kind: 'config', step: null }]);
+    await expect(runner.preview({ config: {} })).rejects.toMatchObject({ message: 'masking: no sections', kind: 'config' });
+    expect(runner.error.peek()).toBeNull();
+    expect(runner.status.peek()).toBe('idle');
+  });
+
+  test('a run waits for the preview in progress; a preview waits for no run', async () => {
+    const { runner, workers } = await setup((job) => (job.upto ? ['pause', previewed] : [{ type: 'done', record: null, grid, heap: null }]));
+    const p = runner.preview({ config: {} });
+    await until(() => workers.made[0]?.resume);
+    expect(runner.previewing()).toBe(true);
+    await expect(runner.preview({ config: {} })).rejects.toThrow('A preview is in progress');
+    const run = runner.start();
+    await tick();
+    expect(workers.made[0].jobs).toHaveLength(1);
+    workers.made[0].resume();
+    await p;
+    await run;
+    await until(() => runner.status.peek() === 'done');
+    expect(workers.made[0].jobs).toHaveLength(2);
+    expect(workers.made[0].jobs[1].upto).toBeUndefined();
+  });
+});
