@@ -93,6 +93,9 @@ async function provideWeights(mod, registry, models, weightBase) {
   }
 }
 
+/** The input objects of the last job, for the next job on the same scan (its identity). */
+let inputs = { identity: /** @type {string | null} */ (null), held: new Map() };
+
 /**
  * The bundle a job needs (the deep-learning one when it names models, with their weights
  * provided), and an engine over the page's volumes.
@@ -107,7 +110,9 @@ async function engineFor(job) {
     const registry = Object.fromEntries(JSON.parse(baseMod.get_model_registry_wasm()).map((m) => [m.id, m]));
     await provideWeights(mod, registry, job.models, job.weightBase);
   }
-  const volumes = workerVolumes(job.volumes, post, allocate);
+  // Inputs decoded for an earlier job on the same scan are not decoded again.
+  if (inputs.identity !== job.identity) inputs = { identity: job.identity, held: new Map() };
+  const volumes = workerVolumes(job.volumes, post, allocate, inputs.held);
   const engine = new mod.Engine(volumes, JSON.stringify(job.inputs), job.identity, job.recorded ?? undefined);
   return { mod, memory, volumes, engine };
 }

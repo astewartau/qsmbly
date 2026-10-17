@@ -19,13 +19,28 @@
  * @param {Record<ItemKey, { nifti: Uint8Array } | Float32Array | Uint8Array>} volumes
  * @param {(message: RunMessage) => void} post
  * @param {(byteLength: number) => ArrayBuffer | SharedArrayBuffer} allocate
+ * @param {Map<ItemKey, any>} [inputs] - the input objects of an earlier job on the same inputs
+ *   (the same scan identity), with what the bindings kept beside each file: a file of the same
+ *   size is taken to be the same file, and its grid (`geometry`) is carried over, so a new engine
+ *   does not decode it again just to read its header (a mask preview after each edit). Its decoded
+ *   voxels are not carried over: they would stay in memory between jobs. Updated with this job's.
  */
-export function workerVolumes(volumes, post, allocate) {
+export function workerVolumes(volumes, post, allocate, inputs = new Map()) {
   /** @type {Map<ItemKey, any>} */
   const held = new Map();
   for (const [key, v] of Object.entries(volumes)) {
-    held.set(key, v instanceof Float32Array || v instanceof Uint8Array ? v : { nifti: v.nifti });
+    if (v instanceof Float32Array || v instanceof Uint8Array) {
+      held.set(key, v);
+      continue;
+    }
+    const earlier = inputs.get(key);
+    const input = earlier?.geometry && earlier.nifti.byteLength === v.nifti.byteLength
+      ? { nifti: v.nifti, geometry: earlier.geometry }
+      : { nifti: v.nifti };
+    inputs.set(key, input);
+    held.set(key, input);
   }
+  for (const key of [...inputs.keys()]) if (!(key in volumes) || !held.has(key)) inputs.delete(key);
   let step = /** @type {string | null} */ (null);
   return {
     /** The step whose outputs are being put. @param {string | null} s */

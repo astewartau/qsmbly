@@ -256,6 +256,9 @@ impl PageVolumes {
     /// The grid of the input file kept under `item` (`None` if there is none), decoding it as a
     /// read does (and so keeping its decoded values beside the file when they are exact in
     /// float32).
+    ///
+    /// The grid is kept beside the file too (`geometry`, Geometry JSON), so a page that hands the
+    /// same input object to later engines (a mask preview after each edit) has it read once.
     fn input_geometry(&self, item: &Item) -> Result<Option<Geometry>, EngineError> {
         let key = JsValue::from_str(&item_key(item));
         let value = self
@@ -265,6 +268,13 @@ impl PageVolumes {
         if value.is_undefined() || value.is_null() {
             return Ok(None);
         }
+        let kept = Reflect::get(&value, &JsValue::from_str("geometry"))
+            .ok()
+            .and_then(|g| g.as_string())
+            .and_then(|g| serde_json::from_str::<Geometry>(&g).ok());
+        if let Some(geometry) = kept {
+            return Ok(Some(geometry));
+        }
         let Some(nifti) = self.nifti(item)? else {
             return Err(EngineError::Config(format!(
                 "the page keeps {} as something that is not a NIfTI file",
@@ -272,11 +282,15 @@ impl PageVolumes {
             )));
         };
         keep_decoded(&value, &nifti.data);
-        Ok(Some(Geometry {
+        let geometry = Geometry {
             dims: nifti.dims,
             voxel_size: nifti.voxel_size,
             affine: nifti.affine,
-        }))
+        };
+        if let Ok(json) = serde_json::to_string(&geometry) {
+            let _ = Reflect::set(&value, &JsValue::from_str("geometry"), &json.into());
+        }
+        Ok(Some(geometry))
     }
 
     /// Keep `from`'s volume under `to` as well: `true` if there was one.

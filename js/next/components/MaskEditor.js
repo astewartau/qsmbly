@@ -371,8 +371,8 @@ function PreviewPanel({ session, store, kit, preview, busy }) {
       ${status === 'failed' && html`<p class="sub err" role="alert" data-testid="preview-error">${preview.error.value}</p>`}
       ${result && status !== 'failed' && html`
         <p class="sub" data-testid="preview-result" aria-live="polite">
-          Mask: <strong data-testid="preview-coverage">${share(result.voxels, result.total)}</strong> of the volume
-          (${result.voxels.toLocaleString('en')} voxels). Otsu threshold of ${result.inputLabel.toLowerCase()}:
+          ${'Mask: '}<strong data-testid="preview-coverage">${share(result.voxels, result.total)}</strong>
+          ${` of the volume (${result.voxels.toLocaleString('en')} voxels). Otsu threshold of ${result.inputLabel.toLowerCase()}: `}
           <strong data-testid="preview-otsu">${thresholdText(result.otsu)}</strong>.
           ${stale && html`<span class="muted"> The recipe has changed since.</span>`}
         </p>`}
