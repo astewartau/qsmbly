@@ -9,7 +9,7 @@ import { gzipSync } from 'node:zlib';
  * @param {number[]} dims
  * @param {Float32Array} data
  */
-export function niftiFloat32(dims, data, voxel = [1, 1, 1]) {
+export function niftiFloat32(dims, data, voxel = [1, 1, 1], tiltDeg = 0) {
   const bytes = Buffer.alloc(352 + data.length * 4);
   bytes.writeInt32LE(348, 0);
   [3, ...dims, 1, 1, 1, 1].forEach((d, i) => bytes.writeInt16LE(d, 40 + 2 * i));
@@ -20,7 +20,13 @@ export function niftiFloat32(dims, data, voxel = [1, 1, 1]) {
   bytes.writeFloatLE(1, 112);
   bytes.writeInt16LE(1, 254); // sform: scanner
   const [nx, ny, nz] = dims;
-  const rows = [[voxel[0], 0, 0, -nx / 2], [0, voxel[1], 0, -ny / 2], [0, 0, voxel[2], -nz / 2]];
+  // Rotated about x by `tiltDeg`: an oblique acquisition.
+  const [c, sn] = [Math.cos((tiltDeg * Math.PI) / 180), Math.sin((tiltDeg * Math.PI) / 180)];
+  const rows = [
+    [voxel[0], 0, 0, -nx / 2],
+    [0, c * voxel[1], -sn * voxel[2], -ny / 2],
+    [0, sn * voxel[1], c * voxel[2], -nz / 2],
+  ];
   rows.flat().forEach((v, i) => bytes.writeFloatLE(v, 280 + 4 * i));
   bytes.write('n+1\0', 344, 'latin1');
   Buffer.from(data.buffer, data.byteOffset, data.byteLength).copy(bytes, 352);
@@ -30,9 +36,10 @@ export function niftiFloat32(dims, data, voxel = [1, 1, 1]) {
 /**
  * The phantom's files: `{ name, mimeType, buffer }` for Playwright's setInputFiles.
  * @param {{ dims?: number[], echoTimes?: number[], fieldStrength?: number, sidecars?: boolean, emptyMagnitude?: boolean }} [options] -
- *   `emptyMagnitude`: all-zero magnitude images, which no mask can be made from
+ *   `emptyMagnitude`: all-zero magnitude images, which no mask can be made from; `tilt`: the grid rotated about x
+ *   by this many degrees, with no B0 direction in the sidecars
  */
-export function phantomFiles({ dims = [48, 48, 36], echoTimes = [0.004, 0.009, 0.014], fieldStrength = 3, sidecars = true, emptyMagnitude = false } = {}) {
+export function phantomFiles({ dims = [48, 48, 36], echoTimes = [0.004, 0.009, 0.014], fieldStrength = 3, sidecars = true, emptyMagnitude = false, tilt = 0 } = {}) {
   const [nx, ny, nz] = dims;
   const n = nx * ny * nz;
   const gamma = 42.576e6;
@@ -72,10 +79,10 @@ export function phantomFiles({ dims = [48, 48, 36], echoTimes = [0.004, 0.009, 0
       phase[j] = inside[j] ? Math.atan2(Math.sin(rad), Math.cos(rad)) : Math.sin(j * 2.3) * Math.PI;
     }
     const base = `sub-phantom_echo-${e + 1}`;
-    files.push({ name: `${base}_part-mag_MEGRE.nii.gz`, mimeType: 'application/gzip', buffer: niftiFloat32(dims, mag) });
-    files.push({ name: `${base}_part-phase_MEGRE.nii.gz`, mimeType: 'application/gzip', buffer: niftiFloat32(dims, phase) });
+    files.push({ name: `${base}_part-mag_MEGRE.nii.gz`, mimeType: 'application/gzip', buffer: niftiFloat32(dims, mag, [1, 1, 1], tilt) });
+    files.push({ name: `${base}_part-phase_MEGRE.nii.gz`, mimeType: 'application/gzip', buffer: niftiFloat32(dims, phase, [1, 1, 1], tilt) });
     if (sidecars) {
-      const sidecar = { EchoTime: te, MagneticFieldStrength: fieldStrength, Manufacturer: 'Siemens', B0_dir: [0, 0, 1] };
+      const sidecar = { EchoTime: te, MagneticFieldStrength: fieldStrength, Manufacturer: 'Siemens', ...(tilt ? {} : { B0_dir: [0, 0, 1] }) };
       for (const part of ['mag', 'phase']) {
         files.push({ name: `${base}_part-${part}_MEGRE.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(sidecar)) });
       }

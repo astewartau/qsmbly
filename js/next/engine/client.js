@@ -105,6 +105,7 @@ export function createEngineClient(worker) {
     scanFacts: op('scanFacts'),
     scanReport: op('scanReport'),
     geometry: op('geometry'),
+    niftiFile: op('niftiFile'),
     models: op('models'),
   };
 }

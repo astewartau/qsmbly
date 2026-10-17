@@ -426,12 +426,69 @@ label.btn.disabled { opacity: 0.45; pointer-events: none; }
 .typed-fact .txt { flex: 1 1 auto; min-width: 0; width: auto; }
 .typed-fact .link { flex: none; }
 
+/* Run state on a pipeline row */
+.run-state { font-size: 11px; padding: 0 6px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.run-state.running { color: var(--accent); }
+.run-state.done { color: var(--ok); }
+.run-state.cached { color: var(--muted); }
+.run-state.failed { color: var(--error); }
+.run-state.cancelled { color: var(--warn); }
+.run-state.skipped { color: var(--muted); border-style: dashed; }
+.step-error { margin: 0; padding: 2px 10px 6px 28px; font-size: 12px; color: var(--error); }
+.step:has(.run-state.failed) .step-title { color: var(--error); }
+
+/* Outputs browser */
+.outputs { flex-direction: column; flex-wrap: nowrap; align-items: stretch; max-height: 30vh; overflow-y: auto; }
+.echo-pick { display: inline-flex; gap: 1px; margin-left: 2px; }
+.echo-pick button {
+  min-width: 20px; height: 20px; padding: 0 4px; border: 1px solid var(--border); background: var(--panel); border-radius: 3px;
+  font-size: 11px; cursor: pointer;
+}
+.echo-pick button[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-soft); }
+.outputs-head { display: flex; align-items: center; gap: 12px; }
+.follow { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
+.output-groups { display: flex; flex-direction: column; gap: 4px; }
+.output-group { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px; align-items: start; }
+.output-group-label { font-size: 12px; color: var(--text-2); padding-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.output-item { display: inline-flex; align-items: center; gap: 0; }
+.output-item .save { width: 20px; height: 22px; font-size: 12px; }
+
+/* Run bar extras: progress, the plan drawer, the log */
+.run-button.cancel { background: var(--error); }
+.run-button.fix { background: var(--warn); }
+.run-progress { min-width: 0; max-width: 46vw; }
+.run-progress progress { width: 120px; }
+.run-progress .run-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.run-progress.failed .run-text { color: var(--error); }
+.run-progress.cancelled .run-text { color: var(--warn); }
+.runbar-tools { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; }
+.runbar-tools .runbar-store { margin-left: 4px; }
+.plan-drawer, .log-panel {
+  position: fixed; left: 0; right: 0; bottom: 41px; z-index: 8; max-height: 52vh; display: flex; flex-direction: column;
+  background: var(--panel); border-top: 1px solid var(--border); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.14);
+}
+.drawer-head { display: flex; align-items: center; gap: 12px; padding: 6px 12px; border-bottom: 1px solid var(--divider); }
+.drawer-head .drawer-close { margin-left: auto; }
+.drawer-body { overflow: auto; padding: 4px 12px 10px; }
+.drawer-foot { padding-top: 6px; }
+.plan-table tr.plan-done td, .plan-table tr.plan-reused td { color: var(--text-2); }
+.plan-table tr.plan-running td { background: var(--accent-soft); }
+.plan-table tr.plan-failed td { color: var(--error); }
+.notes { margin: 4px 0; padding-left: 16px; color: var(--text-2); }
+.log-lines { margin: 0; padding: 8px 12px; overflow: auto; font: 11.5px/1.45 var(--mono); }
+.log-line { white-space: pre-wrap; overflow-wrap: anywhere; }
+.log-warn { color: var(--warn); }
+.log-error { color: var(--error); }
+
 /* Narrow: the viewer above the pipeline. */
 @media (max-width: 899px) {
   .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: 38vh minmax(0, 1fr); }
   .viewer-pane { order: -1; }
   .pipeline { border-right: 0; border-top: 1px solid var(--border); }
   .scan-summary, .runbar-store, .viewer-range { display: none; }
+  .output-group { grid-template-columns: minmax(0, 1fr); }
+  .run-progress { max-width: 100%; }
   .step-sum { max-width: 46vw; }
   .example-button { margin-left: 0; }
 }
+.chip.overlaid { border-style: dashed; border-color: var(--error); }

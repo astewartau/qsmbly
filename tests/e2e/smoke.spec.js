@@ -384,7 +384,8 @@ test.describe('next.html', () => {
     const viewer = page.getByRole('region', { name: 'Viewer' });
     await expect(viewer).toHaveAttribute('data-volume', 'AcquiredMagnitude(1)', { timeout: 30_000 });
     await expect(viewer).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
-    await page.locator('.output-chip[data-key="AcquiredPhase(3)"]').click();
+    // Another echo of the same item, from its echo buttons.
+    await page.locator('.output-item[data-family="AcquiredPhase"] .echo-pick button[data-key="AcquiredPhase(3)"]').click();
     await expect(viewer).toHaveAttribute('data-volume', 'AcquiredPhase(3)');
     await expect(viewer).toHaveAttribute('data-state', 'ready');
     const canvasShot = await viewer.locator('canvas').screenshot();

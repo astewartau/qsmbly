@@ -13,6 +13,7 @@
  * @property {import('../protocol.js').ModelEntry[]} models
  * @property {{ qsmxt: { version: string }, qsm_rs: { version: string } }} versions
  * @property {import('../engine/client.js').EngineClient} engine
+ * @property {import('../run.js').Runner} runner
  * @property {import('../scan.js').ScanLoader} loader
  */
 import { html } from '../html.js';
@@ -23,8 +24,9 @@ import { GraphTab } from './GraphTab.js';
 import { CommandTab } from './CommandTab.js';
 import { Viewer } from '../viewer/Viewer.js';
 import { itemMeta } from '../items.js';
-import { decodeForViewer } from '../scan.js';
 import { installUndoKeys } from '../shortcuts.js';
+import { Outputs, hiddenKey } from './Outputs.js';
+import { decodeForViewer } from '../scan.js';
 
 export const THEME_STORAGE_KEY = 'qsmbly.next.theme';
 const THEMES = /** @type {const} */ (['auto', 'light', 'dark']);
@@ -36,10 +38,11 @@ export function App({ session, store, workspace, providers }) {
     <div class="workspace">
       <${Header} session=${session} versions=${workspace.versions} />
       <div class="main">
-        <${Pipeline} session=${session} store=${store} schema=${workspace.schema} mask=${workspace.mask} loader=${workspace.loader} />
-        <${TabbedPane} session=${session} store=${store} providers=${providers} />
+        <${Pipeline} session=${session} store=${store} schema=${workspace.schema} mask=${workspace.mask}
+          runner=${workspace.runner} loader=${workspace.loader} />
+        <${TabbedPane} session=${session} store=${store} providers=${providers} workspace=${workspace} />
       </div>
-      <${RunBar} session=${session} store=${store} models=${workspace.models} />
+      <${RunBar} session=${session} store=${store} models=${workspace.models} runner=${workspace.runner} schema=${workspace.schema} />
     </div>
   `;
 }
@@ -75,7 +78,7 @@ function Header({ session, versions }) {
         <span class="scan-summary" data-testid="scan-summary">
           ${session.loaded.value ? '' : 'Example scan, not loaded: '}${facts.n_echoes} echoes · ${facts.field_strength.toFixed(2)} T · ${facts.dims.join('×')}
         </span>`}
-      <span class="preview-badge" title=${`Plans with QSMxT ${versions?.qsmxt.version ?? ''}; it does not run anything yet`}>Preview</span>
+      <span class="preview-badge" title=${`Runs QSMxT ${versions?.qsmxt.version ?? ''} in this browser`}>Preview</span>
       <span class="topbar-actions">
         <button type="button" class="btn" onClick=${() => session.undo()} disabled=${!session.canUndo.value} title="Undo (Ctrl+Z)">Undo</button>
         <button type="button" class="btn" onClick=${() => session.redo()} disabled=${!session.canRedo.value} title="Redo (Ctrl+Shift+Z)">Redo</button>
@@ -92,9 +95,9 @@ const TABS = /** @type {const} */ ([['viewer', 'Viewer'], ['pipeline', 'Pipeline
 /**
  * Viewer | Pipeline | Command. The viewer stays mounted behind the other tabs, so it keeps its
  * volume and view.
- * @param {{ session: Session, store: VolumeStore, providers: Providers }} props
+ * @param {{ session: Session, store: VolumeStore, providers: Providers, workspace: Workspace }} props
  */
-function TabbedPane({ session, store, providers }) {
+function TabbedPane({ session, store, providers, workspace }) {
   const tab = session.ui.tab.value;
   const onKey = (e) => {
     const k = TABS.findIndex(([id]) => id === tab);
@@ -113,7 +116,7 @@ function TabbedPane({ session, store, providers }) {
             aria-controls=${`panel-${id}`} tabindex=${tab === id ? 0 : -1} onClick=${() => { session.ui.tab.value = id; }}>${label}</button>`)}
       </div>
       <section class="tab-panel viewer-panel" role="tabpanel" id="panel-viewer" aria-labelledby="tab-viewer" hidden=${tab !== 'viewer'}>
-        <${ViewerPane} session=${session} store=${store} />
+        <${ViewerPane} session=${session} store=${store} workspace=${workspace} />
       </section>
       <section class="tab-panel" role="tabpanel" id="panel-pipeline" aria-labelledby="tab-pipeline" hidden=${tab !== 'pipeline'}>
         ${tab === 'pipeline' && html`<${GraphTab} session=${session} providers=${providers} />`}
@@ -125,10 +128,13 @@ function TabbedPane({ session, store, providers }) {
   `;
 }
 
-/** @param {{ session: Session, store: VolumeStore }} props */
-function ViewerPane({ session, store }) {
+/**
+ * The viewer and the outputs browser under it.
+ * @param {{ session: Session, store: VolumeStore, workspace: Workspace }} props
+ */
+function ViewerPane({ session, store, workspace }) {
   store.version.value;
-  const keys = store.keys().filter((k) => store.entry(k)?.data || store.entry(k)?.nifti);
+  const keys = store.keys().filter((k) => store.entry(k)?.data && !hiddenKey(k));
   const viewing = session.ui.viewing.value;
   const entry = viewing ? store.entry(viewing) : undefined;
   const grid = entry?.grid;
@@ -139,30 +145,20 @@ function ViewerPane({ session, store }) {
   useEffect(() => {
     if (viewing && entry?.nifti && !entry.data) decodeForViewer(store, viewing).catch(() => {});
   }, [viewing, entry]);
-  const [error, setError] = useState('');
-  const view = async (k) => {
-    session.ui.viewing.value = k;
-    try {
-      await decodeForViewer(store, k);
-    } catch (e) {
-      setError(`Could not show ${itemMeta(k).label}: ${e instanceof Error ? e.message : e}`);
-    }
-  };
-  const empty = session.loaded.value ? 'Choose a volume below.' : 'Load a scan in the Data step, or try the example.';
-
+  // A mask over it, when it lies on the same grid.
+  const overlayKey = session.ui.overlay.value;
+  const over = overlayKey && overlayKey !== viewing ? store.entry(overlayKey) : undefined;
+  const sameGrid = (a, b) => !!a && !!b && a.dims.join() === b.dims.join() && a.affine.join() === b.affine.join();
+  const overlay = volume && over?.data && sameGrid(over.grid, grid) && over.data.length === entry?.data?.length
+    ? { key: /** @type {string} */ (overlayKey), data: over.data, grid: /** @type {any} */ (over.grid), meta: itemMeta(/** @type {string} */ (overlayKey)) }
+    : null;
+  const empty = session.loaded.value
+    ? (keys.length ? 'Choose an output below.' : 'Run the pipeline to see its outputs here.')
+    : 'Load a scan in the Data step, or try the example.';
   return html`
     <div class="viewer-body">
-      <${Viewer} volume=${volume} emptyText=${empty} />
-      ${keys.length > 0 && html`
-        <section class="outputs" aria-label="Volumes">
-          <span class="outputs-title">Volumes</span>
-          <div class="outputs-list" role="listbox" aria-label="Volumes">
-            ${keys.map((k) => html`
-              <button type="button" role="option" class="chip output-chip" data-key=${k}
-                aria-selected=${k === viewing} onClick=${() => view(k)}>${itemMeta(k).label}</button>`)}
-          </div>
-          ${error && html`<span class="problem-error small" role="alert">${error}</span>`}
-        </section>`}
+      <${Viewer} volume=${volume} overlay=${overlay} emptyText=${empty} />
+      <${Outputs} session=${session} store=${store} runner=${workspace.runner} engine=${workspace.engine} />
     </div>
   `;
 }

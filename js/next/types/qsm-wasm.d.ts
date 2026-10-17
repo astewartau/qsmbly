@@ -36,6 +36,7 @@ export function provide_weights_wasm(file_name: string, bytes: Uint8Array): void
 export function scan_facts_wasm(dims: Uint32Array, sidecars_json: string, has_magnitude: boolean): string;
 export function scan_report_wasm(inputs_json: string): string;
 export function nifti_geometry_wasm(nifti: Uint8Array): string;
+export function save_nifti_wasm(data: Float64Array, nx: number, ny: number, nz: number, vsx: number, vsy: number, vsz: number, affine: Float64Array): Uint8Array;
 export function generate_command_wasm(config_json: string, mask_section: string): string;
 export function generate_methods_wasm(config_json: string, tool: string, mask_section: string): string;
 export function config_json_to_toml_wasm(config_json: string, mask_section: string): string;
