@@ -31,7 +31,7 @@ const nameOf = (s) => s?.full_label ?? s?.label;
 
 /**
  * @param {{ session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, runner?: Runner, loader?: ScanLoader,
- *   expect?: Expectations }} props
+ *   expect?: Expectations, maskPreview?: import('../mask-preview.js').MaskPreview, engine?: any }} props
  */
 export function Pipeline({ session, store, schema, mask, runner, loader, expect, maskPreview, engine }) {
   const plan = session.plan.value;
