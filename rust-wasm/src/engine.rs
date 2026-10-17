@@ -16,10 +16,12 @@ use std::cell::RefCell;
 
 use js_sys::{Float32Array, Float64Array, Function, Object, Reflect, Uint8Array};
 use qsmxt_engine::inputs::{ScanInputs, ScanReport};
+use qsmxt_engine::masking::MaskSection;
 use qsmxt_engine::observe::{Observer, StageEvent, VolumeData};
 use qsmxt_engine::qsm_core;
 use qsmxt_engine::qsm_core::pipeline::VolumeRef;
 use qsmxt_engine::scan::{QsmSidecar, RunMetadata, ScanFacts};
+use qsmxt_engine::stages::mask::{MaskInputs, Upto};
 use qsmxt_engine::store::{Geometry, Header, Item, MemoryStore, Recorded, Supplied, Volumes};
 use qsmxt_engine::{EngineError, PipelineConfig};
 use wasm_bindgen::prelude::*;
@@ -254,6 +256,9 @@ impl PageVolumes {
     /// The grid of the input file kept under `item` (`None` if there is none), decoding it as a
     /// read does (and so keeping its decoded values beside the file when they are exact in
     /// float32).
+    ///
+    /// The grid is kept beside the file too (`geometry`, Geometry JSON), so a page that hands the
+    /// same input object to later engines (a mask preview after each edit) has it read once.
     fn input_geometry(&self, item: &Item) -> Result<Option<Geometry>, EngineError> {
         let key = JsValue::from_str(&item_key(item));
         let value = self
@@ -263,6 +268,13 @@ impl PageVolumes {
         if value.is_undefined() || value.is_null() {
             return Ok(None);
         }
+        let kept = Reflect::get(&value, &JsValue::from_str("geometry"))
+            .ok()
+            .and_then(|g| g.as_string())
+            .and_then(|g| serde_json::from_str::<Geometry>(&g).ok());
+        if let Some(geometry) = kept {
+            return Ok(Some(geometry));
+        }
         let Some(nifti) = self.nifti(item)? else {
             return Err(EngineError::Config(format!(
                 "the page keeps {} as something that is not a NIfTI file",
@@ -270,11 +282,15 @@ impl PageVolumes {
             )));
         };
         keep_decoded(&value, &nifti.data);
-        Ok(Some(Geometry {
+        let geometry = Geometry {
             dims: nifti.dims,
             voxel_size: nifti.voxel_size,
             affine: nifti.affine,
-        }))
+        };
+        if let Ok(json) = serde_json::to_string(&geometry) {
+            let _ = Reflect::set(&value, &JsValue::from_str("geometry"), &json.into());
+        }
+        Ok(Some(geometry))
     }
 
     /// Keep `from`'s volume under `to` as well: `true` if there was one.
@@ -596,6 +612,43 @@ fn logging_to<T>(sink: Option<(JsValue, Function)>, f: impl FnOnce() -> T) -> T 
 }
 
 // ============================================================================
+// Mask previews
+// ============================================================================
+
+/// The images mask sections work from (`qsmxt_engine::stages::mask::MaskInputs`), kept between
+/// [`Engine::preview_mask`] calls (and across engines over the same volumes): built once, then
+/// reused while only thresholds and morphology change, and built again when what they were built
+/// from changes. They are kept in double precision, as the run's mask step computes them, so a
+/// preview is bit for bit the run's mask.
+#[wasm_bindgen]
+#[derive(Default)]
+pub struct MaskPreviewInputs {
+    inner: MaskInputs,
+}
+
+#[wasm_bindgen]
+impl MaskPreviewInputs {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> MaskPreviewInputs {
+        MaskPreviewInputs::default()
+    }
+
+    /// Bytes held in the WASM heap.
+    pub fn bytes(&self) -> f64 {
+        self.inner.bytes() as f64
+    }
+}
+
+/// Where a mask supplied for a run is written as a BIDS derivative of `tool`, so `qsmxt run
+/// --use-custom-masks <tool>` uses it for that run: `derivatives/<tool>/sub-X/[ses-Y/]anat/<prefix>_mask.nii.gz`
+/// (`qsmxt_engine::supplied::supplied_mask_path`), `prefix` being the run's BIDS prefix
+/// (`sub-01_ses-pre_run-1`).
+#[wasm_bindgen]
+pub fn supplied_mask_path_wasm(tool: &str, prefix: &str) -> Result<String, JsValue> {
+    qsmxt_engine::supplied::supplied_mask_path(tool, prefix).map_err(js_err)
+}
+
+// ============================================================================
 // A scan, and runs of it
 // ============================================================================
 
@@ -739,6 +792,72 @@ impl Engine {
                 Err(error) => Supplied::Unreadable { origin, error },
             });
         self.facts.custom_mask = true;
+    }
+
+    /// The mask a recipe makes on this scan, computed by the run's own masking
+    /// (`qsmxt_engine::run::preview_mask`): `sections_json` (a JSON array of mask sections; the
+    /// config's `masking.sections` when absent, or e.g. its two-pass sections), combined and
+    /// refined as `config_json` says, up to `upto_json` (`"recipe"`, the whole recipe and the mask
+    /// a run makes; or `{ "section": { "index": i, "ops": n } }`, section `i` after its first `n`
+    /// steps). The steps the mask step reads from run first, cached as a run caches them, and
+    /// report to `observer` as a run does; nothing else is written, so the brain mask and
+    /// everything after it stay as they were. The images the sections work from are kept in
+    /// `inputs` for the next preview.
+    ///
+    /// Returns `{ mask: Uint8Array, image: Float32Array, input, otsu, voxels }`: the mask, the
+    /// image of the section shown (the first one for the whole recipe) and its input
+    /// (`phase-quality`, `magnitude`, ...), Otsu's threshold of that image, and the voxels in the
+    /// mask.
+    #[wasm_bindgen(js_name = previewMask)]
+    pub fn preview_mask(
+        &mut self,
+        config_json: &str,
+        sections_json: Option<String>,
+        upto_json: &str,
+        inputs: &mut MaskPreviewInputs,
+        observer: Object,
+    ) -> Result<Object, JsValue> {
+        let config = parse_config(config_json)?;
+        let sections: Vec<MaskSection> = match sections_json {
+            Some(json) => serde_json::from_str(&json)
+                .map_err(|e| js_err(format!("the mask sections are not valid: {e}")))?,
+            None => config.masking.sections.clone(),
+        };
+        let upto: Upto = serde_json::from_str(upto_json)
+            .map_err(|e| js_err(format!("what to preview is not valid: {e}")))?;
+        let mut relay = Relay::new(&observer)?;
+        let sink = relay.log.clone().map(|log| (relay.this.clone(), log));
+        let plan = qsmxt_engine::plan::plan(&config, &self.facts);
+        let (store, facts) = (&mut self.store, &self.facts);
+        let preview = logging_to(sink, || {
+            qsmxt_engine::run::preview_mask(
+                &plan,
+                &config,
+                facts,
+                store,
+                &mut relay,
+                &mut inputs.inner,
+                &sections,
+                upto,
+            )
+            .map_err(|e| engine_error(&e))
+        })?;
+        let out = Object::new();
+        let single: Vec<f32> = preview.image.iter().map(|&v| v as f32).collect();
+        Reflect::set(
+            &out,
+            &"mask".into(),
+            &Uint8Array::from(preview.mask.as_slice()),
+        )?;
+        Reflect::set(
+            &out,
+            &"image".into(),
+            &Float32Array::from(single.as_slice()),
+        )?;
+        Reflect::set(&out, &"input".into(), &preview.input.to_string().into())?;
+        Reflect::set(&out, &"otsu".into(), &preview.otsu.into())?;
+        Reflect::set(&out, &"voxels".into(), &(preview.voxels as f64).into())?;
+        Ok(out)
     }
 
     /// Run `config_json` (PipelineConfig JSON) on this scan, reporting to `observer` ([`Relay`]).

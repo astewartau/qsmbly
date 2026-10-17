@@ -685,6 +685,15 @@ for the browser (E3), requirement problems in neutral words (E4), config normali
 χ-separation patch sizes (E12), and the plan's models when a supplied mask is unreadable (E13).
 Until E3, the run bar shows the engine's estimate for a disk-backed run.
 
+U5 is qsmbly #175, on QSMxT #390 (E10, E11). The mask builder previews its recipe through the
+engine (`run::preview_mask`, the run's own masking): the preview is the run's mask bit for bit,
+and the section images are kept between previews. On 6.3 M voxels natively, a threshold or
+morphology edit takes 70–115 ms. Building the phase-quality image once takes about 0.8 s. The
+viewer shows the preview over its input, with Otsu's threshold. A mask edited by hand with the
+viewer's brush, or uploaded and repaired with the axis flips, becomes a supplied mask. It is
+downloaded as `derivatives/qsmbly/sub-*/anat/<run>_mask.nii.gz`, and the methods text of the run
+says the brain mask was supplied.
+
 Order and parallelism:
 
 - **U1 starts now.** U0's issues go to QSMxT now as well, because E1, E3, E4, E6, E7 and E12

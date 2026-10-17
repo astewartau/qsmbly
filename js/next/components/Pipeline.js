@@ -53,8 +53,11 @@ export function rowRunState(row, runner) {
   return { state: 'done', text: 'done' };
 }
 
-/** @param {{ session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, runner?: Runner, loader?: ScanLoader }} props */
-export function Pipeline({ session, store, schema, mask, runner, loader }) {
+/**
+ * @param {{ session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, runner?: Runner, loader?: ScanLoader,
+ *   maskPreview?: import('../mask-preview.js').MaskPreview, engine?: any }} props
+ */
+export function Pipeline({ session, store, schema, mask, runner, loader, maskPreview, engine }) {
   const plan = session.plan.value;
   const view = session.view.value;
   const forcedBy = (p) => view?.get(p)?.forced_by ?? null;
@@ -83,7 +86,8 @@ export function Pipeline({ session, store, schema, mask, runner, loader }) {
       items.push(html`<li class="group" aria-hidden="true">${group}</li>`);
     }
     items.push(html`<${Step} key=${row.section.id} row=${row} session=${session} store=${store} schema=${schema} mask=${mask}
-      open=${open === row.section.id} forcedBy=${forcedBy} run=${rowRunState(row, runner)} loader=${loader} busy=${busy} />`);
+      open=${open === row.section.id} forcedBy=${forcedBy} run=${rowRunState(row, runner)} loader=${loader} busy=${busy}
+      maskPreview=${maskPreview} engine=${engine} />`);
   }
 
   return html`
@@ -98,9 +102,10 @@ export function Pipeline({ session, store, schema, mask, runner, loader }) {
 /**
  * One step: its row (and switch), and its settings when open.
  * @param {{ row: OutlineRow, session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, open: boolean,
- *   forcedBy: (path: string) => string | null, run: { state: string, text: string, error?: string } | null, loader?: ScanLoader, busy: boolean }} props
+ *   forcedBy: (path: string) => string | null, run: { state: string, text: string, error?: string } | null, loader?: ScanLoader, busy: boolean,
+ *   maskPreview?: import('../mask-preview.js').MaskPreview, engine?: any }} props
  */
-function Step({ row, session, store, schema, mask, open, forcedBy, run, loader, busy }) {
+function Step({ row, session, store, schema, mask, open, forcedBy, run, loader, busy, maskPreview, engine }) {
   const { section, state } = row;
   const config = session.config.value;
   const facts = session.facts.value;
@@ -160,7 +165,7 @@ function Step({ row, session, store, schema, mask, open, forcedBy, run, loader, 
             </ul>`}
           ${section.id === 'data' && loader && html`<${DataPanel} session=${session} loader=${loader} busy=${busy} />`}
           ${section.id === 'masking'
-            ? html`<${MaskEditor} session=${session} store=${store} schema=${schema} kit=${mask} />`
+            ? html`<${MaskEditor} session=${session} store=${store} schema=${schema} kit=${mask} preview=${maskPreview} engine=${engine} busy=${busy} />`
             : (on || section.toggles) && html`<${StepSettings} session=${session} store=${store} schema=${schema} id=${section.id} sections=${section.schema}
                 skip=${section.toggle ? [section.toggle] : []} />`}
         </div>`}

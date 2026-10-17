@@ -41,4 +41,20 @@ describe('the run worker\'s volumes', () => {
     expect(posted[2].data).toBeInstanceOf(Float32Array);
     expect(v.get('BrainMask')).toBe(put.data);
   });
+
+  test('a later job on the same inputs carries each file\'s grid over, not its voxels', () => {
+    const nifti = new Uint8Array([1, 2, 3]);
+    const inputs = new Map();
+    const first = workerVolumes({ 'AcquiredPhase(1)': { nifti } }, () => {}, (n) => new ArrayBuffer(n), inputs);
+    // What the bindings keep beside the file while reading it.
+    Object.assign(first.get('AcquiredPhase(1)'), { geometry: '{"dims":[1,1,3]}', decoded: new Float32Array(3) });
+    const again = workerVolumes({ 'AcquiredPhase(1)': { nifti: new Uint8Array([1, 2, 3]) } }, () => {}, (n) => new ArrayBuffer(n), inputs);
+    expect(again.get('AcquiredPhase(1)').geometry).toBe('{"dims":[1,1,3]}');
+    expect(again.get('AcquiredPhase(1)').decoded).toBeUndefined();
+    // Another file under the key starts afresh, and a key no longer handed over is forgotten.
+    const other = workerVolumes({ 'AcquiredPhase(1)': { nifti: new Uint8Array([1]) } }, () => {}, (n) => new ArrayBuffer(n), inputs);
+    expect(other.get('AcquiredPhase(1)').geometry).toBeUndefined();
+    workerVolumes({}, () => {}, (n) => new ArrayBuffer(n), inputs);
+    expect(inputs.size).toBe(0);
+  });
 });

@@ -17,6 +17,7 @@
  */
 import { html } from '../html.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { parseNifti } from '../nifti.js';
 
 /** NIfTI datatype codes. */
 const DT_UINT8 = 2;
@@ -59,10 +60,33 @@ export function niftiFor(NVImage, volume) {
 export const OVERLAY = { colormap: 'red', opacity: 0.4 };
 
 /**
- * @param {{ volume: ViewVolume | null, overlay?: ViewVolume | null, emptyText?: string }} props - `overlay`: a
- *   mask drawn over `volume` (on the same grid)
+ * A mask being drawn on with NiiVue's brush, over `volume` (on its grid).
+ * @typedef {object} ViewDrawing
+ * @property {Uint8Array} mask - the mask drawing starts from
+ * @property {0 | 1} pen - 1 paints into the mask, 0 erases
+ * @property {number} size - the brush's width in voxels
+ * @property {(capture: (() => Promise<Uint8Array>) | null) => void} onCapture - given the way to read
+ *   the drawing back (voxels in the volume's order, 0/1) while drawing, null after
  */
-export function Viewer({ volume, overlay = null, emptyText = 'Nothing to show yet.' }) {
+
+/**
+ * The drawing NiiVue holds, as voxels in the background volume's own order: NiiVue writes it as
+ * a NIfTI file on the background's grid, undoing its reorientation for display.
+ * @param {any} nv
+ * @returns {Promise<Uint8Array>}
+ */
+export async function drawnVoxels(nv) {
+  const file = await nv.saveImage({ filename: '', isSaveDrawing: true });
+  if (!(file instanceof Uint8Array)) throw new Error('The viewer has no drawing');
+  const { data } = parseNifti(file);
+  return Uint8Array.from(data, (v) => (v > 0 ? 1 : 0));
+}
+
+/**
+ * @param {{ volume: ViewVolume | null, overlay?: ViewVolume | null, drawing?: ViewDrawing | null, emptyText?: string }} props
+ *   `overlay`: a mask drawn over `volume` (on the same grid); `drawing`: a mask to draw on instead
+ */
+export function Viewer({ volume, overlay = null, drawing = null, emptyText = 'Nothing to show yet.' }) {
   const canvas = useRef(/** @type {HTMLCanvasElement | null} */ (null));
   const nv = useRef(/** @type {any} */ (null));
   const lib = useRef(/** @type {any} */ (null));
@@ -70,6 +94,7 @@ export function Viewer({ volume, overlay = null, emptyText = 'Nothing to show ye
   const [error, setError] = useState('');
   const [view, setView] = useState('multiplanar');
   const [range, setRange] = useState(/** @type {[number, number] | null} */ (null));
+  const crosshair = useRef(/** @type {number | null} */ (null));
 
   // Load the volume; a newer volume supersedes one still loading.
   useEffect(() => {
@@ -120,9 +145,48 @@ export function Viewer({ volume, overlay = null, emptyText = 'Nothing to show ye
     if (nv.current && state === 'ready') applyView(nv.current, view);
   }, [view]);
 
+  // Drawing: the mask goes into NiiVue's drawing layer, painted on with its brush.
+  const drawingOn = !!drawing && state === 'ready';
+  useEffect(() => {
+    const n = nv.current;
+    if (!drawingOn || !n || !volume || !drawing || !lib.current) return undefined;
+    let done = false;
+    (async () => {
+      const { NVImage } = lib.current;
+      const bytes = niftiFor(NVImage, { ...volume, key: 'drawing', data: drawing.mask });
+      const image = await NVImage.new(bytes.buffer, 'drawing.nii');
+      if (done) return;
+      n.loadDrawing(image);
+      // The crosshair would hide the brush strokes.
+      crosshair.current = n.opts.crosshairWidth;
+      n.opts.crosshairWidth = 0;
+      n.setDrawingEnabled(true);
+      n.setDrawOpacity(0.5);
+      drawing.onCapture(() => drawnVoxels(n));
+    })().catch((e) => {
+      setError(e instanceof Error ? e.message : String(e));
+      setState('error');
+    });
+    return () => {
+      done = true;
+      drawing.onCapture(null);
+      n.setDrawingEnabled(false);
+      n.closeDrawing();
+      if (crosshair.current != null) n.opts.crosshairWidth = crosshair.current;
+      n.drawScene();
+    };
+  }, [drawingOn, drawing?.mask, volume?.key]);
+  useEffect(() => {
+    const n = nv.current;
+    if (!drawingOn || !n || !drawing) return;
+    n.opts.penSize = drawing.size;
+    n.setPenValue(drawing.pen, false);
+  }, [drawingOn, drawing?.pen, drawing?.size]);
+
   const units = volume?.meta.units ? ` ${volume.meta.units}` : '';
   return html`
-    <section class="viewer" aria-label="Viewer" data-state=${state} data-volume=${volume?.key ?? ''} data-overlay=${overlay?.key ?? ''}>
+    <section class="viewer" aria-label="Viewer" data-state=${state} data-volume=${volume?.key ?? ''} data-overlay=${overlay?.key ?? ''}
+      data-drawing=${drawingOn ? 'on' : ''}>
       <div class="viewer-toolbar">
         <label>
           <span class="visually-hidden">View</span>

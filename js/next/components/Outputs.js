@@ -17,7 +17,7 @@ import { outputPrefix } from '../inputs.js';
 import { decodeForViewer } from '../scan.js';
 
 /** Keys the outputs browser leaves out: the working-grid copies the engine keeps aside. */
-export const hiddenKey = (key) => key.startsWith('WorkingGrid:');
+export const hiddenKey = (key) => key.startsWith('WorkingGrid:') || key.startsWith('MaskPreview');
 
 /**
  * The volumes the page holds, grouped by the step that wrote them, in the plan's order (inputs
