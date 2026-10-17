@@ -9,86 +9,62 @@
 use qsmxt_engine::bids::{entities, outputs};
 use qsmxt_engine::scan::ScanFacts;
 use qsmxt_engine::store::Item;
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 use wasm_bindgen::prelude::*;
 
 use crate::js_err;
 
-/// One output the page holds.
-#[derive(Deserialize)]
-struct Held {
-    /// Its item key (`Chi`, `BrainMask`).
-    key: String,
-    /// The step that last wrote it (`reference`), for its sidecar's `GeneratedBy`.
-    #[serde(default)]
-    step: Option<String>,
-    /// What the steps recorded about it (the run record's `annotations` for its key).
-    #[serde(default)]
-    annotations: Option<Map<String, Value>>,
-}
-
-#[derive(Deserialize)]
-struct Request {
-    /// The name of one of the scan's images (its first echo's phase), which names the run.
-    #[serde(default)]
-    scan_file: Option<String>,
-    facts: ScanFacts,
-    outputs: Vec<Held>,
-    /// The `space-` label of outputs left on the working grid; none on the acquired grid.
-    #[serde(default)]
-    space: Option<String>,
-}
-
-#[derive(Serialize)]
-struct Published {
-    key: String,
-    /// Relative to the derivatives directory: `sub-1/anat/sub-1_Chimap.nii`.
-    path: String,
-    /// The sidecar beside an image (`…_Chimap.json`), and its text as `qsmxt run` writes it.
-    sidecar_path: Option<String>,
-    sidecar: Option<String>,
+/// `value[key]` as a string, if it is one.
+fn str_of<'a>(v: &'a Value, key: &str) -> Option<&'a str> {
+    v.get(key).and_then(Value::as_str)
 }
 
 /// The run the outputs are named after (`entities::run_key`), and of `request.outputs`, those
 /// `qsmxt run` publishes, each with its path and sidecar, in the order given:
 /// `{ run, files: [{ key, path, sidecar_path, sidecar }] }`, `run` being the run's BIDS name
 /// (`sub-1`).
+///
+/// The request, as the page sends it (`OutputRequest` in js/next/protocol.js):
+/// `{ scan_file, facts, outputs: [{ key, step, annotations }], space }`.
+/// - `scan_file`: one of the scan's images (its first echo's phase), which names the run;
+/// - each output's `step` is the step that last wrote it (for `GeneratedBy`), and `annotations`
+///   what the steps recorded about it (the run record's `annotations` for its key);
+/// - `space`: the `space-` label of outputs left on the working grid; none on the acquired grid.
 pub fn output_files(request_json: &str) -> Result<String, String> {
-    let request: Request = serde_json::from_str(request_json)
+    let request: Value = serde_json::from_str(request_json)
         .map_err(|e| format!("output request is not valid: {e}"))?;
-    let key = entities::run_key(request.scan_file.as_deref().unwrap_or(""));
+    let facts: ScanFacts = serde_json::from_value(request["facts"].clone())
+        .map_err(|e| format!("facts JSON is not valid ScanFacts: {e}"))?;
+    let key = entities::run_key(str_of(&request, "scan_file").unwrap_or(""));
+    let space = str_of(&request, "space");
     let basename = key.basename();
-    let facts = outputs::SidecarFacts {
-        field_strength: request.facts.field_strength,
-        echo_times: &request.facts.echo_times,
+    let sidecar_facts = outputs::SidecarFacts {
+        field_strength: facts.field_strength,
+        echo_times: &facts.echo_times,
         qsmxt_version: env!("QSMXT_ENGINE_VERSION"),
         qsm_rs_version: env!("QSM_CORE_PROVENANCE_VERSION"),
     };
     let mut files = Vec::new();
-    for held in request.outputs {
-        let Some(item) = Item::from_key(&held.key) else {
+    for held in request["outputs"].as_array().into_iter().flatten() {
+        let Some(held_key) = str_of(held, "key") else {
             continue;
         };
-        let Some(path) = outputs::published_path(&item, &key, request.space.as_deref()) else {
+        let Some(item) = Item::from_key(held_key) else {
             continue;
         };
-        let generated_by = held
-            .step
-            .as_deref()
-            .map(|step| outputs::activity_iri(step, &basename));
-        let sidecar = outputs::sidecar(
-            &item,
-            held.annotations.unwrap_or_default(),
-            generated_by.as_deref(),
-            &facts,
-        );
-        files.push(Published {
-            key: held.key,
-            sidecar_path: sidecar.as_ref().and_then(|_| outputs::sidecar_name(&path)),
-            sidecar: sidecar.as_ref().map(outputs::sidecar_json),
-            path,
-        });
+        let Some(path) = outputs::published_path(&item, &key, space) else {
+            continue;
+        };
+        let generated_by = str_of(held, "step").map(|step| outputs::activity_iri(step, &basename));
+        let recorded: Map<String, Value> =
+            held["annotations"].as_object().cloned().unwrap_or_default();
+        let sidecar = outputs::sidecar(&item, recorded, generated_by.as_deref(), &sidecar_facts);
+        files.push(json!({
+            "key": held_key,
+            "sidecar_path": sidecar.as_ref().and_then(|_| outputs::sidecar_name(&path)),
+            "sidecar": sidecar.as_ref().map(outputs::sidecar_json),
+            "path": path,
+        }));
     }
     serde_json::to_string(&serde_json::json!({ "run": basename, "files": files }))
         .map_err(|e| e.to_string())
@@ -103,7 +79,6 @@ pub fn output_files_wasm(request_json: &str) -> Result<String, JsValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn facts() -> Value {
         json!({
