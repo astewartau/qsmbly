@@ -1,0 +1,559 @@
+[
+  {
+    "id": "bfrnet",
+    "name": "BFRnet",
+    "stage": "BackgroundRemoval",
+    "description": "Dual-frequency octave-convolution U-Net for background field removal (total field → local field). Fully convolutional.",
+    "paper": "Zhu et al., Z Med Phys 2023; doi:10.1016/j.zemedi.2022.08.001",
+    "source": "https://github.com/sunhongfu/BFRnet",
+    "license": "",
+    "size_divisor": 8,
+    "available": true,
+    "inputs": [
+      "field"
+    ],
+    "outputs": [
+      "local_field"
+    ],
+    "files": [
+      {
+        "name": "bfrnet.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/bfrnet.onnx",
+        "sha256": "6f693f0a02c94550179c4b5188ce652fc4bd8198ff57aaddd102fba67fe873d7",
+        "bytes": 79600612
+      }
+    ]
+  },
+  {
+    "id": "xqsm",
+    "name": "xQSM",
+    "stage": "DipoleInversion",
+    "description": "Octave-convolution U-Net with a learned residual for dipole inversion (local field → susceptibility).",
+    "paper": "Gao et al., NMR Biomed 2021; doi:10.1002/nbm.4461",
+    "source": "https://github.com/sunhongfu/xQSM",
+    "license": "",
+    "size_divisor": 8,
+    "available": true,
+    "inputs": [
+      "field"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "xqsm.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/xqsm.onnx",
+        "sha256": "81854ec2ca85bba25c2f9aae05efdcac299d0efffb03fe6a0e6797019e46b487",
+        "bytes": 20901826
+      }
+    ]
+  },
+  {
+    "id": "qsmnet",
+    "name": "QSMnet",
+    "stage": "DipoleInversion",
+    "description": "3D U-Net dipole inversion trained on COSMOS. Expects 1 mm isotropic input; z-scored with training mean/std.",
+    "paper": "Yoon et al., NeuroImage 2018; doi:10.1016/j.neuroimage.2018.06.030",
+    "source": "https://github.com/SNU-LIST/QSMnet",
+    "license": "",
+    "size_divisor": 16,
+    "available": true,
+    "inputs": [
+      "field"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "qsmnet.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/qsmnet.onnx",
+        "sha256": "8fd1d79b7a9258a262a2faab9e8469757ae7735f3da6212e431acfb207c21b54",
+        "bytes": 397801854
+      }
+    ]
+  },
+  {
+    "id": "qsmnet-plus",
+    "name": "QSMnet+",
+    "stage": "DipoleInversion",
+    "description": "QSMnet retrained with susceptibility-scaling augmentation for a wider, more linear χ range.",
+    "paper": "Jung et al., NeuroImage 2020; doi:10.1016/j.neuroimage.2020.116579",
+    "source": "https://github.com/SNU-LIST/QSMnet",
+    "license": "",
+    "size_divisor": 16,
+    "available": true,
+    "inputs": [
+      "field"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "qsmnet-plus.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/qsmnet-plus.onnx",
+        "sha256": "0ed31f9a1b66f75fee4a96022b6bc3838b91bc5b819714dade5ca87cd331683d",
+        "bytes": 397801854
+      }
+    ]
+  },
+  {
+    "id": "qsmgan",
+    "name": "QSMGAN",
+    "stage": "DipoleInversion",
+    "description": "3D U-Net generator (WGAN-GP refined) for dipole inversion, run patch-wise (64³ input → 48³ output, i64o48). Only the generator is used at inference; the sign flip, input_scale/tanh (χ=atanh/10) and patch tiling live in the Rust glue.",
+    "paper": "Chen et al., NeuroImage 2020; doi:10.1016/j.neuroimage.2019.116389",
+    "source": "https://github.com/mmorri10/QSMGAN-LupoLab",
+    "license": "MIT (fork)",
+    "size_divisor": 8,
+    "available": true,
+    "inputs": [
+      "field"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "qsmgan.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/qsmgan.onnx",
+        "sha256": "238573a6fa8a563004fc28e63a30694289d1a1a204f3c406daba486b1122d604",
+        "bytes": 10753955
+      }
+    ]
+  },
+  {
+    "id": "lpcnn",
+    "name": "LPCNN",
+    "stage": "DipoleInversion",
+    "description": "Learned proximal CNN, 3 unrolled iterations of proximal gradient descent. The k-space dipole data-consistency step, the unroll, the learned step size and the mean/std normalization run in Rust (rustfft); only the learned proximal CNN is ONNX.",
+    "paper": "Lai et al., MICCAI 2020; doi:10.1007/978-3-030-59713-9_13",
+    "source": "https://github.com/Sulam-Group/LPCNN",
+    "license": "",
+    "size_divisor": 8,
+    "available": true,
+    "inputs": [
+      "field",
+      "mask",
+      "b_vec"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "lpcnn.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/lpcnn.onnx",
+        "sha256": "831f2a161f6ab8ee7bf64cc2dd8bca532fc971d0083cf5729d6302d3ed31625d",
+        "bytes": 1790869
+      }
+    ]
+  },
+  {
+    "id": "ir2qsm",
+    "name": "IR2QSM",
+    "stage": "DipoleInversion",
+    "description": "IR2U-net dipole inversion: a 3D U-net (depth 4) run for 4 unrolled iterations with reverse concatenations and a recurrent middle module. The whole net is ONNX; the Rust glue only does /8 zero-pad, crop and mask (no normalization, ppm in/out). The ungated inference-time AddNoise is pinned to its noise-free branch for deterministic export.",
+    "paper": "Li et al., Med. Phys. 2025; doi:10.1002/mp.17747; arXiv:2406.12300",
+    "source": "https://github.com/YangGaoUQ/IR2QSM",
+    "license": "",
+    "size_divisor": 8,
+    "available": true,
+    "inputs": [
+      "field",
+      "mask"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "ir2qsm.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/ir2qsm.onnx",
+        "sha256": "dcaf7a26d6633900f339f94be16d580ccea6147bbf6da26eacb9a5e1acdc0c53",
+        "bytes": 40259354
+      }
+    ]
+  },
+  {
+    "id": "autoqsm",
+    "name": "AutoQSM",
+    "stage": "SingleStep",
+    "description": "V-Net single-step reconstruction (total field → susceptibility) with no separate brain extraction. Fixed 64³→32³ patch net; the Rust glue does the sliding-window tiling + blend.",
+    "paper": "Wei et al., NeuroImage 2019; doi:10.1016/j.neuroimage.2019.116064",
+    "source": "https://github.com/AMRI-Lab/AutoQSM",
+    "license": "",
+    "size_divisor": 1,
+    "available": true,
+    "inputs": [
+      "field"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "autoqsm.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/autoqsm.onnx",
+        "sha256": "c2f23c6ae735fd1677e8623da22cb6f25b4a932ae50ba1ef08a75439e240977e",
+        "bytes": 5609662
+      }
+    ]
+  },
+  {
+    "id": "iqsm",
+    "name": "iQSM",
+    "stage": "SingleStep",
+    "description": "LoT-Unet single-step reconstruction from wrapped phase to susceptibility. The learnable-Laplacian front-end is fused into the exported graph; inputs are phase, mask, TE (s), B0 (T).",
+    "paper": "Gao et al., NeuroImage 2022; doi:10.1016/j.neuroimage.2022.119410",
+    "source": "https://github.com/sunhongfu/iQSM",
+    "license": "",
+    "size_divisor": 8,
+    "available": true,
+    "inputs": [
+      "phase",
+      "mask",
+      "te",
+      "b0",
+      "border"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "iqsm.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/iqsm.onnx",
+        "sha256": "8538a33892a877812e6cd0e22927a5040827c126e9347073d3dd0934bf226b09",
+        "bytes": 17233763
+      }
+    ]
+  },
+  {
+    "id": "iqsm-plus",
+    "name": "iQSM+",
+    "stage": "SingleStep",
+    "description": "iQSM with orientation-adaptive latent feature editing (OA-LFE); the B0 direction is a genuine network input. Inputs: phase, mask, TE, B0, z_prjs (B0 dir), border.",
+    "paper": "Gao et al., Med Image Anal 2024; doi:10.1016/j.media.2024.103160",
+    "source": "https://github.com/sunhongfu/iQSM_Plus",
+    "license": "",
+    "size_divisor": 16,
+    "available": true,
+    "inputs": [
+      "phase",
+      "mask",
+      "te",
+      "b0",
+      "z_prjs",
+      "border"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "iqsm-plus.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/iqsm-plus.onnx",
+        "sha256": "f93a4c83804759a4a0d24603f7754efb997ddd2ba5e3a0346ed6493725cafb1d",
+        "bytes": 17740526
+      }
+    ]
+  },
+  {
+    "id": "iqfm",
+    "name": "iQFM",
+    "stage": "PhaseToField",
+    "description": "The tissue-field head of the iQSM LoT-Unet: wrapped phase → local (background-removed) field in one network (joint unwrap + BFR). Same architecture/inputs as iQSM, `lfs` weights; output is the local field (ppm), not susceptibility.",
+    "paper": "Gao et al., NeuroImage 2022; doi:10.1016/j.neuroimage.2022.119410",
+    "source": "https://github.com/sunhongfu/iQSM",
+    "license": "",
+    "size_divisor": 8,
+    "available": true,
+    "inputs": [
+      "phase",
+      "mask",
+      "te",
+      "b0",
+      "border"
+    ],
+    "outputs": [
+      "localfield"
+    ],
+    "files": [
+      {
+        "name": "iqfm.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/iqfm.onnx",
+        "sha256": "81965f4c0981612d979977c9618847e4cb1d340efa287b8dde894bdea5bf6ac9",
+        "bytes": 17233763
+      }
+    ]
+  },
+  {
+    "id": "nextqsm",
+    "name": "NeXtQSM",
+    "stage": "SingleStep",
+    "description": "U-Net background removal followed by a 6-step variational-network dipole inversion (total field → susceptibility). Reimplemented as a Rust hybrid: two exported U-Nets (`nextqsm-bf` = BFR forward, `nextqsm-vjp` = the regularizer gradient ∇ₓ mean|VarNet(x)| written as a forward graph) plus the FFT data-consistency gradient and unroll in Rust. Order the files BFR-first, VJP-second.",
+    "paper": "Cognolato et al., NeuroImage 2023; doi:10.1016/j.neuroimage.2022.119729",
+    "source": "https://github.com/wayne1123/NeXtQSM",
+    "license": "MIT",
+    "size_divisor": 64,
+    "available": true,
+    "inputs": [
+      "field",
+      "mask",
+      "b_vec"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "nextqsm-bf.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/nextqsm-bf.onnx",
+        "sha256": "d0f0b0391153f8e5e07ef85d46fbe492afc8394fab008350540a6868d0b4a3ba",
+        "bytes": 113211474
+      },
+      {
+        "name": "nextqsm-vjp.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/nextqsm-vjp.onnx",
+        "sha256": "50fe388663c05b1d3996139975270e500e13feb025f1b792576dbc0da814a4bc",
+        "bytes": 42437407
+      }
+    ]
+  },
+  {
+    "id": "modl-qsm",
+    "name": "MoDL-QSM",
+    "stage": "DipoleInversion",
+    "description": "Model-based deep learning: 3-iteration unroll of a QSM forward-model gradient descent with a learned 2-channel CNN prior. The k-space dipole data-consistency (A/Aᴴ), the unroll, the learned step size and per-channel mean/std normalization run in Rust (rustfft); only the CNN prior is ONNX. Output is the STI χ33 component.",
+    "paper": "Feng et al., NeuroImage 2021; doi:10.1016/j.neuroimage.2021.118376",
+    "source": "https://github.com/Ruimin-Feng/MoDL-QSM",
+    "license": "",
+    "size_divisor": 1,
+    "available": true,
+    "inputs": [
+      "field",
+      "mask",
+      "b_vec"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "modl-qsm.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/modl-qsm.onnx",
+        "sha256": "1f8da7d39eaaa4c3f0f9e67298fba5f14230e769cfd6349c81d0b74a6f800c57",
+        "bytes": 1794143
+      }
+    ]
+  },
+  {
+    "id": "susep-net",
+    "name": "SUSEP-Net",
+    "stage": "ChiSeparation",
+    "description": "Dual-branch 3D U-Net source separation from z-scored [QSM, R2', local field] → [χ+, χ−]. Normalization constants are baked into the Rust glue (SusepNetNorm).",
+    "paper": "Li, Gao, Sun et al., arXiv:2506.13293 (2025)",
+    "source": "https://github.com/YangGaoUQ/SUSEP-Net",
+    "license": "",
+    "size_divisor": 8,
+    "available": true,
+    "inputs": [
+      "qsm",
+      "r2prime",
+      "lfs"
+    ],
+    "outputs": [
+      "chi_pos",
+      "chi_neg"
+    ],
+    "files": [
+      {
+        "name": "susep-net.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/susep-net.onnx",
+        "sha256": "9bc85aa28451fda2c661de4b8fae8604ced7a54f028f94ed33629f6111a48b03",
+        "bytes": 205743584
+      }
+    ]
+  },
+  {
+    "id": "r2primenet",
+    "name": "R2PRIMEnet",
+    "stage": "R2PrimeGeneration",
+    "description": "SNU-LIST R2*→R2′ conversion network from the χ-sepnet pipeline (already ONNX): a fully-convolutional 3D U-Net mapping the Dr-scaled, z-scored R2* map to R2′, run as an overlapping sliding window. Supplies R2′ for the GRE-only condition, where no spin-echo R2 is measured. Spatial axes re-declared dynamic (the authors ship a fixed 192×192×128 input) so 32-bit hosts can use a smaller patch. Normalization constants (Dr=114) are baked into the Rust glue (R2PrimeNetNorm).",
+    "paper": "Kim et al., Hum Brain Mapp 2025 (doi:10.1002/hbm.70136)",
+    "source": "https://github.com/SNU-LIST/chi_sepnet",
+    "license": "",
+    "size_divisor": 16,
+    "available": true,
+    "inputs": [
+      "r2star"
+    ],
+    "outputs": [
+      "r2prime"
+    ],
+    "files": [
+      {
+        "name": "r2primenet.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/r2primenet.onnx",
+        "sha256": "44cb5e67d1c68dae87a5f532e501dc0d4bf627d91f9c8ba35a56df5ac7ec3cd0",
+        "bytes": 90307128
+      }
+    ]
+  },
+  {
+    "id": "chi-sepnet",
+    "name": "χ-sepnet",
+    "stage": "ChiSeparation",
+    "description": "SNU-LIST χ-separation network (already ONNX): a fully-convolutional 3D U-Net mapping [QSM, local field, R2′/Dr] (z-scored) → [χ+, χ−], run as an overlapping sliding window. Spatial axes re-declared dynamic (the authors ship a fixed 192×192×128 input) so 32-bit hosts can use a smaller patch. Normalization constants (Dr=114) are baked into the Rust glue (ChiSepNetNorm).",
+    "paper": "Kim et al. / SNU-LIST chi-separation toolbox",
+    "source": "https://github.com/SNU-LIST/chi-separation",
+    "license": "",
+    "size_divisor": 8,
+    "available": true,
+    "inputs": [
+      "local_field",
+      "qsm",
+      "r2prime"
+    ],
+    "outputs": [
+      "chi_pos",
+      "chi_neg"
+    ],
+    "files": [
+      {
+        "name": "chi-sepnet.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/chi-sepnet.onnx",
+        "sha256": "5b442fdfdb88f50ec9149b384dabd0d2d9adb6983947d9cfa58382b78676bed9",
+        "bytes": 90314172
+      }
+    ]
+  },
+  {
+    "id": "hd-bet",
+    "name": "HD-BET",
+    "stage": "BrainExtraction",
+    "description": "nnU-Net v2 3D U-Net brain extraction (HD-BET v2): magnitude → brain mask, trained on 11,751 multi-sequence clinical MRIs. Runs at 1 mm on the whole volume (or Gaussian-weighted sliding-window patches, 96×192×192 as trained); nnU-Net's crop/normalise/resample pipeline is in the Rust glue (bet::hd_bet). Spatial axes are dynamic (multiples of 16×32×32).",
+    "paper": "Isensee et al., Hum Brain Mapp 40(17):4952-4964 (2019); https://doi.org/10.1002/hbm.24750",
+    "source": "https://github.com/MIC-DKFZ/HD-BET",
+    "license": "CC-BY-NC-4.0",
+    "size_divisor": 32,
+    "available": true,
+    "inputs": [
+      "image"
+    ],
+    "outputs": [
+      "logits"
+    ],
+    "files": [
+      {
+        "name": "hd-bet.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/hd-bet.onnx",
+        "sha256": "f15200f9a0697cf53b151e316a0c4fe2cacfdbe2220deb36cb56184be4a227f9",
+        "bytes": 123168028
+      }
+    ]
+  },
+  {
+    "id": "rs2-net",
+    "name": "RS2-Net",
+    "stage": "BrainExtraction",
+    "description": "Swin-UNETR rodent (mouse, rat) brain extraction, trained within nnU-Net v2 on 1,142 MRIs from 89 centres: magnitude → brain mask. Runs at 0.25×0.2×0.16 mm with Gaussian-weighted sliding-window patches; nnU-Net's transpose/crop/normalise/resample pipeline is in the Rust glue (bet::rs2_net). The graph is traced at a fixed 128×96×128 patch.",
+    "paper": "Lin et al., NeuroImage 298:120769 (2024); https://doi.org/10.1016/j.neuroimage.2024.120769",
+    "source": "https://github.com/VitoLin21/Rodent-Skull-Stripping",
+    "license": "GPL-3.0",
+    "size_divisor": 32,
+    "available": true,
+    "inputs": [
+      "input"
+    ],
+    "outputs": [
+      "logits"
+    ],
+    "files": [
+      {
+        "name": "rs2-net.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/rs2-net.onnx",
+        "sha256": "a120ce43b06a9f3ddecf85bf18f281cbb54c354ef15b34a6bcaaffa4e3c4a570",
+        "bytes": 63456162
+      }
+    ]
+  },
+  {
+    "id": "mindgrab",
+    "name": "MindGrab",
+    "stage": "BrainExtraction",
+    "description": "MeshNet brain extraction for any contrast (25 dilated 3×3×3 convolutions, 15 channels, 146 k parameters) trained only on synthetic data: image → brain mask. Runs on the whole 256³ 1 mm LIA conformed volume; the conform/normalise/largest-component/reslice pipeline is in the Rust glue (bet::mindgrab). Spatial axes are dynamic.",
+    "paper": "Fani et al., arXiv:2506.11860 (2025); https://doi.org/10.48550/arXiv.2506.11860",
+    "source": "https://github.com/neuroneural/brainchop-cli",
+    "license": "MIT",
+    "size_divisor": 1,
+    "available": true,
+    "inputs": [
+      "image"
+    ],
+    "outputs": [
+      "logits"
+    ],
+    "files": [
+      {
+        "name": "mindgrab.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/mindgrab.onnx",
+        "sha256": "2e20e5e03211976d4c30b4e704c57f7f18cb1b78e840105acf12765c6e3c342b",
+        "bytes": 672150
+      }
+    ]
+  },
+  {
+    "id": "synthseg",
+    "name": "SynthSeg 1.0",
+    "stage": "Segmentation",
+    "description": "Contrast-agnostic whole-brain segmentation: magnitude → 32 FreeSurfer labels. A 5-level 3D U-Net (24 features, ELU, 13.2 M parameters) trained only on synthetic images with randomised contrast, so it runs directly on GRE magnitude without a T1w scan. Resample/orient/normalise, flip averaging and the topological cleanup are in the Rust glue (segment::synthseg). Spatial axes are dynamic (multiples of 32).",
+    "paper": "Billot et al., Med Image Anal 86:102789 (2023); https://doi.org/10.1016/j.media.2023.102789",
+    "source": "https://github.com/BBillot/SynthSeg",
+    "license": "Apache-2.0",
+    "size_divisor": 32,
+    "available": true,
+    "inputs": [
+      "image"
+    ],
+    "outputs": [
+      "unet_prediction"
+    ],
+    "files": [
+      {
+        "name": "synthseg.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/synthseg.onnx",
+        "sha256": "c2821a74e8a03d4073896b5c2e359b3ef86f9776bacd78e00da1c757aa97bbcc",
+        "bytes": 52998326
+      }
+    ]
+  },
+  {
+    "id": "synthseg-2.0",
+    "name": "SynthSeg 2.0",
+    "stage": "Segmentation",
+    "description": "SynthSeg 2.0: same architecture as `synthseg` with a 33-label set (adds a general CSF class). The upstream weights are not in the SynthSeg repository — they ship with FreeSurfer, or come from the UCL download linked in the SynthSeg README — so they have to be fetched before exporting. Run it with SynthSegVersion::V2.",
+    "paper": "Billot et al., PNAS 120(9):e2216399120 (2023); https://doi.org/10.1073/pnas.2216399120",
+    "source": "https://github.com/BBillot/SynthSeg",
+    "license": "Apache-2.0",
+    "size_divisor": 32,
+    "available": false,
+    "inputs": [
+      "image"
+    ],
+    "outputs": [
+      "unet_prediction"
+    ],
+    "files": [
+      {
+        "name": "synthseg-2.0.onnx",
+        "url": "",
+        "sha256": "",
+        "bytes": 0
+      }
+    ]
+  }
+]
