@@ -10,23 +10,23 @@
  * @typedef {import('../mask.js').MaskKit} MaskKit
  * @typedef {import('../schema.js').Setting} Setting
  * @typedef {import('../outline.js').OutlineRow} OutlineRow
+ * @typedef {import('../scan.js').ScanLoader} ScanLoader
  */
 import { html } from '../html.js';
 import { useState, useEffect } from 'preact/hooks';
 import { outlineRows, visibleRows, unplacedSteps } from '../outline.js';
 import { searchSettings, formatValue, isChanged, valueOf } from '../schema.js';
 import { maskSummary } from '../mask.js';
-import { itemMeta } from '../items.js';
-import { formatBytes, formatMs } from '../format.js';
 import { StepSettings } from './Settings.js';
+import { DataPanel } from './DataPanel.js';
 import { MaskEditor } from './MaskEditor.js';
 import { Icon } from './icons.js';
 
 /** @param {Setting | undefined} s */
 const nameOf = (s) => s?.full_label ?? s?.label;
 
-/** @param {{ session: Session, store: VolumeStore, schema: Schema, mask: MaskKit }} props */
-export function Pipeline({ session, store, schema, mask }) {
+/** @param {{ session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, loader?: ScanLoader }} props */
+export function Pipeline({ session, store, schema, mask, loader }) {
   const plan = session.plan.value;
   const view = session.view.value;
   const forcedBy = (p) => view?.get(p)?.forced_by ?? null;
@@ -53,7 +53,7 @@ export function Pipeline({ session, store, schema, mask }) {
       items.push(html`<li class="group" aria-hidden="true">${group}</li>`);
     }
     items.push(html`<${Step} key=${row.section.id} row=${row} session=${session} store=${store} schema=${schema} mask=${mask}
-      open=${open === row.section.id} forcedBy=${forcedBy} />`);
+      open=${open === row.section.id} forcedBy=${forcedBy} loader=${loader} />`);
   }
 
   return html`
@@ -68,9 +68,9 @@ export function Pipeline({ session, store, schema, mask }) {
 /**
  * One step: its row (and switch), and its settings when open.
  * @param {{ row: OutlineRow, session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, open: boolean,
- *   forcedBy: (path: string) => string | null }} props
+ *   forcedBy: (path: string) => string | null, loader?: ScanLoader }} props
  */
-function Step({ row, session, store, schema, mask, open, forcedBy }) {
+function Step({ row, session, store, schema, mask, open, forcedBy, loader }) {
   const { section, state } = row;
   const config = session.config.value;
   const facts = session.facts.value;
@@ -82,9 +82,14 @@ function Step({ row, session, store, schema, mask, open, forcedBy }) {
   const problems = (session.plan.value?.check.problems ?? []).filter((p) => (p.setting
     ? settings.some((s) => s.path === p.setting)
     : section.id === 'data'));
+  const inputErrors = section.id === 'data' && session.loaded.value
+    ? (session.scan.value?.problems ?? []).filter((p) => p.severity === 'error').length : 0;
 
   let summary = '';
-  if (section.id === 'data') summary = facts ? `${facts.n_echoes} echoes · ${facts.field_strength.toFixed(2)} T` : 'no data';
+  if (section.id === 'data') {
+    summary = !session.loaded.value ? 'none loaded'
+      : facts ? `${facts.n_echoes} echoes · ${facts.field_strength.toFixed(2)} T` : 'incomplete';
+  }
   else if (!on) summary = 'off';
   else if (section.id === 'masking') summary = maskSummary(mask, config.masking);
   else if (section.toggles) {
@@ -94,7 +99,7 @@ function Step({ row, session, store, schema, mask, open, forcedBy }) {
     const s = schema.settings.find((x) => x.path === section.summary);
     if (s) summary = formatValue(s, valueOf(s, config));
   }
-  const stateText = problems.some((p) => p.severity === 'error') ? 'problem' : !on ? 'off' : changed ? 'changed' : 'will run';
+  const stateText = inputErrors || problems.some((p) => p.severity === 'error') ? 'problem' : !on ? 'off' : changed ? 'changed' : 'will run';
   const toggleOpen = () => { session.ui.section.value = open ? null : section.id; };
 
   return html`
@@ -120,34 +125,13 @@ function Step({ row, session, store, schema, mask, open, forcedBy }) {
             <ul class="problems">
               ${problems.map((p) => html`<li class=${`problem-${p.severity}`} role=${p.severity === 'error' ? 'alert' : undefined}>${p.reason}</li>`)}
             </ul>`}
-          ${section.id === 'data' && html`<${DataPanel} session=${session} store=${store} />`}
+          ${section.id === 'data' && loader && html`<${DataPanel} session=${session} loader=${loader} busy=${false} />`}
           ${section.id === 'masking'
             ? html`<${MaskEditor} session=${session} store=${store} schema=${schema} kit=${mask} />`
             : (on || section.toggles) && html`<${StepSettings} session=${session} store=${store} schema=${schema} id=${section.id} sections=${section.schema}
                 skip=${section.toggle ? [section.toggle] : []} />`}
         </div>`}
     </li>
-  `;
-}
-
-/** The scan's facts and the loaded files. */
-function DataPanel({ session, store }) {
-  const facts = session.facts.value;
-  store.version.value;
-  const inputs = store.keys().filter((k) => store.entry(k)?.nifti);
-  if (!facts) return html`<p class="sub">No data yet.</p>`;
-  return html`
-    <dl class="facts">
-      <dt>Grid</dt><dd>${facts.dims.join(' × ')}</dd>
-      <dt>Echoes</dt><dd>${facts.n_echoes}</dd>
-      <dt>Echo times</dt><dd>${facts.echo_times.map(formatMs).join(', ')} ms</dd>
-      <dt>Field strength</dt><dd>${facts.field_strength} T</dd>
-      <dt>Magnitude</dt><dd>${facts.has_magnitude ? 'yes' : 'no'}</dd>
-    </dl>
-    ${inputs.length > 0 && html`
-      <ul class="files">
-        ${inputs.map((k) => html`<li>${itemMeta(k).label} <span class="muted">${formatBytes(store.entry(k)?.nifti?.byteLength ?? 0)}</span></li>`)}
-      </ul>`}
   `;
 }
 

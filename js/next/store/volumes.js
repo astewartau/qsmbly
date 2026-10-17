@@ -31,6 +31,7 @@ export function sharedMemoryAvailable() {
  * @property {Uint8Array} [nifti] - an input's NIfTI file, as the engine decodes it
  * @property {RunMetadata | null} grid - the grid it lies on, when known
  * @property {string | null} step - the step that wrote it (null for inputs)
+ * @property {boolean} [input] - an input or supplied file, which the scan's identity follows
  */
 
 /** @implements {PageVolumes} */
@@ -50,6 +51,11 @@ export class VolumeStore {
     this.recorded = signal(/** @type {string | null} */ (null));
     /** The step whose outputs `put` is receiving, as the worker reports it. */
     this.currentStep = /** @type {string | null} */ (null);
+    /**
+     * Bumped whenever an input or supplied file is stored or removed: an engine's identity for
+     * the scan, so a run on changed inputs computes everything again.
+     */
+    this.inputVersion = 0;
     /** Bytes held, counting a shared buffer once. */
     this.bytes = computed(() => {
       this.version.value;
@@ -134,7 +140,8 @@ export class VolumeStore {
    * @param {{ decoded?: Float32Array, grid?: RunMetadata | null }} [extra]
    */
   putInput(key, nifti, { decoded, grid = null } = {}) {
-    this._set(key, { data: decoded ?? null, nifti, grid, step: null });
+    this.inputVersion++;
+    this._set(key, { data: decoded ?? null, nifti, grid, step: null, input: true });
   }
 
   /**
@@ -145,7 +152,7 @@ export class VolumeStore {
   copy(from, to) {
     const v = this._volumes.get(from);
     if (!v) return false;
-    this._set(to, { ...v });
+    this._set(to, { ...v, input: false });
     return true;
   }
 
@@ -154,6 +161,7 @@ export class VolumeStore {
    * @returns {boolean} whether there was a volume to remove
    */
   remove(key) {
+    if (this._volumes.get(key)?.input) this.inputVersion++;
     const had = this._volumes.delete(key);
     if (had) this.version.value++;
     return had;
@@ -161,6 +169,7 @@ export class VolumeStore {
 
   /** Forget every volume (a new scan). */
   clear() {
+    this.inputVersion++;
     this._volumes.clear();
     this.grid.value = null;
     this.recorded.value = null;

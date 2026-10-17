@@ -103,6 +103,8 @@ export function createEngineClient(worker) {
     fromToml: op('fromToml'),
     itemMeta: op('itemMeta'),
     scanFacts: op('scanFacts'),
+    scanReport: op('scanReport'),
+    geometry: op('geometry'),
     models: op('models'),
   };
 }

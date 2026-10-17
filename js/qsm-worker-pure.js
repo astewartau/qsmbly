@@ -350,7 +350,9 @@ async function runEnginePipeline(data, outputs = { qsm: true }) {
     await provideWeights(mod, plan.models);
   }
 
-  const engine = new mod.Engine(volumes, sidecarsJson, `load-${++engineLoads}`);
+  // The scan as the engine builds its facts: each echo's sidecar (the headers are the files').
+  const inputsJson = JSON.stringify({ echoes: JSON.parse(sidecarsJson).map((sidecar) => ({ sidecar })) });
+  const engine = new mod.Engine(volumes, inputsJson, `load-${++engineLoads}`);
   try {
     if (suppliedMask) engine.supplyMask(new Uint8Array(customMaskBuffer), 'the masking panel');
     const progress = createPlanProgress(plan);
