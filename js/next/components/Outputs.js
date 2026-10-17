@@ -2,7 +2,8 @@
  * The outputs browser under the viewer (redesign §3.5): every volume the page holds, grouped by
  * the step that wrote it, in run order, each with its name and units from the engine's items.
  * Clicking one shows it; each downloads as a NIfTI file, written by qsm-core as `qsmxt run`
- * writes its outputs, under its BIDS name.
+ * writes its outputs, under its BIDS name. An output `qsmxt run` publishes takes the name it gets
+ * there, and its JSON sidecar downloads beside it (both the engine's, `bundle.js`).
  *
  * @typedef {import('../store/session.js').Session} Session
  * @typedef {import('../store/volumes.js').VolumeStore} VolumeStore
@@ -20,6 +21,8 @@ import { decodeForViewer } from '../scan.js';
 import { isAside } from '../store/volumes.js';
 import { HISTORY_LIMIT } from '../history.js';
 import { formatBytes } from '../format.js';
+import { publishedFiles } from '../bundle.js';
+import { useProvided, saveFile } from './provided.js';
 
 /** Keys the outputs browser leaves out: the working-grid copies the engine keeps aside. */
 export const hiddenKey = isAside;
@@ -188,6 +191,14 @@ export function Outputs({ session, store, runner, engine, history }) {
   const prefix = outputPrefix(session.files.value);
   const [saving, setSaving] = useState(/** @type {string | null} */ (null));
   const [error, setError] = useState('');
+  // The published outputs' names and sidecars, as `qsmxt run` writes them.
+  const published = useProvided(() => publishedFiles({ session, store, engine }), [store.version.value, session.facts.value, store.recorded.value]);
+  const publishedOf = (key) => published.value?.files.find((f) => f.key === key) ?? null;
+  /** The name a volume downloads as: its published name (gzipped), else the scan's prefix and its BIDS name. */
+  const nameOf = (key) => {
+    const p = publishedOf(key);
+    return p ? `${p.path.split('/').pop()}.gz` : fileName(prefix, key);
+  };
 
   const overlay = session.ui.overlay.value;
   // A mask is drawn over what is shown (click it again to take it off); anything else is shown.
@@ -209,7 +220,7 @@ export function Outputs({ session, store, runner, engine, history }) {
     setSaving(key);
     setError('');
     try {
-      await downloadVolume(engine, store, key, fileName(prefix, key), past?.outputs.get(key));
+      await downloadVolume(engine, store, key, nameOf(key), past?.outputs.get(key));
     } catch (e) {
       setError(`Could not save ${itemMeta(key).label}: ${e instanceof Error ? e.message : e}`);
     } finally {
@@ -257,12 +268,21 @@ export function Outputs({ session, store, runner, engine, history }) {
                           ${f.keys.map((e) => html`<button type="button" aria-pressed=${e === k} data-key=${e} title=${itemMeta(e).label}
                             onClick=${() => view(e)}>${itemMeta(e).echo}</button>`)}
                         </span>`}
-                      <button type="button" class="ib save" aria-label=${`Download ${itemMeta(k).label}`} title=${`Download ${fileName(prefix, k)}`}
+                      <button type="button" class="ib save" aria-label=${`Download ${itemMeta(k).label}`} title=${`Download ${nameOf(k)}`}
                         data-download=${k} disabled=${saving === k} onClick=${() => save(k)}>↓</button>
                       ${comparable(k).slice(0, 1).map((other) => html`
                         <button type="button" class="ib compare" data-compare=${k} data-testid="compare"
                           aria-label=${`Compare ${itemMeta(k).label} with run ${other.id}`} title=${`Compare with run ${other.id}, side by side`}
                           onClick=${() => startCompare(k, other.id)}>⇄</button>`)}
+                      ${(() => {
+                        const p = publishedOf(k);
+                        // An earlier run's sidecar is not kept: the page's describes the latest run.
+                        if (past || !p?.sidecar_path || p.sidecar == null) return '';
+                        const name = /** @type {string} */ (p.sidecar_path.split('/').pop());
+                        return html`<button type="button" class="ib save sidecar" aria-label=${`Download the sidecar of ${itemMeta(k).label}`}
+                          title=${`Download ${name}`} data-sidecar=${k}
+                          onClick=${() => saveFile(name, /** @type {string} */ (p.sidecar), 'application/json')}>{}</button>`;
+                      })()}
                     </span>`;
                 })}
               </div>

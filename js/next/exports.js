@@ -2,7 +2,8 @@
  * The seams for the Pipeline and Command tabs: the run's graph (qsmxt-engine
  * `pipeline_graph::pipeline_graph` and `PipelineGraph::to_mermaid`), its methods text sentence by
  * sentence (`methods::methods_structured`), its `qsmxt run` command
- * (`generate_command`), its settings file (`PipelineConfig::to_toml_selected`) and reading a
+ * (`generate_command`), its settings file (`PipelineConfig::to_toml_selected`, `to_toml`,
+ * `to_toml_changed`) and reading a
  * settings file back (`PipelineConfig::from_toml_migrating`).
  *
  * The tabs only ever call a {@link Providers}: engine/providers.js answers on the live engine,
@@ -58,6 +59,10 @@
  * @typedef {{ methods: Methods }} MethodsResult
  * @typedef {{ command: string }} CommandResult
  * @typedef {{ toml: string }} TomlResult
+ * @typedef {'selected' | 'full' | 'changed'} TomlForm - which settings a settings file holds: those
+ *   of the chosen algorithms (`to_toml_selected`, the default), every one (`to_toml`, as `qsmxt
+ *   run` writes `pipeline_config.toml`), or only those that differ from QSMxT's defaults
+ *   (`to_toml_changed`)
  * @typedef {{ config: PipelineConfig, warnings: string[] }} ImportResult
  *
  * @typedef {object} Providers
@@ -67,7 +72,7 @@
  *   the methods text of a run of `config` on the scan (given its record, of what the run did),
  *   each sentence with the graph's boxes it describes
  * @property {(config: PipelineConfig) => Promise<CommandResult>} command - `qsmxt run <bids_dir> …`
- * @property {(config: PipelineConfig) => Promise<TomlResult>} toml - the settings file
+ * @property {(config: PipelineConfig, form?: TomlForm) => Promise<TomlResult>} toml - the settings file
  * @property {(text: string) => Promise<ImportResult>} importToml - rejects with the reason a file
  *   cannot be read
 
