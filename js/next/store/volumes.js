@@ -145,14 +145,28 @@ export class VolumeStore {
   }
 
   /**
+   * The grid a volume lies on, when the engine says it is not the run's (its record's
+   * `geometries`). A grid with no `dims` leaves it alone.
+   * @param {ItemKey} key
+   * @param {RunMetadata | import('../protocol.js').Geometry} grid
+   */
+  setGrid(key, grid) {
+    const v = this._volumes.get(key);
+    if (!v || !grid?.dims) return;
+    v.grid = /** @type {RunMetadata} */ ({ ...(v.grid ?? {}), ...grid });
+    this.version.value++;
+  }
+
+  /**
    * @param {ItemKey} from
    * @param {ItemKey} to
+   * @param {{ step?: string | null }} [meta] - the step that made the copy (else `from`'s)
    * @returns {boolean} false when there is nothing under `from`
    */
-  copy(from, to) {
+  copy(from, to, { step } = {}) {
     const v = this._volumes.get(from);
     if (!v) return false;
-    this._set(to, { ...v, input: false });
+    this._set(to, { ...v, input: false, step: step === undefined ? v.step : step });
     return true;
   }
 

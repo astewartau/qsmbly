@@ -55,10 +55,14 @@ export function niftiFor(NVImage, volume) {
   return NVImage.createNiftiArray([...dims], [...voxelSize], [...affine], datatype, volume.data);
 }
 
+/** How a mask is drawn over the volume under it. */
+export const OVERLAY = { colormap: 'red', opacity: 0.4 };
+
 /**
- * @param {{ volume: ViewVolume | null, emptyText?: string }} props
+ * @param {{ volume: ViewVolume | null, overlay?: ViewVolume | null, emptyText?: string }} props - `overlay`: a
+ *   mask drawn over `volume` (on the same grid)
  */
-export function Viewer({ volume, emptyText = 'Nothing to show yet.' }) {
+export function Viewer({ volume, overlay = null, emptyText = 'Nothing to show yet.' }) {
   const canvas = useRef(/** @type {HTMLCanvasElement | null} */ (null));
   const nv = useRef(/** @type {any} */ (null));
   const lib = useRef(/** @type {any} */ (null));
@@ -91,9 +95,13 @@ export function Viewer({ volume, emptyText = 'Nothing to show yet.' }) {
           niftiFor(NVImage, volume).buffer, `${volume.key}.nii`, 'gray', 1, null,
           r ? r[0] : NaN, r ? r[1] : NaN, r !== null,
         );
+        const over = overlay
+          ? await NVImage.new(niftiFor(NVImage, overlay).buffer, `${overlay.key}.nii`, OVERLAY.colormap, OVERLAY.opacity, null, 0, 1, true)
+          : null;
         if (cancelled) return;
         for (const old of [...nv.current.volumes]) nv.current.removeVolume(old);
         nv.current.addVolume(image);
+        if (over) nv.current.addVolume(over);
         applyView(nv.current, view);
         setRange([image.cal_min, image.cal_max]);
         setState('ready');
@@ -106,7 +114,7 @@ export function Viewer({ volume, emptyText = 'Nothing to show yet.' }) {
     return () => {
       cancelled = true;
     };
-  }, [volume?.key, volume?.data]);
+  }, [volume?.key, volume?.data, overlay?.key, overlay?.data]);
 
   useEffect(() => {
     if (nv.current && state === 'ready') applyView(nv.current, view);
@@ -114,7 +122,7 @@ export function Viewer({ volume, emptyText = 'Nothing to show yet.' }) {
 
   const units = volume?.meta.units ? ` ${volume.meta.units}` : '';
   return html`
-    <section class="viewer" aria-label="Viewer" data-state=${state} data-volume=${volume?.key ?? ''}>
+    <section class="viewer" aria-label="Viewer" data-state=${state} data-volume=${volume?.key ?? ''} data-overlay=${overlay?.key ?? ''}>
       <div class="viewer-toolbar">
         <label>
           <span class="visually-hidden">View</span>
@@ -122,7 +130,7 @@ export function Viewer({ volume, emptyText = 'Nothing to show yet.' }) {
             ${VIEWS.map(([id, label]) => html`<option value=${id}>${label}</option>`)}
           </select>
         </label>
-        <span class="viewer-title">${volume?.meta.label ?? ''}</span>
+        <span class="viewer-title">${volume?.meta.label ?? ''}${overlay ? html` <span class="muted">with ${overlay.meta.label}</span>` : ''}</span>
         ${range && state === 'ready' && html`
           <span class="viewer-range" title="Display range">${fmt(range[0])} … ${fmt(range[1])}${units}</span>`}
       </div>

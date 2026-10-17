@@ -317,6 +317,43 @@
  * every volume and a terminated worker loses only the step in progress.
  */
 
+// ---------------------------------------------------------------------------------------------
+// The workspace's run worker (js/next/engine/run-worker.js)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * A run, as the page asks the run worker for one. `volumes` is every volume the page keeps, by
+ * key: an input or supplied file as `{ nifti }`, a computed volume as its typed array (on a
+ * SharedArrayBuffer where the page is cross-origin isolated, so it is not copied).
+ * @typedef {object} RunJob
+ * @property {Record<string, any>} config - PipelineConfig
+ * @property {ScanInputs} inputs
+ * @property {string} identity - changes whenever the inputs do
+ * @property {string | null} recorded - Recorded JSON from the last run over these volumes
+ * @property {Record<ItemKey, { nifti: Uint8Array } | Float32Array | Uint8Array>} volumes
+ * @property {string[]} models - the plan's models, whose weights the worker provides
+ * @property {string} weightBase - where weights are fetched from ('' for the registry's URLs)
+ */
+
+/**
+ * What the run worker posts while it runs. `put`, `copy` and `remove` keep the page's store in
+ * step with the engine's volumes; a terminated worker loses only the step in progress.
+ * @typedef {{ type: 'ready', versions: object, threads: number }
+ *   | { type: 'weights', model: string, done: number, total: number, cached: boolean }
+ *   | { type: 'begin', grid: string }
+ *   | { type: 'put', key: ItemKey, data: Float32Array | Uint8Array, step: string | null }
+ *   | { type: 'copy', from: ItemKey, to: ItemKey, step: string | null }
+ *   | { type: 'remove', key: ItemKey }
+ *   | { type: 'recorded', recorded: string }
+ *   | { type: 'stage', step: string, algorithm: string | null, event: StageEventKind, text: string | null, heap?: number | null }
+ *   | { type: 'progress', done: number, total: number }
+ *   | { type: 'log', level: string, message: string, step: string | null }
+ *   | { type: 'output', key: ItemKey }
+ *   | { type: 'done', record: string | null, grid: string | null, heap?: number | null }
+ *   | { type: 'failed', message: string, kind: string | null, step: string | null }
+ * } RunMessage
+ */
+
 /** The stage events, in the order a computed step reports them. */
 export const STAGE_EVENTS = /** @type {const} */ (['started', 'cached', 'finished']);
 
