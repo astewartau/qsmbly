@@ -28,8 +28,8 @@ export function Compare({ history }) {
   }
   const same = a.data.length === b.data.length && a.grid.dims.join() === b.grid.dims.join();
   const panes = [
-    { id: 'a', title: `Run ${c.a}: ${meta.label}`, volume: { key: `run${c.a}:${c.key}`, data: a.data, grid: a.grid, meta } },
-    { id: 'b', title: `Run ${c.b}: ${meta.label}`, volume: { key: `run${c.b}:${c.key}`, data: b.data, grid: b.grid, meta } },
+    { id: 'a', title: `Run ${c.a}`, volume: { key: `run${c.a}:${c.key}`, data: a.data, grid: a.grid, meta } },
+    { id: 'b', title: `Run ${c.b}`, volume: { key: `run${c.b}:${c.key}`, data: b.data, grid: b.grid, meta } },
   ];
   if (same) {
     panes.push({
@@ -59,7 +59,7 @@ export function Compare({ history }) {
         ${panes.map((p, i) => html`
           <div class="compare-pane" data-pane=${p.id} key=${p.id}>
             ${fits(p.volume)
-              ? html`<${Viewer} volume=${p.volume} title=${p.title} label=${p.title} onReady=${ready(i)} />`
+              ? html`<${Viewer} volume=${p.volume} title=${p.title} label=${`${p.title}: ${meta.label}`} onReady=${ready(i)} />`
               : html`<p class="muted">${p.title}: not on a grid the viewer can show.</p>`}
           </div>`)}
       </div>

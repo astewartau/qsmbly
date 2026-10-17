@@ -156,7 +156,7 @@ export function RunBar({ session, store, models, runner, schema, expect, history
 
   let statusText = 'Needs data';
   if (error) statusText = `No plan: ${error}`;
-  else if (plan) statusText = `Plan: ${plan.steps.length} steps${counts.known && counts.cached ? ` · ${counts.compute} to run, ${counts.cached} cached` : ''}`;
+  else if (plan) statusText = `Plan: ${plan.steps.length} steps${counts.known && counts.cached ? (counts.compute ? ` · ${counts.compute} to run` : ' · all cached') : ''}`;
   const showGraph = () => { session.ui.tab.value = 'pipeline'; };
   const ran = status === 'done' || status === 'failed' || status === 'cancelled';
 

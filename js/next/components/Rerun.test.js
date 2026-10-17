@@ -97,7 +97,7 @@ describe('the Run button and the plan, from the engine\'s dry run', () => {
     expect(button(root).textContent).toBe('Re-run 2 steps');
     expect(button(root).disabled).toBe(false);
     expect(button(root).title).toBe('Compute 2 steps and reuse the other 6');
-    expect(root.querySelector('[data-testid="plan-status"]')?.textContent).toBe('Plan: 10 steps · 2 to run, 6 cached');
+    expect(root.querySelector('[data-testid="plan-status"]')?.textContent).toBe('Plan: 10 steps · 2 to run');
 
     // The drawer says the same, step by step.
     await act(() => /** @type {HTMLButtonElement} */ (root.querySelector('[data-testid="plan-drawer-toggle"]')).click());
@@ -201,7 +201,7 @@ describe('run history and compare', () => {
     expect(history.compare.value).toEqual({ key: 'Chi', a: 1, b: 2 });
     const view = root.querySelector('[data-testid="compare-view"]');
     expect([...(view?.querySelectorAll('.compare-pane') ?? [])].map((p) => p.getAttribute('data-pane'))).toEqual(['a', 'b', 'diff']);
-    expect([...(view?.querySelectorAll('.viewer-title') ?? [])].map((t) => t.textContent)).toEqual(['Run 1: Susceptibility', 'Run 2: Susceptibility', 'Run 1 − run 2']);
+    expect([...(view?.querySelectorAll('.viewer-title') ?? [])].map((t) => t.textContent)).toEqual(['Run 1', 'Run 2', 'Run 1 − run 2']);
     expect(view?.querySelector('[data-testid="compare-changes"]')?.textContent).toBe('inversion.algorithm: ilsqr → rts');
     await act(() => /** @type {HTMLButtonElement} */ (root.querySelector('[data-testid="compare-close"]')).click());
     expect(history.compare.value).toBeNull();
