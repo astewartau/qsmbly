@@ -17,12 +17,13 @@ import { fetchExample, convertDicom, isScanFile } from '../scan.js';
 
 const ROLES = /** @type {const} */ ([['phase', 'Phase'], ['magnitude', 'Magnitude'], ['sidecar', 'Sidecar'], ['ignore', 'Not used']]);
 
+/** Where a fact came from: [shown, said in full]. */
 const SOURCES = {
-  header: 'from the headers',
-  sidecar: 'from the sidecars',
-  typed: 'typed in',
-  files: '',
-  missing: 'missing',
+  header: ['headers', 'From the NIfTI headers'],
+  sidecar: ['sidecars', 'From the JSON sidecars'],
+  typed: ['typed', 'Typed in'],
+  files: ['', ''],
+  missing: ['missing', 'Nothing gives it'],
 };
 
 /**
@@ -234,7 +235,7 @@ function Facts({ report, problems: all, session, loader, disabled }) {
                 ${fact.note && html`<div class="muted small">${fact.note}</div>`}
                 ${problems.map((p) => html`<div class=${`problem-${p.severity} small`} role=${p.severity === 'error' ? 'alert' : undefined}>${p.message}</div>`)}
               </td>
-              <td class="fact-source muted small" data-testid="fact-source">${SOURCES[fact.source] ?? fact.source}</td>
+              <td class="fact-source muted small" data-testid="fact-source" title=${SOURCES[fact.source]?.[1] ?? ''}>${SOURCES[fact.source]?.[0] ?? fact.source}</td>
             </tr>`;
         })}
       </tbody>

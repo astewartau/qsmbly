@@ -70,6 +70,9 @@ export function Viewer({ volume, emptyText = 'Nothing to show yet.' }) {
   // Load the volume; a newer volume supersedes one still loading.
   useEffect(() => {
     if (!volume) {
+      // Nothing to show: take down what was shown, so the canvas does not keep a volume the
+      // store no longer has.
+      if (nv.current) for (const old of [...nv.current.volumes]) nv.current.removeVolume(old);
       setState('empty');
       return;
     }

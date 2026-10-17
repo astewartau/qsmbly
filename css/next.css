@@ -397,13 +397,20 @@ meter { width: 100px; }
 /* Data step */
 .data-panel { display: grid; gap: 6px; padding-top: 4px; }
 .dropzone {
-  display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 10px;
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 10px; min-width: 0;
   border: 1px dashed var(--input-border); border-radius: 6px; background: var(--panel); font-size: 12px; color: var(--text-2);
 }
 .dropzone.over { border-color: var(--accent); background: var(--accent-soft); }
 .dropzone-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 label.btn.disabled { opacity: 0.45; pointer-events: none; }
 .file-table, .fact-table, .plan-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.fact-table { table-layout: fixed; }
+.fact-table th { width: 36%; }
+.fact-table td.fact-source { width: 18%; }
+.file-table { table-layout: fixed; }
+.file-table th:nth-child(2) { width: 104px; }
+.file-table th:nth-child(3) { width: 44px; }
+.file-table th:nth-child(4) { width: 24px; }
 .file-table th, .plan-table th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; padding: 2px 4px; }
 .file-table td, .fact-table td, .fact-table th, .plan-table td { padding: 3px 4px; border-top: 1px solid var(--divider); vertical-align: top; }
 .fact-table th { text-align: left; font-weight: 500; color: var(--text-2); white-space: nowrap; }
@@ -413,10 +420,11 @@ label.btn.disabled { opacity: 0.45; pointer-events: none; }
 .data-panel { min-width: 0; }
 .file-table tr.unused .file-name { color: var(--muted); }
 .num.echo-num { width: 34px; }
-.txt.wide { width: 150px; }
 .fact-source { white-space: nowrap; text-align: right; }
 .fact-table tr.missing th { color: var(--error); }
-.typed-fact { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.typed-fact { display: flex; gap: 4px; align-items: center; min-width: 0; }
+.typed-fact .txt { flex: 1 1 auto; min-width: 0; width: auto; }
+.typed-fact .link { flex: none; }
 
 /* Narrow: the viewer above the pipeline. */
 @media (max-width: 899px) {

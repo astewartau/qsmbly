@@ -75,7 +75,7 @@ describe('the Data step', () => {
     const root = await mount(html`<${DataPanel} session=${session} loader=${loader} busy=${false} />`);
     const row = (name) => root.querySelector(`tr[data-fact="${name}"]`);
     expect(row('dims')?.querySelector('[data-testid="fact-value"]')?.textContent).toBe('184 × 256 × 128');
-    expect(row('dims')?.querySelector('[data-testid="fact-source"]')?.textContent).toBe('from the headers');
+    expect(row('dims')?.querySelector('[data-testid="fact-source"]')?.textContent).toBe('headers');
     expect(/** @type {HTMLInputElement} */ (/** @type {Element} */ (row('echo_times')).querySelector('input')).value).toBe('5, 11');
     expect(row('b0_dir')?.textContent).toContain('From the image\'s orientation');
     // The magnitude problem is on the magnitude file; the B0 one, with no sidecar file, on its fact.

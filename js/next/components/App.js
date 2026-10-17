@@ -135,6 +135,10 @@ function ViewerPane({ session, store }) {
   // A volume whose grid does not match its voxels (yet) is not shown.
   const fits = !!(entry?.data && grid?.dims && entry.data.length === grid.dims[0] * grid.dims[1] * grid.dims[2]);
   const volume = fits && viewing && entry?.data && grid ? { key: viewing, data: entry.data, grid, meta: itemMeta(viewing) } : null;
+  // An input in view whose voxels are not decoded (yet, or again after its scan changed) is.
+  useEffect(() => {
+    if (viewing && entry?.nifti && !entry.data) decodeForViewer(store, viewing).catch(() => {});
+  }, [viewing, entry]);
   const [error, setError] = useState('');
   const view = async (k) => {
     session.ui.viewing.value = k;

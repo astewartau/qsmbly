@@ -32,10 +32,10 @@ test.describe('the Data step', () => {
 
     // The engine's facts, each with its source.
     await expect(fact(page, 'dims').getByTestId('fact-value')).toHaveText('48 × 48 × 36');
-    await expect(fact(page, 'dims').getByTestId('fact-source')).toHaveText('from the headers');
+    await expect(fact(page, 'dims').getByTestId('fact-source')).toHaveText('headers');
     await expect(fact(page, 'voxel_size').getByTestId('fact-value')).toHaveText('1 × 1 × 1 mm');
     await expect(page.getByTestId('fact-echo_times')).toHaveValue('4, 9, 14');
-    await expect(fact(page, 'echo_times').getByTestId('fact-source')).toHaveText('from the sidecars');
+    await expect(fact(page, 'echo_times').getByTestId('fact-source')).toHaveText('sidecars');
     await expect(page.getByTestId('fact-b0_dir')).toHaveValue('0, 0, 1');
     await expect(fact(page, 'magnitude').getByTestId('fact-value')).toHaveText('yes');
     await expect(fact(page, 'manufacturer').getByTestId('fact-value')).toHaveText('Siemens');
@@ -65,10 +65,10 @@ test.describe('the Data step', () => {
     // A typed field strength wins over the sidecars', and can be taken back.
     await page.getByTestId('fact-field_strength').fill('2.89');
     await page.getByTestId('fact-field_strength').press('Enter');
-    await expect(fact(page, 'field_strength').getByTestId('fact-source')).toHaveText('typed in');
+    await expect(fact(page, 'field_strength').getByTestId('fact-source')).toHaveText('typed');
     await expect(page.getByTestId('scan-summary')).toContainText('2.89 T');
     await fact(page, 'field_strength').getByRole('button', { name: "Use the files'" }).click();
-    await expect(fact(page, 'field_strength').getByTestId('fact-source')).toHaveText('from the sidecars');
+    await expect(fact(page, 'field_strength').getByTestId('fact-source')).toHaveText('sidecars');
     expect(errors).toEqual([]);
   });
 
@@ -85,7 +85,7 @@ test.describe('the Data step', () => {
     await page.getByTestId('fact-field_strength').fill('3');
     await page.getByTestId('fact-field_strength').press('Enter');
     await expect(page.getByTestId('scan-summary')).toHaveText(/^\s*3 echoes · 3\.00 T · 48×48×36/);
-    await expect(fact(page, 'echo_times').getByTestId('fact-source')).toHaveText('typed in');
+    await expect(fact(page, 'echo_times').getByTestId('fact-source')).toHaveText('typed');
     await expect(page.getByRole('alert')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
