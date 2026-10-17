@@ -1,0 +1,1377 @@
+{
+  "config": {
+    "description": "",
+    "pipeline": {
+      "do_qsm": true,
+      "do_swi": false,
+      "do_smwi": false,
+      "do_segmentation": false,
+      "do_analysis": false,
+      "do_t2starmap": false,
+      "do_r2starmap": false,
+      "do_r2map": false,
+      "do_r2primemap": false,
+      "do_chi_separation": false,
+      "export_dicom": false,
+      "axial_resampling": false,
+      "obliquity_threshold": 10.0,
+      "crop_to_mask": false,
+      "fft_padding": false,
+      "crop_margin_mm": 32.0,
+      "output_space": "acquired",
+      "ignore_slice_gap": false
+    },
+    "field_mapping": {
+      "phase_offset_removal": true,
+      "phase_offset_sigma": [
+        4.0,
+        4.0,
+        4.0
+      ],
+      "coil_combination_sigma": [
+        10.0,
+        10.0,
+        5.0
+      ],
+      "bipolar_correction": false,
+      "unwrapping_algorithm": "romeo",
+      "b0_estimation": "weighted-avg",
+      "b0_weight_type": "phase-snr",
+      "b0_weight_assumed_t2star_ms": 40.0,
+      "laplacian_solver": "dct",
+      "laplacian_fft_pad": [
+        64,
+        64,
+        64
+      ],
+      "romeo": {
+        "individual": true,
+        "correct_global": true,
+        "template": 0,
+        "phase_coherence": true,
+        "phase_gradient_coherence": true,
+        "phase_linearity": true,
+        "mag_coherence": true,
+        "mag_weight": false,
+        "mag_weight2": false,
+        "bestpath": false,
+        "temporal_uncertain_unwrapping": 0.5,
+        "max_seeds": 1,
+        "merge_regions": false,
+        "correct_regions": false,
+        "wrap_addition": 0.0
+      },
+      "linear_fit": {
+        "estimate_offset": true,
+        "reliability_threshold_percentile": 90.0
+      },
+      "robust_fit": {
+        "loss": "tukey",
+        "tuning": null,
+        "iterations": 3,
+        "downweight_level": 0.75,
+        "flag_ratio": 3.0
+      }
+    },
+    "masking": {
+      "inhomogeneity_correction": true,
+      "sections": [
+        {
+          "input": "phase-quality",
+          "generator": {
+            "op": "threshold",
+            "method": "otsu",
+            "value": null
+          },
+          "refinements": [
+            {
+              "op": "dilate",
+              "iterations": 1
+            },
+            {
+              "op": "fill-holes",
+              "max_size": 0
+            },
+            {
+              "op": "erode",
+              "iterations": 1
+            }
+          ]
+        }
+      ],
+      "combine": "or",
+      "refinements": [],
+      "custom_mask_tool": "qsmbly",
+      "two_pass": false,
+      "two_pass_sections": null
+    },
+    "bg_removal": {
+      "algorithm": "vsharp",
+      "vsharp": {
+        "deconvolve": false,
+        "threshold": 0.2,
+        "max_radius": 12.0,
+        "min_radius": 1.0,
+        "grid": "native",
+        "grid_spacing": 1.0
+      },
+      "pdf": {
+        "tol": 0.00001
+      },
+      "lbv": {
+        "tol": 1e-6
+      },
+      "ismv": {
+        "tol": 1e-6,
+        "max_iter": 50,
+        "radius": 5.0
+      },
+      "sharp": {
+        "threshold": 0.05,
+        "radius": 6.0
+      },
+      "resharp": {
+        "radius": 6.0,
+        "tik_reg": 0.0001,
+        "tol": 1e-6,
+        "max_iter": 30
+      },
+      "harperella": {
+        "radius": 10.0,
+        "max_iter": 40,
+        "tol": 1e-6
+      },
+      "iharperella": {
+        "max_iter": 40,
+        "tol": 1e-6
+      },
+      "msmv": {
+        "radius": 5.0,
+        "maxk": 5
+      },
+      "msmv_refine": false
+    },
+    "inversion": {
+      "algorithm": "ilsqr",
+      "rts": {
+        "delta": 0.15,
+        "mu": 100000.0,
+        "rho": 10.0,
+        "tol": 0.01,
+        "max_iter": 20,
+        "lsmr_iter": 4
+      },
+      "tv": {
+        "lambda": 0.0002,
+        "rho": 0.02,
+        "tol": 0.001,
+        "max_iter": 250
+      },
+      "tkd": {
+        "threshold": 0.15
+      },
+      "tsvd": {
+        "threshold": 0.15
+      },
+      "tikhonov": {
+        "lambda": 0.01,
+        "reg": "identity"
+      },
+      "nltv": {
+        "lambda": 0.001,
+        "mu": 1.0,
+        "tol": 0.001,
+        "max_iter": 250,
+        "newton_iter": 10
+      },
+      "medi": {
+        "lambda": 0.001,
+        "merit": false,
+        "smv": true,
+        "smv_radius": 5.0,
+        "data_weighting": 1,
+        "percentage": 0.3,
+        "cg_tol": 0.01,
+        "cg_max_iter": 10,
+        "max_iter": 30,
+        "tol": 0.1
+      },
+      "tfi": {
+        "lambda": 0.000075,
+        "precond": 30.0,
+        "merit": false,
+        "data_weighting": 1,
+        "percentage": 0.9,
+        "cg_tol": 0.01,
+        "cg_max_iter": 100,
+        "max_iter": 10,
+        "tol": 0.1
+      },
+      "ilsqr": {
+        "tol": 0.001,
+        "max_iter": 100,
+        "pad_mm": 16.0
+      },
+      "tgv": {
+        "iterations": 1000,
+        "erosions": 3,
+        "alpha0": 0.0002002475,
+        "alpha1": 0.00006674916,
+        "step_size": 3.0,
+        "tol": 0.00001
+      },
+      "qsmart": {
+        "ilsqr_max_iter": 50,
+        "ilsqr_pad_mm": 6.0,
+        "vasc_sphere_radius": 8,
+        "sdf_spatial_radius": 8,
+        "inversion": "ilsqr",
+        "sdf_sigma1_stage1": 10.0,
+        "sdf_sigma2_stage1": 10.0,
+        "sdf_sigma1_stage2": 8.0,
+        "sdf_sigma2_stage2": 2.0,
+        "sdf_lower_lim": 0.6,
+        "sdf_curv_constant": 500.0,
+        "frangi_scale_min": 0.5,
+        "frangi_scale_max": 6.0,
+        "frangi_scale_ratio": 0.5,
+        "frangi_c": 500.0
+      },
+      "ndi": {
+        "tau": 2.0,
+        "alpha": 0.00001,
+        "max_iter": 200,
+        "phase_scale": 1.0
+      },
+      "fansi": {
+        "alpha1": 0.0002,
+        "mu1": 0.02,
+        "mu2": 1.0,
+        "alpha0": 0.0004,
+        "mu0": 0.04,
+        "max_iter": 150,
+        "tol_update": 0.1,
+        "tol_delta": 1e-6,
+        "phase_scale": 1.0
+      },
+      "l1qsm": {
+        "alpha1": 0.0002,
+        "mu1": 0.02,
+        "mu2": 1.0,
+        "mu3": 1.0,
+        "lambda": 1.0,
+        "max_iter": 50,
+        "tol_update": 1.0,
+        "tol_delta": 1e-6,
+        "phase_scale": 1.0
+      },
+      "whqsm": {
+        "alpha1": 0.0002,
+        "mu1": 0.02,
+        "mu2": 1.0,
+        "beta": 150.0,
+        "muh": 3.0,
+        "max_iter": 300,
+        "tol_update": 0.1,
+        "tol_delta": 1e-6,
+        "phase_scale": 1.0
+      },
+      "hdqsm": {
+        "alpha_l2": 0.0001,
+        "mu1_l2": 0.01,
+        "mu2": 1.0,
+        "max_iter_l1": 20,
+        "max_iter_l2": 80,
+        "tol_update": 1.0
+      },
+      "amp_pe": {
+        "wave_order": 1,
+        "nlevel": 3,
+        "wave_pec": 0.85,
+        "simulated_te": 0.008,
+        "max_linearization_ite": 25,
+        "b0": 3.0,
+        "gyro_ratio": 42.58,
+        "damp_rate_sig": 0.01,
+        "damp_rate_par": 0.1,
+        "max_pe_spar_ite": 5,
+        "max_pe_est_ite": 5,
+        "cvg_thd": 1e-6,
+        "tikhonov_beta": 0.02
+      },
+      "lsqr": {
+        "residual_weighting": null,
+        "fit_global_offset": true,
+        "tol": 0.00001,
+        "max_iter": 400
+      },
+      "heidi": {
+        "cone_threshold": 0.1,
+        "gradient_threshold": 0.003924908970520748,
+        "apply_laplacian_correction": true,
+        "laplacian_threshold": 0.05943433583931419,
+        "gradient_mask_floor": 0.1,
+        "continuation_steps": 8,
+        "inner_iterations": 500,
+        "mu_min": 2.220446049250313e-16,
+        "tol": 0.001,
+        "denoise": true,
+        "denoise_iterations": 5,
+        "denoise_time_step": 0.05,
+        "denoise_conductance": 1.0
+      },
+      "tile_size": 56,
+      "tile_halo": 4
+    },
+    "separation": {
+      "algorithm": "r2star-qsm",
+      "chi_sep_ilsqr": {
+        "dr_pos": 137.0,
+        "dr_neg": 137.0,
+        "lambda1": 1.0,
+        "percentage": 0.9,
+        "r2p_min": 1.0,
+        "r2p_max": 30.0,
+        "max_iter": 30,
+        "tol": 0.01,
+        "cg_max_iter": 30,
+        "cg_tol": 0.05
+      },
+      "chi_sep_medi": {
+        "lambda_para": 1000.0,
+        "lambda_dia": 1000.0,
+        "lambda_cpl": 100.0,
+        "dr_pos": 137.0,
+        "dr_neg": 137.0,
+        "percentage": 0.3,
+        "cg_tol": 0.01,
+        "cg_max_iter": 100,
+        "max_iter": 10,
+        "tol": 0.1
+      },
+      "r2star_qsm": {
+        "r_const_3t": 274.0
+      },
+      "wavesep": {
+        "dr_pos": 137.0,
+        "dr_neg": 137.0,
+        "alpha": 0.2,
+        "lambda": 0.02,
+        "wavelet_order": 4,
+        "max_iter": 100,
+        "tol": 0.001
+      },
+      "decompose": {
+        "n_inner": 10,
+        "chi_bound": 0.5,
+        "max_lm_iter": 30
+      },
+      "hc_chisep": {
+        "dr_pos_3t": 137.0,
+        "bin_hz": 0.25
+      },
+      "custom_qsm_tool": null,
+      "custom_r2_tool": null,
+      "custom_r2prime_tool": null,
+      "r2prime_strategy": "auto",
+      "r2primenet": {
+        "patch": [
+          128,
+          128,
+          64
+        ],
+        "ignore_field_mismatch": false
+      }
+    },
+    "qsm": {
+      "reference": "mean"
+    },
+    "swi": {
+      "unwrap": "laplacian",
+      "hp_sigma": [
+        4.0,
+        4.0,
+        0.0
+      ],
+      "scaling": "tanh",
+      "strength": 4.0,
+      "mip_window": 7
+    },
+    "smwi": {
+      "threshold_ppm": 1.0,
+      "power": 4.0,
+      "mip_window": 4
+    },
+    "segmentation": {
+      "version": "v1",
+      "crop": null,
+      "flip_averaging": true,
+      "topology_cleanup": true,
+      "sigma_smoothing": 0.5,
+      "custom_dseg_tool": null
+    },
+    "bet": {
+      "fractional_intensity": 0.5,
+      "smoothness": 1.0,
+      "gradient_threshold": 0.0,
+      "iterations": 1000,
+      "subdivisions": 4,
+      "voxel_scale": 1.0
+    },
+    "homogeneity": {
+      "sigma_mm": 7.0,
+      "nbox": 3
+    },
+    "multi_orientation": {
+      "group_by": "",
+      "algorithm": "cosmos",
+      "lambda": 0.0,
+      "force": false,
+      "register": true,
+      "magnitude_weighting": false,
+      "cosmos_tol": 1e-6,
+      "cosmos_max_iter": 100
+    },
+    "motion_correction": {
+      "enabled": false,
+      "reference": "first",
+      "chain": true,
+      "chain_levels": 3,
+      "min_ncc": 0.3
+    },
+    "registration": {
+      "levels": 5,
+      "max_samples": 200000,
+      "max_iterations": 20,
+      "max_evaluations": 5000,
+      "tolerance": 0.00001,
+      "rotation_step_deg": 3.0,
+      "translation_step_mm": 3.0,
+      "min_overlap": 0.25
+    }
+  },
+  "facts": {
+    "dims": [
+      184,
+      256,
+      128
+    ],
+    "n_echoes": 5,
+    "echo_times": [
+      0.005,
+      0.011,
+      0.017,
+      0.023,
+      0.029
+    ],
+    "has_magnitude": true,
+    "n_coils": 1,
+    "real_imaginary": false,
+    "field_strength": 2.8946,
+    "b0_dir": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "mese_echo_times": null,
+    "custom_mask": true,
+    "custom_dseg": false,
+    "custom_qsm": false,
+    "custom_r2": false,
+    "custom_r2prime": false
+  },
+  "record": {
+    "steps": [
+      {
+        "id": "load",
+        "label": "Load",
+        "state": "computed"
+      },
+      {
+        "id": "scale_phase",
+        "label": "Phase scaling",
+        "state": "computed"
+      },
+      {
+        "id": "magnitude",
+        "label": "Combined magnitude",
+        "state": "computed"
+      },
+      {
+        "id": "mask",
+        "label": "Brain mask",
+        "state": "computed",
+        "decisions": [
+          {
+            "topic": "mask_source",
+            "choice": "computed",
+            "reason": "The supplied mask could not be brought onto the working grid, so the mask was computed.",
+            "detail": "drawn mask"
+          }
+        ]
+      },
+      {
+        "id": "motion",
+        "label": "Motion correction",
+        "state": "skipped"
+      },
+      {
+        "id": "unwrap",
+        "label": "Field map",
+        "state": "computed"
+      },
+      {
+        "id": "bgremove",
+        "label": "Background-field removal",
+        "state": "computed"
+      },
+      {
+        "id": "invert",
+        "label": "Dipole inversion",
+        "state": "computed"
+      },
+      {
+        "id": "reference",
+        "label": "Referencing",
+        "state": "computed"
+      },
+      {
+        "id": "output_space",
+        "label": "Return to the acquired grid",
+        "state": "skipped"
+      }
+    ],
+    "resampled": false
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "load",
+        "label": "Load",
+        "algorithm": null,
+        "algorithm_label": null,
+        "settings": [],
+        "branch": null,
+        "enabled_by": null,
+        "only_when": null,
+        "models": [],
+        "reads": [],
+        "writes": [
+          "AcquiredPhase(1)",
+          "AcquiredPhase(2)",
+          "AcquiredPhase(3)",
+          "AcquiredPhase(4)",
+          "AcquiredPhase(5)",
+          "AcquiredMagnitude(1)",
+          "AcquiredMagnitude(2)",
+          "AcquiredMagnitude(3)",
+          "AcquiredMagnitude(4)",
+          "AcquiredMagnitude(5)"
+        ],
+        "run": {
+          "state": "computed"
+        }
+      },
+      {
+        "id": "scale_phase",
+        "label": "Phase scaling",
+        "algorithm": null,
+        "algorithm_label": null,
+        "settings": [],
+        "branch": null,
+        "enabled_by": null,
+        "only_when": null,
+        "models": [],
+        "reads": [
+          "AcquiredPhase(1)",
+          "AcquiredPhase(2)",
+          "AcquiredPhase(3)",
+          "AcquiredPhase(4)",
+          "AcquiredPhase(5)",
+          "AcquiredMagnitude(1)",
+          "AcquiredMagnitude(2)",
+          "AcquiredMagnitude(3)",
+          "AcquiredMagnitude(4)",
+          "AcquiredMagnitude(5)"
+        ],
+        "writes": [
+          "Phase(1)",
+          "Phase(2)",
+          "Phase(3)",
+          "Phase(4)",
+          "Phase(5)",
+          "Magnitude(1)",
+          "Magnitude(2)",
+          "Magnitude(3)",
+          "Magnitude(4)",
+          "Magnitude(5)"
+        ],
+        "run": {
+          "state": "computed"
+        }
+      },
+      {
+        "id": "magnitude",
+        "label": "Combined magnitude",
+        "algorithm": "rss",
+        "algorithm_label": "root sum of squares",
+        "settings": [
+          "inhomogeneity correction"
+        ],
+        "branch": null,
+        "enabled_by": null,
+        "only_when": null,
+        "models": [],
+        "reads": [
+          "Magnitude(1)",
+          "Magnitude(2)",
+          "Magnitude(3)",
+          "Magnitude(4)",
+          "Magnitude(5)"
+        ],
+        "writes": [
+          "CombinedMagnitude"
+        ],
+        "run": {
+          "state": "computed"
+        }
+      },
+      {
+        "id": "mask",
+        "label": "Brain mask",
+        "algorithm": null,
+        "algorithm_label": null,
+        "settings": [
+          "phase quality: Otsu threshold, dilation, hole-filling, erosion"
+        ],
+        "branch": null,
+        "enabled_by": null,
+        "only_when": null,
+        "models": [],
+        "reads": [
+          "Phase(1)",
+          "Phase(2)",
+          "Phase(3)",
+          "Phase(4)",
+          "Phase(5)",
+          "Magnitude(1)",
+          "Magnitude(2)",
+          "Magnitude(3)",
+          "Magnitude(4)",
+          "Magnitude(5)"
+        ],
+        "writes": [
+          "BrainMask"
+        ],
+        "run": {
+          "state": "computed",
+          "decisions": [
+            {
+              "topic": "mask_source",
+              "choice": "computed",
+              "reason": "The supplied mask could not be brought onto the working grid, so the mask was computed.",
+              "detail": "drawn mask"
+            }
+          ]
+        }
+      },
+      {
+        "id": "unwrap",
+        "label": "Field map",
+        "algorithm": "phase_offset_removal",
+        "algorithm_label": "ROMEO",
+        "settings": [
+          "phase offsets removed",
+          "B0 by weighted average"
+        ],
+        "branch": null,
+        "enabled_by": null,
+        "only_when": null,
+        "models": [],
+        "reads": [
+          "Phase(1)",
+          "Phase(2)",
+          "Phase(3)",
+          "Phase(4)",
+          "Phase(5)",
+          "Magnitude(1)",
+          "Magnitude(2)",
+          "Magnitude(3)",
+          "Magnitude(4)",
+          "Magnitude(5)",
+          "BrainMask"
+        ],
+        "writes": [
+          "FieldPpm",
+          "TotalFieldHz",
+          "TotalFieldMagnitude"
+        ],
+        "run": {
+          "state": "computed"
+        }
+      },
+      {
+        "id": "bgremove",
+        "label": "Background-field removal",
+        "algorithm": "vsharp",
+        "algorithm_label": "V-SHARP",
+        "settings": [
+          "SMV kernel radii from 12 to 1 mm"
+        ],
+        "branch": null,
+        "enabled_by": null,
+        "only_when": null,
+        "models": [],
+        "reads": [
+          "FieldPpm",
+          "BrainMask"
+        ],
+        "writes": [
+          "LocalField(Main)",
+          "LocalFieldMask(Main)"
+        ],
+        "run": {
+          "state": "computed"
+        }
+      },
+      {
+        "id": "invert",
+        "label": "Dipole inversion",
+        "algorithm": "ilsqr",
+        "algorithm_label": "iLSQR",
+        "settings": [],
+        "branch": null,
+        "enabled_by": null,
+        "only_when": null,
+        "models": [],
+        "reads": [
+          "LocalField(Main)",
+          "LocalFieldMask(Main)"
+        ],
+        "writes": [
+          "RawChi(Main)"
+        ],
+        "run": {
+          "state": "computed"
+        }
+      },
+      {
+        "id": "reference",
+        "label": "Referencing",
+        "algorithm": "mean",
+        "algorithm_label": "mean",
+        "settings": [],
+        "branch": null,
+        "enabled_by": null,
+        "only_when": null,
+        "models": [],
+        "reads": [
+          "RawChi(Main)",
+          "LocalFieldMask(Main)"
+        ],
+        "writes": [
+          "Chi",
+          "ChiSupport"
+        ],
+        "run": {
+          "state": "computed"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from": "load",
+        "to": "scale_phase",
+        "items": [
+          "AcquiredPhase(1)",
+          "AcquiredPhase(2)",
+          "AcquiredPhase(3)",
+          "AcquiredPhase(4)",
+          "AcquiredPhase(5)",
+          "AcquiredMagnitude(1)",
+          "AcquiredMagnitude(2)",
+          "AcquiredMagnitude(3)",
+          "AcquiredMagnitude(4)",
+          "AcquiredMagnitude(5)"
+        ]
+      },
+      {
+        "from": "scale_phase",
+        "to": "magnitude",
+        "items": [
+          "Magnitude(1)",
+          "Magnitude(2)",
+          "Magnitude(3)",
+          "Magnitude(4)",
+          "Magnitude(5)"
+        ]
+      },
+      {
+        "from": "scale_phase",
+        "to": "mask",
+        "items": [
+          "Phase(1)",
+          "Phase(2)",
+          "Phase(3)",
+          "Phase(4)",
+          "Phase(5)",
+          "Magnitude(1)",
+          "Magnitude(2)",
+          "Magnitude(3)",
+          "Magnitude(4)",
+          "Magnitude(5)"
+        ]
+      },
+      {
+        "from": "scale_phase",
+        "to": "unwrap",
+        "items": [
+          "Phase(1)",
+          "Phase(2)",
+          "Phase(3)",
+          "Phase(4)",
+          "Phase(5)",
+          "Magnitude(1)",
+          "Magnitude(2)",
+          "Magnitude(3)",
+          "Magnitude(4)",
+          "Magnitude(5)"
+        ]
+      },
+      {
+        "from": "mask",
+        "to": "unwrap",
+        "items": [
+          "BrainMask"
+        ]
+      },
+      {
+        "from": "unwrap",
+        "to": "bgremove",
+        "items": [
+          "FieldPpm"
+        ]
+      },
+      {
+        "from": "mask",
+        "to": "bgremove",
+        "items": [
+          "BrainMask"
+        ]
+      },
+      {
+        "from": "bgremove",
+        "to": "invert",
+        "items": [
+          "LocalField(Main)",
+          "LocalFieldMask(Main)"
+        ]
+      },
+      {
+        "from": "invert",
+        "to": "reference",
+        "items": [
+          "RawChi(Main)"
+        ]
+      },
+      {
+        "from": "bgremove",
+        "to": "reference",
+        "items": [
+          "LocalFieldMask(Main)"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "key": "AcquiredPhase(1)",
+        "item": {
+          "AcquiredPhase": 1
+        },
+        "label": "Phase (as acquired)",
+        "units": null,
+        "kind": "phase",
+        "bids_name": null,
+        "published": false,
+        "echo": 1,
+        "coil": null
+      },
+      {
+        "key": "AcquiredPhase(2)",
+        "item": {
+          "AcquiredPhase": 2
+        },
+        "label": "Phase (as acquired)",
+        "units": null,
+        "kind": "phase",
+        "bids_name": null,
+        "published": false,
+        "echo": 2,
+        "coil": null
+      },
+      {
+        "key": "AcquiredPhase(3)",
+        "item": {
+          "AcquiredPhase": 3
+        },
+        "label": "Phase (as acquired)",
+        "units": null,
+        "kind": "phase",
+        "bids_name": null,
+        "published": false,
+        "echo": 3,
+        "coil": null
+      },
+      {
+        "key": "AcquiredPhase(4)",
+        "item": {
+          "AcquiredPhase": 4
+        },
+        "label": "Phase (as acquired)",
+        "units": null,
+        "kind": "phase",
+        "bids_name": null,
+        "published": false,
+        "echo": 4,
+        "coil": null
+      },
+      {
+        "key": "AcquiredPhase(5)",
+        "item": {
+          "AcquiredPhase": 5
+        },
+        "label": "Phase (as acquired)",
+        "units": null,
+        "kind": "phase",
+        "bids_name": null,
+        "published": false,
+        "echo": 5,
+        "coil": null
+      },
+      {
+        "key": "AcquiredMagnitude(1)",
+        "item": {
+          "AcquiredMagnitude": 1
+        },
+        "label": "Magnitude (as acquired)",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 1,
+        "coil": null
+      },
+      {
+        "key": "AcquiredMagnitude(2)",
+        "item": {
+          "AcquiredMagnitude": 2
+        },
+        "label": "Magnitude (as acquired)",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 2,
+        "coil": null
+      },
+      {
+        "key": "AcquiredMagnitude(3)",
+        "item": {
+          "AcquiredMagnitude": 3
+        },
+        "label": "Magnitude (as acquired)",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 3,
+        "coil": null
+      },
+      {
+        "key": "AcquiredMagnitude(4)",
+        "item": {
+          "AcquiredMagnitude": 4
+        },
+        "label": "Magnitude (as acquired)",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 4,
+        "coil": null
+      },
+      {
+        "key": "AcquiredMagnitude(5)",
+        "item": {
+          "AcquiredMagnitude": 5
+        },
+        "label": "Magnitude (as acquired)",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 5,
+        "coil": null
+      },
+      {
+        "key": "Phase(1)",
+        "item": {
+          "Phase": 1
+        },
+        "label": "Phase",
+        "units": "rad",
+        "kind": "phase",
+        "bids_name": null,
+        "published": false,
+        "echo": 1,
+        "coil": null
+      },
+      {
+        "key": "Phase(2)",
+        "item": {
+          "Phase": 2
+        },
+        "label": "Phase",
+        "units": "rad",
+        "kind": "phase",
+        "bids_name": null,
+        "published": false,
+        "echo": 2,
+        "coil": null
+      },
+      {
+        "key": "Phase(3)",
+        "item": {
+          "Phase": 3
+        },
+        "label": "Phase",
+        "units": "rad",
+        "kind": "phase",
+        "bids_name": null,
+        "published": false,
+        "echo": 3,
+        "coil": null
+      },
+      {
+        "key": "Phase(4)",
+        "item": {
+          "Phase": 4
+        },
+        "label": "Phase",
+        "units": "rad",
+        "kind": "phase",
+        "bids_name": null,
+        "published": false,
+        "echo": 4,
+        "coil": null
+      },
+      {
+        "key": "Phase(5)",
+        "item": {
+          "Phase": 5
+        },
+        "label": "Phase",
+        "units": "rad",
+        "kind": "phase",
+        "bids_name": null,
+        "published": false,
+        "echo": 5,
+        "coil": null
+      },
+      {
+        "key": "Magnitude(1)",
+        "item": {
+          "Magnitude": 1
+        },
+        "label": "Magnitude",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 1,
+        "coil": null
+      },
+      {
+        "key": "Magnitude(2)",
+        "item": {
+          "Magnitude": 2
+        },
+        "label": "Magnitude",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 2,
+        "coil": null
+      },
+      {
+        "key": "Magnitude(3)",
+        "item": {
+          "Magnitude": 3
+        },
+        "label": "Magnitude",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 3,
+        "coil": null
+      },
+      {
+        "key": "Magnitude(4)",
+        "item": {
+          "Magnitude": 4
+        },
+        "label": "Magnitude",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 4,
+        "coil": null
+      },
+      {
+        "key": "Magnitude(5)",
+        "item": {
+          "Magnitude": 5
+        },
+        "label": "Magnitude",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 5,
+        "coil": null
+      },
+      {
+        "key": "CombinedMagnitude",
+        "item": "CombinedMagnitude",
+        "label": "Combined magnitude",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": "part-mag_T2starw",
+        "published": true,
+        "echo": null,
+        "coil": null
+      },
+      {
+        "key": "BrainMask",
+        "item": "BrainMask",
+        "label": "Brain mask",
+        "units": null,
+        "kind": "mask",
+        "bids_name": "mask",
+        "published": true,
+        "echo": null,
+        "coil": null
+      },
+      {
+        "key": "FieldPpm",
+        "item": "FieldPpm",
+        "label": "Total field",
+        "units": "ppm",
+        "kind": "field",
+        "bids_name": "desc-totalppm_fieldmap",
+        "published": false,
+        "echo": null,
+        "coil": null
+      },
+      {
+        "key": "TotalFieldHz",
+        "item": "TotalFieldHz",
+        "label": "Total field",
+        "units": "Hz",
+        "kind": "field",
+        "bids_name": "desc-total_fieldmap",
+        "published": true,
+        "echo": null,
+        "coil": null
+      },
+      {
+        "key": "TotalFieldMagnitude",
+        "item": "TotalFieldMagnitude",
+        "label": "Field map magnitude",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": "desc-total_magnitude",
+        "published": true,
+        "echo": null,
+        "coil": null
+      },
+      {
+        "key": "LocalField(Main)",
+        "item": {
+          "LocalField": "Main"
+        },
+        "label": "Local field",
+        "units": "ppm",
+        "kind": "field",
+        "bids_name": "localfield",
+        "published": false,
+        "echo": null,
+        "coil": null
+      },
+      {
+        "key": "LocalFieldMask(Main)",
+        "item": {
+          "LocalFieldMask": "Main"
+        },
+        "label": "Local field mask",
+        "units": null,
+        "kind": "mask",
+        "bids_name": "bgmask",
+        "published": false,
+        "echo": null,
+        "coil": null
+      },
+      {
+        "key": "RawChi(Main)",
+        "item": {
+          "RawChi": "Main"
+        },
+        "label": "Unreferenced susceptibility",
+        "units": "ppm",
+        "kind": "chi",
+        "bids_name": "desc-unreferenced_Chimap",
+        "published": false,
+        "echo": null,
+        "coil": null
+      },
+      {
+        "key": "Chi",
+        "item": "Chi",
+        "label": "Susceptibility",
+        "units": "ppm",
+        "kind": "chi",
+        "bids_name": "Chimap",
+        "published": true,
+        "echo": null,
+        "coil": null
+      },
+      {
+        "key": "ChiSupport",
+        "item": "ChiSupport",
+        "label": "Susceptibility support",
+        "units": null,
+        "kind": "mask",
+        "bids_name": "desc-qsm_mask",
+        "published": true,
+        "echo": null,
+        "coil": null
+      }
+    ],
+    "two_pass": false,
+    "mermaid": "flowchart TD\n    load[\"Load<br/><small><b>computed</b></small>\"]\n    scale_phase[\"Phase scaling<br/><small><b>computed</b></small>\"]\n    magnitude[\"Combined magnitude<br/><i>root sum of squares</i><br/><small>inhomogeneity correction</small><br/><small><b>computed</b></small>\"]\n    mask[\"Brain mask<br/><small>phase quality: Otsu threshold, dilation, hole-filling, erosion</small><br/><small><b>computed</b></small><br/><small>The supplied mask could not be brought onto the working grid, so the mask was computed. (drawn mask)</small>\"]\n    unwrap[\"Field map<br/><i>ROMEO</i><br/><small>phase offsets removed</small><br/><small>B0 by weighted average</small><br/><small><b>computed</b></small>\"]\n    bgremove[\"Background-field removal<br/><i>V-SHARP</i><br/><small>SMV kernel radii from 12 to 1 mm</small><br/><small><b>computed</b></small>\"]\n    invert[\"Dipole inversion<br/><i>iLSQR</i><br/><small><b>computed</b></small>\"]\n    reference[\"Referencing<br/><i>mean</i><br/><small><b>computed</b></small>\"]\n    load -->|\"Phase (as acquired), Magnitude (as acquired)\"| scale_phase\n    scale_phase -->|\"Magnitude\"| magnitude\n    scale_phase -->|\"Phase, Magnitude\"| mask\n    scale_phase -->|\"Phase, Magnitude\"| unwrap\n    mask -->|\"Brain mask\"| unwrap\n    unwrap -->|\"Total field\"| bgremove\n    mask -->|\"Brain mask\"| bgremove\n    bgremove -->|\"Local field, Local field mask\"| invert\n    invert -->|\"Unreferenced susceptibility\"| reference\n    bgremove -->|\"Local field mask\"| reference\n",
+    "differs": true
+  },
+  "methods": {
+    "sentences": [
+      {
+        "text": "QSM processing was performed using QSMbly (Stewart, 2026).",
+        "steps": [],
+        "citations": [
+          "stewart2026qsmbly"
+        ]
+      },
+      {
+        "text": "Inhomogeneity correction (Eckstein et al., 2019) was applied to the RSS-combined magnitude image.",
+        "steps": [
+          "magnitude"
+        ],
+        "citations": [
+          "eckstein2019"
+        ]
+      },
+      {
+        "text": "A brain mask was generated using Otsu thresholding (Otsu, 1979) of the ROMEO phase quality map (computed from phase data and the inhomogeneity-corrected RSS-combined magnitude), followed by dilation, hole-filling, and erosion.",
+        "steps": [
+          "mask"
+        ],
+        "citations": [
+          "dymerska2021",
+          "otsu1979"
+        ]
+      },
+      {
+        "text": "Phase offset removal was performed using the HIP method (Eckstein et al., 2018).",
+        "steps": [
+          "unwrap"
+        ],
+        "citations": [
+          "eckstein2018"
+        ]
+      },
+      {
+        "text": "Phase unwrapping was performed using ROMEO (Dymerska et al., 2021).",
+        "steps": [
+          "unwrap"
+        ],
+        "citations": [
+          "dymerska2021"
+        ]
+      },
+      {
+        "text": "The B0 field map was estimated as a weighted average of the unwrapped echo phases.",
+        "steps": [
+          "unwrap"
+        ],
+        "citations": []
+      },
+      {
+        "text": "Background field removal was performed using V-SHARP (Wu et al., 2012).",
+        "steps": [
+          "bgremove"
+        ],
+        "citations": [
+          "wu2012"
+        ]
+      },
+      {
+        "text": "Dipole inversion was performed using iLSQR (Li et al., 2015).",
+        "steps": [
+          "invert"
+        ],
+        "citations": [
+          "li2015"
+        ]
+      },
+      {
+        "text": "Susceptibility values were referenced to the mean susceptibility within the reconstruction mask (the brain mask less any rim eroded by background field removal).",
+        "steps": [
+          "reference"
+        ],
+        "citations": []
+      }
+    ],
+    "references": [
+      {
+        "key": "stewart2026qsmbly",
+        "text": "Stewart, A. (2026). QSMbly: Browser-based Quantitative Susceptibility Mapping. https://github.com/astewartau/qsmbly"
+      },
+      {
+        "key": "eckstein2019",
+        "text": "Eckstein, K., Trattnig, S., Robinson, S.D. (2019). \"A Simple Homogeneity Correction for Neuroimaging at 7T.\" *Proc. ISMRM 27th Annual Meeting*."
+      },
+      {
+        "key": "dymerska2021",
+        "text": "Dymerska, B., et al. (2021). \"Phase unwrapping with a rapid opensource minimum spanning tree algorithm (ROMEO).\" *Magnetic Resonance in Medicine*, 85(4):2294-2308. https://doi.org/10.1002/mrm.28563"
+      },
+      {
+        "key": "otsu1979",
+        "text": "Otsu, N. (1979). \"A Threshold Selection Method from Gray-Level Histograms.\" *IEEE Transactions on Systems, Man, and Cybernetics*, 9(1):62-66. https://doi.org/10.1109/TSMC.1979.4310076"
+      },
+      {
+        "key": "eckstein2018",
+        "text": "Eckstein, K., et al. (2018). \"Computationally Efficient Combination of Multi-channel Phase Data From Multi-echo Acquisitions (ASPIRE).\" *Magnetic Resonance in Medicine*, 79:2996-3006. https://doi.org/10.1002/mrm.26963"
+      },
+      {
+        "key": "wu2012",
+        "text": "Wu, B., et al. (2012). \"Whole brain susceptibility mapping using compressed sensing.\" *Magnetic Resonance in Medicine*, 67(1):137-147. https://doi.org/10.1002/mrm.23000"
+      },
+      {
+        "key": "li2015",
+        "text": "Li, W., et al. (2015). \"A method for estimating and removing streaking artifacts in quantitative susceptibility mapping.\" *NeuroImage*, 108:111-122. https://doi.org/10.1016/j.neuroimage.2014.12.043"
+      }
+    ]
+  }
+}

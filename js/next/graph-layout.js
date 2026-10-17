@@ -23,7 +23,7 @@
  * @typedef {import('./exports.js').GraphNode} GraphNode
  * @typedef {import('./exports.js').GraphEdge} GraphEdge
  *
- * @typedef {{ text: string, cls: 'title' | 'algorithm' | 'setting' | 'when' }} TextLine
+ * @typedef {{ text: string, cls: 'title' | 'algorithm' | 'setting' | 'when' | 'run' | 'note' }} TextLine
  *
  * @typedef {object} LaidNode
  * @property {string} id
@@ -64,9 +64,9 @@ export const RETURN_STEP = 'output_space';
 
 export const NODE_W = 210;
 const PAD = 8;
-const LINE = { title: 17, algorithm: 15, setting: 14, when: 14 };
+const LINE = { title: 17, algorithm: 15, setting: 14, when: 14, run: 14, note: 13 };
 /** Average glyph widths (px) at the sizes next.css draws them. */
-export const CHAR = { title: 7.7, algorithm: 6.4, setting: 5.9, when: 5.9, label: 5.4 };
+export const CHAR = { title: 7.7, algorithm: 6.4, setting: 5.9, when: 5.9, run: 6.2, note: 5.6, label: 5.4 };
 const TRACK = 15; // between horizontal tracks in a gap
 const GAP = 14; // a gap's margin above and below its tracks
 const LANE = 7; // between vertical lanes in a gutter
@@ -104,8 +104,15 @@ export function wrap(text, max) {
 /** @param {string} text @param {number} max */
 const clip = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
+/** What a run's step did, as a box says it. */
+export const RUN_STATES = { computed: 'Computed', cached: 'Reused from the cache', skipped: 'Skipped' };
+
+/** A decision's note: its reason, with the detail after it. @param {{ reason: string, detail?: string }} d */
+export const decisionNote = (d) => (d.detail ? `${d.reason} (${d.detail})` : d.reason);
+
 /**
- * A box's text: the step, its algorithm, its settings and when it applies.
+ * A box's text: the step, its algorithm, its settings and when it applies; after a run, what the
+ * step did and what it decided (each reason on at most two lines; the box's tooltip has them in full).
  * @param {GraphNode} n
  * @returns {TextLine[]}
  */
@@ -120,6 +127,14 @@ export function nodeLines(n) {
   if (n.algorithm_label) lines.push({ text: clip(n.algorithm_label, room('algorithm')), cls: 'algorithm' });
   for (const s of n.settings) for (const l of wrap(s, room('setting'))) lines.push({ text: l, cls: 'setting' });
   if (n.only_when) for (const l of wrap(`Only when ${n.only_when}`, room('when'))) lines.push({ text: l, cls: 'when' });
+  if (n.run) {
+    lines.push({ text: RUN_STATES[n.run.state] ?? n.run.state, cls: 'run' });
+    for (const d of n.run.decisions ?? []) {
+      const ls = wrap(d.reason, room('note'));
+      const shown = ls.length > 2 ? [ls[0], clip(ls.slice(1).join(' '), room('note'))] : ls;
+      for (const l of shown) lines.push({ text: l, cls: 'note' });
+    }
+  }
   return lines;
 }
 

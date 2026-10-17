@@ -745,8 +745,9 @@ impl Engine {
     /// What the scan's data cannot produce of what was asked for fails the run before anything is
     /// computed, in `qsmxt run`'s words. The weights of the plan's models must have been provided.
     /// A failed run throws an `Error` with the step it failed in and the kind of failure
-    /// ([`run_error`]).
-    pub fn run(&mut self, config_json: &str, observer: Object) -> Result<(), JsValue> {
+    /// ([`run_error`]). Returns what the run did (RunRecord JSON: each step `computed`, `cached` or
+    /// `skipped`, and what it decided), for `pipeline_graph_after_wasm` and `methods_for_run_wasm`.
+    pub fn run(&mut self, config_json: &str, observer: Object) -> Result<String, JsValue> {
         let config = parse_config(config_json)?;
         let mut relay = Relay::new(&observer)?;
         let sink = relay.log.clone().map(|log| (relay.this.clone(), log));
@@ -762,6 +763,7 @@ impl Engine {
             qsmxt_engine::run::run(&plan, &config, facts, store, &mut relay)
                 .map_err(|e| engine_error(&e))
         })
+        .and_then(|record| serde_json::to_string(&record).map_err(js_err))
     }
 
     /// The grid the last run worked on (RunMetadata JSON), once it has loaded the scan.
