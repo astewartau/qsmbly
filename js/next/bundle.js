@@ -61,11 +61,13 @@ export function heldOutputs(store) {
  */
 export function publishedFiles({ session, store, engine }) {
   const facts = session.facts.peek();
-  if (!facts) return Promise.resolve({ run: '', files: [] });
+  const outputs = heldOutputs(store);
+  // Nothing computed yet: nothing to name (the run's name is asked with its outputs).
+  if (!facts || !outputs.length) return Promise.resolve({ run: '', files: [] });
   return engine.outputFiles({
     scan_file: echoes(session.files.peek())[0]?.phase?.name ?? null,
     facts,
-    outputs: heldOutputs(store),
+    outputs,
   });
 }
 
