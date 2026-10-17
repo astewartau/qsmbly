@@ -12,6 +12,8 @@
  * @typedef {import('../outline.js').OutlineRow} OutlineRow
  * @typedef {import('../run.js').Runner} Runner
  * @typedef {import('../scan.js').ScanLoader} ScanLoader
+ * @typedef {import('../rerun.js').Expectations} Expectations
+ * @typedef {import('../rerun.js').RowStatus} RowStatus
  */
 import { html } from '../html.js';
 import { useState, useEffect } from 'preact/hooks';
@@ -22,39 +24,16 @@ import { StepSettings } from './Settings.js';
 import { DataPanel } from './DataPanel.js';
 import { MaskEditor } from './MaskEditor.js';
 import { Icon } from './icons.js';
+import { rowStatus, ROW_STATES } from '../rerun.js';
 
 /** @param {Setting | undefined} s */
 const nameOf = (s) => s?.full_label ?? s?.label;
 
 /**
- * What a row shows of the last run: its steps' states, the one running with its progress.
- * @param {OutlineRow} row
- * @param {Runner | undefined} runner
- * @returns {{ state: string, text: string, error?: string } | null}
+ * @param {{ session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, runner?: Runner, loader?: ScanLoader,
+ *   expect?: Expectations }} props
  */
-export function rowRunState(row, runner) {
-  if (!runner) return null;
-  const steps = runner.steps.value;
-  const error = runner.error.value;
-  const states = row.steps.map((s) => steps.get(s.name)).filter((s) => !!s);
-  if (!states.length) return null;
-  const running = states.find((s) => s.state === 'running');
-  if (running) {
-    const p = running.progress;
-    return { state: 'running', text: p && p.total ? `${Math.round((100 * p.done) / p.total)}%` : 'running' };
-  }
-  if (states.some((s) => s.state === 'failed')) {
-    return { state: 'failed', text: 'failed', error: error && row.steps.some((s) => s.name === error.step) ? error.message : undefined };
-  }
-  if (states.some((s) => s.state === 'cancelled')) return { state: 'cancelled', text: 'cancelled' };
-  if (states.length < row.steps.length) return null;
-  if (states.every((s) => s.state === 'skipped')) return { state: 'skipped', text: 'not needed' };
-  if (states.every((s) => s.state === 'cached' || s.state === 'skipped')) return { state: 'cached', text: 'reused' };
-  return { state: 'done', text: 'done' };
-}
-
-/** @param {{ session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, runner?: Runner, loader?: ScanLoader }} props */
-export function Pipeline({ session, store, schema, mask, runner, loader }) {
+export function Pipeline({ session, store, schema, mask, runner, loader, expect }) {
   const plan = session.plan.value;
   const view = session.view.value;
   const forcedBy = (p) => view?.get(p)?.forced_by ?? null;
@@ -83,7 +62,7 @@ export function Pipeline({ session, store, schema, mask, runner, loader }) {
       items.push(html`<li class="group" aria-hidden="true">${group}</li>`);
     }
     items.push(html`<${Step} key=${row.section.id} row=${row} session=${session} store=${store} schema=${schema} mask=${mask}
-      open=${open === row.section.id} forcedBy=${forcedBy} run=${rowRunState(row, runner)} loader=${loader} busy=${busy} />`);
+      open=${open === row.section.id} forcedBy=${forcedBy} runner=${runner} expect=${expect} loader=${loader} busy=${busy} />`);
   }
 
   return html`
@@ -96,11 +75,11 @@ export function Pipeline({ session, store, schema, mask, runner, loader }) {
 }
 
 /**
- * One step: its row (and switch), and its settings when open.
+ * One step: its row (and switch), its status, and its settings when open.
  * @param {{ row: OutlineRow, session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, open: boolean,
- *   forcedBy: (path: string) => string | null, run: { state: string, text: string, error?: string } | null, loader?: ScanLoader, busy: boolean }} props
+ *   forcedBy: (path: string) => string | null, runner?: Runner, expect?: Expectations, loader?: ScanLoader, busy: boolean }} props
  */
-function Step({ row, session, store, schema, mask, open, forcedBy, run, loader, busy }) {
+function Step({ row, session, store, schema, mask, open, forcedBy, runner, expect, loader, busy }) {
   const { section, state } = row;
   const config = session.config.value;
   const facts = session.facts.value;
@@ -129,20 +108,26 @@ function Step({ row, session, store, schema, mask, open, forcedBy, run, loader, 
     const s = schema.settings.find((x) => x.path === section.summary);
     if (s) summary = formatValue(s, valueOf(s, config));
   }
-  const stateText = inputErrors || problems.some((p) => p.severity === 'error') ? 'problem' : !on ? 'off' : changed ? 'changed' : 'will run';
+  const run = rowStatus({
+    row,
+    expected: expect?.expected.value ?? null,
+    status: runner?.status.value,
+    steps: runner?.steps.value,
+    error: runner?.error.value,
+    blocked: !!inputErrors || problems.some((p) => p.severity === 'error'),
+  });
   const toggleOpen = () => { session.ui.section.value = open ? null : section.id; };
 
   return html`
-    <li class=${`step state-${state}${problems.length ? ' has-problem' : ''}`} data-step=${section.id} data-open=${open}>
+    <li class=${`step state-${state}${problems.length ? ' has-problem' : ''}${changed ? ' has-changes' : ''}`} data-step=${section.id} data-open=${open}
+      data-status=${run?.state ?? ''}>
       <div class="step-head-wrap">
         <button type="button" class="step-head" aria-expanded=${open} aria-controls=${`step-${section.id}`} data-section=${section.id}
           onClick=${toggleOpen}>
           ${Icon.chevron}
           <span class="step-title">${section.label}</span>
           <span class="step-sum" data-testid="summary">${summary}</span>
-          ${run
-            ? html`<span class=${`run-state ${run.state}`} data-testid="run-state" title=${run.text}>${run.text}</span>`
-            : html`<span class=${`state-dot ${stateText.replace(' ', '-')}`} title=${stateText}><span class="visually-hidden">${stateText}</span></span>`}
+          ${run && html`<${RowBadge} status=${run} />`}
         </button>
         ${toggle && html`
           <input type="checkbox" class="switch step-switch" aria-label=${nameOf(toggle)} checked=${!!session.get(toggle.path) || !!forced}
@@ -166,6 +151,15 @@ function Step({ row, session, store, schema, mask, open, forcedBy, run, loader, 
         </div>`}
     </li>
   `;
+}
+
+/**
+ * A row's status: an icon and its word, never colour alone (redesign §3.7).
+ * @param {{ status: RowStatus }} props
+ */
+function RowBadge({ status }) {
+  return html`<span class=${`run-state ${status.state}`} data-testid="run-state" data-state=${status.state} title=${status.title}>
+    <span class="run-state-icon" aria-hidden="true">${ROW_STATES[status.state].icon}</span>${status.text}</span>`;
 }
 
 /**

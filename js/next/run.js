@@ -53,8 +53,9 @@ const LOG_LIMIT = 2000;
  * @param {() => number} [options.now]
  * @param {typeof downloadModels} [options.download]
  * @param {typeof withCacheState} [options.cacheState]
+ * @param {import('./history.js').History | null} [options.history] - keeps each finished run's outputs
  */
-export function createRunner({ session, store, createWorker, registry, now = () => performance.now(), download = downloadModels, cacheState = withCacheState }) {
+export function createRunner({ session, store, createWorker, registry, now = () => performance.now(), download = downloadModels, cacheState = withCacheState, history = null }) {
   const status = signal(/** @type {RunStatus} */ ('idle'));
   const steps = signal(/** @type {Map<string, StepStatus>} */ (new Map()));
   const current = signal(/** @type {string | null} */ (null));
@@ -183,6 +184,7 @@ export function createRunner({ session, store, createWorker, registry, now = () 
             session.runs.last.record.value = m.record;
             session.runs.last.config.value = ranConfig;
           }
+          history?.add({ config: ranConfig ?? session.config.peek(), record: m.record ?? null, steps: steps.peek() });
         });
         break;
       case 'failed':
@@ -248,7 +250,7 @@ export function createRunner({ session, store, createWorker, registry, now = () 
     return {
       config: session.config.peek(),
       inputs: /** @type {any} */ (session.scanInputs.peek()),
-      identity: `inputs-${store.inputVersion}`,
+      identity: store.identity(),
       recorded: store.recorded.peek(),
       volumes,
       models: p.models,
@@ -338,9 +340,10 @@ export function createRunner({ session, store, createWorker, registry, now = () 
       });
       addLog({ level: 'WARN', message: 'Cancelled. The finished steps are kept; Run carries on from them.', step, at: t() });
     },
-    /** Forget the last run's states (a new scan). */
+    /** Forget the last run's states and the earlier runs' outputs (a new scan). */
     reset() {
       if (this.busy()) this.cancel();
+      history?.clear();
       batch(() => {
         status.value = 'idle';
         steps.value = new Map();
