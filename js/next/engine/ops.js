@@ -55,6 +55,18 @@ export function engineOps(wasm) {
      * @param {PipelineConfig} config @param {ScanFacts} f @returns {Methods}
      */
     methods: (config, f) => JSON.parse(call(wasm.methods_structured_wasm, json(config), json(f))),
+    /**
+     * The graph a run took, as its record (`Engine.run`'s answer, JSON) says: `graph`'s shape with
+     * each box's `run` (`{ state, decisions }`) and `differs` (from the planned graph).
+     * @param {PipelineConfig} config @param {ScanFacts} f @param {string} record
+     * @returns {PipelineGraph & { differs: boolean }}
+     */
+    graphAfter: (config, f, record) => JSON.parse(call(wasm.pipeline_graph_after_wasm, json(config), json(f), record)),
+    /**
+     * The methods text of the run `record` describes (`methods_for_run` for "QSMbly"): what was done.
+     * @param {PipelineConfig} config @param {ScanFacts} f @param {string} record @returns {Methods}
+     */
+    methodsAfter: (config, f, record) => JSON.parse(call(wasm.methods_for_run_wasm, json(config), json(f), record)),
     /** The `qsmxt run` command. @param {PipelineConfig} config @returns {string} */
     command: (config) => call(wasm.command_wasm, json(config)),
     /** The config as a QSMxT configuration file; `selected`: only the chosen algorithms' tables. */

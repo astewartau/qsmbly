@@ -12,7 +12,8 @@
 //! Each export is a thin wrapper around a function of the same name without the `_wasm` suffix,
 //! which returns its error as a `String` so it can be tested off wasm.
 
-use qsmxt_engine::pipeline_graph::pipeline_graph;
+use qsmxt_engine::pipeline_graph::{pipeline_graph, pipeline_graph_after, pipeline_graph_on};
+use qsmxt_engine::record::RunRecord;
 use qsmxt_engine::scan::{RunMetadata, ScanFacts};
 use qsmxt_engine::schema::{self, ViewFacts};
 use qsmxt_engine::store::Item;
@@ -326,6 +327,70 @@ pub fn methods_structured_wasm(config_json: &str, facts_json: &str) -> Result<St
     methods(config_json, facts_json).map_err(js_err)
 }
 
+fn parse_record(record_json: &str) -> Result<RunRecord, String> {
+    serde_json::from_str(record_json).map_err(|e| format!("the run record is not valid: {e}"))
+}
+
+/// The pipeline a run of `config` on the scan `facts` describes took, as `record` (what
+/// `Engine.run` returned) says: [`graph`]'s JSON with each box's `run` (`{ state, decisions }`:
+/// `computed`, `cached` or `skipped`, and what the step decided, each `{ topic, choice, reason,
+/// detail }`), and `differs`: whether it differs from the planned graph (a box or arrow drawn
+/// differently, or a step that did nothing; reusing the cache is no difference).
+pub fn graph_after(
+    config_json: &str,
+    facts_json: &str,
+    record_json: &str,
+) -> Result<String, String> {
+    let config = parse_config(config_json)?;
+    let facts = parse_facts(facts_json)?;
+    let record = parse_record(record_json)?;
+    let plan = qsmxt_engine::plan::plan(&config, &facts);
+    let planned = pipeline_graph_on(&plan, &config, &facts, record.resampled);
+    let after = pipeline_graph_after(&plan, &config, &facts, &record);
+    let mut value = serde_json::to_value(&after).map_err(|e| e.to_string())?;
+    value["mermaid"] = after.to_mermaid().into();
+    value["differs"] = after.differs_from(&planned).into();
+    Ok(value.to_string())
+}
+
+/// [`graph_after`].
+#[wasm_bindgen]
+pub fn pipeline_graph_after_wasm(
+    config_json: &str,
+    facts_json: &str,
+    record_json: &str,
+) -> Result<String, JsValue> {
+    graph_after(config_json, facts_json, record_json).map_err(js_err)
+}
+
+/// The methods text of a run of `config` on the scan `facts` describes that did what `record`
+/// says (`methods::methods_for_run` for "QSMbly"), in [`methods`]' shape: what was done, including
+/// what the run decided (a supplied mask used, or computed when it could not be).
+pub fn methods_after(
+    config_json: &str,
+    facts_json: &str,
+    record_json: &str,
+) -> Result<String, String> {
+    let config = parse_config(config_json)?;
+    let facts = parse_facts(facts_json)?;
+    let record = parse_record(record_json)?;
+    let plan = qsmxt_engine::plan::plan(&config, &facts);
+    serde_json::to_string(&qsmxt_engine::methods::methods_for_run(
+        &config, &plan, &record, "QSMbly",
+    ))
+    .map_err(|e| e.to_string())
+}
+
+/// [`methods_after`].
+#[wasm_bindgen]
+pub fn methods_for_run_wasm(
+    config_json: &str,
+    facts_json: &str,
+    record_json: &str,
+) -> Result<String, JsValue> {
+    methods_after(config_json, facts_json, record_json).map_err(js_err)
+}
+
 /// What the item kept under `key` is (`Item::meta`, with its `key` and serialised `item`):
 /// `{ key, item, label, units, kind, bids_name, published, echo, coil }`; `None` for a key that
 /// names no item.
@@ -546,5 +611,208 @@ mod tests {
         let phase: Value = serde_json::from_str(&item_meta("AcquiredPhase(3)").unwrap()).unwrap();
         assert_eq!(phase["echo"], 3);
         assert!(item_meta("NoSuchItem").is_none());
+    }
+
+    /// A scan in memory: a sphere of tissue in a 16³ box at 1 mm, three echoes, a smooth local
+    /// field inside it wrapped into the phase, a magnitude bright inside and dark outside.
+    fn phantom() -> (
+        qsmxt_engine::scan::ScanFacts,
+        qsmxt_engine::store::MemoryStore,
+    ) {
+        use qsmxt_engine::observe::VolumeData;
+        use qsmxt_engine::store::{Header, MemoryStore};
+        const N: usize = 16;
+        let tes = [0.005, 0.010, 0.015];
+        let mut affine = [0.0; 16];
+        for i in 0..4 {
+            affine[5 * i] = 1.0;
+        }
+        let header = Header {
+            dims: (N, N, N),
+            voxel_size: (1.0, 1.0, 1.0),
+            affine,
+            sidecar: None,
+        };
+        let mut store = MemoryStore::new(header, json!("phantom-1"));
+        let c = (N as f64 - 1.0) / 2.0;
+        let (mut field_hz, mut magnitude) = (vec![0.0; N * N * N], vec![0.0; N * N * N]);
+        for z in 0..N {
+            for y in 0..N {
+                for x in 0..N {
+                    let i = x + y * N + z * N * N;
+                    let (dx, dy, dz) = (x as f64 - c, y as f64 - c, z as f64 - c);
+                    if dx * dx + dy * dy + dz * dz < 36.0 {
+                        field_hz[i] = 3.0 * (dx / 6.0) + 2.0 * (dz / 6.0);
+                        magnitude[i] = 100.0;
+                    } else {
+                        magnitude[i] = 1.0;
+                    }
+                }
+            }
+        }
+        for (e, te) in tes.iter().enumerate() {
+            let phase: Vec<f64> = field_hz
+                .iter()
+                .map(|f| {
+                    let p = 2.0 * std::f64::consts::PI * f * te;
+                    (p + std::f64::consts::PI).rem_euclid(2.0 * std::f64::consts::PI)
+                        - std::f64::consts::PI
+                })
+                .collect();
+            store.insert(Item::AcquiredPhase(e + 1), VolumeData::Real(phase));
+            store.insert(
+                Item::AcquiredMagnitude(e + 1),
+                VolumeData::Real(magnitude.clone()),
+            );
+        }
+        let facts: ScanFacts = serde_json::from_value(json!({
+            "dims": [N, N, N], "n_echoes": 3, "echo_times": tes, "has_magnitude": true,
+            "n_coils": 1, "real_imaginary": false, "field_strength": 3.0, "b0_dir": [0.0, 0.0, 1.0],
+            "mese_echo_times": null, "custom_mask": false, "custom_dseg": false, "custom_qsm": false,
+            "custom_r2": false, "custom_r2prime": false,
+        }))
+        .unwrap();
+        (facts, store)
+    }
+
+    /// Run `config` on the phantom in memory, as `Engine.run` does: the record's JSON. With
+    /// `QSMBLY_WRITE_RUN_FIXTURES` set, `js/next/fixtures/<name>` gets the recorded run the page's
+    /// tests show, on the example scan (`facts` as the example's, `custom_mask` from `facts`):
+    /// `{ config, facts, record, graph, methods }`, the last two as the bindings answer them.
+    fn recorded_run(
+        name: &str,
+        config: &PipelineConfig,
+        facts: &ScanFacts,
+        store: &mut qsmxt_engine::store::MemoryStore,
+    ) -> String {
+        let plan = qsmxt_engine::plan::plan(config, facts);
+        let record = qsmxt_engine::run::run(&plan, config, facts, store, &mut ()).unwrap();
+        let json = serde_json::to_string(&record).unwrap();
+        if std::env::var_os("QSMBLY_WRITE_RUN_FIXTURES").is_some() {
+            let mut example: Value = serde_json::from_str(&example_facts()).unwrap();
+            example["custom_mask"] = facts.custom_mask.into();
+            let (c, f) = (config.to_json().unwrap(), example.to_string());
+            let fixture = json!({
+                "config": serde_json::from_str::<Value>(&c).unwrap(),
+                "facts": example,
+                "record": record,
+                "graph": serde_json::from_str::<Value>(&graph_after(&c, &f, &json).unwrap()).unwrap(),
+                "methods": serde_json::from_str::<Value>(&methods_after(&c, &f, &json).unwrap()).unwrap(),
+            });
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../js/next/fixtures")
+                .join(name);
+            std::fs::write(
+                path,
+                format!("{}\n", serde_json::to_string_pretty(&fixture).unwrap()),
+            )
+            .unwrap();
+        }
+        json
+    }
+
+    /// A run in memory with the browser's settings: its record reaches the graph after the run
+    /// (each box with what its step did) and the methods text, as the bindings give them; nothing
+    /// was decided that the plan did not know, so the graph does not differ from the planned one.
+    #[test]
+    fn a_runs_record_draws_the_graph_after_it_and_its_methods() {
+        let (facts, mut store) = phantom();
+        let config = PipelineConfig::browser();
+        let record = recorded_run("run-as-planned.json", &config, &facts, &mut store);
+        let (config_json, facts_json) = (
+            config.to_json().unwrap(),
+            serde_json::to_string(&facts).unwrap(),
+        );
+        let after: Value =
+            serde_json::from_str(&graph_after(&config_json, &facts_json, &record).unwrap())
+                .unwrap();
+        assert_eq!(after["differs"], false);
+        let nodes = after["nodes"].as_array().unwrap();
+        assert!(
+            nodes.iter().all(|n| n["run"]["state"] == "computed"),
+            "{nodes:?}"
+        );
+        assert!(after["mermaid"].as_str().unwrap().contains("computed"));
+        let methods = methods_after(&config_json, &facts_json, &record).unwrap();
+        assert_eq!(methods, super::methods(&config_json, &facts_json).unwrap());
+        // The record fits the example's plan too, which the page's tests show it on.
+        let example: Vec<Value> = serde_json::from_str::<Value>(
+            &super::graph(&browser(), &example_facts(), None).unwrap(),
+        )
+        .unwrap()["nodes"]
+            .as_array()
+            .unwrap()
+            .clone();
+        // (Without its grid, the return to the acquired grid is drawn conditional; the run was not
+        // resampled.)
+        let ids = |nodes: &[Value]| {
+            nodes
+                .iter()
+                .map(|n| n["id"].clone())
+                .filter(|id| id != "output_space")
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(nodes), ids(&example));
+    }
+
+    /// A supplied mask that cannot be brought onto the run's grid is computed instead: the graph
+    /// after the run differs from the planned one (the mask is drawn computed from the echoes,
+    /// with the reason on its box), and the methods text describes the recipe that ran.
+    #[test]
+    fn a_supplied_mask_the_run_could_not_use_shows_in_the_graph_and_the_methods() {
+        use qsmxt_engine::store::Supplied;
+        let (mut facts, mut store) = phantom();
+        let mut config = PipelineConfig::browser();
+        config.masking.custom_mask_tool = Some("qsmbly".into());
+        facts.custom_mask = true;
+        let mut far = [0.0; 16];
+        for i in 0..4 {
+            far[5 * i] = 1.0;
+        }
+        far[3] = 1000.0;
+        store.supply_mask(Supplied::Found {
+            origin: "drawn mask".into(),
+            data: vec![1.0; 8],
+            dims: (2, 2, 2),
+            affine: far,
+        });
+        let record = recorded_run("run-mask-computed.json", &config, &facts, &mut store);
+        let (config_json, facts_json) = (
+            config.to_json().unwrap(),
+            serde_json::to_string(&facts).unwrap(),
+        );
+        let after: Value =
+            serde_json::from_str(&graph_after(&config_json, &facts_json, &record).unwrap())
+                .unwrap();
+        assert_eq!(after["differs"], true);
+        let mask = after["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["id"] == "mask")
+            .unwrap()
+            .clone();
+        assert_eq!(mask["run"]["decisions"][0]["choice"], "computed");
+        assert!(mask["reads"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r == "Phase(1)"));
+        let methods: Value =
+            serde_json::from_str(&methods_after(&config_json, &facts_json, &record).unwrap())
+                .unwrap();
+        let text: Vec<&str> = methods["sentences"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s["text"].as_str().unwrap())
+            .collect();
+        assert!(
+            !text.iter().any(|t| t.starts_with("Where available")),
+            "{text:?}"
+        );
+        assert!(super::methods(&config_json, &facts_json)
+            .unwrap()
+            .contains("Where available"));
     }
 }

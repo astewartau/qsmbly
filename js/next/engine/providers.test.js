@@ -19,4 +19,18 @@ describe('the tabs\' providers on the engine', () => {
     expect(calls.map((c) => c[0])).toEqual(['graph', 'methods', 'command', 'toToml', 'fromToml']);
     expect(calls[3][2]).toBe(true);
   });
+
+  test('after a run, given its record, answer with the graph it took and what was done', async () => {
+    const calls = [];
+    const engine = /** @type {any} */ ({
+      graphAfter: async (c, f, r) => { calls.push(['graphAfter', r]); return { nodes: [{ id: 'mask', run: { state: 'cached' } }], edges: [], items: [], two_pass: false, mermaid: 'flowchart TD', differs: true }; },
+      methodsAfter: async (c, f, r) => { calls.push(['methodsAfter', r]); return { sentences: [], references: [] }; },
+    });
+    const p = engineProviders(engine);
+    expect(await p.graph({}, /** @type {any} */ ({}), '{"steps":[]}')).toEqual({
+      graph: { nodes: [{ id: 'mask', run: { state: 'cached' } }], edges: [], items: [], two_pass: false }, mermaid: 'flowchart TD', differs: true,
+    });
+    expect(await p.methods({}, /** @type {any} */ ({}), '{"steps":[]}')).toEqual({ methods: { sentences: [], references: [] } });
+    expect(calls).toEqual([['graphAfter', '{"steps":[]}'], ['methodsAfter', '{"steps":[]}']]);
+  });
 });
