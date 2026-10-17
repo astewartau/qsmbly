@@ -94,6 +94,7 @@ export function Viewer({ volume, overlay = null, drawing = null, emptyText = 'No
   const [error, setError] = useState('');
   const [view, setView] = useState('multiplanar');
   const [range, setRange] = useState(/** @type {[number, number] | null} */ (null));
+  const crosshair = useRef(/** @type {number | null} */ (null));
 
   // Load the volume; a newer volume supersedes one still loading.
   useEffect(() => {
@@ -156,6 +157,9 @@ export function Viewer({ volume, overlay = null, drawing = null, emptyText = 'No
       const image = await NVImage.new(bytes.buffer, 'drawing.nii');
       if (done) return;
       n.loadDrawing(image);
+      // The crosshair would hide the brush strokes.
+      crosshair.current = n.opts.crosshairWidth;
+      n.opts.crosshairWidth = 0;
       n.setDrawingEnabled(true);
       n.setDrawOpacity(0.5);
       drawing.onCapture(() => drawnVoxels(n));
@@ -168,6 +172,8 @@ export function Viewer({ volume, overlay = null, drawing = null, emptyText = 'No
       drawing.onCapture(null);
       n.setDrawingEnabled(false);
       n.closeDrawing();
+      if (crosshair.current != null) n.opts.crosshairWidth = crosshair.current;
+      n.drawScene();
     };
   }, [drawingOn, drawing?.mask, volume?.key]);
   useEffect(() => {

@@ -12,7 +12,7 @@ import { MaskEditor } from './components/MaskEditor.js';
 import { createSession } from './store/session.js';
 import { VolumeStore } from './store/volumes.js';
 import {
-  createMaskPreview, recipeKey, slowSteps, PREVIEW_MASK, PREVIEW_INPUT, SUPPLIED_MASK, EDITED_NAME,
+  createMaskPreview, slowSteps, PREVIEW_MASK, PREVIEW_INPUT, SUPPLIED_MASK, EDITED_NAME,
 } from './mask-preview.js';
 import { suppliedMaskEntry, usesSuppliedMask, sameGrid } from './supplied-mask.js';
 import { itemMeta } from './items.js';

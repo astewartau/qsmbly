@@ -12,6 +12,17 @@
 import { gzip, gunzip, isGzip, parseNifti } from './nifti.js';
 import { SUPPLIED_TOOL } from './schema.js';
 import { SUPPLIED_MASK, CUSTOM_MASK_PATH } from './mask-preview.js';
+import { outputPrefix } from './inputs.js';
+
+/**
+ * The run's BIDS name, as the page names its outputs (`outputPrefix`), or `sub-1` for a scan
+ * whose file names give none.
+ * @param {Session} session
+ */
+export function runName(session) {
+  const prefix = outputPrefix(session.files.peek());
+  return prefix.startsWith('sub-') ? prefix : 'sub-1';
+}
 
 /** The scan's image a supplied mask is checked against: the first echo's magnitude, else its phase. */
 export const REFERENCE_KEYS = ['AcquiredMagnitude(1)', 'AcquiredPhase(1)'];

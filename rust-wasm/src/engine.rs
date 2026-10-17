@@ -16,10 +16,10 @@ use std::cell::RefCell;
 
 use js_sys::{Float32Array, Float64Array, Function, Object, Reflect, Uint8Array};
 use qsmxt_engine::inputs::{ScanInputs, ScanReport};
+use qsmxt_engine::masking::MaskSection;
 use qsmxt_engine::observe::{Observer, StageEvent, VolumeData};
 use qsmxt_engine::qsm_core;
 use qsmxt_engine::qsm_core::pipeline::VolumeRef;
-use qsmxt_engine::masking::MaskSection;
 use qsmxt_engine::scan::{QsmSidecar, RunMetadata, ScanFacts};
 use qsmxt_engine::stages::mask::{MaskInputs, Upto};
 use qsmxt_engine::store::{Geometry, Header, Item, MemoryStore, Recorded, Supplied, Volumes};
@@ -817,14 +817,29 @@ impl Engine {
         let (store, facts) = (&mut self.store, &self.facts);
         let preview = logging_to(sink, || {
             qsmxt_engine::run::preview_mask(
-                &plan, &config, facts, store, &mut relay, &mut inputs.inner, &sections, upto,
+                &plan,
+                &config,
+                facts,
+                store,
+                &mut relay,
+                &mut inputs.inner,
+                &sections,
+                upto,
             )
             .map_err(|e| engine_error(&e))
         })?;
         let out = Object::new();
         let single: Vec<f32> = preview.image.iter().map(|&v| v as f32).collect();
-        Reflect::set(&out, &"mask".into(), &Uint8Array::from(preview.mask.as_slice()))?;
-        Reflect::set(&out, &"image".into(), &Float32Array::from(single.as_slice()))?;
+        Reflect::set(
+            &out,
+            &"mask".into(),
+            &Uint8Array::from(preview.mask.as_slice()),
+        )?;
+        Reflect::set(
+            &out,
+            &"image".into(),
+            &Float32Array::from(single.as_slice()),
+        )?;
         Reflect::set(&out, &"input".into(), &preview.input.to_string().into())?;
         Reflect::set(&out, &"otsu".into(), &preview.otsu.into())?;
         Reflect::set(&out, &"voxels".into(), &(preview.voxels as f64).into())?;

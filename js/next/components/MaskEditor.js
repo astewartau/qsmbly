@@ -36,7 +36,7 @@ import { SettingRow, sectionRows } from './Settings.js';
 import { SUPPLIED_TOOL } from '../schema.js';
 import { Icon } from './icons.js';
 import { slowSteps, SUPPLIED_MASK, PREVIEW_MASK, CUSTOM_MASK_PATH, EDITED_NAME } from '../mask-preview.js';
-import { suppliedMaskEntry, repairSuppliedMask, sameGrid, REFERENCE_KEYS } from '../supplied-mask.js';
+import { suppliedMaskEntry, repairSuppliedMask, sameGrid, runName, REFERENCE_KEYS } from '../supplied-mask.js';
 
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
@@ -471,7 +471,7 @@ function SuppliedMask({ session, store, engine }) {
   };
   const download = async () => {
     try {
-      const file = await suppliedMaskEntry({ session, store, engine, run: 'sub-1' });
+      const file = await suppliedMaskEntry({ session, store, engine, run: runName(session) });
       if (!file) return;
       setPath(file.path);
       const url = URL.createObjectURL(new Blob([/** @type {BlobPart} */ (file.bytes)], { type: 'application/gzip' }));
