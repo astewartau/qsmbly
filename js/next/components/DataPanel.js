@@ -252,7 +252,11 @@ function TypedFact({ fact, typed, loader, disabled }) {
     ? fact.value.map(formatMs).join(', ')
     : fact.name === 'b0_dir' ? fact.value.join(', ') : String(fact.value);
   const unit = fact.name === 'echo_times' ? 'ms' : fact.name === 'field_strength' ? 'T' : '';
+  // What is being typed, kept until it is committed: the page re-renders while the engine answers
+  // (the plan, the dry run), and that must not wipe it.
+  const [draft, setDraft] = useState(/** @type {string | null} */ (null));
   const commit = (text) => {
+    setDraft(null);
     const t = text.trim();
     if (t === shown) return;
     if (!t) return loader.override(/** @type {any} */ (fact.name), null);
@@ -266,8 +270,8 @@ function TypedFact({ fact, typed, loader, disabled }) {
   return html`
     <span class="typed-fact">
       <input type="text" class=${fact.name === 'echo_times' ? 'txt wide' : 'txt'} aria-label=${fact.label}
-        placeholder=${fact.name === 'b0_dir' ? 'from the image' : 'type it'} value=${shown} disabled=${disabled}
-        data-testid=${`fact-${fact.name}`}
+        placeholder=${fact.name === 'b0_dir' ? 'from the image' : 'type it'} value=${draft ?? shown} disabled=${disabled}
+        data-testid=${`fact-${fact.name}`} onInput=${(e) => setDraft(e.currentTarget.value)}
         onChange=${(e) => commit(e.currentTarget.value)} onKeyDown=${(e) => { if (e.key === 'Enter') commit(e.currentTarget.value); }} />
       <span class="unit">${unit}</span>
       ${typed && html`<button type="button" class="link" disabled=${disabled} onClick=${() => loader.override(/** @type {any} */ (fact.name), null)}>Use the files'</button>`}
