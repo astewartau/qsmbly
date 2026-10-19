@@ -34,6 +34,8 @@ import { installUndoKeys } from '../shortcuts.js';
 import { Outputs, hiddenKey } from './Outputs.js';
 import { decodeForViewer } from '../scan.js';
 import { Compare } from './Compare.js';
+import { ReportView } from './ReportView.js';
+import { reportsOf } from '../reports.js';
 
 export const THEME_STORAGE_KEY = 'qsmbly.next.theme';
 const THEMES = /** @type {const} */ (['auto', 'light', 'dark']);
@@ -189,10 +191,13 @@ function ViewerPane({ session, store, workspace }) {
   const empty = session.loaded.value
     ? (keys.length ? 'Choose an output below.' : 'Run the pipeline to see its outputs here.')
     : 'Load a scan in the Data step, or try the example.';
+  // A table or report in view (the per-structure statistics) is shown in the viewer's place.
+  const report = !past && viewing ? reportsOf(store.recorded.value).find((r) => r.key === viewing) : undefined;
   return html`
     <div class="viewer-body">
       ${comparing && history
         ? html`<${Compare} history=${history} />`
+        : report ? html`<${ReportView} report=${report} />`
         : html`<${Viewer} volume=${volume} overlay=${drawing ? null : overlay} drawing=${drawing} emptyText=${empty}
             title=${past && pastEntry ? `${itemMeta(/** @type {string} */ (viewing)).label} (run ${past.id})` : undefined} />`}
       <${Outputs} session=${session} store=${store} runner=${workspace.runner} engine=${workspace.engine} history=${history} />

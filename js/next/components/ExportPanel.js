@@ -19,7 +19,7 @@ import { html } from '../html.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatCommand } from '../exports.js';
 import { methodsMarkdown, methodsPlainText, methodsParagraph, referenceRuns } from '../methods.js';
-import { publishedFiles, bundleEntries, bundleZip, bundleContributors, niftiOf } from '../bundle.js';
+import { publishedFiles, bundleEntries, bundleZip, bundleContributors, outputFile } from '../bundle.js';
 import { itemMeta } from '../items.js';
 import { runRecord } from './GraphTab.js';
 import { useProvided, useCopy, saveFile } from './provided.js';
@@ -240,7 +240,7 @@ function FilesExport({ session, store, engine, providers, methods, command, ranM
       ]);
       const entries = await bundleEntries({
         command, methods: methodsMarkdown(methods), toml, mermaid, ranMermaid, run: files.value.run, files: chosen,
-        nifti: (key) => niftiOf(engine, store, key), extra,
+        nifti: (key) => outputFile(engine, store, key), extra,
       });
       const blob = await bundleZip(files.value.run, entries);
       saveBlob(`qsmbly-${files.value.run || 'run'}.zip`, blob);

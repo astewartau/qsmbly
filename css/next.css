@@ -543,3 +543,12 @@ label.btn.disabled { opacity: 0.45; pointer-events: none; }
 }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .btn.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+
+/* A run's table or report, shown in the viewer's place (ReportView.js). */
+.report-view { display: flex; flex-direction: column; min-height: 0; }
+.report { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.report-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 6px 8px; }
+.report-scroll { overflow: auto; flex: 1; min-height: 0; padding: 0 8px 8px; }
+.report-scroll td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.stats-table th button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.report-json { overflow: auto; padding: 8px; font-size: 12px; margin: 0; }
