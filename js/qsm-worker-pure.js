@@ -7,6 +7,7 @@
 
 // Import utilities - no fallbacks
 import { ppmFieldToPhase } from './worker/utils/PhaseUtils.js';
+import { describeFailure } from './next/engine/engine-call.js';
 import { createThresholdMask } from './worker/utils/MaskUtils.js';
 import { resolveTgvParams } from './worker/utils/TgvParams.js';
 import { clampTileConfig, MAX_WASM_PATCH_EDGE } from './worker/utils/DlTiling.js';
@@ -389,9 +390,17 @@ async function runEnginePipeline(data, outputs = { qsm: true }) {
       const geometry = engine.geometry(key);
       if (geometry) show(key, JSON.parse(geometry));
     }
-  } finally {
-    engine.free();
+  } catch (e) {
+    // A call that died inside the module (a panic) leaves the engine borrowed, and freeing it
+    // then throws about that instead: report what happened (js/next/engine/engine-call.js).
+    try {
+      engine.free();
+    } catch {
+      // left allocated
+    }
+    throw new Error(describeFailure(e, { mod }).message);
   }
+  engine.free();
   postLog(`Volumes held during the run: ${(volumes.bytes() / 1e6).toFixed(0)} MB`);
 
   postProgress(1.0, 'Pipeline complete!');

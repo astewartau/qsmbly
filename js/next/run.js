@@ -254,6 +254,15 @@ export function createRunner({ session, store, createWorker, registry, now = () 
           return;
         }
         onMessage(runId, m);
+        // The job died inside the WASM module: its state is not to be trusted, so the next job
+        // gets a fresh worker.
+        if (m.type === 'failed' && m.fatal) {
+          mine.terminate();
+          if (w === mine) {
+            w = null;
+            ready = null;
+          }
+        }
       };
       mine.onerror = (event) => {
         const message = `The run worker failed: ${event?.message ?? 'unknown error'}`;

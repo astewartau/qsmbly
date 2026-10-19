@@ -14,8 +14,13 @@
  * Protocol: `{ type: 'run', job }` in (protocol.js `RunJob`); `RunMessage`s out, ending with
  * `done` or `failed`. `{ type: 'preview', job }` (`PreviewJob`) previews a mask recipe instead,
  * ending with `previewed` or `failed`. One job at a time.
+ *
+ * A job that dies inside the WASM module (a panic, or memory it cannot have) is reported with the
+ * panic's message or the heap's size (engine-call.js), as a `fatal` failure: the module is not to
+ * be trusted after it, so the page replaces this worker.
  */
 import { workerVolumes } from './run-volumes.js';
+import { reporting, withEngine } from './engine-call.js';
 
 /** @typedef {import('../protocol.js').RunJob} RunJob */
 /** @typedef {import('../protocol.js').RunMessage} RunMessage */
@@ -117,15 +122,20 @@ async function engineFor(job) {
   return { mod, memory, volumes, engine };
 }
 
+/** The step the engine is in, for a failure that names none (a trap names nothing). */
+let current = /** @type {string | null} */ (null);
+
 /**
  * What the engine reports, posted to the page.
  * @param {ReturnType<typeof workerVolumes>} volumes
  * @param {WebAssembly.Memory | undefined} memory
  */
 function observer(volumes, memory) {
-  return {
+  current = null;
+  return reporting({
     stage(step, algorithm, event, text) {
-      volumes.setStep(event === 'finished' ? null : step);
+      current = event === 'finished' ? null : step;
+      volumes.setStep(current);
       // The heap only grows: its size when a step finishes is the run's high-water mark so far.
       post({ type: 'stage', step, algorithm, event, text, heap: event === 'finished' ? memory?.buffer.byteLength ?? null : null });
     },
@@ -138,19 +148,18 @@ function observer(volumes, memory) {
     output(key) {
       post({ type: 'output', key });
     },
-  };
+  }, (method, e) => post({ type: 'log', level: 'ERROR', message: `The page's ${method}() callback failed: ${e instanceof Error ? e.message : e}`, step: current }));
 }
 
 /** @param {RunJob} job */
 async function run(job) {
-  const { memory, volumes, engine } = await engineFor(job);
-  try {
-    const record = engine.run(JSON.stringify(job.config), observer(volumes, memory));
-    // The WASM heap only grows, so its size after the run is the run's high-water mark.
-    post({ type: 'done', record: typeof record === 'string' ? record : null, grid: engine.grid() ?? null, heap: memory?.buffer.byteLength ?? null });
-  } finally {
-    engine.free();
-  }
+  const { mod, memory, volumes, engine } = await engineFor(job);
+  const done = withEngine(engine, (e) => {
+    const record = e.run(JSON.stringify(job.config), observer(volumes, memory));
+    return { record: typeof record === 'string' ? record : null, grid: e.grid() ?? null };
+  }, { mod, memory, get step() { return current; } });
+  // The WASM heap only grows, so its size after the run is the run's high-water mark.
+  post({ type: 'done', ...done, heap: memory?.buffer.byteLength ?? null });
 }
 
 /**
@@ -167,18 +176,17 @@ const previewInputs = new Map();
  */
 async function preview(job) {
   const { mod, volumes, engine, memory } = await engineFor(job);
-  try {
-    if (!previewInputs.has(mod)) previewInputs.set(mod, new mod.MaskPreviewInputs());
-    const sections = job.sections ? JSON.stringify(job.sections) : undefined;
-    const out = engine.previewMask(JSON.stringify(job.config), sections, JSON.stringify(job.upto), previewInputs.get(mod), observer(volumes, memory));
-    const mask = new Uint8Array(allocate(out.mask.length));
-    mask.set(out.mask);
-    const image = new Float32Array(allocate(out.image.length * 4));
-    image.set(out.image);
-    post({ type: 'previewed', mask, image, input: out.input, otsu: out.otsu, voxels: out.voxels, grid: engine.grid() ?? null });
-  } finally {
-    engine.free();
-  }
+  if (!previewInputs.has(mod)) previewInputs.set(mod, new mod.MaskPreviewInputs());
+  const sections = job.sections ? JSON.stringify(job.sections) : undefined;
+  const { out, grid } = withEngine(engine, (e) => ({
+    out: e.previewMask(JSON.stringify(job.config), sections, JSON.stringify(job.upto), previewInputs.get(mod), observer(volumes, memory)),
+    grid: e.grid() ?? null,
+  }), { mod, memory, get step() { return current; } });
+  const mask = new Uint8Array(allocate(out.mask.length));
+  mask.set(out.mask);
+  const image = new Float32Array(allocate(out.image.length * 4));
+  image.set(out.image);
+  post({ type: 'previewed', mask, image, input: out.input, otsu: out.otsu, voxels: out.voxels, grid });
 }
 
 base.then(
@@ -204,6 +212,7 @@ self.onmessage = async (/** @type {MessageEvent} */ event) => {
       message: err instanceof Error ? err.message : String(err),
       kind: err?.kind ?? null,
       step: err?.step ?? null,
+      ...(err?.fatal ? { fatal: true } : {}),
     });
   } finally {
     busy = false;
