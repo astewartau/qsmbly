@@ -274,8 +274,9 @@ input[type='checkbox'] { width: 14px; height: 14px; margin: 0; accent-color: var
 
 /* Pipeline graph */
 .graph-tab { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; container-type: inline-size; }
-/* The graph with the methods text below it, or beside it where the pane is wide enough. */
-.graph-body { display: grid; grid-template-rows: auto auto; align-content: start; min-height: 0; overflow: auto; }
+/* The graph with the methods text below it, or beside it where the pane is wide enough. Below
+   each other, both keep their full heights and scroll together (auto rows let the graph shrink to nothing). */
+.graph-body { display: grid; grid-template-rows: max-content max-content; align-content: start; min-height: 0; overflow: auto; }
 .graph-scroll { overflow-x: auto; min-height: 0; padding: 4px 0 16px; }
 @container (min-width: 900px) {
   .graph-body { grid-template-columns: minmax(0, 1fr) minmax(300px, 36%); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
