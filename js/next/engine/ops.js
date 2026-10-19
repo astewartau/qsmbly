@@ -36,7 +36,7 @@ export function engineOps(wasm) {
     /** The settings schema (`schema_json()`, with `mask`). */
     schema: () => JSON.parse(call(wasm.schema_json_wasm)),
     /** The browser profile: the session's defaults. @returns {PipelineConfig} */
-    browserConfig: () => { const c = JSON.parse(call(wasm.browser_config_wasm)); c.inversion.tile_size = 48; return c; },
+    browserConfig: () => JSON.parse(call(wasm.browser_config_wasm)),
     /** The mask recipe's presets, step defaults and reliable mask, as the browser runs them. @returns {MaskDefaults} */
     maskDefaults: () => JSON.parse(call(wasm.browser_mask_defaults_wasm)),
     /** @param {PipelineConfig} config @param {ScanFacts | null} f @returns {SettingView[]} */
