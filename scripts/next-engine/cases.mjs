@@ -37,6 +37,9 @@ export const CASES = [
   { name: 'motion reference echo 3', edits: [['motion_correction.reference', '3']] },
   // Optional outputs
   { name: 'χ-separation', edits: [['pipeline.do_chi_separation', true]] },
+  ...['decompose', 'chi-sep-ilsqr', 'chi-sep-medi', 'wavesep', 'hc-chisep', 'susep-net', 'chi-sepnet'].map((algorithm) => (
+    { name: `χ-separation by ${algorithm}`, edits: [['pipeline.do_chi_separation', true], ['separation.algorithm', algorithm]] })),
+  { name: 'χ-separation by χ-sepnet with a supplied R2′', edits: [['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sepnet'], ['separation.custom_r2prime_tool', 'qsmbly']], scan: { custom_r2prime: true } },
   { name: 'SWI', edits: [['pipeline.do_swi', true]] },
   { name: 'SWI without magnitude', edits: [['pipeline.do_swi', true]], scan: { has_magnitude: false } },
   { name: 'SWI and SMWI', edits: [['pipeline.do_swi', true], ['pipeline.do_smwi', true]] },

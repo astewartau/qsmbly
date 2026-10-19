@@ -41,6 +41,9 @@ async function idbPut(key, value) {
       tx.objectStore(STORE).put(value, key);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
+      // A write over the storage quota aborts the transaction, which may fire only `abort`: without
+      // this the download never finished (seen with SUSEP-Net's 206 MB in a fresh profile).
+      tx.onabort = () => reject(tx.error ?? new Error('the cache write was aborted'));
     });
   } finally { db.close(); }
 }

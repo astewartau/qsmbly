@@ -166,3 +166,20 @@ test('uncombined coils: each image given its coil, combined by the engine', asyn
   await expect(page.locator('.output-chip[data-key="Chi"]')).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('χ-separation (R2*-QSM, the fastest method): its three maps, drawn one-sided, named as qsmxt names them', async ({ page }) => {
+  test.setTimeout(5 * 60_000);
+  const errors = watchErrors(page);
+  await run(page, [['inversion.algorithm', 'tkd'], ['pipeline.do_chi_separation', true], ['separation.algorithm', 'r2star-qsm']]);
+  for (const key of ['SeparatedChi(Paramagnetic)', 'SeparatedChi(Diamagnetic)', 'SeparatedTotalChi', 'R2star']) {
+    await expect(page.locator(`.output-chip[data-key="${key}"]`)).toBeVisible();
+  }
+  const viewer = page.getByRole('region', { name: 'Viewer' });
+  await page.locator('.output-chip[data-key="SeparatedChi(Diamagnetic)"]').click();
+  await expect(viewer).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
+  await expect(viewer.locator('.viewer-range')).toContainText(/-0\.10 … 0\.0 ppm/);
+  expect(await publishedPaths(page)).toEqual(expect.arrayContaining([
+    'sub-phantom/anat/sub-phantom_desc-paramagnetic_Chimap.nii', 'sub-phantom/anat/sub-phantom_desc-diamagnetic_Chimap.nii',
+  ]));
+  expect(errors).toEqual([]);
+});
