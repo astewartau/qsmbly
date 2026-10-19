@@ -337,8 +337,8 @@
       "cg_tol": 0.05
     },
     "chi_sep_medi": {
-      "lambda_para": 1000,
-      "lambda_dia": 1000,
+      "lambda_para": 30,
+      "lambda_dia": 30,
       "lambda_cpl": 100,
       "dr_pos": 137,
       "dr_neg": 137,
