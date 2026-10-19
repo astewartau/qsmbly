@@ -14,7 +14,7 @@
  * @property {string} name
  * @property {[string, unknown][]} changes - the config's changes from the browser profile
  * @property {ScanFacts} facts
- * @property {{ hidden: string[], forced: Record<string, string>, errors: Record<string, string> }} view
+ * @property {{ hidden: string[], forced: Record<string, string>, errors: Record<string, string>, warnings?: Record<string, string> }} view
  * @property {Omit<Plan, 'items'> & { items: string[] }} plan - its items by key
  *
  * @typedef {object} RecordedEngine - fixtures/engine-cases.json
@@ -75,6 +75,7 @@ export function recordedEngine(recorded) {
         visible: !hidden.has(path),
         ...(view.forced[path] ? { forced_by: view.forced[path] } : {}),
         ...(view.errors[path] ? { error: view.errors[path] } : {}),
+        ...(view.warnings?.[path] ? { warning: view.warnings[path] } : {}),
       }));
     },
     /** @param {PipelineConfig} config @param {ScanFacts} facts @returns {Plan} */
