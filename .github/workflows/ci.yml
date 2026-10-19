@@ -52,16 +52,56 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The same toolchain build-pages.yml deploys with.
-      - uses: ./.github/actions/setup-wasm-build
+      # The bundle is a function of the Rust crate (its source, Cargo.toml and Cargo.lock, so the
+      # qsmxt-engine pin too), build.sh, the toolchain action and this workflow. When none of
+      # those changed, reuse the bundle a previous run built from the same inputs, and skip the
+      # ~10 min build: a JS-only change goes straight to the round trip and the smoke tests.
+      # Pushes to main always rebuild, so the floating nightly is still built against on every
+      # merge, and they refresh the bundle PRs restore.
+      #
+      # The key is taken once, here: after the build, rust-wasm/ also holds target/ and pkg/, and
+      # hashing it again would give the saved bundle a key no later run looks up.
+      - name: Key the bundle on its inputs
+        id: key
+        run: echo "key=wasm-bundle-${{ hashFiles('rust-wasm/**', 'build.sh', '.github/actions/setup-wasm-build/**', '.github/workflows/ci.yml') }}" >> "$GITHUB_OUTPUT"
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Restore a bundle built from the same inputs
+        id: bundle
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+        uses: actions/cache/restore@v4
         with:
-          workspaces: rust-wasm
+          path: |
+            wasm/
+            rust-wasm/pkg/
+          key: ${{ steps.key.outputs.key }}
+
+      # The same toolchain build-pages.yml deploys with.
+      - if: steps.bundle.outputs.cache-hit != 'true'
+        uses: ./.github/actions/setup-wasm-build
+
+      # No rust-cache here: build.sh rebuilds std (-Z build-std), and rust-cache prunes what is not
+      # in Cargo.lock, std included, so every crate recompiled even on a full cache match while
+      # the job still restored and saved ~250 MB.
 
       # Exactly what a deploy runs: both bundles, threaded, with every feature the site ships.
       - name: Build WASM as deployed
+        if: steps.bundle.outputs.cache-hit != 'true'
         run: ./build.sh --simd
+
+      - name: Keep the bundle for runs with the same inputs
+        if: steps.bundle.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            wasm/
+            rust-wasm/pkg/
+          key: ${{ steps.key.outputs.key }}
+
+      # Node for the steps below, which the toolchain action sets up only when it runs.
+      - if: steps.bundle.outputs.cache-hit == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
 
       # build.sh regenerates js/app/qsm-defaults.js from the freshly built wasm; a diff means the
       # committed copy has drifted from the Rust defaults.
