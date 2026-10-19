@@ -37,6 +37,15 @@ describe('bundle', () => {
     expect(asked.outputs.map((o) => o.key)).toEqual(['Chi', 'BrainMask', 'LocalField(Main)']);
   });
 
+  test('the graph the run took goes beside the run, as qsmxt writes it, only when given', async () => {
+    const parts = { command: '', methods: '', toml: '', mermaid: 'planned', files: [], nifti: async () => new Uint8Array() };
+    const paths = async (extra) => (await bundleEntries({ ...parts, ...extra })).map((e) => e.path);
+    expect(await paths({ run: 'sub-1' })).not.toContain(`${DERIVATIVES}/workflow/sub-1/sub-1_desc-ran_pipeline.mmd`);
+    const entries = await bundleEntries({ ...parts, run: 'sub-1', ranMermaid: 'ran' });
+    expect(entries.find((e) => e.path === `${DERIVATIVES}/pipeline.mmd`)?.bytes).toBe('planned');
+    expect(entries.find((e) => e.path === `${DERIVATIVES}/workflow/sub-1/sub-1_desc-ran_pipeline.mmd`)?.bytes).toBe('ran');
+  });
+
   test('laid out as qsmxt run writes its output directory, under one folder', async () => {
     const files = [
       { key: 'Chi', path: 'sub-1/anat/sub-1_Chimap.nii', sidecar_path: 'sub-1/anat/sub-1_Chimap.json', sidecar: '{\n  "QsmReference": "mean"\n}' },

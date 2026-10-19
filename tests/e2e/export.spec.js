@@ -39,6 +39,7 @@ test('after a run, Export shows the engine\'s methods, command and settings, and
     const record = session.runs.last.record.value;
     const { methods } = await providers.methods(config, facts, record);
     const { mermaid } = await providers.graph(config, facts, record);
+    const planned = await workspace.engine.plannedMermaid(config, facts, store.grid.value);
     const files = await workspace.engine.outputFiles({
       scan_file: session.files.value.find((f) => f.role === 'phase' && f.echo === 1).name,
       facts,
@@ -51,6 +52,7 @@ test('after a run, Export shows the engine\'s methods, command and settings, and
       changed: (await providers.toml(config, 'changed')).toml,
       full: (await providers.toml(config, 'full')).toml,
       mermaid,
+      planned,
       files,
     };
   });
@@ -93,7 +95,9 @@ test('after a run, Export shows the engine\'s methods, command and settings, and
   ];
   expect([...archive.keys()].map((p) => p.slice(root.length + 1))).toEqual(expected);
   expect(text('derivatives/qsmxt/pipeline_config.toml')).toBe(want.full);
-  expect(text('derivatives/qsmxt/pipeline.mmd')).toBe(want.mermaid);
+  // As qsmxt writes it: the graph as planned, on the run's grid (the run took it, so there is no
+  // `desc-ran` one).
+  expect(text('derivatives/qsmxt/pipeline.mmd')).toBe(want.planned);
   expect(text('derivatives/qsmxt/methods.md')).toContain(want.paragraph);
   expect(text('command.txt').replace(/ \\\n\s+/g, ' ').replace(' <output_dir>', '').trim()).toBe(want.command);
   for (const f of want.files.files) {

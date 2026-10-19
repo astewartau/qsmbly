@@ -1,37 +1,95 @@
 #!/usr/bin/env node
-// Checks that the browser's engine answers are QSMxT's: for every config in
-// scripts/next-engine/cases.mjs, what the workspace asks through the bindings (js/next/engine/ops.js
-// on a built bundle) must equal what qsmxt-engine answers natively (scripts/next-engine/main.rs,
-// built against a QSMxT checkout): the config, settings_view, prune_hidden, the plan, the
-// `qsmxt run` command, the TOML and the pipeline graph.
+// Checks that the browser's engine answers are QSMxT's, without running any algorithm: for every
+// config in scripts/next-engine/cases.mjs and every option the settings schema has
+// (scripts/next-engine/options.mjs), what the workspace asks through the bindings
+// (js/next/engine/ops.js on a built bundle) must equal what qsmxt-engine answers natively
+// (scripts/next-engine/main.rs, built against a QSMxT checkout):
+//
+// - the config, settings_view and prune_hidden;
+// - the plan (its steps, their inputs and outputs, models, memory estimate, requirement checks);
+// - the dry run: what each step of a first run would do, and the key it is cached under (the
+//   step's algorithm, the parameters it hands QSM.rs and the settings it reads, hashed);
+// - the published outputs: each one's file name and its sidecar;
+// - the pipeline graph and its Mermaid, the methods text, the `qsmxt run` command and the TOML.
 //
 //   node scripts/next-engine-parity.mjs <qsmxt-checkout> <bundle-dir>
 //
 // <qsmxt-checkout> should be at the commit rust-wasm/Cargo.toml pins (the script says if it is
 // not). <bundle-dir> holds qsm_wasm.js and qsm_wasm_bg.wasm from a build without threads
-// (`wasm-pack build --target web` in rust-wasm/). CARGO_TARGET_DIR is passed through to cargo (by
-// default the temporary crate's own target/, deleted afterwards). Exits 1 on any difference.
+// (`wasm-pack build --target web` in rust-wasm/). The native side is built in a temporary crate
+// (CARGO_TARGET_DIR is passed through to cargo), or, with PARITY_ORACLE_BIN, is that binary, built
+// beforehand with `--build-oracle <qsmxt-checkout> <binary-out>` (CI builds it beside `qsmxt`).
+// Exits 1 on any difference.
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { engineOps } from '../js/next/engine/ops.js';
 import { EXAMPLE_SCAN } from '../js/next/fixtures.js';
 import { CASES } from './next-engine/cases.mjs';
+import { optionCases } from './next-engine/options.mjs';
 
-const [checkout, bundle] = process.argv.slice(2);
-if (!checkout || !bundle || !existsSync(join(checkout, 'crates', 'qsmxt-engine', 'Cargo.toml'))) {
-  console.error('usage: node scripts/next-engine-parity.mjs <qsmxt-checkout> <bundle-dir>');
-  process.exit(2);
-}
 const here = dirname(fileURLToPath(import.meta.url));
+const started = Date.now();
+
+/**
+ * Build the native side against `checkout` in a crate at `crate`: its binary's path. Cargo's
+ * target directory is CARGO_TARGET_DIR, else the crate's own.
+ */
+function buildOracle(checkout, crate) {
+  mkdirSync(crate, { recursive: true });
+  writeFileSync(join(crate, 'Cargo.toml'), `[package]
+name = "qsmbly-engine-parity"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+qsmxt-engine = { path = ${JSON.stringify(resolve(checkout, 'crates', 'qsmxt-engine'))} }
+# As the bindings parse JSON (rust-wasm/Cargo.toml): every float the browser sends arrives exact.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[[bin]]
+name = "oracle"
+path = "main.rs"
+
+[workspace]
+`);
+  copyFileSync(join(here, 'next-engine', 'main.rs'), join(crate, 'main.rs'));
+  if (existsSync(join(checkout, 'Cargo.lock'))) copyFileSync(join(checkout, 'Cargo.lock'), join(crate, 'Cargo.lock'));
+  execFileSync('cargo', ['build', '--release', '--quiet', '--manifest-path', join(crate, 'Cargo.toml')], { stdio: 'inherit' });
+  return join(process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : join(crate, 'target'), 'release', 'oracle');
+}
+
+const isCheckout = (dir) => !!dir && existsSync(join(dir, 'crates', 'qsmxt-engine', 'Cargo.toml'));
+const usage = () => {
+  console.error('usage: node scripts/next-engine-parity.mjs <qsmxt-checkout> <bundle-dir>\n'
+    + '       node scripts/next-engine-parity.mjs --build-oracle <qsmxt-checkout> <binary-out>');
+  process.exit(2);
+};
+if (process.argv[2] === '--build-oracle') {
+  const [checkout, out] = process.argv.slice(3);
+  if (!isCheckout(checkout) || !out) usage();
+  const crate = mkdtempSync(join(tmpdir(), 'qsmbly-engine-parity-'));
+  try {
+    copyFileSync(buildOracle(checkout, crate), resolve(out));
+  } finally {
+    rmSync(crate, { recursive: true, force: true });
+  }
+  console.log(`built ${resolve(out)}`);
+  process.exit(0);
+}
+// The native side is the oracle binary PARITY_ORACLE_BIN names (from --build-oracle at the pin),
+// else built here from <qsmxt-checkout>.
+const [checkout, bundle] = process.argv.slice(2);
+if (!bundle || (!process.env.PARITY_ORACLE_BIN && !isCheckout(checkout))) usage();
 
 // The checkout against the pin.
 const pinned = readFileSync(join(here, '..', 'rust-wasm', 'Cargo.toml'), 'utf8').match(/qsmxt-engine = \{[^}]*rev = "([0-9a-f]+)"/)?.[1];
 let head = '';
 try {
-  head = execFileSync('git', ['-C', checkout, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  if (isCheckout(checkout)) head = execFileSync('git', ['-C', checkout, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 } catch {
   // Not a git checkout: say nothing about the pin.
 }
@@ -43,56 +101,83 @@ await wasm.default({ module_or_path: readFileSync(resolve(bundle, 'qsm_wasm_bg.w
 const engine = engineOps(wasm);
 const scanFacts = engine.scanFacts(EXAMPLE_SCAN.dims, EXAMPLE_SCAN.sidecars, EXAMPLE_SCAN.hasMagnitude);
 const facts = { ...scanFacts, b0_dir: scanFacts.b0_dir ?? EXAMPLE_SCAN.b0Dir };
-const cases = CASES.map((c) => ({ ...c, facts: { ...facts, ...c.scan } }));
+const SCAN_FILE = 'sub-1_echo-1_part-phase_MEGRE.nii';
+
+/** The scan `f` describes as the page holds it: each echo's headers and sidecar, and its volumes' keys. */
+function scanOf(f) {
+  const geometry = { dims: f.dims, voxel_size: [1, 1, 1], affine: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] };
+  const echoes = f.echo_times.map((EchoTime) => ({
+    phase: geometry,
+    magnitude: f.has_magnitude ? geometry : null,
+    sidecar: { EchoTime, MagneticFieldStrength: f.field_strength },
+  }));
+  const held = echoes.flatMap((e, i) => [`AcquiredPhase(${i + 1})`, ...(e.magnitude ? [`AcquiredMagnitude(${i + 1})`] : [])]);
+  return { inputs: { echoes, overrides: {} }, held };
+}
+
+/** Each item the plan's steps write, with the step that writes it last, as a run would hold them. */
+function heldAfter(plan) {
+  const last = new Map();
+  for (const step of plan.steps) {
+    for (const key of step.outputs) {
+      last.delete(key);
+      last.set(key, step.name);
+    }
+  }
+  return [...last].map(([key, step]) => ({ key, step, annotations: null }));
+}
+
+/** Keep `fn`'s answer, or the engine's reason it has none. */
+const answer = (fn) => {
+  try {
+    return { ok: fn() };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+};
+
+const all = [...CASES, ...optionCases(engine, facts)];
+const cases = all.map((c) => {
+  const f = { ...facts, ...c.scan };
+  return { ...c, facts: f, ...scanOf(f), scan_file: SCAN_FILE };
+});
 const browserConfig = engine.browserConfig();
-const browserSide = cases.map(({ name, edits, facts: f }) => {
+const browserSide = cases.map(({ name, edits, facts: f, inputs, held }) => {
   try {
     const config = edits.reduce((c, [path, value]) => engine.set(c, path, value), browserConfig);
+    const plan = engine.plan(config, f);
     return {
       name,
       config,
       view: engine.settingsView(config, f),
       pruned: engine.pruneHidden(config, f),
-      plan: engine.plan(config, f),
+      plan,
       command: engine.command(config),
       toml: engine.toToml(config, true),
       graph: engine.graph(config, f),
+      methods: engine.methods(config, f),
+      keys: answer(() => engine.planState(config, f, inputs, 'parity', null, held)),
+      outputs: engine.outputFiles({ scan_file: SCAN_FILE, facts: f, outputs: heldAfter(plan) }),
     };
   } catch (e) {
     return { name, error: e instanceof Error ? e.message : String(e) };
   }
 });
+// The versions the bindings stamp on sidecars, for the oracle to stamp the same.
+const stamped = browserSide.flatMap((c) => c.outputs?.files ?? []).find((f) => f.sidecar);
+const sidecar = stamped ? JSON.parse(stamped.sidecar) : {};
+const versions = { qsmxt: sidecar.QSMxTVersion ?? '', qsm_rs: sidecar.QSMrsVersion ?? '' };
+const browserSeconds = (Date.now() - started) / 1000;
 
 // QSMxT's answers, natively.
-const crate = mkdtempSync(join(tmpdir(), 'qsmbly-engine-parity-'));
+const request = JSON.stringify({ versions, cases: cases.map(({ name, edits, facts: f, inputs, held, scan_file }) => ({ name, edits, facts: f, inputs, held, scan_file })) });
+const crate = process.env.PARITY_ORACLE_BIN ? null : mkdtempSync(join(tmpdir(), 'qsmbly-engine-parity-'));
 let native;
 try {
-  writeFileSync(join(crate, 'Cargo.toml'), `[package]
-name = "qsmbly-engine-parity"
-version = "0.0.0"
-edition = "2021"
-publish = false
-
-[dependencies]
-qsmxt-engine = { path = ${JSON.stringify(resolve(checkout, 'crates', 'qsmxt-engine'))} }
-serde_json = "1"
-
-[[bin]]
-name = "oracle"
-path = "main.rs"
-
-[workspace]
-`);
-  copyFileSync(join(here, 'next-engine', 'main.rs'), join(crate, 'main.rs'));
-  if (existsSync(join(checkout, 'Cargo.lock'))) copyFileSync(join(checkout, 'Cargo.lock'), join(crate, 'Cargo.lock'));
-  native = JSON.parse(execFileSync('cargo', ['run', '--release', '--quiet', '--manifest-path', join(crate, 'Cargo.toml')], {
-    input: JSON.stringify({ cases: cases.map(({ name, edits, facts: f }) => ({ name, edits, facts: f })) }),
-    encoding: 'utf8',
-    maxBuffer: 1 << 30,
-    stdio: ['pipe', 'pipe', 'inherit'],
-  }));
+  const oracle = crate ? buildOracle(checkout, crate) : resolve(/** @type {string} */ (process.env.PARITY_ORACLE_BIN));
+  native = JSON.parse(execFileSync(oracle, [], { input: request, encoding: 'utf8', maxBuffer: 1 << 30, stdio: ['pipe', 'pipe', 'inherit'] }));
 } finally {
-  rmSync(crate, { recursive: true, force: true });
+  if (crate) rmSync(crate, { recursive: true, force: true });
 }
 
 // Compare.
@@ -113,7 +198,7 @@ function difference(a, b, path = '') {
     }
     return null;
   }
-  return JSON.stringify(a) === JSON.stringify(b) ? null : `${path || '.'}: ${JSON.stringify(a)?.slice(0, 120)} vs ${JSON.stringify(b)?.slice(0, 120)}`;
+  return JSON.stringify(a) === JSON.stringify(b) ? null : `${path || '.'}: ${JSON.stringify(a)?.slice(0, 160)} vs ${JSON.stringify(b)?.slice(0, 160)}`;
 }
 
 const failures = [];
@@ -123,7 +208,7 @@ const check = (what, a, b) => {
 };
 check('schema', engine.schema(), native.schema);
 check('browser profile', browserConfig, native.browser);
-const answers = ['config', 'view', 'pruned', 'plan', 'command', 'toml', 'graph'];
+const answers = ['config', 'view', 'pruned', 'plan', 'keys', 'outputs', 'graph', 'methods', 'command', 'toml'];
 for (const [i, ours] of browserSide.entries()) {
   const theirs = native.cases[i];
   if (ours.error || theirs.error) {
@@ -133,10 +218,22 @@ for (const [i, ours] of browserSide.entries()) {
   for (const a of answers) check(`${ours.name}: ${a}`, ours[a], theirs[a]);
 }
 
+// What the configs exercised, so a comparison of nothing shows as such.
+const ran = browserSide.filter((c) => !c.error);
+const distinct = (f) => new Set(ran.map(f)).size;
+const summary = [
+  `${browserSide.length} configs (${CASES.length} listed, ${browserSide.length - CASES.length} from the schema), ${browserSide.length - ran.length} refused by both`,
+  `${distinct((c) => JSON.stringify(c.plan.steps.map((s) => [s.name, s.algorithm])))} distinct step lists, ${distinct((c) => c.command)} distinct commands`,
+  `${new Set(ran.flatMap((c) => (c.keys.ok ?? []).map((k) => `${k.id}:${k.key}`))).size} distinct step keys, ${ran.filter((c) => c.keys.error).length} dry runs refused by both`,
+  `${new Set(ran.flatMap((c) => c.outputs.files.map((f) => f.path))).size} distinct output names`,
+  `browser side ${browserSeconds.toFixed(1)} s, total ${((Date.now() - started) / 1000).toFixed(1)} s`,
+];
 const compared = browserSide.length * answers.length + 2;
 if (failures.length) {
-  console.error(failures.join('\n'));
-  console.error(`\n${failures.length} of ${compared} answers differ`);
+  console.error(failures.slice(0, 60).join('\n'));
+  if (failures.length > 60) console.error(`… and ${failures.length - 60} more`);
+  console.error(`\n${failures.length} of ${compared} answers differ\n${summary.join('\n')}`);
   process.exit(1);
 }
-console.log(`${browserSide.length} configs: the browser's ${answers.join(', ')} equal QSMxT's native answers (${compared} answers, with the schema and the browser profile)`);
+console.log(`The browser's ${answers.join(', ')} equal QSMxT's native answers (${compared} answers, with the schema and the browser profile)`);
+console.log(summary.join('\n'));

@@ -46,6 +46,7 @@ function setup() {
       asked.push(request);
       return { run: 'sub-1', files: [{ key: 'Chi', path: 'sub-1/anat/sub-1_Chimap.nii', sidecar_path: 'sub-1/anat/sub-1_Chimap.json', sidecar: '{}' }] };
     },
+    plannedMermaid: async () => 'flowchart TD\n',
   });
   return { session, providers, base, store, engine, asked };
 }

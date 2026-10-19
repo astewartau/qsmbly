@@ -220,8 +220,23 @@ The TUI can later render from the schema, which removes its separate copy.
    and in WASM (Node, loading the built bundle) on a small phantom; outputs agree within a
    measured tolerance (NRMSE). Bitwise agreement is not expected: rustfft and tract pick different
    kernels per CPU and SIMD level, and threaded sums reorder.
-3. **End to end.** CI downloads the pinned QSMxT release binary, runs the command qsmbly generates
-   on the phantom, and compares with the WASM run.
+3. **End to end.** CI builds `qsmxt` at the pinned commit, runs the command qsmbly generates on
+   the phantom, and compares with the WASM run.
+
+Built in 3.7 as `.github/workflows/parity.yml` (qsmbly), at the commit or tag
+`rust-wasm/Cargo.toml` pins, on every PR and on the pin-bump PRs:
+
+- **engine**: no algorithm runs. Every listed config and every option of the settings schema
+  (each enum option, each switch, each number changed where it is shown, each mask preset, input
+  and step), asked of the bundle under Node and of `qsmxt-engine` natively: config, settings view,
+  plan, the dry run's step keys (algorithm, parameters and settings read, hashed), published names
+  and sidecars, graph, methods, command and TOML must be equal.
+- **e2e**: a handful of runs with the fastest algorithms (TKD; two-pass, SWI and T2*/R2*, an
+  oblique scan resampled) on a 24×24×20 phantom, through qsmbly's own run and export code, against
+  `qsmxt run` with the bundle's command and with its settings file: the same outputs, sidecars,
+  settings file, graph, methods and run record; masks bitwise, every other output within 2e-6 of
+  `qsmxt run`'s, relative to the volume's largest value (measured: bitwise or ≤ 1.2e-10 ppm on χ).
+  Per-algorithm agreement belongs to QSM.rs's wasm harness.
 
 ## 4. Work plan
 
@@ -355,7 +370,7 @@ Still open:
 - The pipeline graph (§4), defaults in place until decided: formats (Mermaid and SVG; no DOT),
   detail (one box per step), and the methods text describing what ran rather than what was
   configured.
-- The tolerance for native vs WASM parity (measure it in 3.7, then fix it in CI).
+- The tolerance for native vs WASM parity: 2e-6 (relative) in CI since 3.7; masks bitwise.
 - qsmbly's version number for the first engine-based release.
 
 ## 6. Pointers

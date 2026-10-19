@@ -62,6 +62,14 @@ export function engineOps(wasm) {
     /** @param {PipelineConfig} config @param {ScanFacts} f @returns {PipelineGraph} */
     graph: (config, f) => JSON.parse(call(wasm.pipeline_graph_wasm, json(config), json(f), undefined)),
     /**
+     * The graph as planned, drawn on the grid a run worked on (`grid`, RunMetadata; null before a
+     * run), as `qsmxt run` writes `pipeline.mmd`: its Mermaid text. Its own op, outside `graph`'s
+     * lane, so saving a bundle is never superseded by the tabs.
+     * @param {PipelineConfig} config @param {ScanFacts} f @param {Record<string, any> | null} grid
+     * @returns {string}
+     */
+    plannedMermaid: (config, f, grid) => JSON.parse(call(wasm.pipeline_graph_wasm, json(config), json(f), grid ? json(grid) : undefined)).mermaid,
+    /**
      * The methods text sentence by sentence, each with the graph's boxes it describes
      * (`methods_structured` for "QSMbly", on the same plan as `graph`).
      * @param {PipelineConfig} config @param {ScanFacts} f @returns {Methods}
