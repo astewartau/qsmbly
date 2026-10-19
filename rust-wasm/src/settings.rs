@@ -406,6 +406,68 @@ pub fn methods_for_run_wasm(
     methods_after(config_json, facts_json, record_json).map_err(js_err)
 }
 
+/// What `qsmxt run` writes for a dataset of this one run, beside its outputs
+/// (`dataset::summarise` for "QSMbly", as `qsmxt run` calls it once its runs are done):
+/// `{ methods, mermaid, run, changed }`.
+///
+/// - `methods` and `mermaid`: the dataset's methods text (sentence by sentence, as
+///   [`methods`]) and pipeline graph (Mermaid): `methods.md` and `pipeline.mmd`.
+/// - `run`: the run's own, `{ methods, planned, after, differs }`: its methods text, its graph as
+///   planned on the grid it took and as it ran, and whether those differ; `qsmxt run` writes the
+///   methods and the planned graph in `workflow/<run>/`, and the graph as it ran there too when it
+///   differs.
+/// - `changed`: the run differs from the dataset (`qsmxt run` then also keeps its methods and
+///   graph as it ran in `changes/`).
+///
+/// With no `record_json` (nothing has run), the dataset's files as planned, as `qsmxt run` writes
+/// them before its runs: the methods text and graph of the plan, `run` and `changed` null.
+pub fn dataset_summary(
+    config_json: &str,
+    facts_json: &str,
+    record_json: Option<&str>,
+) -> Result<String, String> {
+    let config = parse_config(config_json)?;
+    let facts = parse_facts(facts_json)?;
+    let plan = qsmxt_engine::plan::plan(&config, &facts);
+    let Some(record_json) = record_json else {
+        let methods = qsmxt_engine::methods::methods_structured(&config, &plan, "QSMbly");
+        let graph = pipeline_graph(&plan, &config, &facts, None);
+        return Ok(json!({
+            "methods": methods,
+            "mermaid": graph.to_mermaid(),
+            "run": Value::Null,
+            "changed": Value::Null,
+        })
+        .to_string());
+    };
+    let record = parse_record(record_json)?;
+    let summary = qsmxt_engine::dataset::summarise(&config, &[(&plan, &facts, &record)], "QSMbly")
+        .ok_or("the run record describes no run")?;
+    let run = &summary.runs[0];
+    Ok(json!({
+        "methods": summary.methods,
+        "mermaid": summary.graph.to_mermaid(),
+        "run": {
+            "methods": run.methods,
+            "planned": run.planned.to_mermaid(),
+            "after": run.after.to_mermaid(),
+            "differs": run.differs,
+        },
+        "changed": summary.changed.contains(&0),
+    })
+    .to_string())
+}
+
+/// [`dataset_summary`].
+#[wasm_bindgen]
+pub fn dataset_summary_wasm(
+    config_json: &str,
+    facts_json: &str,
+    record_json: Option<String>,
+) -> Result<String, JsValue> {
+    dataset_summary(config_json, facts_json, record_json.as_deref()).map_err(js_err)
+}
+
 /// What the item kept under `key` is (`Item::meta`, with its `key` and serialised `item`):
 /// `{ key, item, label, units, kind, bids_name, published, echo, coil }`; `None` for a key that
 /// names no item.
@@ -425,6 +487,26 @@ mod tests {
 
     fn browser() -> String {
         browser_config().unwrap()
+    }
+
+    #[test]
+    fn before_a_run_the_dataset_files_are_the_plans() {
+        let summary: Value =
+            serde_json::from_str(&dataset_summary(&browser(), &example_facts(), None).unwrap())
+                .unwrap();
+        let graph: Value =
+            serde_json::from_str(&graph(&browser(), &example_facts(), None).unwrap()).unwrap();
+        let planned: Value =
+            serde_json::from_str(&methods(&browser(), &example_facts()).unwrap()).unwrap();
+        assert_eq!(summary["mermaid"], graph["mermaid"]);
+        assert_eq!(summary["methods"], planned);
+        assert!(summary["run"].is_null() && summary["changed"].is_null());
+    }
+
+    #[test]
+    fn a_record_that_is_not_one_is_refused() {
+        let e = dataset_summary(&browser(), &example_facts(), Some("{")).unwrap_err();
+        assert!(e.contains("run record"), "{e}");
     }
 
     fn example_facts() -> String {

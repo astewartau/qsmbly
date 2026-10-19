@@ -39,7 +39,7 @@ test('after a run, Export shows the engine\'s methods, command and settings, and
     const record = session.runs.last.record.value;
     const { methods } = await providers.methods(config, facts, record);
     const { mermaid } = await providers.graph(config, facts, record);
-    const planned = await workspace.engine.plannedMermaid(config, facts, store.grid.value);
+    const summary = await workspace.engine.datasetSummary(config, facts, record);
     const files = await workspace.engine.outputFiles({
       scan_file: session.files.value.find((f) => f.role === 'phase' && f.echo === 1).name,
       facts,
@@ -52,7 +52,7 @@ test('after a run, Export shows the engine\'s methods, command and settings, and
       changed: (await providers.toml(config, 'changed')).toml,
       full: (await providers.toml(config, 'full')).toml,
       mermaid,
-      planned,
+      summary,
       files,
     };
   });
@@ -91,13 +91,16 @@ test('after a run, Export shows the engine\'s methods, command and settings, and
   const text = (p) => new TextDecoder().decode(archive.get(`${root}/${p}`));
   const expected = [
     'command.txt', 'derivatives/qsmxt/methods.md', 'derivatives/qsmxt/pipeline_config.toml', 'derivatives/qsmxt/pipeline.mmd',
+    'derivatives/qsmxt/workflow/sub-phantom/sub-phantom_methods.md', 'derivatives/qsmxt/workflow/sub-phantom/sub-phantom_pipeline.mmd',
     ...want.files.files.flatMap((f) => [`derivatives/qsmxt/${f.path}`, ...(f.sidecar_path ? [`derivatives/qsmxt/${f.sidecar_path}`] : [])]),
   ];
   expect([...archive.keys()].map((p) => p.slice(root.length + 1))).toEqual(expected);
   expect(text('derivatives/qsmxt/pipeline_config.toml')).toBe(want.full);
-  // As qsmxt writes it: the graph as planned, on the run's grid (the run took it, so there is no
-  // `desc-ran` one).
-  expect(text('derivatives/qsmxt/pipeline.mmd')).toBe(want.planned);
+  // As qsmxt writes them once its runs are done: the dataset's graph, and the run's as planned (the
+  // run took it, so there is no `desc-ran` one).
+  expect(want.summary.run.differs).toBe(false);
+  expect(text('derivatives/qsmxt/pipeline.mmd')).toBe(want.summary.mermaid);
+  expect(text('derivatives/qsmxt/workflow/sub-phantom/sub-phantom_pipeline.mmd')).toBe(want.summary.run.planned);
   expect(text('derivatives/qsmxt/methods.md')).toContain(want.paragraph);
   expect(text('command.txt').replace(/ \\\n\s+/g, ' ').replace(' <output_dir>', '').trim()).toBe(want.command);
   for (const f of want.files.files) {

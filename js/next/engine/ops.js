@@ -62,13 +62,16 @@ export function engineOps(wasm) {
     /** @param {PipelineConfig} config @param {ScanFacts} f @returns {PipelineGraph} */
     graph: (config, f) => JSON.parse(call(wasm.pipeline_graph_wasm, json(config), json(f), undefined)),
     /**
-     * The graph as planned, drawn on the grid a run worked on (`grid`, RunMetadata; null before a
-     * run), as `qsmxt run` writes `pipeline.mmd`: its Mermaid text. Its own op, outside `graph`'s
-     * lane, so saving a bundle is never superseded by the tabs.
-     * @param {PipelineConfig} config @param {ScanFacts} f @param {Record<string, any> | null} grid
-     * @returns {string}
+     * What `qsmxt run` writes beside a dataset of this one run, as `record` (`Engine.run`'s
+     * answer, JSON) says it ran (`dataset::summarise` for "QSMbly"): the dataset's methods text and
+     * graph, the run's own (its methods, its graph as planned and as it ran, whether they differ),
+     * and whether the run differs from the dataset. With no record, the dataset's as planned
+     * (`run` and `changed` null). Its own op, outside the tabs' lanes, so saving a bundle is never
+     * superseded by them.
+     * @param {PipelineConfig} config @param {ScanFacts} f @param {string | null} record
+     * @returns {import('../protocol.js').DatasetSummary}
      */
-    plannedMermaid: (config, f, grid) => JSON.parse(call(wasm.pipeline_graph_wasm, json(config), json(f), grid ? json(grid) : undefined)).mermaid,
+    datasetSummary: (config, f, record) => JSON.parse(call(wasm.dataset_summary_wasm, json(config), json(f), record ?? undefined)),
     /**
      * The methods text sentence by sentence, each with the graph's boxes it describes
      * (`methods_structured` for "QSMbly", on the same plan as `graph`).

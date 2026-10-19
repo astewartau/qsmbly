@@ -145,6 +145,19 @@
  */
 
 /**
+ * What `qsmxt run` writes beside a dataset's outputs, for a dataset of one run
+ * (`dataset_summary_wasm`): the dataset's methods text and graph (`methods.md`, `pipeline.mmd`);
+ * the run's own (`workflow/<run>/`: its methods, its graph as planned, and as it ran when that
+ * differs); and whether the run differs from the dataset (then also kept in `changes/`). `run`
+ * and `changed` are null before anything has run.
+ * @typedef {object} DatasetSummary
+ * @property {Methods} methods
+ * @property {string} mermaid
+ * @property {{ methods: Methods, planned: string, after: string, differs: boolean } | null} run
+ * @property {boolean | null} changed
+ */
+
+/**
  * The outputs the page asks {@link OutputFiles} for: each held output, the step that last wrote
  * it, and what the run recorded about it (the record's `annotations`).
  * @typedef {object} OutputRequest

@@ -94,8 +94,7 @@ export function ExportPanel({ session, store, providers, engine, versions, onClo
         ${tab === 'toml' && html`<${TomlExport} config=${config} providers=${providers} />`}
         ${tab === 'graph' && html`<${GraphExport} result=${graph} />`}
         ${tab === 'files' && html`<${FilesExport} session=${session} store=${store} engine=${engine} providers=${providers}
-          methods=${methods.value?.methods ?? null} command=${commandText}
-          ranMermaid=${record && graph.value?.differs ? graph.value.mermaid : null} />`}
+          command=${commandText} record=${record} />`}
       </div>
     </aside>
   `;
@@ -212,10 +211,9 @@ function GraphExport({ result }) {
 /**
  * The outputs `qsmxt run` would publish, each chosen for the bundle or not, and the bundle.
  * @param {{ session: Session, store: VolumeStore, engine: EngineClient, providers: Providers,
- *   methods: import('../exports.js').Methods | null, command: string, ranMermaid: string | null }} props -
- *   `ranMermaid`: the graph the run took, when it differs from the plan
+ *   command: string, record: string | null }} props - `record`: the last run's (RunRecord JSON)
  */
-function FilesExport({ session, store, engine, providers, methods, command, ranMermaid }) {
+function FilesExport({ session, store, engine, providers, command, record }) {
   const version = store.version.value;
   const facts = session.facts.value;
   const files = useProvided(() => publishedFiles({ session, store, engine }), [version, facts, store.recorded.value]);
@@ -227,19 +225,19 @@ function FilesExport({ session, store, engine, providers, methods, command, ranM
 
   const download = async () => {
     const facts = session.facts.peek();
-    if (!files.value || !methods || !facts) return;
+    if (!files.value || !facts) return;
     setStatus({ busy: true, text: 'Writing the bundle…' });
     try {
       const config = session.config.peek();
-      // The graph as qsmxt writes it beside the run: as planned, on the run's grid; and the one
-      // the run took only when it differs from the plan.
-      const [{ toml }, mermaid, extra] = await Promise.all([
+      // The methods texts and graphs as qsmxt writes them once its runs are done: the dataset's,
+      // and the run's own.
+      const [{ toml }, summary, extra] = await Promise.all([
         providers.toml(config, 'full'),
-        engine.plannedMermaid(config, facts, store.grid.peek()),
+        engine.datasetSummary(config, facts, record),
         Promise.all(bundleContributors.map((c) => c({ session, store, engine, run: files.value?.run ?? '' }))).then((all) => all.flat()),
       ]);
       const entries = await bundleEntries({
-        command, methods: methodsMarkdown(methods), toml, mermaid, ranMermaid, run: files.value.run, files: chosen,
+        command, toml, summary, run: files.value.run, files: chosen,
         nifti: (key) => niftiOf(engine, store, key), extra,
       });
       const blob = await bundleZip(files.value.run, entries);
@@ -253,7 +251,7 @@ function FilesExport({ session, store, engine, providers, methods, command, ranM
   return html`
     <section class="export-block" data-testid="export-files">
       <${Toolbar} title="Files">
-        <button type="button" class="btn small primary" data-testid="download-bundle" disabled=${!methods || !files.value || status?.busy}
+        <button type="button" class="btn small primary" data-testid="download-bundle" disabled=${!files.value || status?.busy}
           onClick=${download}>${Icon.download} Download bundle (.zip)</button>
       <//>
       <p class="export-note">

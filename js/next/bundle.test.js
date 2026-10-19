@@ -37,13 +37,28 @@ describe('bundle', () => {
     expect(asked.outputs.map((o) => o.key)).toEqual(['Chi', 'BrainMask', 'LocalField(Main)']);
   });
 
-  test('the graph the run took goes beside the run, as qsmxt writes it, only when given', async () => {
-    const parts = { command: '', methods: '', toml: '', mermaid: 'planned', files: [], nifti: async () => new Uint8Array() };
-    const paths = async (extra) => (await bundleEntries({ ...parts, ...extra })).map((e) => e.path);
-    expect(await paths({ run: 'sub-1' })).not.toContain(`${DERIVATIVES}/workflow/sub-1/sub-1_desc-ran_pipeline.mmd`);
-    const entries = await bundleEntries({ ...parts, run: 'sub-1', ranMermaid: 'ran' });
-    expect(entries.find((e) => e.path === `${DERIVATIVES}/pipeline.mmd`)?.bytes).toBe('planned');
-    expect(entries.find((e) => e.path === `${DERIVATIVES}/workflow/sub-1/sub-1_desc-ran_pipeline.mmd`)?.bytes).toBe('ran');
+  const texts = (text) => ({ sentences: [{ text, steps: [], citations: [] }], references: [] });
+  const summary = (run = null, changed = null) => ({ methods: texts('The dataset.'), mermaid: 'dataset graph', run, changed });
+
+  test("the dataset's methods and graph, and the run's own beside it, as qsmxt writes them once its runs are done", async () => {
+    const parts = { command: '', toml: '', run: 'sub-1', files: [], nifti: async () => new Uint8Array() };
+    const at = (entries, path) => entries.find((e) => e.path === `${DERIVATIVES}/${path}`)?.bytes;
+    const run = { methods: texts('The run.'), planned: 'planned', after: 'after', differs: false };
+
+    const planned = await bundleEntries({ ...parts, summary: summary() });
+    expect(planned.map((e) => e.path).filter((p) => p.includes('workflow') || p.includes('changes'))).toEqual([]);
+
+    const ran = await bundleEntries({ ...parts, summary: summary(run, false) });
+    expect(at(ran, 'methods.md')).toBe('# Methods\n\nThe dataset.\n\n');
+    expect(at(ran, 'pipeline.mmd')).toBe('dataset graph');
+    expect(at(ran, 'workflow/sub-1/sub-1_methods.md')).toBe('# Methods\n\nThe run.\n\n');
+    expect(at(ran, 'workflow/sub-1/sub-1_pipeline.mmd')).toBe('planned');
+    expect(at(ran, 'workflow/sub-1/sub-1_desc-ran_pipeline.mmd')).toBeUndefined();
+
+    const differed = await bundleEntries({ ...parts, summary: summary({ ...run, differs: true }, true) });
+    expect(at(differed, 'workflow/sub-1/sub-1_desc-ran_pipeline.mmd')).toBe('after');
+    expect(at(differed, 'changes/sub-1_methods.md')).toBe('# Methods\n\nThe run.\n\n');
+    expect(at(differed, 'changes/sub-1_desc-ran_pipeline.mmd')).toBe('after');
   });
 
   test('laid out as qsmxt run writes its output directory, under one folder', async () => {
@@ -52,7 +67,7 @@ describe('bundle', () => {
       { key: 'RegionStats', path: 'sub-1/anat/sub-1_desc-segmentation_stats.tsv', sidecar_path: null, sidecar: null },
     ];
     const entries = await bundleEntries({
-      command: 'qsmxt run <bids_dir> <output_dir>', methods: '# Methods\n', toml: '[pipeline]\n', mermaid: 'flowchart TD\n',
+      command: 'qsmxt run <bids_dir> <output_dir>', toml: '[pipeline]\n', summary: summary(), run: 'sub-1',
       files, nifti: async (key) => new TextEncoder().encode(`nifti of ${key}`),
       extra: [{ path: 'derivatives/qsmbly/sub-1/anat/sub-1_mask.nii.gz', bytes: new Uint8Array([1]) }],
     });

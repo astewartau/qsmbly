@@ -20,8 +20,9 @@
 //      TOLERANCE (a reference offset is a mean of χ);
 //    - the settings file qsmxt writes: the bundle's (by the command: the bundle's with the
 //      settings that do not apply to the run at QSMxT's defaults, `prune_hidden`);
-//    - the run's graph as planned, and the methods text once the tool's name and reference are
-//      the same; the graph the run took when either side says it differs from the plan;
+//    - the methods texts and pipeline graphs, the dataset's (methods.md, pipeline.mmd), the run's
+//      (workflow/<run>/) and a differing run's (changes/): the same files, the same text once the
+//      tool's name and reference are each front end's;
 //    - the run record: the same steps, each in the same state with the same decisions;
 //    - the voxels: masks bitwise; every other output within TOLERANCE of `qsmxt run`'s (rustfft
 //      picks other kernels natively, and the threaded sums another order; QSM.rs #201).
@@ -41,7 +42,6 @@ import { reporting } from '../../js/next/engine/engine-call.js';
 import { VolumeStore } from '../../js/next/store/volumes.js';
 import { echoes, inputKeys, scanInputs, sortFiles } from '../../js/next/inputs.js';
 import { bundleEntries, DERIVATIVES, heldOutputs, niftiOf } from '../../js/next/bundle.js';
-import { methodsMarkdown } from '../../js/next/methods.js';
 import { formatCommand } from '../../js/next/exports.js';
 import { phantomFiles } from '../../tests/e2e/phantom.js';
 
@@ -163,14 +163,10 @@ async function browserRun(settings, phantom, out) {
 
   const published = ops.outputFiles({ scan_file: echoes(files)[0].phase?.name ?? null, facts, outputs: heldOutputs(store) });
   // As the Export panel writes the bundle (components/ExportPanel.js).
-  const [{ methods }, ran, { toml }, { command }] = await Promise.all([
-    providers.methods(config, facts, record), providers.graph(config, facts, record), providers.toml(config, 'full'), providers.command(config),
-  ]);
-  const mermaid = ops.plannedMermaid(config, facts, store.grid.peek());
+  const [{ toml }, { command }] = await Promise.all([providers.toml(config, 'full'), providers.command(config)]);
   const entries = await bundleEntries({
-    command: formatCommand(command), methods: methodsMarkdown(methods), toml, mermaid,
-    ranMermaid: ran.differs ? ran.mermaid : null, run: published.run, files: published.files,
-    nifti: (key) => niftiOf(ops, store, key),
+    command: formatCommand(command), toml, summary: ops.datasetSummary(config, facts, record), run: published.run,
+    files: published.files, nifti: (key) => niftiOf(ops, store, key),
   });
   for (const e of entries) {
     mkdirSync(dirname(join(out, e.path)), { recursive: true });
@@ -271,7 +267,6 @@ function compare(name, browserDir, nativeDir, browser, toml) {
     rows.push(`  ${ok ? 'ok  ' : 'FAIL'} ${f.key.padEnd(28)} ${(differing ? `${differing} voxels differ, max ${maxDiff.toExponential(2)}` : 'bitwise').padEnd(40)} ${mask ? '(mask: bitwise)' : `(allowed ${allowed.toExponential(1)})`}`);
     if (!ok) problems.push(`${f.path}: ${differing} voxels differ, max |Δ| ${maxDiff.toExponential(3)} > ${allowed.toExponential(3)}`);
   }
-  // The texts.
   const text = (p) => (existsSync(p) ? readFileSync(p, 'utf8') : null);
   const same = (what, ours2, theirs2) => {
     if (theirs2 == null) problems.push(`${what}: not written by qsmxt run`);
@@ -281,18 +276,17 @@ function compare(name, browserDir, nativeDir, browser, toml) {
     }
   };
   same('pipeline_config.toml', toml, text(join(nativeDir, 'pipeline_config.toml')));
-  // The run's own graph and methods, beside its record.
+  // The methods texts and pipeline graphs: the dataset's (methods.md, pipeline.mmd), the run's
+  // own (workflow/<run>/), and a run that differs from the dataset's (changes/), each written by
+  // both sides or by neither. The tool's own name and its reference are each front end's.
+  const tool = (s) => s.replace(/^- Stewart, A\. \(\d{4}\)\. (QSMbly|QSMxT)\b.*\n/m, '').replace(/\b(QSMbly|qsmxt)\b/g, '<tool>');
+  const isText = (p) => /\.(md|mmd)$/.test(p) && (!p.includes('/') || p.startsWith(`workflow/${prefix}/`) || p.startsWith('changes/'));
+  for (const p of new Set([...bundled.keys(), ...nativeFiles.keys()].filter(isText))) {
+    const [mine, theirs2] = [bundled.get(p), nativeFiles.get(p)];
+    if (!mine || !theirs2) problems.push(`${p}: written by ${mine ? 'the browser' : 'qsmxt run'} only`);
+    else same(p, tool(readFileSync(mine, 'utf8')), tool(readFileSync(theirs2, 'utf8')));
+  }
   const run = join(nativeDir, 'workflow', prefix);
-  // The run's graph as planned: qsmxt writes it beside the run's record. (Its dataset-level
-  // pipeline.mmd adds what the dataset's runs decided, e.g. "1 run: Resampled …"; the bundle has
-  // one run's.)
-  same('pipeline graph (Mermaid)', text(join(browserDir, DERIVATIVES, 'pipeline.mmd')), text(join(nativeDir, 'workflow', prefix, `${prefix}_pipeline.mmd`)));
-  const ranGraph = `workflow/${prefix}/${prefix}_desc-ran_pipeline.mmd`;
-  const [ourRan, theirRan] = [text(join(browserDir, DERIVATIVES, ranGraph)), text(join(nativeDir, ranGraph))];
-  if (ourRan != null || theirRan != null) same(`the graph the run took (${ranGraph})`, ourRan ?? '(none)', theirRan ?? '(none)');
-  // The tool's own name and its reference are each front end's.
-  const tool = (s) => s?.replace(/^- Stewart, A\. \(\d{4}\)\. (QSMbly|QSMxT)\b.*\n/m, '').replace(/\b(QSMbly|qsmxt)\b/g, '<tool>');
-  same('methods text', tool(text(join(browserDir, DERIVATIVES, 'methods.md'))), tool(text(join(run, `${prefix}_methods.md`))));
   // The run record: steps, states and decisions.
   const steps = (r) => r.steps.map((s) => ({ id: s.id, state: s.state, decisions: s.decisions ?? [] }));
   const nativeRecord = text(join(run, `${prefix}_runrecord.json`));
