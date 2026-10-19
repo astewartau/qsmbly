@@ -18,10 +18,10 @@ function watchErrors(page) {
 }
 
 /** Load the phantom, apply `settings`, run, and wait for the run to end. */
-async function run(page, settings, before = async () => {}) {
+async function run(page, settings, before = async () => {}, files = phantomFiles()) {
   await page.goto('next.html');
   await page.locator('[data-section="data"]').click();
-  await page.getByTestId('file-input').setInputFiles(phantomFiles());
+  await page.getByTestId('file-input').setInputFiles(files);
   await expect(page.getByTestId('scan-summary')).toHaveText(/3 echoes/, { timeout: 30_000 });
   await before();
   await page.evaluate((s) => {
@@ -120,5 +120,49 @@ test('motion correction: the corrected echoes feed the field map, and the motion
   await page.locator('.output-chip[data-key="MotionReport"]').click();
   await expect(page.getByTestId('motion-report').locator('tbody tr')).toHaveCount(3);
   expect(await publishedPaths(page)).toContain('sub-phantom/anat/sub-phantom_desc-motioncoverage_mask.nii');
+  expect(errors).toEqual([]);
+});
+
+const held = (page, key) => page.evaluate((k) => Array.from(globalThis.qsmblyNext.store.get(k)), key);
+const fact = (page, name) => page.locator(`.fact-table tr[data-fact="${name}"]`);
+/** Pearson correlation of two maps over the voxels where either is non-zero. */
+function correlation(a, b) {
+  const idx = a.map((_, i) => i).filter((i) => a[i] !== 0 || b[i] !== 0);
+  const mean = (x) => idx.reduce((s, i) => s + x[i], 0) / idx.length;
+  const [ma, mb] = [mean(a), mean(b)];
+  let [sab, saa, sbb] = [0, 0, 0];
+  for (const i of idx) { sab += (a[i] - ma) * (b[i] - mb); saa += (a[i] - ma) ** 2; sbb += (b[i] - mb) ** 2; }
+  return sab / Math.sqrt(saa * sbb);
+}
+
+test('real and imaginary parts from a GE scanner: read as such, the phase sign corrected, the same χ', async ({ page }) => {
+  test.setTimeout(5 * 60_000);
+  const errors = watchErrors(page);
+  const settings = [['inversion.algorithm', 'tkd']];
+  await run(page, settings);
+  const reference = await held(page, 'Chi');
+  await run(page, settings, async () => {
+    await expect(fact(page, 'real_imaginary').getByTestId('fact-value')).toHaveText('yes');
+    await expect(fact(page, 'manufacturer').locator('input')).toHaveValue('GE');
+    const roles = await page.locator('.file-table select').evaluateAll((els) => els.map((e) => e.value));
+    expect(roles.filter((r) => r === 'real')).toHaveLength(3);
+  }, phantomFiles({ encoding: 'real-imaginary', manufacturer: 'GE' }));
+  const load = await page.evaluate(() => globalThis.qsmblyNext.runner.plan.value.steps.find((s) => s.name === 'load').outputs);
+  expect(load).toEqual(expect.arrayContaining(['AcquiredReal(1)', 'AcquiredImaginary(3)']));
+  expect(correlation(await held(page, 'Chi'), reference)).toBeGreaterThan(0.95);
+  expect(errors).toEqual([]);
+});
+
+test('uncombined coils: each image given its coil, combined by the engine', async ({ page }) => {
+  test.setTimeout(5 * 60_000);
+  const errors = watchErrors(page);
+  await run(page, [['inversion.algorithm', 'tkd']], async () => {
+    await expect(fact(page, 'coils').getByTestId('fact-value')).toHaveText('2');
+    expect(await page.locator('tr[data-file$=".nii.gz"] [data-testid="coil-input"]').evaluateAll((els) => els.map((e) => e.value))).toEqual(expect.arrayContaining(['1', '2']));
+  }, phantomFiles({ encoding: 'coils' }));
+  const step = await page.evaluate(() => globalThis.qsmblyNext.runner.plan.value.steps.find((s) => s.name === 'scale_phase'));
+  expect(step.algorithm).toBe('mcpc3ds');
+  expect(step.reads).toEqual(expect.arrayContaining(['CoilPhase(2, 3)', 'CoilMagnitude(1, 1)']));
+  await expect(page.locator('.output-chip[data-key="Chi"]')).toBeVisible();
   expect(errors).toEqual([]);
 });

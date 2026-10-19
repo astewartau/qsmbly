@@ -35,11 +35,16 @@ export function niftiFloat32(dims, data, voxel = [1, 1, 1], tiltDeg = 0) {
 
 /**
  * The phantom's files: `{ name, mimeType, buffer }` for Playwright's setInputFiles.
- * @param {{ dims?: number[], echoTimes?: number[], fieldStrength?: number, sidecars?: boolean, emptyMagnitude?: boolean }} [options] -
+ * @param {{ dims?: number[], echoTimes?: number[], fieldStrength?: number, sidecars?: boolean, emptyMagnitude?: boolean, tilt?: number,
+ *   encoding?: 'magnitude-phase' | 'real-imaginary' | 'coils', manufacturer?: string }} [options] -
+ *   `encoding`: each echo as its magnitude and phase images (the default), as real and imaginary parts (BIDS
+ *   `part-real`/`part-imag`, the phase negated as GE stores it when `manufacturer` is GE), or as two uncombined
+ *   coils (`coil-1`, `coil-2`) with smooth sensitivities and their own phase offsets;
  *   `emptyMagnitude`: all-zero magnitude images, which no mask can be made from; `tilt`: the grid rotated about x
  *   by this many degrees, with no B0 direction in the sidecars
  */
-export function phantomFiles({ dims = [48, 48, 36], echoTimes = [0.004, 0.009, 0.014], fieldStrength = 3, sidecars = true, emptyMagnitude = false, tilt = 0 } = {}) {
+export function phantomFiles({ dims = [48, 48, 36], echoTimes = [0.004, 0.009, 0.014], fieldStrength = 3, sidecars = true, emptyMagnitude = false, tilt = 0,
+  encoding = 'magnitude-phase', manufacturer = 'Siemens' } = {}) {
   const [nx, ny, nz] = dims;
   const n = nx * ny * nz;
   const gamma = 42.576e6;
@@ -79,12 +84,29 @@ export function phantomFiles({ dims = [48, 48, 36], echoTimes = [0.004, 0.009, 0
       phase[j] = inside[j] ? Math.atan2(Math.sin(rad), Math.cos(rad)) : Math.sin(j * 2.3) * Math.PI;
     }
     const base = `sub-phantom_echo-${e + 1}`;
-    files.push({ name: `${base}_part-mag_MEGRE.nii.gz`, mimeType: 'application/gzip', buffer: niftiFloat32(dims, mag, [1, 1, 1], tilt) });
-    files.push({ name: `${base}_part-phase_MEGRE.nii.gz`, mimeType: 'application/gzip', buffer: niftiFloat32(dims, phase, [1, 1, 1], tilt) });
-    if (sidecars) {
-      const sidecar = { EchoTime: te, MagneticFieldStrength: fieldStrength, Manufacturer: 'Siemens', ...(tilt ? {} : { B0_dir: [0, 0, 1] }) };
-      for (const part of ['mag', 'phase']) {
-        files.push({ name: `${base}_part-${part}_MEGRE.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(sidecar)) });
+    /** @type {[string, Float32Array][]} */
+    let images;
+    if (encoding === 'real-imaginary') {
+      const sign = /^ge/i.test(manufacturer) ? -1 : 1;
+      images = [
+        ['part-real', mag.map((m, j) => m * Math.cos(phase[j]))],
+        ['part-imag', mag.map((m, j) => sign * m * Math.sin(phase[j]))],
+      ];
+    } else if (encoding === 'coils') {
+      images = [];
+      for (const [c, offset] of [[1, 0.4], [2, -0.7]]) {
+        const weight = (j) => 0.6 + 0.4 * Math.cos(((j % nx) / nx) * Math.PI * (c === 1 ? 1 : -1));
+        images.push([`coil-${c}_part-mag`, mag.map((m, j) => m * weight(j))]);
+        images.push([`coil-${c}_part-phase`, phase.map((p) => Math.atan2(Math.sin(p + offset), Math.cos(p + offset)))]);
+      }
+    } else {
+      images = [['part-mag', mag], ['part-phase', phase]];
+    }
+    for (const [tag, data] of images) {
+      files.push({ name: `${base}_${tag}_MEGRE.nii.gz`, mimeType: 'application/gzip', buffer: niftiFloat32(dims, data, [1, 1, 1], tilt) });
+      if (sidecars) {
+        const sidecar = { EchoTime: te, MagneticFieldStrength: fieldStrength, Manufacturer: manufacturer, ...(tilt ? {} : { B0_dir: [0, 0, 1] }) };
+        files.push({ name: `${base}_${tag}_MEGRE.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(sidecar)) });
       }
     }
   });

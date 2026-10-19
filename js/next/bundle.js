@@ -25,7 +25,7 @@
  * @typedef {(context: { session: Session, store: VolumeStore, engine: EngineClient, run: string }) => Promise<ZipEntry[]>} BundleContributor
  *   `run`: the run's BIDS name, as the engine names its outputs ({@link OutputFiles}`.run`)
  */
-import { echoes } from './inputs.js';
+import { firstImage } from './inputs.js';
 import { reportsOf, reportFile } from './reports.js';
 import { zip } from './zip.js';
 
@@ -73,7 +73,7 @@ export function publishedFiles({ session, store, engine }) {
   // Nothing computed yet: nothing to name (the run's name is asked with its outputs).
   if (!facts || !outputs.length) return Promise.resolve({ run: '', files: [] });
   return engine.outputFiles({
-    scan_file: echoes(session.files.peek())[0]?.phase?.name ?? null,
+    scan_file: firstImage(session.files.peek())?.name ?? null,
     facts,
     outputs,
   });

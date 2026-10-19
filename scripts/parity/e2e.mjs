@@ -39,7 +39,7 @@ import { engineProviders } from '../../js/next/engine/providers.js';
 import { workerVolumes } from '../../js/next/engine/run-volumes.js';
 import { reporting } from '../../js/next/engine/engine-call.js';
 import { VolumeStore } from '../../js/next/store/volumes.js';
-import { echoes, inputKeys, scanInputs, sortFiles } from '../../js/next/inputs.js';
+import { firstImage, inputKeys, scanInputs, sortFiles } from '../../js/next/inputs.js';
 import { bundleEntries, DERIVATIVES, heldOutputs, niftiOf } from '../../js/next/bundle.js';
 import { methodsMarkdown } from '../../js/next/methods.js';
 import { formatCommand } from '../../js/next/exports.js';
@@ -125,7 +125,7 @@ async function browserRun(settings, phantom, out) {
 
   const store = new VolumeStore({ shared: false });
   const volumes = {};
-  for (const [key, f] of inputKeys(files)) {
+  for (const [key, f] of inputKeys(files, report.files)) {
     store.putInput(key, f.bytes);
     volumes[key] = { nifti: f.bytes };
   }
@@ -161,7 +161,7 @@ async function browserRun(settings, phantom, out) {
     engine.free();
   }
 
-  const published = ops.outputFiles({ scan_file: echoes(files)[0].phase?.name ?? null, facts, outputs: heldOutputs(store) });
+  const published = ops.outputFiles({ scan_file: firstImage(files)?.name ?? null, facts, outputs: heldOutputs(store) });
   // As the Export panel writes the bundle (components/ExportPanel.js).
   const [{ methods }, ran, { toml }, { command }] = await Promise.all([
     providers.methods(config, facts, record), providers.graph(config, facts, record), providers.toml(config, 'full'), providers.command(config),
