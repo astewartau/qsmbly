@@ -98,7 +98,7 @@ export async function bundleEntries({ command, methods, toml, mermaid, ranMermai
   ];
   if (ranMermaid && run) entries.push({ path: `${DERIVATIVES}/workflow/${run}/${run}_desc-ran_pipeline.mmd`, bytes: ranMermaid });
   for (const f of files) {
-    entries.push({ path: `${DERIVATIVES}/${f.path}`, bytes: await nifti(f.key) });
+    entries.push({ path: `${DERIVATIVES}/${f.path.replace('_Chimap', '_QSM')}`, bytes: await nifti(f.key) });
     if (f.sidecar_path && f.sidecar != null) entries.push({ path: `${DERIVATIVES}/${f.sidecar_path}`, bytes: f.sidecar });
   }
   return [...entries, ...extra];
