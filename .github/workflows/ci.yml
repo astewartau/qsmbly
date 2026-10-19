@@ -79,9 +79,31 @@ jobs:
       - if: steps.bundle.outputs.cache-hit != 'true'
         uses: ./.github/actions/setup-wasm-build
 
-      # No rust-cache here: build.sh rebuilds std (-Z build-std), and rust-cache prunes what is not
-      # in Cargo.lock, std included, so every crate recompiled even on a full cache match while
-      # the job still restored and saved ~250 MB.
+      # The compiled dependencies, for when the bundle has to be rebuilt. Not rust-cache: build.sh
+      # rebuilds std (-Z build-std), and rust-cache prunes what is not in Cargo.lock, std included,
+      # so every crate recompiled even on a full cache match. This keeps target/ whole instead.
+      # Cargo rebuilds anything whose compiler changed, so the key starts with the nightly's own
+      # commit: a newer nightly misses rather than restoring artifacts it cannot use.
+      - name: Key the compiled dependencies on the nightly
+        id: nightly
+        if: steps.bundle.outputs.cache-hit != 'true'
+        run: |
+          echo "rustc=$(rustc +nightly -vV | sed -n 's/^commit-hash: //p' | head -c 12)" >> "$GITHUB_OUTPUT"
+
+      - if: steps.bundle.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: rust-wasm/target
+          key: wasm-target-${{ steps.nightly.outputs.rustc }}-${{ hashFiles('rust-wasm/Cargo.lock', 'build.sh') }}
+          restore-keys: wasm-target-${{ steps.nightly.outputs.rustc }}-
+
+      # Cargo decides whether std is stale by the mtimes of its sources, and the toolchain is
+      # installed afresh each run, so its sources are always newer than the cached std and every
+      # crate rebuilt (measured: a restored target still recompiled all 253 crates). The key pins
+      # the nightly, so the sources are the ones the cache was built from: date them back.
+      - name: Let the cached std count as fresh
+        if: steps.bundle.outputs.cache-hit != 'true'
+        run: find "$(rustc +nightly --print sysroot)/lib/rustlib/src" -exec touch -h -d '2000-01-01' {} +
 
       # Exactly what a deploy runs: both bundles, threaded, with every feature the site ships.
       - name: Build WASM as deployed
