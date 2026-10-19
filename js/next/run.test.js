@@ -1,4 +1,5 @@
 import { createRunner } from './run.js';
+import { createHistory } from './history.js';
 import { createSession } from './store/session.js';
 import { VolumeStore } from './store/volumes.js';
 import { learnItems } from './items.js';
@@ -62,16 +63,18 @@ function fakeWorkers(script) {
   return { create, made };
 }
 
-async function setup(script, { missing = 0 } = {}) {
+async function setup(script, { missing = 0, withHistory = false } = {}) {
   const session = createSession({ defaults: { pipeline: {} }, planner: () => plan, schedule: (run) => run() });
   session.facts.value = /** @type {any} */ ({ n_echoes: 1 });
   const store = new VolumeStore({ shared: false });
   store.putInput('AcquiredPhase(1)', new Uint8Array([9]));
   const workers = fakeWorkers(script);
   const downloads = [];
+  const history = withHistory ? createHistory({ store }) : null;
   const runner = createRunner({
     session,
     store,
+    history,
     registry: [],
     createWorker: workers.create,
     cacheState: async (models) => models.map((m) => ({ ...m, missing })),
@@ -81,7 +84,7 @@ async function setup(script, { missing = 0 } = {}) {
     },
   });
   await until(() => !!session.plan.peek());
-  return { session, store, runner, workers, downloads };
+  return { session, store, runner, workers, downloads, history };
 }
 
 const grid = JSON.stringify({ dims: [2, 1, 1], voxel_size: [1, 1, 1], affine: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] });
@@ -192,5 +195,41 @@ describe('runs from the page', () => {
     expect(runner.error.peek()).toEqual({ message: 'the local field is empty', kind: 'invalid_input', step: 'invert' });
     expect(runner.steps.peek().get('invert')?.state).toBe('failed');
     expect(runner.log.peek().at(-1)).toMatchObject({ level: 'ERROR', step: 'invert' });
+  });
+
+  test('each finished run is kept in the history, which a new scan clears', async () => {
+    let n = 0;
+    const { session, store, runner, history } = await setup(() => {
+      n++;
+      return [
+        { type: 'begin', grid },
+        { type: 'stage', step: 'load', algorithm: null, event: 'cached', text: null },
+        { type: 'stage', step: 'mask', algorithm: null, event: n === 1 ? 'started' : 'cached', text: 'Creating mask' },
+        ...(n === 1 ? [{ type: 'put', key: 'BrainMask', data: new Uint8Array([1, 0]), step: 'mask' },
+          { type: 'stage', step: 'mask', algorithm: null, event: 'finished', text: 'Mask' }] : []),
+        { type: 'stage', step: 'invert', algorithm: 'ilsqr', event: 'started', text: 'Dipole inversion' },
+        { type: 'put', key: 'Chi', data: new Float32Array([n, -n]), step: 'invert' },
+        { type: 'stage', step: 'invert', algorithm: 'ilsqr', event: 'finished', text: 'iLSQR' },
+        { type: 'done', record: `{"run":${n}}`, grid },
+      ];
+    }, { withHistory: true });
+    runner.start();
+    await until(() => runner.status.peek() === 'done');
+    session.set('inversion.algorithm', 'rts');
+    runner.start();
+    await until(() => runner.status.peek() === 'done' && history?.runs.peek().length === 2);
+    const [first, second] = /** @type {any} */ (history).runs.peek();
+    expect(first).toMatchObject({ id: 1, record: '{"run":1}', computed: ['mask', 'invert'], reused: ['load'] });
+    expect(second).toMatchObject({ id: 2, record: '{"run":2}', computed: ['invert'], reused: ['load', 'mask'] });
+    expect(second.config.inversion.algorithm).toBe('rts');
+    expect(Array.from(first.outputs.get('Chi').data)).toEqual([1, -1]);
+    expect(Array.from(second.outputs.get('Chi').data)).toEqual([2, -2]);
+    // The mask was reused: both runs hold the same buffer.
+    expect(first.outputs.get('BrainMask').data).toBe(second.outputs.get('BrainMask').data);
+    expect(first.outputs.has('AcquiredPhase(1)')).toBe(false);
+    expect(history?.extraBytes.peek()).toBe(8);
+    expect(store.has('Chi')).toBe(true);
+    runner.reset();
+    expect(history?.runs.peek()).toEqual([]);
   });
 });

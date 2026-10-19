@@ -59,10 +59,12 @@ export function niftiFor(NVImage, volume) {
 export const OVERLAY = { colormap: 'red', opacity: 0.4 };
 
 /**
- * @param {{ volume: ViewVolume | null, overlay?: ViewVolume | null, emptyText?: string }} props - `overlay`: a
- *   mask drawn over `volume` (on the same grid)
+ * @param {{ volume: ViewVolume | null, overlay?: ViewVolume | null, emptyText?: string, title?: string,
+ *   onReady?: (nv: any) => void, label?: string }} props - `overlay`: a mask drawn over `volume` (on the same grid);
+ *   `title`: what the toolbar calls it (else the item's label); `onReady`: given the NiiVue instance once a volume
+ *   is shown (the compare view links their crosshairs); `label`: the region's accessible name
  */
-export function Viewer({ volume, overlay = null, emptyText = 'Nothing to show yet.' }) {
+export function Viewer({ volume, overlay = null, emptyText = 'Nothing to show yet.', title, onReady, label = 'Viewer' }) {
   const canvas = useRef(/** @type {HTMLCanvasElement | null} */ (null));
   const nv = useRef(/** @type {any} */ (null));
   const lib = useRef(/** @type {any} */ (null));
@@ -105,6 +107,7 @@ export function Viewer({ volume, overlay = null, emptyText = 'Nothing to show ye
         applyView(nv.current, view);
         setRange([image.cal_min, image.cal_max]);
         setState('ready');
+        onReady?.(nv.current);
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
@@ -122,7 +125,7 @@ export function Viewer({ volume, overlay = null, emptyText = 'Nothing to show ye
 
   const units = volume?.meta.units ? ` ${volume.meta.units}` : '';
   return html`
-    <section class="viewer" aria-label="Viewer" data-state=${state} data-volume=${volume?.key ?? ''} data-overlay=${overlay?.key ?? ''}>
+    <section class="viewer" aria-label=${label} data-state=${state} data-volume=${volume?.key ?? ''} data-overlay=${overlay?.key ?? ''}>
       <div class="viewer-toolbar">
         <label>
           <span class="visually-hidden">View</span>
@@ -130,7 +133,7 @@ export function Viewer({ volume, overlay = null, emptyText = 'Nothing to show ye
             ${VIEWS.map(([id, label]) => html`<option value=${id}>${label}</option>`)}
           </select>
         </label>
-        <span class="viewer-title">${volume?.meta.label ?? ''}${overlay ? html` <span class="muted">with ${overlay.meta.label}</span>` : ''}</span>
+        <span class="viewer-title">${title ?? volume?.meta.label ?? ''}${overlay ? html` <span class="muted">with ${overlay.meta.label}</span>` : ''}</span>
         ${range && state === 'ready' && html`
           <span class="viewer-range" title="Display range">${fmt(range[0])} … ${fmt(range[1])}${units}</span>`}
       </div>

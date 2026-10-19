@@ -47,7 +47,7 @@ test.describe('runs in next.html', () => {
     await expect(page.getByTestId('run-progress')).toContainText('Done: ');
     await expect(viewer).toHaveAttribute('data-volume', 'Chi');
     await expect(viewer).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
-    await expect(page.locator('.step[data-step="inversion"] [data-testid="run-state"]')).toHaveText('done');
+    await expect(page.locator('.step[data-step="inversion"] [data-testid="run-state"]')).toHaveAttribute('data-state', 'done');
     // The outputs, grouped by step, in run order.
     const groups = await page.locator('.output-group').evaluateAll((els) => els.map((e) => e.dataset.step));
     expect(groups.slice(0, 3)).toEqual(['inputs', 'scale_phase', 'magnitude']);
@@ -75,7 +75,7 @@ test.describe('runs in next.html', () => {
 
     // The plan drawer: each step's state in the last run.
     await page.getByTestId('plan-drawer-toggle').click();
-    await expect(page.getByTestId('plan-drawer').locator('tr[data-step="invert"] [data-testid="step-state"]')).toHaveText('done');
+    await expect(page.getByTestId('plan-drawer').locator('tr[data-step="invert"] [data-testid="step-state"]')).toHaveAttribute('data-state', 'done');
     expect(errors).toEqual([]);
   });
 
@@ -100,7 +100,8 @@ test.describe('runs in next.html', () => {
     expect(first.unwrap).toBe('done');
     expect(first.invert).toBe('cancelled');
     expect(await page.evaluate(() => globalThis.qsmblyNext.store.has('LocalField(Main)'))).toBe(true);
-    await expect(page.getByTestId('run-button')).toHaveText('Run');
+    // The engine's dry run: the inversion and referencing are left to compute.
+    await expect(page.getByTestId('run-button')).toHaveText('Re-run 2 steps');
 
     // Again: everything finished before is reused; the inversion and what follows are computed.
     await page.getByTestId('run-button').click();
@@ -109,7 +110,7 @@ test.describe('runs in next.html', () => {
     for (const step of ['load', 'scale_phase', 'magnitude', 'mask', 'unwrap', 'bgremove']) expect(second[step], step).toBe('cached');
     expect(second.invert).toBe('done');
     expect(second.reference).toBe('done');
-    await expect(page.locator('.step[data-step="fieldmap"] [data-testid="run-state"]')).toHaveText('reused');
+    await expect(page.locator('.step[data-step="fieldmap"] [data-testid="run-state"]')).toHaveAttribute('data-state', 'cached');
     expect(errors).toEqual([]);
   });
 

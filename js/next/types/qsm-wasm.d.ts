@@ -32,6 +32,7 @@ export function methods_structured_wasm(config_json: string, facts_json: string)
 export function item_meta_wasm(key: string): string | undefined;
 export function get_model_registry_wasm(): string;
 export function plan_wasm(config_json: string, facts_json: string): string;
+export function plan_state_wasm(config_json: string, facts_json: string, inputs_json: string, identity: string, recorded_json: string | null | undefined, held_json: string): string;
 export function provide_weights_wasm(file_name: string, bytes: Uint8Array): void;
 export function scan_facts_wasm(dims: Uint32Array, sidecars_json: string, has_magnitude: boolean): string;
 export function scan_report_wasm(inputs_json: string): string;

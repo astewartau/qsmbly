@@ -785,9 +785,264 @@ impl Engine {
     }
 }
 
+/// The volumes the page holds, by key, and nothing of their data: all a dry run looks at
+/// ([`plan_state`]).
+struct Held(std::collections::HashSet<String>);
+
+impl Volumes for Held {
+    fn contains(&self, item: &Item) -> bool {
+        self.0.contains(&item_key(item))
+    }
+
+    fn get(&self, _item: &Item) -> Result<Option<VolumeData>, EngineError> {
+        Ok(None)
+    }
+
+    fn insert(&mut self, item: Item, _volume: VolumeRef<'_>) -> Result<(), EngineError> {
+        self.0.insert(item_key(&item));
+        Ok(())
+    }
+
+    fn remove(&mut self, item: &Item) -> bool {
+        self.0.remove(&item_key(item))
+    }
+
+    fn set_aside(&mut self, item: &Item) -> bool {
+        self.remove(item)
+    }
+
+    fn put_back(&mut self, item: &Item) -> bool {
+        self.0.insert(item_key(item));
+        true
+    }
+
+    fn drop_aside(&mut self, _item: &Item) {}
+}
+
+/// What a run of `config` would do with each step, given what the page holds: the engine's
+/// `run::dry_run` over the page's record (`recorded_json`, what the last [`Engine`] recorded) and
+/// the keys of the volumes it holds (`held_json`), on the scan `inputs_json` describes, whose
+/// identity is `identity` (as given to [`Engine::new`]). JSON: `[{ id, state, key? }]` in the
+/// plan's order, `state` one of `cached`, `will_run`, `changed`, `stale`, `skipped`.
+pub fn plan_state(
+    config_json: &str,
+    facts_json: &str,
+    inputs_json: &str,
+    identity: &str,
+    recorded_json: Option<&str>,
+    held_json: &str,
+) -> Result<String, String> {
+    let config = crate::settings::parse_config(config_json)?;
+    let facts = crate::settings::parse_facts(facts_json)?;
+    let inputs = parse_scan_inputs(inputs_json)?;
+    let held: std::collections::HashSet<String> = serde_json::from_str(held_json)
+        .map_err(|e| format!("the held volumes are not a JSON list of keys: {e}"))?;
+    let first = inputs
+        .echoes
+        .first()
+        .and_then(|e| e.phase.clone())
+        .ok_or("the scan has no first phase image")?;
+    let header = Header {
+        dims: first.dims,
+        voxel_size: first.voxel_size,
+        affine: first.affine,
+        sidecar: inputs.facts().sidecars.into_iter().next(),
+    };
+    let mut store = MemoryStore::with_volumes(header, identity.into(), Held(held));
+    if let Some(json) = recorded_json {
+        let recorded: Recorded = serde_json::from_str(json)
+            .map_err(|e| format!("the recorded steps are not valid: {e}"))?;
+        store.restore(recorded);
+    }
+    let plan = qsmxt_engine::plan::plan(&config, &facts);
+    let expected =
+        qsmxt_engine::run::dry_run(&plan, &config, &facts, &store).map_err(|e| e.to_string())?;
+    serde_json::to_string(&expected).map_err(|e| e.to_string())
+}
+
+/// [`plan_state`], for the page.
+#[wasm_bindgen]
+pub fn plan_state_wasm(
+    config_json: &str,
+    facts_json: &str,
+    inputs_json: &str,
+    identity: &str,
+    recorded_json: Option<String>,
+    held_json: &str,
+) -> Result<String, JsValue> {
+    plan_state(
+        config_json,
+        facts_json,
+        inputs_json,
+        identity,
+        recorded_json.as_deref(),
+        held_json,
+    )
+    .map_err(js_err)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A sphere of tissue in a 16³ box at 1 mm, three echoes, as the page describes it
+    /// (`ScanInputs`), and a store holding it under `identity`.
+    fn phantom(identity: &str) -> (String, ScanFacts, MemoryStore) {
+        const N: usize = 16;
+        let tes = [0.005, 0.010, 0.015];
+        let mut affine = [0.0; 16];
+        for i in 0..4 {
+            affine[5 * i] = 1.0;
+        }
+        let grid = serde_json::json!({ "dims": [N, N, N], "voxel_size": [1.0, 1.0, 1.0], "affine": affine });
+        let inputs = serde_json::json!({
+            "echoes": tes.iter().map(|te| serde_json::json!({
+                "phase": grid, "magnitude": grid,
+                "sidecar": { "EchoTime": te, "MagneticFieldStrength": 3.0 },
+            })).collect::<Vec<_>>(),
+            "overrides": {},
+        });
+        let report = parse_scan_inputs(&inputs.to_string()).unwrap().facts();
+        let facts = report.facts.clone().expect("facts");
+        let header = Header {
+            dims: (N, N, N),
+            voxel_size: (1.0, 1.0, 1.0),
+            affine,
+            sidecar: report.sidecars.into_iter().next(),
+        };
+        let mut store = MemoryStore::new(header, identity.into());
+        let c = (N as f64 - 1.0) / 2.0;
+        let mut field = vec![0.0; N * N * N];
+        let mut magnitude = vec![1.0; N * N * N];
+        for z in 0..N {
+            for y in 0..N {
+                for x in 0..N {
+                    let (dx, dy, dz) = (x as f64 - c, y as f64 - c, z as f64 - c);
+                    if dx * dx + dy * dy + dz * dz < 36.0 {
+                        let i = x + y * N + z * N * N;
+                        field[i] = 4.0 * dx / 6.0 + 2.0 * (dz / 6.0).powi(2);
+                        magnitude[i] = 100.0;
+                    }
+                }
+            }
+        }
+        let pi = std::f64::consts::PI;
+        for (e, te) in tes.iter().enumerate() {
+            let phase = field
+                .iter()
+                .map(|f| (2.0 * pi * f * te + pi).rem_euclid(2.0 * pi) - pi)
+                .collect();
+            store.insert(Item::AcquiredPhase(e + 1), VolumeData::Real(phase));
+            store.insert(
+                Item::AcquiredMagnitude(e + 1),
+                VolumeData::Real(magnitude.clone()),
+            );
+        }
+        (inputs.to_string(), facts, store)
+    }
+
+    /// A configuration quick enough for the phantom: a magnitude threshold, PDF and TKD.
+    fn quick_config() -> PipelineConfig {
+        use qsmxt_engine::masking::{MaskOp, MaskSection, MaskThresholdMethod, MaskingInput};
+        let mut config = PipelineConfig::default();
+        config.masking.sections = vec![MaskSection {
+            input: MaskingInput::Magnitude,
+            generator: MaskOp::Threshold {
+                method: MaskThresholdMethod::Otsu,
+                value: None,
+            },
+            refinements: vec![],
+        }];
+        config.masking.refinements = vec![];
+        config.masking.inhomogeneity_correction = false;
+        config.bg_removal.algorithm = qsmxt_engine::BfAlgorithm::Pdf;
+        config.inversion.algorithm = qsmxt_engine::QsmAlgorithm::Tkd;
+        config
+    }
+
+    /// Each step's state, by name.
+    fn states(json: &str) -> Vec<(String, String)> {
+        let v: Vec<serde_json::Value> = serde_json::from_str(json).unwrap();
+        v.iter()
+            .map(|e| {
+                (
+                    e["id"].as_str().unwrap().to_string(),
+                    e["state"].as_str().unwrap().to_string(),
+                )
+            })
+            .collect()
+    }
+
+    /// The page's plan state is the engine's dry run over what it holds: every step will run
+    /// before a run; after one, everything is cached; a new TKD threshold changes the inversion
+    /// and makes referencing stale; new input data changes the load step. The keys the page
+    /// holds count: a step whose output is gone is computed again.
+    #[test]
+    fn plan_state_is_the_engines_dry_run_over_what_the_page_holds() {
+        let (inputs, facts, mut store) = phantom("inputs-1");
+        let mut config = quick_config();
+        let facts_json = serde_json::to_string(&facts).unwrap();
+        let state =
+            |config: &PipelineConfig, identity: &str, recorded: Option<&str>, held: &[String]| {
+                let json = plan_state(
+                    &config.to_json().unwrap(),
+                    &facts_json,
+                    &inputs,
+                    identity,
+                    recorded,
+                    &serde_json::to_string(held).unwrap(),
+                )
+                .unwrap();
+                states(&json)
+            };
+        let inputs_held: Vec<String> = (1..=3)
+            .flat_map(|e| [Item::AcquiredPhase(e), Item::AcquiredMagnitude(e)])
+            .map(|i| item_key(&i))
+            .collect();
+        let before = state(&config, "inputs-1", None, &inputs_held);
+        assert!(
+            before
+                .iter()
+                .all(|(_, s)| s == "will_run" || s == "skipped"),
+            "{before:?}"
+        );
+
+        let plan = qsmxt_engine::plan::plan(&config, &facts);
+        qsmxt_engine::run::run(&plan, &config, &facts, &mut store, &mut ()).unwrap();
+        let recorded = store.recorded();
+        let mut held = inputs_held.clone();
+        held.extend(
+            recorded
+                .steps
+                .values()
+                .flat_map(|(_, outputs)| outputs.iter().cloned()),
+        );
+        let recorded = serde_json::to_string(&recorded).unwrap();
+
+        let after = state(&config, "inputs-1", Some(&recorded), &held);
+        assert!(
+            after.iter().all(|(_, s)| s == "cached" || s == "skipped"),
+            "{after:?}"
+        );
+
+        config.inversion.tkd.threshold *= 2.0;
+        let changed = state(&config, "inputs-1", Some(&recorded), &held);
+        let of = |list: &[(String, String)], id: &str| {
+            list.iter().find(|(i, _)| i == id).map(|(_, s)| s.clone())
+        };
+        assert_eq!(of(&changed, "bgremove").as_deref(), Some("cached"));
+        assert_eq!(of(&changed, "invert").as_deref(), Some("changed"));
+        assert_eq!(of(&changed, "reference").as_deref(), Some("stale"));
+
+        let without_chi: Vec<String> = held.iter().filter(|k| *k != "Chi").cloned().collect();
+        let gone = state(&quick_config(), "inputs-1", Some(&recorded), &without_chi);
+        assert_eq!(of(&gone, "reference").as_deref(), Some("stale"), "{gone:?}");
+        assert_eq!(of(&gone, "invert").as_deref(), Some("cached"));
+
+        let new_data = state(&quick_config(), "inputs-2", Some(&recorded), &held);
+        assert_eq!(of(&new_data, "load").as_deref(), Some("changed"));
+        assert_eq!(of(&new_data, "invert").as_deref(), Some("stale"));
+    }
 
     /// The page's scan report is the engine's `ScanInputs::facts`, as JSON.
     #[test]

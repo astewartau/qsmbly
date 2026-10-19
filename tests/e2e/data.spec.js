@@ -56,7 +56,7 @@ test.describe('the Data step', () => {
     const mag2 = 'sub-phantom_echo-2_part-mag_MEGRE.nii.gz';
     await page.getByLabel(`Role of ${mag2}`).selectOption('ignore');
     await expect(page.getByRole('alert').filter({ hasText: 'Echo 2 has no magnitude image' })).toBeVisible();
-    await expect(page.locator('.step[data-step="data"] .state-dot')).toHaveClass(/problem/);
+    await expect(page.locator('.step[data-step="data"] [data-testid="run-state"]')).toHaveAttribute('data-state', 'cant-run');
     const shot = await page.screenshot({ path: testInfo.outputPath('data-problem.png') });
     await testInfo.attach('a problem on a file', { body: shot, contentType: 'image/png' });
     await page.getByLabel(`Role of ${mag2}`).selectOption('magnitude');

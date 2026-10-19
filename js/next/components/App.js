@@ -15,6 +15,8 @@
  * @property {import('../engine/client.js').EngineClient} engine
  * @property {import('../run.js').Runner} runner
  * @property {import('../scan.js').ScanLoader} loader
+ * @property {import('../history.js').History} [history]
+ * @property {import('../rerun.js').Expectations} [expect]
  */
 import { html } from '../html.js';
 import { useState, useEffect } from 'preact/hooks';
@@ -27,6 +29,7 @@ import { itemMeta } from '../items.js';
 import { installUndoKeys } from '../shortcuts.js';
 import { Outputs, hiddenKey } from './Outputs.js';
 import { decodeForViewer } from '../scan.js';
+import { Compare } from './Compare.js';
 
 export const THEME_STORAGE_KEY = 'qsmbly.next.theme';
 const THEMES = /** @type {const} */ (['auto', 'light', 'dark']);
@@ -39,10 +42,11 @@ export function App({ session, store, workspace, providers }) {
       <${Header} session=${session} versions=${workspace.versions} />
       <div class="main">
         <${Pipeline} session=${session} store=${store} schema=${workspace.schema} mask=${workspace.mask}
-          runner=${workspace.runner} loader=${workspace.loader} />
+          runner=${workspace.runner} loader=${workspace.loader} expect=${workspace.expect} />
         <${TabbedPane} session=${session} store=${store} providers=${providers} workspace=${workspace} />
       </div>
-      <${RunBar} session=${session} store=${store} models=${workspace.models} runner=${workspace.runner} schema=${workspace.schema} />
+      <${RunBar} session=${session} store=${store} models=${workspace.models} runner=${workspace.runner} schema=${workspace.schema}
+        expect=${workspace.expect} history=${workspace.history} />
     </div>
   `;
 }
@@ -136,7 +140,14 @@ function ViewerPane({ session, store, workspace }) {
   store.version.value;
   const keys = store.keys().filter((k) => store.entry(k)?.data && !hiddenKey(k));
   const viewing = session.ui.viewing.value;
-  const entry = viewing ? store.entry(viewing) : undefined;
+  const history = workspace.history;
+  const comparing = !!history?.compare.value;
+  // An earlier run's outputs, when the outputs browser shows that run (its inputs are the store's).
+  const pastId = history?.viewing.value ?? null;
+  const past = pastId != null ? history?.get(pastId) : null;
+  const pastEntry = past && viewing ? past.outputs.get(viewing) : undefined;
+  const pastOverlay = (key) => (past && key ? past.outputs.get(key) : undefined);
+  const entry = /** @type {import('../store/volumes.js').StoredVolume | undefined} */ (viewing ? pastEntry ?? store.entry(viewing) : undefined);
   const grid = entry?.grid;
   // A volume whose grid does not match its voxels (yet) is not shown.
   const fits = !!(entry?.data && grid?.dims && entry.data.length === grid.dims[0] * grid.dims[1] * grid.dims[2]);
@@ -147,7 +158,7 @@ function ViewerPane({ session, store, workspace }) {
   }, [viewing, entry]);
   // A mask over it, when it lies on the same grid.
   const overlayKey = session.ui.overlay.value;
-  const over = overlayKey && overlayKey !== viewing ? store.entry(overlayKey) : undefined;
+  const over = overlayKey && overlayKey !== viewing ? pastOverlay(overlayKey) ?? store.entry(overlayKey) : undefined;
   const sameGrid = (a, b) => !!a && !!b && a.dims.join() === b.dims.join() && a.affine.join() === b.affine.join();
   const overlay = volume && over?.data && sameGrid(over.grid, grid) && over.data.length === entry?.data?.length
     ? { key: /** @type {string} */ (overlayKey), data: over.data, grid: /** @type {any} */ (over.grid), meta: itemMeta(/** @type {string} */ (overlayKey)) }
@@ -157,8 +168,11 @@ function ViewerPane({ session, store, workspace }) {
     : 'Load a scan in the Data step, or try the example.';
   return html`
     <div class="viewer-body">
-      <${Viewer} volume=${volume} overlay=${overlay} emptyText=${empty} />
-      <${Outputs} session=${session} store=${store} runner=${workspace.runner} engine=${workspace.engine} />
+      ${comparing && history
+        ? html`<${Compare} history=${history} />`
+        : html`<${Viewer} volume=${volume} overlay=${overlay} emptyText=${empty}
+            title=${past && pastEntry ? `${itemMeta(/** @type {string} */ (viewing)).label} (run ${past.id})` : undefined} />`}
+      <${Outputs} session=${session} store=${store} runner=${workspace.runner} engine=${workspace.engine} history=${history} />
     </div>
   `;
 }

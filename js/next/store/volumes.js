@@ -18,6 +18,13 @@
 import { signal, computed } from '@preact/signals-core';
 
 /**
+ * Whether `key` is the working-grid copy of an output the engine keeps aside while the output
+ * holds its version on the acquired grid (`WorkingGrid:<key>`, rust-wasm/src/engine.rs).
+ * @param {ItemKey} key
+ */
+export const isAside = (key) => key.startsWith('WorkingGrid:');
+
+/**
  * Whether volumes can live in SharedArrayBuffers here.
  * @returns {boolean}
  */
@@ -71,6 +78,11 @@ export class VolumeStore {
       }
       return total;
     });
+  }
+
+  /** The scan's identity for an engine (`Engine` and `planState`): changes whenever an input does. */
+  identity() {
+    return `inputs-${this.inputVersion}`;
   }
 
   /** @param {ItemKey} key */

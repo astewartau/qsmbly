@@ -190,6 +190,23 @@
  */
 
 /**
+ * What a run would do with a step, found before running it (qsmxt-engine `run::ExpectedState`):
+ * `cached` its earlier output is still valid; `will_run` never computed; `changed` computed
+ * before under another key (its own settings, or the configuration it reads, changed); `stale`
+ * computed before with these settings, but a step it reads is computed again (or its outputs are
+ * gone); `skipped` it would do nothing.
+ * @typedef {'cached' | 'will_run' | 'changed' | 'stale' | 'skipped'} ExpectedState
+ */
+
+/**
+ * One plan step as a run would take it (qsmxt-engine `run::Expected`, from `run::dry_run`).
+ * @typedef {object} Expected
+ * @property {string} id - the step's name, as in the plan
+ * @property {ExpectedState} state
+ * @property {string} [key] - the key it would be cached under
+ */
+
+/**
  * What a run will do (qsmxt-engine `Plan`, with each step's reads and outputs as item keys, and
  * every item it touches).
  * @typedef {object} Plan
