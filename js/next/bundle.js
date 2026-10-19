@@ -4,18 +4,22 @@
  *
  * ```
  * command.txt                                    the `qsmxt run` command
- * derivatives/qsmxt/methods.md                   the methods text
+ * derivatives/qsmxt/methods.md                   the dataset's methods text
  * derivatives/qsmxt/pipeline_config.toml         every setting, as qsmxt writes it there
- * derivatives/qsmxt/pipeline.mmd                 the pipeline graph (Mermaid), as planned
- * derivatives/qsmxt/workflow/sub-1/sub-1_desc-ran_pipeline.mmd   the graph the run took, only when
- *                                                it differs from the plan (as qsmxt writes it)
+ * derivatives/qsmxt/pipeline.mmd                 the dataset's pipeline graph (Mermaid)
+ * derivatives/qsmxt/workflow/sub-1/sub-1_methods.md               the run's methods text,
+ * derivatives/qsmxt/workflow/sub-1/sub-1_pipeline.mmd             its graph as planned,
+ * derivatives/qsmxt/workflow/sub-1/sub-1_desc-ran_pipeline.mmd    and as it ran, if that differs
+ * derivatives/qsmxt/changes/sub-1_{methods.md,desc-ran_pipeline.mmd}  only if the run differs
+ *                                                from the dataset (one run never does)
  * derivatives/qsmxt/sub-1/anat/sub-1_Chimap.nii  each published output…
  * derivatives/qsmxt/sub-1/anat/sub-1_Chimap.json …and its sidecar
  * ```
  *
  * Every name and every sidecar is the engine's (`qsmxt_engine::bids::outputs`, which `qsmxt run`
- * names and describes its files with), and every text is a provider's: this module only collects
- * them. Volumes are written as NIfTI by qsm-core (the engine client's `niftiFile`).
+ * names and describes its files with), and every text is the engine's (the methods texts and
+ * graphs from `dataset::summarise`, as `qsmxt run` writes them once its runs are done): this
+ * module only collects them. Volumes are written as NIfTI by qsm-core (the engine client's `niftiFile`).
  *
  * @typedef {import('./store/volumes.js').VolumeStore} VolumeStore
  * @typedef {import('./store/session.js').Session} Session
@@ -26,6 +30,7 @@
  *   `run`: the run's BIDS name, as the engine names its outputs ({@link OutputFiles}`.run`)
  */
 import { echoes } from './inputs.js';
+import { methodsMarkdown } from './methods.js';
 import { zip } from './zip.js';
 
 /** Where `qsmxt run` writes its derivatives under its output directory. */
@@ -78,25 +83,32 @@ export function publishedFiles({ session, store, engine }) {
  * The bundle's files: the texts, then each chosen output and its sidecar.
  * @param {object} parts
  * @param {string} parts.command - as shown (`formatCommand`)
- * @param {string} parts.methods - Markdown (`methodsMarkdown`)
  * @param {string} parts.toml - every setting (`to_toml`)
- * @param {string} parts.mermaid - the graph, as planned
- * @param {string | null} [parts.ranMermaid] - the graph the run took, when it differs from the plan
- * @param {string} [parts.run] - the run's BIDS name ({@link OutputFiles}`.run`), which names that graph's file
+ * @param {import('./protocol.js').DatasetSummary} parts.summary - the methods texts and graphs (`datasetSummary`)
+ * @param {string} parts.run - the run's BIDS name ({@link OutputFiles}`.run`), which names its files
  * @param {OutputFiles['files']} parts.files - the outputs to include
  * @param {(key: string) => Promise<Uint8Array>} parts.nifti - an output's NIfTI file
  * @param {ZipEntry[]} [parts.extra] - from {@link bundleContributors}
  * @returns {Promise<ZipEntry[]>}
  */
-export async function bundleEntries({ command, methods, toml, mermaid, ranMermaid = null, run = '', files, nifti, extra = [] }) {
+export async function bundleEntries({ command, toml, summary, run, files, nifti, extra = [] }) {
   /** @type {ZipEntry[]} */
   const entries = [
     { path: 'command.txt', bytes: `${command}\n` },
-    { path: `${DERIVATIVES}/methods.md`, bytes: methods },
+    { path: `${DERIVATIVES}/methods.md`, bytes: methodsMarkdown(summary.methods) },
     { path: `${DERIVATIVES}/pipeline_config.toml`, bytes: toml },
-    { path: `${DERIVATIVES}/pipeline.mmd`, bytes: mermaid },
+    { path: `${DERIVATIVES}/pipeline.mmd`, bytes: summary.mermaid },
   ];
-  if (ranMermaid && run) entries.push({ path: `${DERIVATIVES}/workflow/${run}/${run}_desc-ran_pipeline.mmd`, bytes: ranMermaid });
+  if (summary.run && run) {
+    const dir = `${DERIVATIVES}/workflow/${run}/${run}`;
+    entries.push({ path: `${dir}_methods.md`, bytes: methodsMarkdown(summary.run.methods) });
+    entries.push({ path: `${dir}_pipeline.mmd`, bytes: summary.run.planned });
+    if (summary.run.differs) entries.push({ path: `${dir}_desc-ran_pipeline.mmd`, bytes: summary.run.after });
+    if (summary.changed) {
+      entries.push({ path: `${DERIVATIVES}/changes/${run}_methods.md`, bytes: methodsMarkdown(summary.run.methods) });
+      entries.push({ path: `${DERIVATIVES}/changes/${run}_desc-ran_pipeline.mmd`, bytes: summary.run.after });
+    }
+  }
   for (const f of files) {
     entries.push({ path: `${DERIVATIVES}/${f.path}`, bytes: await nifti(f.key) });
     if (f.sidecar_path && f.sidecar != null) entries.push({ path: `${DERIVATIVES}/${f.sidecar_path}`, bytes: f.sidecar });

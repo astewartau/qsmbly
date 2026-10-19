@@ -98,7 +98,7 @@ export function createEngineClient(worker) {
     plan: op('plan'),
     planState: op('planState'),
     graph: op('graph'),
-    plannedMermaid: op('plannedMermaid'),
+    datasetSummary: op('datasetSummary'),
     methods: op('methods'),
     graphAfter: op('graphAfter'),
     methodsAfter: op('methodsAfter'),
