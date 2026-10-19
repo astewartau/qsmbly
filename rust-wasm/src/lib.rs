@@ -36,11 +36,47 @@ macro_rules! console_log {
     }};
 }
 
-/// Initialize panic hook for better error messages in browser console
+/// The message of the last panic, kept for the page: the build aborts on a panic
+/// (`panic=abort`), so the call it happened in throws only `RuntimeError: unreachable`, and the
+/// page asks [`take_panic_wasm`] what happened. One for every thread of a threaded build.
+static LAST_PANIC: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// What a panic says, and where it happened.
+fn panic_text(info: &std::panic::PanicHookInfo<'_>) -> String {
+    let payload = info.payload();
+    let message = payload
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "a panic with no message".to_string());
+    match info.location() {
+        Some(l) => format!("{message} (at {}:{})", l.file(), l.line()),
+        None => message,
+    }
+}
+
+/// Install the panic hook: a panic's message is kept for [`take_panic_wasm`] and, with the
+/// `console_error_panic_hook` feature, written to the console with its stack.
 #[wasm_bindgen(start)]
 pub fn init() {
-    #[cfg(feature = "console_error_panic_hook")]
-    console_error_panic_hook::set_once();
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        std::panic::set_hook(Box::new(|info| {
+            if let Ok(mut last) = LAST_PANIC.lock() {
+                *last = Some(panic_text(info));
+            }
+            #[cfg(feature = "console_error_panic_hook")]
+            console_error_panic_hook::hook(info);
+        }));
+    });
+}
+
+/// The message of the last panic (and where it happened), once: what a call that threw
+/// `RuntimeError: unreachable` died of. `undefined` when nothing has panicked since it was last
+/// asked.
+#[wasm_bindgen]
+pub fn take_panic_wasm() -> Option<String> {
+    LAST_PANIC.lock().ok().and_then(|mut last| last.take())
 }
 
 // Rayon threadpool bootstrap for wasm. JS must `await init_thread_pool(n)` once after module
@@ -1043,6 +1079,25 @@ config_defaults!(get_ilsqr_defaults, qsmxt_engine::config::IlsqrConfig);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // A panicking call is reported by its message: the page asks for it after the call aborts.
+    #[test]
+    fn a_panic_is_kept_for_the_page_once() {
+        init();
+        let _ = take_panic_wasm();
+        let caught = std::panic::catch_unwind(|| {
+            let v: Vec<u8> = Vec::new();
+            v[3]
+        });
+        assert!(caught.is_err());
+        let text = take_panic_wasm().expect("the panic was kept");
+        assert!(
+            text.starts_with("index out of bounds: the len is 0 but the index is 3 (at "),
+            "{text}"
+        );
+        assert!(text.contains("lib.rs:"), "{text}");
+        assert_eq!(take_panic_wasm(), None);
+    }
 
     #[test]
     fn test_version() {

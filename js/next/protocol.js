@@ -397,9 +397,11 @@
  *   | { type: 'log', level: string, message: string, step: string | null }
  *   | { type: 'output', key: ItemKey }
  *   | { type: 'done', record: string | null, grid: string | null, heap?: number | null }
- *   | { type: 'failed', message: string, kind: string | null, step: string | null }
+ *   | { type: 'failed', message: string, kind: string | null, step: string | null, fatal?: boolean }
  *   | { type: 'previewed', mask: Uint8Array, image: Float32Array, input: string, otsu: number, voxels: number, grid: string | null }
  * } RunMessage
+ * `failed` ends a job; `fatal`: it died inside the WASM module (a panic, or memory the heap
+ * could not grow to), whose state is then not to be trusted, so the page replaces the worker.
  * `previewed` ends a preview: the mask, the image of the section shown and its input
  * (`phase-quality`, ...), Otsu's threshold of that image, and the voxels in the mask.
  */

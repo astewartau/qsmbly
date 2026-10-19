@@ -197,6 +197,23 @@ describe('runs from the page', () => {
     expect(runner.log.peek().at(-1)).toMatchObject({ level: 'ERROR', step: 'invert' });
   });
 
+  test('a run that died inside the WASM module says why, and the next run gets a fresh worker', async () => {
+    const { runner, workers } = await setup((job, w) => (workers.made.indexOf(w) === 0
+      ? [
+        { type: 'stage', step: 'segmentation', algorithm: 'synthseg', event: 'started', text: 'Segmenting' },
+        { type: 'failed', message: 'The engine ran out of memory: its heap had grown to 3.8 GB of the 4.0 GB a browser allows (unreachable)', kind: 'abort', step: 'segmentation', fatal: true },
+      ]
+      : [{ type: 'done', record: null, grid: null }]));
+    await runner.start();
+    await until(() => runner.status.peek() === 'failed');
+    expect(runner.error.peek()).toEqual({ message: expect.stringMatching(/^The engine ran out of memory/), kind: 'abort', step: 'segmentation' });
+    expect(runner.steps.peek().get('segmentation')?.state).toBe('failed');
+    expect(workers.made[0].terminated).toBe(true);
+    await runner.start();
+    await until(() => runner.status.peek() === 'done');
+    expect(workers.made).toHaveLength(2);
+  });
+
   test('each finished run is kept in the history, which a new scan clears', async () => {
     let n = 0;
     const { session, store, runner, history } = await setup(() => {
