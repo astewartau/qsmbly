@@ -316,6 +316,11 @@ from the configuration alone, so it says what was done, including those changes.
 | G4 | QSMxT | TUI "Pipeline" view: the graph as text, with memory and models, updated as settings change; a key writes the SVG and opens it. | G3 |
 | G5 | qsmbly | The graph in the new UI, live during a run (queued, running, done, cached, stale). | the UI redesign |
 
+Status (2026-10-19): G1–G3 are merged (QSMxT #369, #382, #386, #387); G4 is QSMxT #403. G5 is
+qsmbly #188: the Pipeline tab's boxes carry a status strip (icon and word, a progress bar while the
+step runs) from the run's stage events and, between runs, from the engine's dry run; the failed step
+shows the engine's message. The graph itself stays the engine's.
+
 A dataset gets one graph per run and a **dataset graph**: every run's graph merged, each step
 once, labelled with how many runs took it (e.g. "Inversion (iLSQR), 320/320 runs"). A step only
 some runs took is drawn differently (e.g. dashed) with its count ("R2PRIMEnet, 12/320 runs"), and
