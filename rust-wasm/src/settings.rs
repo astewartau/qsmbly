@@ -245,6 +245,21 @@ pub fn config_to_toml_wasm(config_json: &str, selected: bool) -> Result<String, 
     config_to_toml(config_json, selected).map_err(js_err)
 }
 
+/// `config` as a QSMxT configuration file of only the settings that differ from QSMxT's defaults
+/// (`PipelineConfig::to_toml_changed`; settings that do not apply are left out, as from the
+/// command), so `qsmxt run --config` reproduces it.
+pub fn config_to_toml_changed(config_json: &str) -> Result<String, String> {
+    parse_config(config_json)?
+        .to_toml_changed()
+        .map_err(|e| e.to_string())
+}
+
+/// [`config_to_toml_changed`].
+#[wasm_bindgen]
+pub fn config_to_toml_changed_wasm(config_json: &str) -> Result<String, JsValue> {
+    config_to_toml_changed(config_json).map_err(js_err)
+}
+
 /// A QSMxT configuration file, read as `qsmxt run --config` reads it
 /// (`PipelineConfig::from_toml_migrating`), then given the browser profile
 /// (`apply_browser_profile`: a default the browser cannot run becomes the browser's value; every
@@ -551,6 +566,24 @@ mod tests {
         )
         .unwrap();
         assert_eq!(old["warnings"].as_array().unwrap().len(), 1);
+    }
+
+    /// The short settings file holds the browser profile's and the user's changes from QSMxT's
+    /// defaults, and nothing else: read by `qsmxt run --config`, it is the same run.
+    #[test]
+    fn the_short_toml_is_what_differs_from_qsmxts_defaults() {
+        let config = set(&browser(), "inversion.algorithm", json!("rts"));
+        let short = config_to_toml_changed(&config).unwrap();
+        assert!(short.contains("algorithm = \"rts\""), "{short}");
+        assert!(!short.contains("[inversion.tkd]"), "{short}");
+        let full = config_to_toml(&config, false).unwrap();
+        assert!(short.lines().count() * 4 < full.lines().count(), "{short}");
+        let back = PipelineConfig::from_toml(&short).unwrap();
+        assert_eq!(
+            qsmxt_engine::generate_command(&back),
+            command(&config).unwrap(),
+            "the short file and the command set the same run"
+        );
     }
 
     #[test]

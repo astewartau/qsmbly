@@ -32,8 +32,13 @@ export function engineProviders(engine) {
     }),
     /** @param {PipelineConfig} config */
     command: async (config) => ({ command: await engine.command(config) }),
-    /** @param {PipelineConfig} config */
-    toml: async (config) => ({ toml: await engine.toToml(config, true) }),
+    /**
+     * @param {PipelineConfig} config
+     * @param {import('../exports.js').TomlForm} [form]
+     */
+    toml: async (config, form = 'selected') => ({
+      toml: await (form === 'changed' ? engine.toTomlChanged(config) : form === 'full' ? engine.toTomlFull(config) : engine.toToml(config, true)),
+    }),
     /** @param {string} text */
     importToml: (text) => engine.fromToml(text),
   };

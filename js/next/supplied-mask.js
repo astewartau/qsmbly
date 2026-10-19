@@ -53,6 +53,18 @@ export async function suppliedMaskEntry({ session, store, engine, run }) {
   return { path, bytes };
 }
 
+/**
+ * The bundle's share of the supplied mask (a `bundleContributors` entry, bundle.js): the BIDS
+ * derivative for the bundle's run (`run`, the engine's name for the run's outputs; the page's
+ * name when it has none yet), or nothing when the run does not use a supplied mask.
+ * @param {{ session: Session, store: VolumeStore, engine: any, run: string }} context
+ * @returns {Promise<{ path: string, bytes: Uint8Array }[]>}
+ */
+export async function suppliedMaskFiles({ session, store, engine, run }) {
+  const entry = await suppliedMaskEntry({ session, store, engine, run: run || runName(session) });
+  return entry ? [entry] : [];
+}
+
 /** @param {Uint8Array} file @returns {Promise<Uint8Array>} */
 async function plain(file) {
   return isGzip(file) ? gunzip(file) : file;

@@ -136,6 +136,24 @@
  */
 
 /**
+ * What `qsmxt run` would write for the outputs the page holds (`output_files_wasm`, from
+ * qsmxt-engine `bids::outputs`): the run's BIDS name, and for each published output its path
+ * under the derivatives directory and its sidecar (JSON text, as `qsmxt run` writes it).
+ * @typedef {object} OutputFiles
+ * @property {string} run - `sub-1`
+ * @property {{ key: ItemKey, path: string, sidecar_path: string | null, sidecar: string | null }[]} files
+ */
+
+/**
+ * The outputs the page asks {@link OutputFiles} for: each held output, the step that last wrote
+ * it, and what the run recorded about it (the record's `annotations`).
+ * @typedef {object} OutputRequest
+ * @property {string | null} scan_file - one of the scan's images (its first phase), which names the run
+ * @property {ScanFacts} facts
+ * @property {{ key: ItemKey, step: string | null, annotations: Record<string, unknown> | null }[]} outputs
+ */
+
+/**
  * One requirement problem, as data (QSMxT #347).
  * @typedef {object} Problem
  * @property {'error' | 'warning'} severity

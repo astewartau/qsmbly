@@ -69,6 +69,18 @@ fn describe(pkg: &Locked) -> (String, String, String) {
     )
 }
 
+/// A git source's version as QSMxT records it in provenance: its `tag=` as written, else
+/// `rev-<full commit>`.
+fn provenance_version(source: &str) -> String {
+    let git = source.strip_prefix("git+").unwrap_or(source);
+    let (url, commit) = git.split_once('#').unwrap_or((git, ""));
+    let query = url.split_once('?').map_or("", |(_, q)| q);
+    match query.split('&').find_map(|kv| kv.strip_prefix("tag=")) {
+        Some(tag) => tag.to_string(),
+        None => format!("rev-{commit}"),
+    }
+}
+
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("set by cargo");
     let lock_path = Path::new(&manifest_dir).join("Cargo.lock");
@@ -84,4 +96,11 @@ fn main() {
         println!("cargo:rustc-env={prefix}_COMMIT={commit}");
         println!("cargo:rustc-env={prefix}_REPOSITORY={repo}");
     }
+    // The QSM.rs version an output's sidecar records (`QSMrsVersion`), as `qsmxt run` records it
+    // (QSMxT's build.rs): the tag it is pinned to, else `rev-<full commit>`.
+    let provenance = locked_package(&lock, "qsm-core")
+        .and_then(|p| p.source)
+        .map(|source| provenance_version(&source))
+        .unwrap_or_else(|| "unknown".into());
+    println!("cargo:rustc-env=QSM_CORE_PROVENANCE_VERSION={provenance}");
 }

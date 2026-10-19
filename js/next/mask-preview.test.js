@@ -14,7 +14,7 @@ import { VolumeStore } from './store/volumes.js';
 import {
   createMaskPreview, slowSteps, PREVIEW_MASK, PREVIEW_INPUT, SUPPLIED_MASK, EDITED_NAME,
 } from './mask-preview.js';
-import { suppliedMaskEntry, usesSuppliedMask, sameGrid } from './supplied-mask.js';
+import { suppliedMaskEntry, suppliedMaskFiles, usesSuppliedMask, sameGrid, runName } from './supplied-mask.js';
 import { itemMeta } from './items.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
@@ -178,11 +178,18 @@ describe('hand edits and supplied masks', () => {
     const file = await suppliedMaskEntry({ session, store, engine, run: 'sub-1' });
     expect(file?.path).toBe('derivatives/qsmbly/sub-1/anat/sub-1_mask.nii.gz');
     expect(file?.bytes).toBe(store.entry(SUPPLIED_MASK)?.nifti);
+    // The bundle's contributor names it for the bundle's run, else for the page's run name.
+    expect(await suppliedMaskFiles({ session, store, engine, run: 'sub-01_ses-pre' })).toEqual([
+      { path: 'derivatives/qsmbly/sub-01_ses-pre/anat/sub-01_ses-pre_mask.nii.gz', bytes: store.entry(SUPPLIED_MASK)?.nifti },
+    ]);
+    const fallback = await suppliedMaskFiles({ session, store, engine, run: '' });
+    expect(fallback[0].path).toBe(`derivatives/qsmbly/${runName(session)}/anat/${runName(session)}_mask.nii.gz`);
     // Back to the recipe drops it.
     await act(() => [...root.querySelectorAll('[role="radio"]')].find((b) => b.textContent === 'Recipe').click());
     expect(store.has(SUPPLIED_MASK)).toBe(false);
     expect(session.config.value.masking.custom_mask_tool).toBeNull();
     expect(await suppliedMaskEntry({ session, store, engine, run: 'sub-1' })).toBeNull();
+    expect(await suppliedMaskFiles({ session, store, engine, run: 'sub-1' })).toEqual([]);
   });
 
   test('cancelling a drawing keeps the recipe', async () => {

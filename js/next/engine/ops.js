@@ -83,6 +83,13 @@ export function engineOps(wasm) {
     command: (config) => call(wasm.command_wasm, json(config)),
     /** The config as a QSMxT configuration file; `selected`: only the chosen algorithms' tables. */
     toToml: (config, selected = true) => call(wasm.config_to_toml_wasm, json(config), selected),
+    /**
+     * Every setting, as `qsmxt run` writes `pipeline_config.toml` (`to_toml`). Its own op, outside
+     * `toToml`'s lane, so saving a bundle is never superseded by the tabs.
+     */
+    toTomlFull: (config) => call(wasm.config_to_toml_wasm, json(config), false),
+    /** The config as a QSMxT configuration file of only the settings that differ from QSMxT's defaults. */
+    toTomlChanged: (config) => call(wasm.config_to_toml_changed_wasm, json(config)),
     /** A QSMxT configuration file read as `qsmxt run --config` does, with the browser profile. */
     fromToml: (text) => /** @type {{ config: PipelineConfig, warnings: string[] }} */ (JSON.parse(call(wasm.config_from_toml_wasm, text))),
     /** What the item kept under `key` is; null for a key that names no item. @returns {ItemMeta | null} */
@@ -118,6 +125,13 @@ export function engineOps(wasm) {
      * @param {string} tool @param {string} run @returns {string}
      */
     suppliedMaskPath: (tool, run) => call(wasm.supplied_mask_path_wasm, tool, run),
+    /**
+     * Of the outputs the page holds, those `qsmxt run` publishes, each with its file's path and
+     * sidecar as `qsmxt run` writes them.
+     * @param {import('../protocol.js').OutputRequest} request
+     * @returns {import('../protocol.js').OutputFiles}
+     */
+    outputFiles: (request) => JSON.parse(call(wasm.output_files_wasm, json(request))),
     /** QSM.rs's model registry. @returns {ModelEntry[]} */
     models: () => JSON.parse(call(wasm.get_model_registry_wasm)),
   };

@@ -29,6 +29,8 @@ const models = fixture('models.json');
 const schema = fixture('schema.json');
 const mask = { schema: schema.mask, defaults: fixture('mask-defaults.json') };
 const engine = recordedEngine(fixture('engine-cases.json'));
+// The outputs browser asks the engine for published names; these tests use the page's own.
+const noNames = /** @type {any} */ ({ outputFiles: async () => ({ run: '', files: [] }) });
 
 learnItems([
   { key: 'Chi', label: 'Susceptibility', units: 'ppm', kind: 'chi' },
@@ -167,7 +169,7 @@ describe('run history and compare', () => {
 
   test('the runs kept, what changed between them, pinning, and an earlier run\'s outputs', async () => {
     const { session, store, runner, history } = await twoRuns();
-    const root = await mount(html`<${Outputs} session=${session} store=${store} runner=${runner} engine=${/** @type {any} */ ({})} history=${history} />`);
+    const root = await mount(html`<${Outputs} session=${session} store=${store} runner=${runner} engine=${noNames} history=${history} />`);
     const chips = () => [...root.querySelectorAll('[data-testid="run-chip"]')].map((c) => c.textContent?.replace(/\s+/g, ' ').trim());
     expect(chips()).toEqual(['Run 1 8 B', 'Run 2 (latest)']);
     expect(root.querySelector('[data-testid="run-changes"]')?.textContent).toContain('inversion.algorithm: ilsqr → rts');
@@ -191,7 +193,7 @@ describe('run history and compare', () => {
     const { session, store, runner, history } = await twoRuns();
     const root = await mount(html`<div>
       <${Compare} history=${history} />
-      <${Outputs} session=${session} store=${store} runner=${runner} engine=${/** @type {any} */ ({})} history=${history} />
+      <${Outputs} session=${session} store=${store} runner=${runner} engine=${noNames} history=${history} />
     </div>`);
     // The field map was reused, so only χ can be compared.
     expect(root.querySelector('[data-compare="FieldPpm"]')).toBeNull();
