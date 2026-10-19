@@ -47,7 +47,7 @@ const report = (problems = []) => ({
   sidecars: [],
 });
 
-async function setup({ problems = [] } = {}) {
+async function setup({ problems = [], files = null, shown = null } = {}) {
   const session = createSession({
     defaults: browser,
     planner: (c, f) => engine.plan(c, f),
@@ -55,11 +55,11 @@ async function setup({ problems = [] } = {}) {
     schedule: (run) => run(),
   });
   session.facts.value = facts;
-  session.files.value = sortFiles([
+  session.files.value = sortFiles(files ?? [
     { name: 'sub-1_echo-1_part-phase_MEGRE.nii.gz', bytes: new Uint8Array(4) },
     { name: 'sub-1_echo-1_part-mag_MEGRE.nii.gz', bytes: new Uint8Array(4) },
   ]);
-  session.scan.value = /** @type {any} */ (report(problems));
+  session.scan.value = /** @type {any} */ ({ ...report(problems), ...(shown ? { shown } : {}) });
   await settle();
   return { session };
 }
@@ -98,11 +98,49 @@ describe('the Data step', () => {
     expect(loader.assign).toHaveBeenCalledWith(expect.any(Number), { role: 'ignore' });
   });
 
+  test('real and imaginary parts, coils and MESE echoes: their roles, coils, problems and typed facts', async () => {
+    const files = [
+      { name: 'sub-1_echo-1_part-real_MEGRE.nii.gz', bytes: new Uint8Array(4) },
+      { name: 'sub-1_echo-1_part-imag_MEGRE.nii.gz', bytes: new Uint8Array(4) },
+      { name: 'sub-1_echo-1_MESE.nii.gz', bytes: new Uint8Array(4) },
+    ];
+    const problems = [{ severity: 'error', fact: null, echo: 1, coil: null, part: 'mese_magnitude', message: 'MESE echo 1 has no echo time' }];
+    const shown = [
+      { name: 'manufacturer', label: 'Manufacturer', units: null, value: null, source: 'missing', typed: true, note: null },
+      { name: 'mese_echo_times', label: 'Spin-echo times', units: 's', value: null, source: 'missing', typed: true, note: null },
+      { name: 'real_imaginary', label: 'Real and imaginary parts', units: null, value: true, source: 'files', typed: false, note: null },
+    ];
+    const { session } = await setup({ files, problems, shown });
+    const loader = { override: jest.fn(async () => {}), load: jest.fn(), assign: jest.fn(async () => {}), drop: jest.fn(), clear: jest.fn(), review: jest.fn() };
+    const root = await mount(html`<${DataPanel} session=${session} loader=${loader} busy=${false} />`);
+    const role = (name) => /** @type {HTMLSelectElement} */ (root.querySelector(`select[aria-label="Role of ${name}"]`)).value;
+    expect([role(files[0].name), role(files[1].name), role(files[2].name)]).toEqual(['real', 'imaginary', 'mese']);
+    expect(root.querySelector(`tr[data-file="${files[2].name}"]`)?.textContent).toContain('MESE echo 1 has no echo time');
+    expect(root.querySelector('tr[data-fact="real_imaginary"] [data-testid="fact-value"]')?.textContent).toBe('yes');
+    const typed = (name, value) => {
+      const input = /** @type {HTMLInputElement} */ (root.querySelector(`[data-testid="fact-${name}"]`));
+      input.value = value;
+      return act(() => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+    };
+    await typed('manufacturer', 'GE');
+    expect(loader.override).toHaveBeenCalledWith('manufacturer', 'GE');
+    await typed('mese_echo_times', '10, 20, 30');
+    expect(loader.override).toHaveBeenCalledWith('mese_echo_times', [0.01, 0.02, 0.03]);
+    // No file has a coil: the coil column is asked for, then a coil given.
+    expect(root.querySelector('[data-testid="coil-input"]')).toBeNull();
+    await act(() => { /** @type {HTMLButtonElement} */ (root.querySelector('[data-testid="show-coils"]')).click(); });
+    const coils = /** @type {HTMLInputElement[]} */ ([...root.querySelectorAll('[data-testid="coil-input"]')]);
+    expect(coils).toHaveLength(3);
+    expect(coils.every((c) => c.disabled)).toBe(true); // real, imaginary and MESE images have no coil
+  });
+
   test('facts read as values', () => {
     const f = (name, value) => factText(/** @type {any} */ ({ name, value }));
     expect(f('voxel_size', [0.6, 0.6, 1.25])).toBe('0.6 × 0.6 × 1.25 mm');
     expect(f('field_strength', 2.8946)).toBe('2.895 T');
     expect(f('magnitude', false)).toBe('no');
     expect(f('manufacturer', null)).toBe('—');
+    expect(f('mese_echo_times', [0.01, 0.02])).toBe('10, 20 ms');
+    expect(f('real_imaginary', true)).toBe('yes');
   });
 });

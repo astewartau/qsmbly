@@ -196,3 +196,35 @@ describe('motion correction', () => {
     expect(stepOf(plan, 'motion').outputs).toEqual([]);
   });
 });
+
+describe('real and imaginary parts, uncombined coils, a MESE', () => {
+  test('a real/imaginary scan: the load step takes its parts, and phase scaling turns them into phase and magnitude', () => {
+    const plan = planOf('real and imaginary parts');
+    expect(stepOf(plan, 'load').outputs).toEqual(expect.arrayContaining(['AcquiredReal(1)', 'AcquiredImaginary(5)']));
+    expect(stepOf(plan, 'scale_phase').reads).toEqual(expect.arrayContaining(['AcquiredReal(1)', 'AcquiredImaginary(1)']));
+    expect(stepOf(plan, 'scale_phase').outputs).toEqual(expect.arrayContaining(['Phase(1)', 'Magnitude(1)']));
+    expect(sectionOf('scale_phase')?.id).toBe('data');
+  });
+
+  test('uncombined coils: MCPC-3D-S combines every coil of every echo', () => {
+    const plan = planOf('four uncombined coils');
+    const step = stepOf(plan, 'scale_phase');
+    expect(step.algorithm).toBe('mcpc3ds');
+    expect(step.reads).toEqual(expect.arrayContaining(['CoilPhase(4, 5)', 'CoilMagnitude(1, 1)']));
+    expect(plan.check.errors).toEqual([]);
+  });
+
+  test('uncombined coils with one echo cannot be combined: the plan says why, in plain words', () => {
+    const plan = planOf('uncombined coils, one echo');
+    expect(plan.check.errors[0]).toMatch(/needs at least 2 echoes/);
+    expect(plan.check.errors[0]).not.toMatch(/--/);
+  });
+
+  test('a MESE: its echoes are loaded and R2 is measured from them', () => {
+    const plan = planOf('R2 and R2′ from a MESE');
+    expect(stepOf(plan, 'load').outputs).toEqual(expect.arrayContaining(['MeseMagnitude(1)', 'MeseMagnitude(4)']));
+    expect(stepOf(plan, 'r2_r2prime').reads).toEqual(expect.arrayContaining(['MeseMagnitude(1)', 'MeseMagnitude(4)']));
+    expect(stepOf(plan, 'r2_r2prime').outputs).toContain('R2');
+    expect(engine.items.R2).toMatchObject({ kind: 'relaxometry', published: true, units: 's-1' });
+  });
+});

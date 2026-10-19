@@ -61,6 +61,9 @@ export const CASES = [
   // Other scans
   { name: 'no magnitude', edits: [], scan: { has_magnitude: false } },
   { name: 'one echo', edits: [], scan: { n_echoes: 1, echo_times: [0.005] } },
+  { name: 'real and imaginary parts', edits: [], scan: { real_imaginary: true } },
+  { name: 'four uncombined coils', edits: [], scan: { n_coils: 4 } },
+  { name: 'uncombined coils, one echo', edits: [], scan: { n_coils: 4, n_echoes: 1, echo_times: [0.005] } },
   { name: 'one echo, motion correction', edits: [['motion_correction.enabled', true]], scan: { n_echoes: 1, echo_times: [0.005] } },
 ];
 

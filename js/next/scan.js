@@ -54,14 +54,20 @@ export function withSupplied(facts, has) {
 export function createScanLoader({ session, store, engine, preview, onNewInputs = () => {} }) {
   let asked = 0;
 
-  /** Drop every volume but the supplied files, and put the scan's files back under their roles. */
-  function storeInputs() {
+  /**
+   * Drop every volume but the supplied files.
+   */
+  function dropVolumes() {
     for (const key of store.keys()) {
       if (!key.startsWith('Supplied')) store.remove(key);
     }
     store.grid.value = null;
     store.recorded.value = null;
-    for (const [key, file] of inputKeys(session.files.peek())) {
+  }
+
+  /** Put the scan's files in the store under the keys the engine's report gives them. */
+  function storeInputs() {
+    for (const [key, file] of inputKeys(session.files.peek(), session.scan.peek()?.files ?? [])) {
       store.putInput(key, file.bytes, { grid: file.geometry ? /** @type {any} */ (file.geometry) : null });
     }
   }
@@ -87,8 +93,9 @@ export function createScanLoader({ session, store, engine, preview, onNewInputs 
   /** The inputs changed: start over from them. */
   async function changed() {
     onNewInputs();
-    storeInputs();
+    dropVolumes();
     await review();
+    storeInputs();
   }
 
   /**
@@ -122,8 +129,8 @@ export function createScanLoader({ session, store, engine, preview, onNewInputs 
       });
       await changed();
       // Show the first echo's magnitude (or phase) while nothing has been run.
-      const keys = inputKeys(session.files.peek()).map(([k]) => k);
-      const first = keys.find((k) => k.startsWith('AcquiredMagnitude')) ?? keys[0];
+      const keys = inputKeys(session.files.peek(), session.scan.peek()?.files ?? []).map(([k]) => k);
+      const first = keys.find((k) => /^(AcquiredMagnitude|CoilMagnitude)/.test(k)) ?? keys[0];
       if (first) {
         session.ui.viewing.value = first;
         await decodeForViewer(store, first).catch(() => {});
@@ -132,7 +139,7 @@ export function createScanLoader({ session, store, engine, preview, onNewInputs 
     /**
      * Give a file another role or echo.
      * @param {number} id
-     * @param {{ role?: Role, echo?: number | null }} change
+     * @param {{ role?: Role, echo?: number | null, coil?: number | null }} change
      */
     async assign(id, change) {
       session.files.value = session.files.peek().map((f) => (f.id === id ? { ...f, ...change } : f));

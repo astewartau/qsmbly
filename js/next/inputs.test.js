@@ -62,7 +62,11 @@ describe('what the engine is given', () => {
       echoes: [{ phase: grid, magnitude: grid, sidecar: { EchoTime: 0.004 } }],
       overrides: { field_strength: 3 },
     });
-    expect(inputKeys(files).map(([k, f]) => [k, f.name])).toEqual([
+    const reported = [
+      { key: 'AcquiredPhase(1)', echo: 1, coil: null, part: 'phase' },
+      { key: 'AcquiredMagnitude(1)', echo: 1, coil: null, part: 'magnitude' },
+    ];
+    expect(inputKeys(files, reported).map(([k, f]) => [k, f.name])).toEqual([
       ['AcquiredPhase(1)', 'sub-2_ses-a_echo-1_part-phase_MEGRE.nii'],
       ['AcquiredMagnitude(1)', 'sub-2_ses-a_echo-1_part-mag_MEGRE.nii'],
     ]);
@@ -81,5 +85,71 @@ describe('what the engine is given', () => {
     ]);
     files[1].role = 'ignore';
     expect(scanInputs(files).echoes).toHaveLength(1);
+  });
+});
+
+describe('real and imaginary parts, uncombined coils and a MESE', () => {
+  test('a real/imaginary scan: its parts by BIDS part-, given as real and imaginary per echo', () => {
+    const files = sortFiles([
+      { name: 'sub-1_echo-1_part-real_MEGRE.nii', bytes: bytes() },
+      { name: 'sub-1_echo-1_part-imag_MEGRE.nii', bytes: bytes() },
+      { name: 'sub-1_echo-1_part-real_MEGRE.json', bytes: json({ EchoTime: 0.004, Manufacturer: 'GE' }) },
+      { name: 'sub-1_echo-2_part-real_MEGRE.nii', bytes: bytes() },
+      { name: 'sub-1_echo-2_part-imag_MEGRE.nii', bytes: bytes() },
+    ]);
+    expect(files.filter((f) => f.type === 'nifti').map((f) => [f.role, f.echo])).toEqual([['real', 1], ['imaginary', 1], ['real', 2], ['imaginary', 2]]);
+    for (const f of files) if (f.type === 'nifti') f.geometry = grid;
+    expect(scanInputs(files).echoes[0]).toEqual({ phase: null, magnitude: null, real: grid, imaginary: grid, sidecar: { EchoTime: 0.004, Manufacturer: 'GE' } });
+    expect(outputPrefix(files)).toBe('sub-1');
+    const reported = [1, 2].flatMap((e) => [
+      { key: `AcquiredReal(${e})`, echo: e, coil: null, part: 'real' },
+      { key: `AcquiredImaginary(${e})`, echo: e, coil: null, part: 'imaginary' },
+    ]);
+    expect(inputKeys(files, reported).map(([k]) => k)).toEqual(['AcquiredReal(1)', 'AcquiredImaginary(1)', 'AcquiredReal(2)', 'AcquiredImaginary(2)']);
+  });
+
+  test('a sidecar\'s ComplexImageComponent says real or imaginary too', () => {
+    expect(guessRole('x.nii', { ComplexImageComponent: 'REAL' })).toBe('real');
+    expect(guessRole('x.nii', { ImageType: ['ORIGINAL', 'PRIMARY', 'IMAGINARY'] })).toBe('imaginary');
+  });
+
+  test('uncombined coils: each coil\'s images by BIDS coil-, in coil order per echo', () => {
+    const files = sortFiles([2, 1].flatMap((c) => [1, 2].flatMap((e) => [
+      { name: `sub-1_echo-${e}_coil-${c}_part-phase_MEGRE.nii`, bytes: bytes() },
+      { name: `sub-1_echo-${e}_coil-${c}_part-mag_MEGRE.nii`, bytes: bytes() },
+    ])));
+    for (const f of files) f.geometry = grid;
+    const inputs = scanInputs(files);
+    expect(inputs.echoes).toHaveLength(2);
+    expect(inputs.echoes[0].coils).toEqual([{ phase: grid, magnitude: grid }, { phase: grid, magnitude: grid }]);
+    expect(inputs.echoes[0].phase).toBeNull();
+    expect(outputPrefix(files)).toBe('sub-1');
+    const reported = [1, 2].flatMap((e) => [1, 2].flatMap((c) => [
+      { key: `CoilPhase(${c}, ${e})`, echo: e, coil: c, part: 'phase' },
+      { key: `CoilMagnitude(${c}, ${e})`, echo: e, coil: c, part: 'magnitude' },
+    ]));
+    const keys = Object.fromEntries(inputKeys(files, reported).map(([k, f]) => [f.name, k]));
+    expect(keys['sub-1_echo-2_coil-1_part-phase_MEGRE.nii']).toBe('CoilPhase(1, 2)');
+    expect(keys['sub-1_echo-1_coil-2_part-mag_MEGRE.nii']).toBe('CoilMagnitude(2, 1)');
+  });
+
+  test('a MESE beside the scan: its echoes, numbered by echo time, with their sidecars', () => {
+    const files = sortFiles([
+      { name: 'sub-1_echo-1_part-phase_MEGRE.nii', bytes: bytes() },
+      { name: 'sub-1_run-1_echo-2_MESE.nii', bytes: bytes() },
+      { name: 'sub-1_run-1_echo-1_MESE.nii', bytes: bytes() },
+      { name: 'sub-1_run-1_echo-1_MESE.json', bytes: json({ EchoTime: 0.01 }) },
+    ]);
+    expect(files.filter((f) => f.role === 'mese').map((f) => f.echo).sort()).toEqual([1, 2]);
+    for (const f of files) if (f.type === 'nifti') f.geometry = grid;
+    const inputs = scanInputs(files);
+    expect(inputs.echoes).toHaveLength(1);
+    expect(inputs.mese).toEqual({ name: 'sub-1_run-1_MESE', echoes: [{ magnitude: grid, sidecar: { EchoTime: 0.01 } }, { magnitude: grid, sidecar: null }] });
+    const reported = [
+      { key: 'AcquiredPhase(1)', echo: 1, coil: null, part: 'phase' },
+      { key: 'MeseMagnitude(1)', echo: 1, coil: null, part: 'mese_magnitude' },
+      { key: 'MeseMagnitude(2)', echo: 2, coil: null, part: 'mese_magnitude' },
+    ];
+    expect(inputKeys(files, reported).map(([k]) => k)).toEqual(['AcquiredPhase(1)', 'MeseMagnitude(1)', 'MeseMagnitude(2)']);
   });
 });

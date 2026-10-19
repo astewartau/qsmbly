@@ -24,6 +24,11 @@ function fakeEngine() {
         shown: [],
         problems: n ? [] : [{ severity: 'error', fact: 'echoes', echo: null, part: 'phase', message: 'No phase images' }],
         sidecars: [],
+        // As the engine names a phase/magnitude scan's files.
+        files: inputs.echoes.flatMap((e, i) => [
+          ...(e.phase ? [{ key: `AcquiredPhase(${i + 1})`, echo: i + 1, coil: null, part: 'phase', own_grid: false }] : []),
+          ...(e.magnitude ? [{ key: `AcquiredMagnitude(${i + 1})`, echo: i + 1, coil: null, part: 'magnitude', own_grid: false }] : []),
+        ]),
       };
     },
   };

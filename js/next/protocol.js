@@ -63,19 +63,36 @@
  * @property {number[] | null} [echo_times] - seconds
  * @property {number | null} [field_strength] - tesla
  * @property {[number, number, number] | null} [b0_dir]
+ * @property {string | null} [manufacturer] - decides the phase sign of real/imaginary parts
+ * @property {number[] | null} [mese_echo_times] - seconds
  */
 
 /**
- * A scan as the page holds it (qsmxt-engine `inputs::ScanInputs`): each echo's headers and sidecar.
+ * One echo as the page holds it (qsmxt-engine `inputs::EchoInput`): its phase and magnitude
+ * images, its real and imaginary parts, or each uncombined coil's images, and its sidecar.
+ * @typedef {object} EchoInput
+ * @property {Geometry | null} phase
+ * @property {Geometry | null} magnitude
+ * @property {Geometry | null} [real]
+ * @property {Geometry | null} [imaginary]
+ * @property {{ phase: Geometry | null, magnitude: Geometry | null }[]} [coils]
+ * @property {Record<string, any> | null} sidecar
+ */
+
+/**
+ * A scan as the page holds it (qsmxt-engine `inputs::ScanInputs`): each echo's headers and
+ * sidecar, a MESE acquisition for R2, and what was typed in.
  * @typedef {object} ScanInputs
- * @property {{ phase: Geometry | null, magnitude: Geometry | null, sidecar: Record<string, any> | null }[]} echoes
+ * @property {EchoInput[]} echoes
+ * @property {{ name: string | null, echoes: { magnitude: Geometry | null, sidecar: Record<string, any> | null }[] }} [mese]
  * @property {FactOverrides} overrides
  */
 
 /**
  * One fact of a scan and where it came from (qsmxt-engine `inputs::Fact`).
  * @typedef {object} Fact
- * @property {'dims' | 'voxel_size' | 'echoes' | 'echo_times' | 'field_strength' | 'b0_dir' | 'magnitude' | 'manufacturer'} name
+ * @property {'dims' | 'voxel_size' | 'echoes' | 'echo_times' | 'field_strength' | 'b0_dir' | 'magnitude' | 'manufacturer'
+ *   | 'real_imaginary' | 'coils' | 'mese_echoes' | 'mese_echo_times'} name
  * @property {string} label
  * @property {string | null} units
  * @property {any} value - null when nothing gives it
@@ -89,8 +106,9 @@
  * @typedef {object} InputProblem
  * @property {'error' | 'warning'} severity
  * @property {Fact['name'] | null} fact
- * @property {number | null} echo - from 1
- * @property {'phase' | 'magnitude' | 'sidecar' | null} part
+ * @property {number | null} echo - from 1 (a MESE part's: the MESE's echo)
+ * @property {number | null} [coil] - from 1, for uncombined coil data
+ * @property {'phase' | 'magnitude' | 'real' | 'imaginary' | 'sidecar' | 'mese_magnitude' | 'mese_sidecar' | null} part
  * @property {string} message
  */
 
@@ -101,6 +119,8 @@
  * @property {Fact[]} shown
  * @property {InputProblem[]} problems
  * @property {Record<string, any>[]} sidecars - each echo's sidecar as a run reads it
+ * @property {{ key: string, echo: number, coil: number | null, part: string, own_grid: boolean }[]} files - every image given,
+ *   with the store item the run reads it from
  */
 
 /**

@@ -662,9 +662,11 @@ pub struct Engine {
 
 #[wasm_bindgen]
 impl Engine {
-    /// A scan whose volumes the page keeps in `volumes` ([`PageVolumes`]): echo `n`'s phase under
-    /// `AcquiredPhase(n)` and its magnitude, if there is one, under `AcquiredMagnitude(n)`, from
-    /// `n = 1`, each as its NIfTI file. `inputs_json` is the scan as [`scan_report_wasm`] takes
+    /// A scan whose volumes the page keeps in `volumes` ([`PageVolumes`]), each image as its NIfTI
+    /// file under the item [`scan_report_wasm`]'s `files` names for it: echo `n`'s phase and
+    /// magnitude under `AcquiredPhase(n)` and `AcquiredMagnitude(n)`, a real/imaginary scan's
+    /// parts under `AcquiredReal(n)` and `AcquiredImaginary(n)`, uncombined coil `c`'s under
+    /// `CoilPhase(c, n)` and `CoilMagnitude(c, n)`, and a MESE's echoes under `MeseMagnitude(n)`. `inputs_json` is the scan as [`scan_report_wasm`] takes
     /// it (`ScanInputs` JSON): its echoes, each with its sidecar, and the values the user typed in.
     /// The headers are read from the files here, as the run reads them; the geometry the JSON
     /// gives is not used. Files supplied for the run are read from the volumes too:
@@ -683,27 +685,17 @@ impl Engine {
     ) -> Result<Engine, JsValue> {
         let volumes = PageVolumes::new(&volumes)?;
         let mut inputs = parse_scan_inputs(inputs_json).map_err(js_err)?;
-        for (e, echo) in inputs.echoes.iter_mut().enumerate() {
-            echo.phase = volumes
-                .input_geometry(&Item::AcquiredPhase(e + 1))
-                .map_err(js_err)?;
-            echo.magnitude = volumes
-                .input_geometry(&Item::AcquiredMagnitude(e + 1))
-                .map_err(js_err)?;
-        }
+        // Every image's header as the run reads it, from the file the page keeps under its item.
+        inputs
+            .read_headers(|item| volumes.input_geometry(item))
+            .map_err(js_err)?;
         let report = inputs.facts();
-        let (Some(facts), Some(first), false) = (
+        let (Some(facts), Some(header), false) = (
             report.facts.clone(),
-            inputs.echoes.first().and_then(|e| e.phase.clone()),
+            inputs.header(&report),
             report.has_errors(),
         ) else {
             return Err(input_error(&report));
-        };
-        let header = Header {
-            dims: first.dims,
-            voxel_size: first.voxel_size,
-            affine: first.affine,
-            sidecar: report.sidecars.into_iter().next(),
         };
         let mut facts = facts;
         // Files supplied for this run (a brain mask, χ, R2, R2′, a segmentation), as the run's
@@ -742,6 +734,8 @@ impl Engine {
         facts.custom_r2prime = found(Item::SuppliedR2prime);
         facts.custom_dseg = found(Item::SuppliedSegmentation);
         let mut store = MemoryStore::with_volumes(header, identity.into(), volumes);
+        // A MESE for R2, and the grids of its echoes.
+        inputs.supply(&report, &mut store);
         if let Some(mask) = mask {
             store.supply_mask(mask);
         }

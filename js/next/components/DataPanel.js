@@ -15,7 +15,24 @@ import { useState } from 'preact/hooks';
 import { formatBytes, formatMs } from '../format.js';
 import { fetchExample, convertDicom, isScanFile } from '../scan.js';
 
-const ROLES = /** @type {const} */ ([['phase', 'Phase'], ['magnitude', 'Magnitude'], ['sidecar', 'Sidecar'], ['ignore', 'Not used']]);
+const ROLES = /** @type {const} */ ([
+  ['phase', 'Phase'], ['magnitude', 'Magnitude'], ['real', 'Real part'], ['imaginary', 'Imaginary part'],
+  ['mese', 'Spin echo (MESE)'], ['sidecar', 'Sidecar'], ['ignore', 'Not used'],
+]);
+
+/** The engine's part of a file in each role (`inputs::Part`). */
+const PART_OF = /** @type {Record<string, string>} */ ({ phase: 'phase', magnitude: 'magnitude', real: 'real', imaginary: 'imaginary', mese: 'mese_magnitude', sidecar: 'sidecar' });
+
+/**
+ * Whether a problem the engine found is about this file: its echo, part and coil.
+ * @param {InputProblem} p
+ * @param {InputFile} f
+ */
+export function isAbout(p, f) {
+  if (p.echo == null || !p.part || f.error) return false;
+  if (p.echo !== f.echo || PART_OF[f.role] !== p.part) return false;
+  return (p.coil ?? null) === null || (p.coil ?? null) === (f.coil ?? null);
+}
 
 /** Where a fact came from: [shown, said in full]. */
 const SOURCES = {
@@ -38,7 +55,9 @@ export function factText(fact) {
   switch (fact.name) {
     case 'dims': return v.join(' × ');
     case 'voxel_size': return `${v.map(num).join(' × ')} mm`;
-    case 'echo_times': return `${v.map(formatMs).join(', ')} ms`;
+    case 'echo_times':
+    case 'mese_echo_times': return `${v.map(formatMs).join(', ')} ms`;
+    case 'real_imaginary': return v ? 'yes' : 'no';
     case 'field_strength': return `${num(v)} T`;
     case 'b0_dir': return `(${v.map(num).join(', ')})`;
     case 'magnitude': return v ? 'yes' : 'no';
@@ -133,7 +152,7 @@ export function DataPanel({ session, loader, busy }) {
   // Each problem is shown once: on the file it concerns if there is one, else on its fact, else
   // above both.
   const problems = report?.problems ?? [];
-  const fileOf = (p) => (p.echo != null && p.part ? files.find((f) => f.echo === p.echo && f.role === p.part && !f.error) : undefined);
+  const fileOf = (p) => files.find((f) => isAbout(p, f));
   const onFiles = problems.filter((p) => fileOf(p));
   const onFacts = problems.filter((p) => !fileOf(p) && p.fact != null);
   const general = problems.filter((p) => !fileOf(p) && p.fact == null);
@@ -173,7 +192,7 @@ export function DataPanel({ session, loader, busy }) {
 }
 
 /** @param {InputFile[]} files */
-const countEchoes = (files) => new Set(files.filter((f) => f.role === 'phase' || f.role === 'magnitude').map((f) => f.echo)).size;
+const countEchoes = (files) => new Set(files.filter((f) => ['phase', 'magnitude', 'real', 'imaginary'].includes(f.role)).map((f) => f.echo)).size;
 
 /** @param {{ list: InputProblem[] }} props */
 function Problems({ list }) {
@@ -185,11 +204,19 @@ function Problems({ list }) {
 
 /** @param {{ files: InputFile[], problems: InputProblem[], loader: ScanLoader, disabled: boolean }} props */
 function Files({ files, problems, loader, disabled }) {
-  const sorted = [...files].sort((a, b) => (a.echo ?? 99) - (b.echo ?? 99) || ROLES.findIndex(([r]) => r === a.role) - ROLES.findIndex(([r]) => r === b.role));
-  const about = (f) => problems.filter((p) => p.echo === f.echo && p.part === f.role);
+  const rank = (f) => (f.role === 'mese' ? 1 : 0);
+  const sorted = [...files].sort((a, b) => rank(a) - rank(b) || (a.echo ?? 99) - (b.echo ?? 99) || (a.coil ?? 0) - (b.coil ?? 0)
+    || ROLES.findIndex(([r]) => r === a.role) - ROLES.findIndex(([r]) => r === b.role));
+  const about = (f) => problems.filter((p) => isAbout(p, f));
+  // The coil column, for uncombined coil data: shown when a file has a coil, or asked for.
+  const [coilsAsked, setCoilsAsked] = useState(false);
+  const coils = coilsAsked || files.some((f) => f.coil != null);
+  const hasCoil = (f) => f.role === 'phase' || f.role === 'magnitude';
   return html`
-    <table class="file-table" aria-label="Files">
-      <thead><tr><th>File</th><th>Role</th><th>Echo</th><th></th></tr></thead>
+    ${!coils && html`<p class="sub"><button type="button" class="link" onClick=${() => setCoilsAsked(true)} data-testid="show-coils">
+      Uncombined coils? Give each image its coil</button></p>`}
+    <table class=${`file-table${coils ? ' with-coils' : ''}`} aria-label="Files">
+      <thead><tr><th>File</th><th>Role</th><th>Echo</th>${coils && html`<th>Coil</th>`}<th></th></tr></thead>
       <tbody>
         ${sorted.map((f) => html`
           <tr data-file=${f.name} class=${f.role === 'ignore' ? 'unused' : ''}>
@@ -208,6 +235,17 @@ function Files({ files, problems, loader, disabled }) {
                 disabled=${disabled || f.role === 'ignore'}
                 onChange=${(e) => { const n = Number(e.currentTarget.value); if (Number.isInteger(n) && n > 0) loader.assign(f.id, { echo: n }); else e.currentTarget.value = String(f.echo ?? ''); }} />
             </td>
+            ${coils && html`<td>
+              <input type="text" inputmode="numeric" class="num echo-num" aria-label=${`Coil of ${f.name}`} value=${f.coil ?? ''}
+                placeholder="—" disabled=${disabled || !hasCoil(f)} data-testid="coil-input"
+                onChange=${(e) => {
+                  const t = e.currentTarget.value.trim();
+                  const n = Number(t);
+                  if (!t) loader.assign(f.id, { coil: null });
+                  else if (Number.isInteger(n) && n > 0) loader.assign(f.id, { coil: n });
+                  else e.currentTarget.value = String(f.coil ?? '');
+                }} />
+            </td>`}
             <td><button type="button" class="ib" aria-label=${`Remove ${f.name}`} title="Remove" disabled=${disabled}
               onClick=${() => loader.drop(f.id)}>×</button></td>
           </tr>`)}
@@ -243,15 +281,17 @@ function Facts({ report, problems: all, session, loader, disabled }) {
 }
 
 /**
- * A fact the user can type: echo times (ms, comma-separated), field strength (T), B0 direction.
+ * A fact the user can type: echo times and the MESE's (ms, comma-separated), field strength (T),
+ * B0 direction, the manufacturer (which decides the phase sign of real/imaginary parts).
  * What is typed is parsed only; whether it is usable is the engine's to say.
  * @param {{ fact: Fact, typed: boolean, loader: ScanLoader, disabled: boolean }} props
  */
 function TypedFact({ fact, typed, loader, disabled }) {
-  const shown = fact.value == null ? '' : fact.name === 'echo_times'
+  const times = fact.name === 'echo_times' || fact.name === 'mese_echo_times';
+  const shown = fact.value == null ? '' : times
     ? fact.value.map(formatMs).join(', ')
     : fact.name === 'b0_dir' ? fact.value.join(', ') : String(fact.value);
-  const unit = fact.name === 'echo_times' ? 'ms' : fact.name === 'field_strength' ? 'T' : '';
+  const unit = times ? 'ms' : fact.name === 'field_strength' ? 'T' : '';
   // What is being typed, kept until it is committed: the page re-renders while the engine answers
   // (the plan, the dry run), and that must not wipe it.
   const [draft, setDraft] = useState(/** @type {string | null} */ (null));
@@ -260,16 +300,18 @@ function TypedFact({ fact, typed, loader, disabled }) {
     const t = text.trim();
     if (t === shown) return;
     if (!t) return loader.override(/** @type {any} */ (fact.name), null);
+    if (fact.name === 'manufacturer') return loader.override('manufacturer', t);
     const nums = t.split(/[\s,;]+/).filter(Boolean).map(Number);
     if (nums.some((n) => !Number.isFinite(n))) return undefined;
     if (fact.name === 'echo_times') return loader.override('echo_times', nums.map((ms) => ms / 1000));
+    if (fact.name === 'mese_echo_times') return loader.override('mese_echo_times', nums.map((ms) => ms / 1000));
     if (fact.name === 'field_strength') return loader.override('field_strength', nums[0]);
     if (fact.name === 'b0_dir' && nums.length === 3) return loader.override('b0_dir', nums);
     return undefined;
   };
   return html`
     <span class="typed-fact">
-      <input type="text" class=${fact.name === 'echo_times' ? 'txt wide' : 'txt'} aria-label=${fact.label}
+      <input type="text" class=${times ? 'txt wide' : 'txt'} aria-label=${fact.label}
         placeholder=${fact.name === 'b0_dir' ? 'from the image' : 'type it'} value=${draft ?? shown} disabled=${disabled}
         data-testid=${`fact-${fact.name}`} onInput=${(e) => setDraft(e.currentTarget.value)}
         onChange=${(e) => commit(e.currentTarget.value)} onKeyDown=${(e) => { if (e.key === 'Enter') commit(e.currentTarget.value); }} />
