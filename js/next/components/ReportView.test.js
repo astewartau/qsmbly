@@ -37,3 +37,20 @@ describe('a report in the viewer\'s place', () => {
     expect(root.querySelector('pre')?.textContent).toContain('1');
   });
 });
+
+describe('the motion report', () => {
+  test('each echo\'s motion, a suspect registration marked', async () => {
+    const root = document.createElement('div');
+    const value = {
+      reference_echo: 1, max_displacement_mm: 1.234, rotation_spread_deg: 0.5,
+      echoes: [
+        { echo: 1, rotation_deg: 0, translation_mm: 0, max_displacement_mm: 0, ncc: 1, overlap: 1, suspect: false },
+        { echo: 2, rotation_deg: 0.4, translation_mm: 1.1, max_displacement_mm: 1.234, ncc: 0.42, overlap: 0.9, suspect: true },
+      ],
+    };
+    await act(() => render(html`<${ReportView} report=${{ key: 'MotionReport', step: 'motion', value }} />`, root));
+    expect(root.querySelector('[data-testid="motion-report"]')?.textContent).toContain('largest displacement 1.23 mm');
+    expect(root.querySelector('tr[data-echo="2"]')?.textContent).toContain('suspect registration');
+    expect(root.querySelector('tr[data-echo="1"]')?.textContent).not.toContain('suspect');
+  });
+});
