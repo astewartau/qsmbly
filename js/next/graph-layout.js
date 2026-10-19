@@ -110,13 +110,18 @@ export const RUN_STATES = { computed: 'Computed', cached: 'Reused from the cache
 /** A decision's note: its reason, with the detail after it. @param {{ reason: string, detail?: string }} d */
 export const decisionNote = (d) => (d.detail ? `${d.reason} (${d.detail})` : d.reason);
 
+/** The height of a box's status strip (graph-status.js), when the boxes have one. */
+export const STATUS_H = 22;
+
 /**
  * A box's text: the step, its algorithm, its settings and when it applies; after a run, what the
  * step did and what it decided (each reason on at most two lines; the box's tooltip has them in full).
+ * A box with a status strip (`live`) leaves what the step did to the strip.
  * @param {GraphNode} n
+ * @param {{ live?: boolean }} [options]
  * @returns {TextLine[]}
  */
-export function nodeLines(n) {
+export function nodeLines(n, { live = false } = {}) {
   const room = (cls) => Math.floor((NODE_W - 2 * PAD) / CHAR[cls]);
   // The title on up to two lines (beside the model mark, if any).
   const width = room('title') - (n.models.length ? 7 : 0);
@@ -128,7 +133,7 @@ export function nodeLines(n) {
   for (const s of n.settings) for (const l of wrap(s, room('setting'))) lines.push({ text: l, cls: 'setting' });
   if (n.only_when) for (const l of wrap(`Only when ${n.only_when}`, room('when'))) lines.push({ text: l, cls: 'when' });
   if (n.run) {
-    lines.push({ text: RUN_STATES[n.run.state] ?? n.run.state, cls: 'run' });
+    if (!live) lines.push({ text: RUN_STATES[n.run.state] ?? n.run.state, cls: 'run' });
     for (const d of n.run.decisions ?? []) {
       const ls = wrap(d.reason, room('note'));
       const shown = ls.length > 2 ? [ls[0], clip(ls.slice(1).join(' '), room('note'))] : ls;
@@ -172,9 +177,10 @@ const sideStep = (n) => !n.branch && !!n.enabled_by && n.enabled_by.startsWith('
 
 /**
  * @param {PipelineGraph} graph
+ * @param {{ live?: boolean }} [options] - `live`: each box has a status strip ({@link STATUS_H}) at its foot
  * @returns {Layout}
  */
-export function layoutGraph(graph) {
+export function layoutGraph(graph, { live = false } = {}) {
   const nodes = graph.nodes;
   const index = new Map(nodes.map((n, i) => [n.id, i]));
   const edges = drawnEdges(graph).filter((e) => (index.get(e.from) ?? Infinity) < (index.get(e.to) ?? -Infinity));
@@ -221,8 +227,8 @@ export function layoutGraph(graph) {
   });
   const nRows = Math.max(0, ...row) + 1;
   const nCols = Math.max(0, ...col) + 1;
-  const lines = nodes.map(nodeLines);
-  const heights = lines.map((ls) => 2 * PAD + ls.reduce((h, l) => h + LINE[l.cls], 0));
+  const lines = nodes.map((n) => nodeLines(n, { live }));
+  const heights = lines.map((ls) => 2 * PAD + ls.reduce((h, l) => h + LINE[l.cls], 0) + (live ? STATUS_H : 0));
   const rowH = Array.from({ length: nRows }, (_, r) => Math.max(0, ...heights.filter((_, i) => row[i] === r)));
 
   // Ports: each arrow into a step enters at its own point, in the order of the columns it comes

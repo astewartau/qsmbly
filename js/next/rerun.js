@@ -136,12 +136,16 @@ export function rowStatus({ row, expected, status: runStatus = 'idle', steps = n
  * @param {() => boolean} [options.paused] - read inside an effect, so it may be a signal's value
  * @param {(run: () => void) => void} [options.schedule]
  * @param {(e: unknown) => boolean} [options.superseded] - an answer replaced by a newer request
+ * @param {() => number} [options.now] - the runner's clock
  */
-export function createExpectations({ session, store, planState, paused = () => false, schedule = (run) => queueMicrotask(run), superseded = () => false }) {
+export function createExpectations({ session, store, planState, paused = () => false, schedule = (run) => queueMicrotask(run), superseded = () => false,
+  now = () => performance.now() }) {
   /** By step name; null while not known (no scan, or not asked yet). */
   const expected = signal(/** @type {Map<string, Expected> | null} */ (null));
   /** In the plan's order. */
   const list = signal(/** @type {Expected[] | null} */ (null));
+  /** When the answer held was asked for (the runner's clock): an answer asked before a run ended is about the page before it. */
+  const askedAt = signal(/** @type {number | null} */ (null));
   const error = signal(/** @type {string | null} */ (null));
   let requested = 0;
   let scheduled = false;
@@ -155,11 +159,13 @@ export function createExpectations({ session, store, planState, paused = () => f
       return;
     }
     const id = ++requested;
+    const at = now();
     try {
       const answer = await planState(session.config.peek(), facts, session.scanInputs.peek(), store.identity(),
         store.recorded.peek(), store.keys());
       if (id !== requested) return;
       list.value = answer;
+      askedAt.value = at;
       expected.value = new Map(answer.map((e) => [e.id, e]));
       error.value = null;
     } catch (e) {
@@ -187,6 +193,7 @@ export function createExpectations({ session, store, planState, paused = () => f
   return {
     expected,
     list,
+    askedAt,
     error,
     /** Ask now (tests, and after a run). */
     refresh: ask,

@@ -274,8 +274,9 @@ input[type='checkbox'] { width: 14px; height: 14px; margin: 0; accent-color: var
 
 /* Pipeline graph */
 .graph-tab { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; container-type: inline-size; }
-/* The graph with the methods text below it, or beside it where the pane is wide enough. */
-.graph-body { display: grid; grid-template-rows: auto auto; align-content: start; min-height: 0; overflow: auto; }
+/* The graph with the methods text below it, or beside it where the pane is wide enough. Below
+   each other, both keep their full heights and scroll together (auto rows let the graph shrink to nothing). */
+.graph-body { display: grid; grid-template-rows: max-content max-content; align-content: start; min-height: 0; overflow: auto; }
 .graph-scroll { overflow-x: auto; min-height: 0; padding: 4px 0 16px; }
 @container (min-width: 900px) {
   .graph-body { grid-template-columns: minmax(0, 1fr) minmax(300px, 36%); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
@@ -316,6 +317,26 @@ input[type='checkbox'] { width: 14px; height: 14px; margin: 0; accent-color: var
 .g-node .model rect { fill: var(--accent-soft); stroke: var(--accent); }
 .g-node .model text { fill: var(--accent); font-size: 9.5px; font-weight: 600; }
 .g-node.linked rect.box { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+/* Live statuses (graph-status.js): the strip at a box's foot says it in words; colour only adds to that. */
+.graph-status { color: var(--text-2); min-width: 0; overflow-wrap: anywhere; }
+.g-status line { stroke: var(--border); }
+.g-status text { font-size: 10.5px; font-weight: 600; fill: var(--text-2); }
+.g-status .g-status-icon { font-weight: 400; }
+.g-node.status-running rect.box { stroke: var(--accent); stroke-width: 2; }
+.g-node.status-running .g-status text, .g-node.status-changed .g-status text { fill: var(--accent); }
+.g-node.status-done rect.box { stroke: var(--ok); }
+.g-node.status-done .g-status text { fill: var(--ok); }
+.g-node.status-cached .g-status text, .g-node.status-skipped .g-status text, .g-node.status-queued .g-status text { fill: var(--muted); }
+.g-node.status-stale .g-status text, .g-node.status-cancelled .g-status text { fill: var(--warn); }
+.g-node.status-error rect.box { stroke: var(--error); stroke-width: 2; }
+.g-node.status-error .g-status text { fill: var(--error); }
+.g-progress .track { fill: var(--border); }
+.g-progress .fill { fill: var(--accent); transition: width 0.2s ease; }
+.g-progress.indeterminate .fill { animation: g-sweep 1.4s ease-in-out infinite alternate; }
+@keyframes g-sweep { from { transform: translateX(0); } to { transform: translateX(140px); } }
+@media (prefers-reduced-motion: reduce) {
+  .g-progress.indeterminate .fill { animation: none; }
+}
 
 /* Methods text beside the graph */
 .methods { min-width: 0; padding: 8px 14px 16px; background: var(--panel); border-top: 1px solid var(--border); }

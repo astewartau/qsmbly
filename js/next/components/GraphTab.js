@@ -14,15 +14,25 @@
  * than planned (a supplied mask it could not use, a step with nothing to work on), the graph is
  * the one it took, and "As planned" shows the planned one.
  *
+ * Once a scan is loaded the boxes are live (parity plan G5, graph-status.js): each says, with an
+ * icon and a word, what its step is doing in the run in progress (queued, running with a progress
+ * bar, done, cached, failed with the engine's message) and, between runs, what the next run would
+ * do with it (stale or changed after an edit, cached, will run), from the engine's dry run. A
+ * line over the graph says where the run is.
+ *
  * @typedef {import('../store/session.js').Session} Session
  * @typedef {import('../exports.js').Providers} Providers
  * @typedef {import('../exports.js').GraphResult} GraphResult
  * @typedef {import('../graph-layout.js').Layout} Layout
  * @typedef {import('../graph-layout.js').LaidNode} LaidNode
+ * @typedef {import('../graph-status.js').BoxStatus} BoxStatus
+ * @typedef {import('../run.js').Runner} Runner
+ * @typedef {import('../rerun.js').Expectations} Expectations
  */
 import { html } from '../html.js';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { layoutGraph, roundedPath, RUN_STATES, decisionNote } from '../graph-layout.js';
+import { layoutGraph, roundedPath, RUN_STATES, decisionNote, STATUS_H } from '../graph-layout.js';
+import { boxStatuses, statusSummary, liveState } from '../graph-status.js';
 import { sectionOf } from '../outline.js';
 import { useProvided, useCopy, saveFile } from './provided.js';
 import { Icon } from './icons.js';
@@ -30,7 +40,8 @@ import { MethodsPanel } from './MethodsPanel.js';
 import { methodsLinks, linked } from '../methods.js';
 
 /** next.css's graph colours, written into an exported SVG so it stands alone. */
-const EXPORT_VARS = ['--panel', '--panel-2', '--border', '--text', '--text-2', '--muted', '--accent', '--accent-soft', '--graph-edge', '--graph-group', '--graph-label'];
+const EXPORT_VARS = ['--panel', '--panel-2', '--border', '--text', '--text-2', '--muted', '--accent', '--accent-soft', '--graph-edge', '--graph-group', '--graph-label',
+  '--ok', '--warn', '--error'];
 
 /**
  * The graph as a standalone SVG file: the drawing, with the page's current colours and the
@@ -44,6 +55,8 @@ export function standaloneSvg(svg) {
   const vars = EXPORT_VARS.map((v) => `${v}: ${style.getPropertyValue(v).trim() || 'currentColor'};`).join(' ');
   copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   copy.removeAttribute('class');
+  // A box's status is drawn as it is now; a progress bar is not.
+  copy.querySelectorAll('.g-progress').forEach((el) => el.remove());
   copy.querySelectorAll('.hi, .dim, .current, .linked').forEach((el) => el.classList.remove('hi', 'dim', 'current', 'linked'));
   // Boxes are placed by a CSS transform (so they glide when the plan changes); an SVG file says
   // it as an attribute, which every reader understands.
@@ -80,6 +93,14 @@ const GRAPH_SVG_CSS = `
 .g-node.run-skipped text.run { fill: var(--muted); }
 .g-node .model rect { fill: var(--accent-soft); stroke: var(--accent); }
 .g-node .model text { fill: var(--accent); font-size: 9.5px; font-weight: 600; }
+.g-status line { stroke: var(--border); }
+.g-status text { font-size: 10.5px; font-weight: 600; fill: var(--text-2); }
+.g-node.status-running .g-status text, .g-node.status-changed .g-status text { fill: var(--accent); }
+.g-node.status-done .g-status text { fill: var(--ok); }
+.g-node.status-cached .g-status text, .g-node.status-skipped .g-status text, .g-node.status-queued .g-status text { fill: var(--muted); }
+.g-node.status-stale .g-status text, .g-node.status-cancelled .g-status text { fill: var(--warn); }
+.g-node.status-error rect.box { stroke: var(--error); }
+.g-node.status-error .g-status text { fill: var(--error); }
 #g-arrow path { fill: var(--graph-edge); }
 `;
 
@@ -133,8 +154,8 @@ export function runRecord(session, config) {
   return ran === null || canonical(ran) === canonical(config) ? record : null;
 }
 
-/** @param {{ session: Session, providers: Providers }} props */
-export function GraphTab({ session, providers }) {
+/** @param {{ session: Session, providers: Providers, runner?: Runner, expect?: Expectations }} props */
+export function GraphTab({ session, providers, runner, expect }) {
   const config = session.config.value;
   const facts = session.facts.value;
   const record = runRecord(session, config);
@@ -155,7 +176,12 @@ export function GraphTab({ session, providers }) {
     () => (facts ? providers.methods(config, facts, record) : Promise.resolve(null)),
     [config, facts, providers, record],
   );
-  const layout = useMemo(() => (value ? layoutGraph(value.graph) : null), [value]);
+  const state = liveState(runner, expect);
+  const runStatus = state.status ?? 'idle';
+  const statuses = value ? boxStatuses(value.graph.nodes, state) : new Map();
+  const live = statuses.size > 0;
+  const summary = value ? statusSummary(value.graph.nodes, statuses, runStatus) : null;
+  const layout = useMemo(() => (value ? layoutGraph(value.graph, { live }) : null), [value, live]);
   const links = useMemo(() => methodsLinks(methods.value?.methods ?? { sentences: [], references: [] }, value?.graph ?? null),
     [methods.value, value]);
   const [hover, setHover] = useState(/** @type {string | null} */ (null));
@@ -185,6 +211,8 @@ export function GraphTab({ session, providers }) {
             <button type="button" role="radio" aria-checked=${asPlanned} onClick=${() => setAsPlanned(true)}>As planned</button>
           </span>`}
         ${error && html`<span class="problem-error small" role="alert">${error}</span>`}
+        ${summary && html`<span class=${`graph-status small${summary.error ? ' problem-error' : ''}`} data-testid="graph-status"
+          role=${summary.error ? 'alert' : 'status'}>${summary.text}</span>`}
         <${ExportMenu} result=${value} svgRef=${svgRef} />
       </div>
       <div class="graph-body">
@@ -211,7 +239,7 @@ export function GraphTab({ session, providers }) {
               <text x=${g.x + 8} y=${g.y + 13}>${g.title}</text>
             </g>`)}
           ${layout.nodes.map((n) => html`<${Node} key=${n.id} n=${n} current=${sectionOf(n.id)?.id === openSection}
-            linked=${hoverSentence !== null && lit.steps.has(n.id)}
+            linked=${hoverSentence !== null && lit.steps.has(n.id)} status=${statuses.get(n.id) ?? null}
             onHover=${setHover} onOpen=${() => openStep(session, n.id)} />`)}
           ${layout.edges.map((e) => html`
             <g key=${`label-${e.from}>${e.to}`} class=${`g-label${hover ? (near(e.from) || near(e.to) ? ' hi' : ' dim') : ''}`}
@@ -231,9 +259,9 @@ export function GraphTab({ session, providers }) {
 
 /**
  * One step's box.
- * @param {{ n: LaidNode, current: boolean, linked: boolean, onHover: (id: string | null) => void, onOpen: () => void }} props
+ * @param {{ n: LaidNode, current: boolean, linked: boolean, status: BoxStatus | null, onHover: (id: string | null) => void, onOpen: () => void }} props
  */
-function Node({ n, current, linked: isLinked, onHover, onOpen }) {
+function Node({ n, current, linked: isLinked, status, onHover, onOpen }) {
   let y = 8;
   const texts = n.lines.map((l) => {
     y += LINE_Y[l.cls];
@@ -242,12 +270,15 @@ function Node({ n, current, linked: isLinked, onHover, onOpen }) {
   const node = n.node;
   const title = [node.label, node.algorithm_label, ...node.settings, node.only_when && `Only when ${node.only_when}`,
     node.models.length && `Models: ${node.models.join(', ')}`,
-    node.run && (RUN_STATES[node.run.state] ?? node.run.state), ...(node.run?.decisions ?? []).map(decisionNote)].filter(Boolean).join('\n');
+    status ? `${status.text}: ${status.title}` : node.run && (RUN_STATES[node.run.state] ?? node.run.state),
+    status?.error, ...(node.run?.decisions ?? []).map(decisionNote)].filter(Boolean).join('\n');
   const run = node.run ? ` run-${node.run.state}` : '';
+  const live = status ? ` status-${status.state}` : '';
+  const said = status ? `, ${status.text}${status.error ? `: ${status.error}` : ''}` : '';
   return html`
-    <g class=${`g-node${n.optional ? ' optional' : ''}${n.conditional ? ' conditional' : ''}${run}${current ? ' current' : ''}${isLinked ? ' linked' : ''}`}
-      data-step=${n.id} style=${{ transform: `translate(${n.x}px, ${n.y}px)` }}
-      tabindex="0" role="button" aria-label=${`${node.label}${node.algorithm_label ? `, ${node.algorithm_label}` : ''}: open in the pipeline`}
+    <g class=${`g-node${n.optional ? ' optional' : ''}${n.conditional ? ' conditional' : ''}${run}${live}${current ? ' current' : ''}${isLinked ? ' linked' : ''}`}
+      data-step=${n.id} data-status=${status?.state} style=${{ transform: `translate(${n.x}px, ${n.y}px)` }}
+      tabindex="0" role="button" aria-label=${`${node.label}${node.algorithm_label ? `, ${node.algorithm_label}` : ''}${said}: open in the pipeline`}
       onMouseEnter=${() => onHover(n.id)} onMouseLeave=${() => onHover(null)} onFocus=${() => onHover(n.id)} onBlur=${() => onHover(null)}
       onClick=${onOpen} onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}>
       <title>${title}</title>
@@ -257,6 +288,27 @@ function Node({ n, current, linked: isLinked, onHover, onOpen }) {
         <g class="model" transform=${`translate(${n.w - 44}, 6)`}>
           <rect width="38" height="14" rx="7" />
           <text x="19" y="10.5" text-anchor="middle">model</text>
+        </g>`}
+      ${status && html`<${StatusStrip} status=${status} w=${n.w} y=${n.h - STATUS_H} />`}
+    </g>
+  `;
+}
+
+/**
+ * A box's status at its foot: an icon and a word (never colour alone), and while the step runs, a
+ * bar of its progress (a moving one when the step does not report it).
+ * @param {{ status: BoxStatus, w: number, y: number }} props
+ */
+function StatusStrip({ status, w, y }) {
+  const barW = w - 16;
+  return html`
+    <g class="g-status" transform=${`translate(0, ${y})`} data-testid="box-status" data-state=${status.state}>
+      <line x1="1" x2=${w - 1} y1="0" y2="0" />
+      <text x="8" y="14"><tspan class="g-status-icon">${status.icon}</tspan> ${status.text}</text>
+      ${status.state === 'running' && html`
+        <g class=${`g-progress${status.progress == null ? ' indeterminate' : ''}`}>
+          <rect class="track" x="8" y="17" width=${barW} height="3" rx="1.5" />
+          <rect class="fill" x="8" y="17" width=${status.progress == null ? barW / 4 : Math.max(2, barW * status.progress)} height="3" rx="1.5" />
         </g>`}
     </g>
   `;

@@ -141,7 +141,7 @@ function TabbedPane({ session, store, providers, workspace }) {
         <${ViewerPane} session=${session} store=${store} workspace=${workspace} />
       </section>
       <section class="tab-panel" role="tabpanel" id="panel-pipeline" aria-labelledby="tab-pipeline" hidden=${tab !== 'pipeline'}>
-        ${tab === 'pipeline' && html`<${GraphTab} session=${session} providers=${providers} />`}
+        ${tab === 'pipeline' && html`<${GraphTab} session=${session} providers=${providers} runner=${workspace.runner} expect=${workspace.expect} />`}
       </section>
       <section class="tab-panel" role="tabpanel" id="panel-command" aria-labelledby="tab-command" hidden=${tab !== 'command'}>
         ${tab === 'command' && html`<${CommandTab} session=${session} providers=${providers} />`}
