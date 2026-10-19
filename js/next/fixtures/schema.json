@@ -6538,6 +6538,26 @@
       "browser": "available"
     },
     {
+      "path": "segmentation.patch",
+      "label": "Sliding Window",
+      "full_label": "Sliding Window",
+      "help": "Patch size for running SynthSeg piece by piece, which needs less memory; empty runs the whole volume at once",
+      "type": "int",
+      "optional": true,
+      "units": "voxels",
+      "min": 64,
+      "step": 1,
+      "default": null,
+      "browser_default": 96,
+      "level": "advanced",
+      "tab": "outputs",
+      "section": "segmentation",
+      "order": 290,
+      "parent": "pipeline.do_segmentation",
+      "cli_flag": "--synthseg-patch",
+      "browser": "available"
+    },
+    {
       "path": "segmentation.flip_averaging",
       "label": "Flip Averaging",
       "full_label": "Flip Averaging",
@@ -6549,7 +6569,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 290,
+      "order": 291,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--no-synthseg-flip-averaging",
       "browser": "available"
@@ -6566,7 +6586,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 291,
+      "order": 292,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--no-synthseg-topology-cleanup",
       "browser": "available"
@@ -6588,7 +6608,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 292,
+      "order": 293,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-sigma",
       "browser": "available"
@@ -6605,7 +6625,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 293,
+      "order": 294,
       "cli_flag": "--do-analysis",
       "browser": "available"
     },
@@ -6621,7 +6641,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "export",
-      "order": 294,
+      "order": 295,
       "cli_flag": "--export-dicom",
       "browser": "unavailable"
     }
