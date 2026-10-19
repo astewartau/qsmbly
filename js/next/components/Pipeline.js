@@ -102,7 +102,8 @@ function Step({ row, session, store, schema, mask, open, forcedBy, runner, expec
       : facts ? `${facts.n_echoes} echoes · ${facts.field_strength.toFixed(2)} T` : 'incomplete';
   }
   else if (!on) summary = 'off';
-  else if (section.id === 'masking') summary = maskSummary(mask, config.masking);
+  // The recipe the run takes (QSMART's BET in place of a default recipe the user did not choose).
+  else if (section.id === 'masking') summary = maskSummary(mask, session.plan.value?.config?.masking ?? config.masking);
   else if (section.toggles) {
     summary = section.toggles.filter((p) => session.get(p) || forcedBy(p))
       .map((p) => nameOf(schema.settings.find((s) => s.path === p))?.replace(/^Compute /, '') ?? p).join(', ');

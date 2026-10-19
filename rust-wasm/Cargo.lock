@@ -902,7 +902,7 @@ dependencies = [
 [[package]]
 name = "qsm-core"
 version = "0.0.0"
-source = "git+https://github.com/astewartau/QSM.rs.git?rev=23cf677106b7b1fc5b9ff746bfae1971ff0fdb26#23cf677106b7b1fc5b9ff746bfae1971ff0fdb26"
+source = "git+https://github.com/astewartau/QSM.rs.git?rev=5480f30de44f6446e18df67859170673c40dc19f#5480f30de44f6446e18df67859170673c40dc19f"
 dependencies = [
  "bytemuck",
  "delaunator",
@@ -938,7 +938,7 @@ dependencies = [
 [[package]]
 name = "qsmxt-engine"
 version = "0.0.0"
-source = "git+https://github.com/QSMxT/QSMxT.git?rev=e426923bbdfe87124f025d6ed28842c172403533#e426923bbdfe87124f025d6ed28842c172403533"
+source = "git+https://github.com/QSMxT/QSMxT.git?rev=837cb252ff3ba3feef477837d96e24f21b742e87#837cb252ff3ba3feef477837d96e24f21b742e87"
 dependencies = [
  "getrandom",
  "log",

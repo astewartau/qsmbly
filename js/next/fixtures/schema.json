@@ -5648,8 +5648,8 @@
       "help": "Paramagnetic L1 weight",
       "type": "float",
       "optional": false,
-      "default": 1000,
-      "browser_default": 1000,
+      "default": 30,
+      "browser_default": 30,
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
@@ -5666,8 +5666,8 @@
       "help": "Diamagnetic L1 weight",
       "type": "float",
       "optional": false,
-      "default": 1000,
-      "browser_default": 1000,
+      "default": 30,
+      "browser_default": 30,
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
@@ -7176,7 +7176,7 @@
         "label": "full",
         "name": "Whole volume",
         "help": "One pass over the head's bounding box at 1 mm: the fastest, and the most memory (about 6–8 GB measured on a typical adult head)",
-        "budget_bytes": 12125732864
+        "budget_bytes": 9934185600
       },
       {
         "value": [
@@ -7187,7 +7187,7 @@
         "label": "window",
         "name": "Sliding window",
         "help": "192×192×96 patches, HD-BET's training size, half overlapping (about 3.6–4.5 GB measured)",
-        "budget_bytes": 3938451456
+        "budget_bytes": 3138102400
       },
       {
         "value": [
@@ -7198,7 +7198,7 @@
         "label": "low-memory",
         "name": "Low memory",
         "help": "128×128×64 patches, half overlapping: the least memory (about 1.5–1.9 GB measured), and agrees with the larger patches to Dice 0.99",
-        "budget_bytes": 1388314624
+        "budget_bytes": 1021289600
       }
     ],
     "presets": [

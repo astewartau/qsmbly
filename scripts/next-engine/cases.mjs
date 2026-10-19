@@ -29,6 +29,7 @@ export const CASES = [
   { name: 'xQSM untiled', edits: [['inversion.algorithm', 'xqsm'], ['inversion.tile_size', null]] },
   { name: 'TGV', edits: [['inversion.algorithm', 'tgv']] },
   { name: 'QSMART', edits: [['inversion.algorithm', 'qsmart']] },
+  { name: 'QSMART keeping the threshold mask', edits: [['inversion.algorithm', 'qsmart'], ['masking.recipe_chosen', true]] },
   { name: 'no QSM', edits: [['pipeline.do_qsm', false]] },
   // Field map, motion
   { name: 'Laplacian unwrapping', edits: [['field_mapping.unwrapping_algorithm', 'laplacian']] },

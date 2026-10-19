@@ -196,6 +196,7 @@
  * @property {boolean} visible - the setting applies, and so is shown
  * @property {string} [forced_by] - the setting that forces this one on
  * @property {string} [error] - what is wrong with its value: out of range, or refused by a rule
+ * @property {string} [warning] - what may go wrong with its value (a mask QSMART may streak with)
  */
 
 /**
