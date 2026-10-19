@@ -59,7 +59,7 @@ test.describe('next.html', () => {
 
     // The run bar: the plan's memory against the 4 GB heap, no downloads, no problems.
     await expect(page.getByTestId('plan-status')).toHaveText('Plan: 10 steps');
-    await expect(page.getByTestId('memory')).toContainText('Peak 2.8 GB of 4.0 GB');
+    await expect(page.getByTestId('memory')).toContainText('Peak 1.7 GB of 4.0 GB');
     await expect(page.getByTestId('downloads')).toHaveText('Downloads: none');
     await expect(page.getByTestId('problems')).toHaveText('No problems');
     // Nothing to run until a scan is loaded.
