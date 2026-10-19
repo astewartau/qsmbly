@@ -26,6 +26,7 @@
  *   `run`: the run's BIDS name, as the engine names its outputs ({@link OutputFiles}`.run`)
  */
 import { echoes } from './inputs.js';
+import { reportsOf, reportFile } from './reports.js';
 import { zip } from './zip.js';
 
 /** Where `qsmxt run` writes its derivatives under its output directory. */
@@ -40,8 +41,10 @@ export const DERIVATIVES = 'derivatives/qsmxt';
 export const bundleContributors = [];
 
 /**
- * The computed volumes the page holds, as the engine is told about them: each with the step that
- * last wrote it and what the run recorded about it.
+ * The computed outputs the page holds, as the engine is told about them: each volume with the
+ * step that last wrote it and what the run recorded about it, then the run's tables and reports
+ * (the per-structure statistics, the segmentation's lookup table), which the engine keeps in its
+ * record.
  * @param {VolumeStore} store
  */
 export function heldOutputs(store) {
@@ -52,9 +55,11 @@ export function heldOutputs(store) {
   } catch {
     // A record the page cannot read describes nothing.
   }
-  return store.keys()
+  const volumes = store.keys()
     .filter((key) => { const e = store.entry(key); return !!e && !e.input && !!e.data; })
     .map((key) => ({ key, step: store.entry(key)?.step ?? null, annotations: annotations[key] ?? null }));
+  const reports = reportsOf(store.recorded.peek()).map((r) => ({ key: r.key, step: r.step, annotations: null }));
+  return [...volumes, ...reports];
 }
 
 /**
@@ -84,7 +89,7 @@ export function publishedFiles({ session, store, engine }) {
  * @param {string | null} [parts.ranMermaid] - the graph the run took, when it differs from the plan
  * @param {string} [parts.run] - the run's BIDS name ({@link OutputFiles}`.run`), which names that graph's file
  * @param {OutputFiles['files']} parts.files - the outputs to include
- * @param {(key: string) => Promise<Uint8Array>} parts.nifti - an output's NIfTI file
+ * @param {(key: string) => Promise<Uint8Array | string>} parts.nifti - an output's file: a volume's NIfTI file, a table's text
  * @param {ZipEntry[]} [parts.extra] - from {@link bundleContributors}
  * @returns {Promise<ZipEntry[]>}
  */
@@ -102,6 +107,20 @@ export async function bundleEntries({ command, methods, toml, mermaid, ranMermai
     if (f.sidecar_path && f.sidecar != null) entries.push({ path: `${DERIVATIVES}/${f.sidecar_path}`, bytes: f.sidecar });
   }
   return [...entries, ...extra];
+}
+
+/**
+ * An output's file as `qsmxt run` writes it, from the page's store: a volume as NIfTI
+ * (uncompressed), a table or report as its text.
+ * @param {EngineClient} engine
+ * @param {VolumeStore} store
+ * @param {string} key
+ * @returns {Promise<Uint8Array | string>}
+ */
+export async function outputFile(engine, store, key) {
+  const report = reportsOf(store.recorded.peek()).find((r) => r.key === key);
+  if (report) return reportFile(report).text;
+  return niftiOf(engine, store, key);
 }
 
 /**

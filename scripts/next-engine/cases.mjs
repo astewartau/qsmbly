@@ -47,6 +47,10 @@ export const CASES = [
   { name: 'R2 and R2′ from a MESE', edits: [['pipeline.do_r2map', true], ['pipeline.do_r2primemap', true]], scan: { mese_echo_times: [0.01, 0.02, 0.03, 0.04] } },
   { name: 'segmentation', edits: [['pipeline.do_segmentation', true]] },
   { name: 'per-structure statistics', edits: [['pipeline.do_analysis', true]] },
+  { name: 'segmentation and statistics', edits: [['pipeline.do_segmentation', true], ['pipeline.do_analysis', true]] },
+  { name: 'referenced to the thalamus', edits: [['qsm.reference', 'region'], ['qsm.reference_region', 'thalamus'], ['pipeline.do_segmentation', true]] },
+  { name: 'statistics on a supplied segmentation', edits: [['segmentation.custom_dseg_tool', 'qsmbly'], ['pipeline.do_analysis', true]], scan: { custom_dseg: true } },
+  { name: 'referenced to the thalamus of a supplied segmentation', edits: [['segmentation.custom_dseg_tool', 'qsmbly'], ['qsm.reference', 'region'], ['qsm.reference_region', 'thalamus']], scan: { custom_dseg: true } },
   { name: 'supplied R2', edits: [['separation.custom_r2_tool', 'qsmbly']] },
   { name: 'R2 from derivatives', edits: [['separation.custom_r2_tool', 'mese']] },
   // Masking

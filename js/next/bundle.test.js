@@ -1,6 +1,6 @@
 // The export bundle: which outputs the engine is told about, and the bundle's layout.
 import { VolumeStore } from './store/volumes.js';
-import { heldOutputs, publishedFiles, bundleEntries, bundleZip, DERIVATIVES } from './bundle.js';
+import { heldOutputs, publishedFiles, bundleEntries, bundleZip, DERIVATIVES, outputFile } from './bundle.js';
 import { unzip } from '../../tests/e2e/unzip.js';
 
 const grid = { dims: [2, 2, 2], voxel_size: [1, 1, 1], affine: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] };
@@ -22,6 +22,15 @@ describe('bundle', () => {
       { key: 'BrainMask', step: 'mask', annotations: null },
       { key: 'LocalField(Main)', step: 'bgremove', annotations: null },
     ]);
+  });
+
+  test('the run\'s tables are outputs too: the engine names them, the bundle holds their text', async () => {
+    const s = store();
+    s.record(JSON.stringify({ steps: { analysis: ['k', ['RegionStats']] }, reports: { RegionStats: 'map\tunit\n' } }));
+    expect(heldOutputs(s).at(-1)).toEqual({ key: 'RegionStats', step: 'analysis', annotations: null });
+    const engine = /** @type {any} */ ({ niftiFile: async () => new Uint8Array([7]) });
+    expect(await outputFile(engine, s, 'RegionStats')).toBe('map\tunit\n');
+    expect(await outputFile(engine, s, 'Chi')).toEqual(new Uint8Array([7]));
   });
 
   test('the run is named after the first echo\'s phase', async () => {

@@ -125,3 +125,49 @@ describe('relaxometry', () => {
     expect(engine.browser.separation.r2primenet.patch).toEqual([128, 128, 64]);
   });
 });
+
+describe('segmentation, region referencing and per-structure statistics', () => {
+  test('the switches and settings are the schema\'s; the reference is in the Reference row', () => {
+    expectSettingsIn('segmentation', ['pipeline.do_segmentation', 'pipeline.do_analysis', 'segmentation.version', 'segmentation.patch',
+      'segmentation.crop', 'segmentation.flip_averaging', 'segmentation.topology_cleanup', 'segmentation.sigma_smoothing']);
+    expectSettingsIn('reference', ['qsm.reference', 'qsm.reference_region']);
+    const region = schema.settings.find((s) => s.path === 'qsm.reference_region');
+    expect(region.options.map((o) => o.value)).toEqual(expect.arrayContaining(['thalamus', 'ventricles', 'left-putamen']));
+    // A supplied segmentation is a file the Segmentation row takes.
+    const supplied = schema.settings.find((s) => s.path === 'segmentation.custom_dseg_tool');
+    expect(supplied).toMatchObject({ browser: 'supplied-file', item: 'SuppliedSegmentation' });
+  });
+
+  test('SynthSeg needs its weights, runs in the browser profile\'s window, and gives labels, names and volumes', () => {
+    const plan = planOf('segmentation');
+    expect(plan.models).toEqual(['synthseg']);
+    expect(engine.browser.segmentation.patch).toBe(96);
+    expect(sectionOf('segmentation')?.id).toBe('segmentation');
+    expect(stepOf(plan, 'segmentation').outputs).toEqual(['Segmentation', 'SegmentationLabels', 'SegmentationVolumes']);
+    expect(engine.items.Segmentation).toMatchObject({ kind: 'segmentation', published: true, bids_name: 'dseg' });
+    expect(displayOf(engine.items.Segmentation)).toMatchObject({ labels: true, overlay: true });
+    expect(engine.items.SegmentationLabels).toMatchObject({ kind: 'table', published: true });
+  });
+
+  test('the statistics read the segmentation, its volumes and every map; the table is published', () => {
+    const plan = planOf('segmentation and statistics');
+    expect(stepOf(plan, 'analysis').reads).toEqual(['Segmentation', 'Chi', 'SegmentationVolumes']);
+    expect(stepOf(plan, 'analysis').outputs).toEqual(['RegionStats']);
+    expect(sectionOf('analysis')?.id).toBe('segmentation');
+    expect(engine.items.RegionStats).toMatchObject({ kind: 'table', published: true });
+  });
+
+  test('a region reference measures the reference on the segmentation', () => {
+    expect(stepOf(planOf('referenced to the thalamus'), 'reference')).toMatchObject({ algorithm: 'region' });
+    expect(stepOf(planOf('referenced to the thalamus'), 'reference').reads).toContain('Segmentation');
+  });
+
+  test('a supplied segmentation stands in for SynthSeg: no weights, no segmentation step', () => {
+    const stats = planOf('statistics on a supplied segmentation');
+    expect(stats.models).toEqual([]);
+    expect(stepOf(stats, 'segmentation')).toBeUndefined();
+    expect(stepOf(stats, 'analysis').reads).toContain('SuppliedSegmentation');
+    const ref = planOf('referenced to the thalamus of a supplied segmentation');
+    expect(stepOf(ref, 'reference').reads).toContain('SuppliedSegmentation');
+  });
+});

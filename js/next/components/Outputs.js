@@ -12,6 +12,7 @@
  * @typedef {import('../protocol.js').Plan} Plan
  * @typedef {import('../history.js').History} History
  * @typedef {import('../history.js').PastRun} PastRun
+ * @typedef {import('../reports.js').Report} Report
  */
 import { html } from '../html.js';
 import { useState } from 'preact/hooks';
@@ -24,27 +25,32 @@ import { HISTORY_LIMIT } from '../history.js';
 import { formatBytes } from '../format.js';
 import { publishedFiles } from '../bundle.js';
 import { useProvided, saveFile } from './provided.js';
+import { reportsOf, reportFile } from '../reports.js';
 
 /** Keys the outputs browser leaves out: the working-grid copies the engine keeps aside. */
 export const hiddenKey = isAside;
 
 /**
- * The volumes the page holds, grouped by the step that wrote them, in the plan's order (inputs
- * first, then any step the plan no longer has).
+ * The volumes the page holds, and the run's text and JSON outputs (`reports`), grouped by the step
+ * that wrote them, in the plan's order (inputs first, then any step the plan no longer has).
  * @param {VolumeStore} store
  * @param {Plan | null} plan
+ * @param {Report[]} [reports]
  * @returns {{ step: string | null, label: string, keys: string[] }[]}
  */
-export function outputGroups(store, plan) {
+export function outputGroups(store, plan, reports = []) {
   /** @type {Map<string | null, string[]>} */
   const byStep = new Map();
+  const add = (step, key) => {
+    if (!byStep.has(step)) byStep.set(step, []);
+    byStep.get(step)?.push(key);
+  };
   for (const key of store.keys()) {
     const entry = store.entry(key);
     if (!entry || hiddenKey(key)) continue;
-    const step = entry.input ? null : entry.step;
-    if (!byStep.has(step)) byStep.set(step, []);
-    byStep.get(step)?.push(key);
+    add(entry.input ? null : entry.step, key);
   }
+  for (const r of reports) add(r.step, r.key);
   const order = (plan?.steps ?? []).map((s) => s.name);
   const labelOf = (step) => (step == null ? 'Inputs' : plan?.steps.find((s) => s.name === step)?.label ?? step);
   return [...byStep.entries()]
@@ -186,7 +192,10 @@ export function Outputs({ session, store, runner, engine, history }) {
   const pastId = history?.viewing.value ?? null;
   const past = pastId != null ? history?.get(pastId) ?? null : null;
   const source = past ? runVolumes(past) : store;
-  const groups = outputGroups(source, plan);
+  // The run's tables and reports are the latest run's (an earlier run's are not kept).
+  const reports = past ? [] : reportsOf(store.recorded.value);
+  const reportOf = (key) => reports.find((r) => r.key === key) ?? null;
+  const groups = outputGroups(source, plan, reports);
   const viewing = session.ui.viewing.value;
   const steps = runner.steps.value;
   const prefix = outputPrefix(session.files.value);
@@ -198,6 +207,7 @@ export function Outputs({ session, store, runner, engine, history }) {
   /** The name a volume downloads as: its published name (gzipped), else the scan's prefix and its BIDS name. */
   const nameOf = (key) => {
     const p = publishedOf(key);
+    if (p && reportOf(key)) return /** @type {string} */ (p.path.split('/').pop());
     return p ? `${p.path.split('/').pop()}.gz` : fileName(prefix, key);
   };
 
@@ -205,6 +215,11 @@ export function Outputs({ session, store, runner, engine, history }) {
   // A mask or segmentation is drawn over what is shown (click it again to take it off); anything
   // else is shown.
   const view = async (key) => {
+    if (reportOf(key)) {
+      session.ui.viewing.value = key;
+      session.ui.overlay.value = null;
+      return;
+    }
     const mask = isOverlay(itemMeta(key));
     if (mask && viewing && viewing !== key && !isOverlay(itemMeta(viewing))) {
       session.ui.overlay.value = overlay === key ? null : key;
@@ -221,7 +236,14 @@ export function Outputs({ session, store, runner, engine, history }) {
   const save = async (key) => {
     setSaving(key);
     setError('');
+    const report = reportOf(key);
     try {
+      if (report) {
+        const { text, type, ext } = reportFile(report);
+        const name = publishedOf(key)?.path.split('/').pop() ?? `${prefix}_${key.replace(/[^A-Za-z0-9]+/g, '-')}.${ext}`;
+        saveFile(name, text, type);
+        return;
+      }
       await downloadVolume(engine, store, key, nameOf(key), past?.outputs.get(key));
     } catch (e) {
       setError(`Could not save ${itemMeta(key).label}: ${e instanceof Error ? e.message : e}`);
