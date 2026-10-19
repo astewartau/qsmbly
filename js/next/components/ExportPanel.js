@@ -94,7 +94,8 @@ export function ExportPanel({ session, store, providers, engine, versions, onClo
         ${tab === 'toml' && html`<${TomlExport} config=${config} providers=${providers} />`}
         ${tab === 'graph' && html`<${GraphExport} result=${graph} />`}
         ${tab === 'files' && html`<${FilesExport} session=${session} store=${store} engine=${engine} providers=${providers}
-          methods=${methods.value?.methods ?? null} command=${commandText} mermaid=${graph.value?.mermaid ?? null} />`}
+          methods=${methods.value?.methods ?? null} command=${commandText}
+          ranMermaid=${record && graph.value?.differs ? graph.value.mermaid : null} />`}
       </div>
     </aside>
   `;
@@ -211,9 +212,10 @@ function GraphExport({ result }) {
 /**
  * The outputs `qsmxt run` would publish, each chosen for the bundle or not, and the bundle.
  * @param {{ session: Session, store: VolumeStore, engine: EngineClient, providers: Providers,
- *   methods: import('../exports.js').Methods | null, command: string, mermaid: string | null }} props
+ *   methods: import('../exports.js').Methods | null, command: string, ranMermaid: string | null }} props -
+ *   `ranMermaid`: the graph the run took, when it differs from the plan
  */
-function FilesExport({ session, store, engine, providers, methods, command, mermaid }) {
+function FilesExport({ session, store, engine, providers, methods, command, ranMermaid }) {
   const version = store.version.value;
   const facts = session.facts.value;
   const files = useProvided(() => publishedFiles({ session, store, engine }), [version, facts, store.recorded.value]);
@@ -224,16 +226,20 @@ function FilesExport({ session, store, engine, providers, methods, command, merm
   const toggle = (key) => setLeft((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
 
   const download = async () => {
-    if (!files.value || !methods) return;
+    const facts = session.facts.peek();
+    if (!files.value || !methods || !facts) return;
     setStatus({ busy: true, text: 'Writing the bundle…' });
     try {
       const config = session.config.peek();
-      const [{ toml }, extra] = await Promise.all([
+      // The graph as qsmxt writes it beside the run: as planned, on the run's grid; and the one
+      // the run took only when it differs from the plan.
+      const [{ toml }, mermaid, extra] = await Promise.all([
         providers.toml(config, 'full'),
+        engine.plannedMermaid(config, facts, store.grid.peek()),
         Promise.all(bundleContributors.map((c) => c({ session, store, engine, run: files.value?.run ?? '' }))).then((all) => all.flat()),
       ]);
       const entries = await bundleEntries({
-        command, methods: methodsMarkdown(methods), toml, mermaid: mermaid ?? '', files: chosen,
+        command, methods: methodsMarkdown(methods), toml, mermaid, ranMermaid, run: files.value.run, files: chosen,
         nifti: (key) => niftiOf(engine, store, key), extra,
       });
       const blob = await bundleZip(files.value.run, entries);

@@ -6,7 +6,9 @@
  * command.txt                                    the `qsmxt run` command
  * derivatives/qsmxt/methods.md                   the methods text
  * derivatives/qsmxt/pipeline_config.toml         every setting, as qsmxt writes it there
- * derivatives/qsmxt/pipeline.mmd                 the pipeline graph (Mermaid)
+ * derivatives/qsmxt/pipeline.mmd                 the pipeline graph (Mermaid), as planned
+ * derivatives/qsmxt/workflow/sub-1/sub-1_desc-ran_pipeline.mmd   the graph the run took, only when
+ *                                                it differs from the plan (as qsmxt writes it)
  * derivatives/qsmxt/sub-1/anat/sub-1_Chimap.nii  each published output…
  * derivatives/qsmxt/sub-1/anat/sub-1_Chimap.json …and its sidecar
  * ```
@@ -78,13 +80,15 @@ export function publishedFiles({ session, store, engine }) {
  * @param {string} parts.command - as shown (`formatCommand`)
  * @param {string} parts.methods - Markdown (`methodsMarkdown`)
  * @param {string} parts.toml - every setting (`to_toml`)
- * @param {string} parts.mermaid - the graph
+ * @param {string} parts.mermaid - the graph, as planned
+ * @param {string | null} [parts.ranMermaid] - the graph the run took, when it differs from the plan
+ * @param {string} [parts.run] - the run's BIDS name ({@link OutputFiles}`.run`), which names that graph's file
  * @param {OutputFiles['files']} parts.files - the outputs to include
  * @param {(key: string) => Promise<Uint8Array>} parts.nifti - an output's NIfTI file
  * @param {ZipEntry[]} [parts.extra] - from {@link bundleContributors}
  * @returns {Promise<ZipEntry[]>}
  */
-export async function bundleEntries({ command, methods, toml, mermaid, files, nifti, extra = [] }) {
+export async function bundleEntries({ command, methods, toml, mermaid, ranMermaid = null, run = '', files, nifti, extra = [] }) {
   /** @type {ZipEntry[]} */
   const entries = [
     { path: 'command.txt', bytes: `${command}\n` },
@@ -92,6 +96,7 @@ export async function bundleEntries({ command, methods, toml, mermaid, files, ni
     { path: `${DERIVATIVES}/pipeline_config.toml`, bytes: toml },
     { path: `${DERIVATIVES}/pipeline.mmd`, bytes: mermaid },
   ];
+  if (ranMermaid && run) entries.push({ path: `${DERIVATIVES}/workflow/${run}/${run}_desc-ran_pipeline.mmd`, bytes: ranMermaid });
   for (const f of files) {
     entries.push({ path: `${DERIVATIVES}/${f.path}`, bytes: await nifti(f.key) });
     if (f.sidecar_path && f.sidecar != null) entries.push({ path: `${DERIVATIVES}/${f.sidecar_path}`, bytes: f.sidecar });
