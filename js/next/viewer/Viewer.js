@@ -18,6 +18,7 @@
 import { html } from '../html.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { parseNifti } from '../nifti.js';
+import { displayOf, windowOf } from '../display.js';
 
 /** NIfTI datatype codes. */
 const DT_UINT8 = 2;
@@ -32,18 +33,6 @@ export const VIEWS = /** @type {const} */ ([
 ]);
 
 /**
- * The display range for an item: fixed for χ, symmetric for fields, NiiVue's robust range
- * otherwise (null).
- * @param {ItemMeta} meta
- * @returns {[number, number] | null}
- */
-export function defaultRange(meta) {
-  if (meta.kind === 'chi') return [-0.1, 0.1];
-  if (meta.kind === 'mask') return [0, 1];
-  return null;
-}
-
-/**
  * Bytes NiiVue reads: a NIfTI-1 header for `grid` followed by the voxels.
  * @param {any} NVImage
  * @param {ViewVolume} volume
@@ -56,8 +45,24 @@ export function niftiFor(NVImage, volume) {
   return NVImage.createNiftiArray([...dims], [...voxelSize], [...affine], datatype, volume.data);
 }
 
-/** How a mask is drawn over the volume under it. */
-export const OVERLAY = { colormap: 'red', opacity: 0.4 };
+/**
+ * A NiiVue image of `volume`, drawn as display.js says for its kind: colormap and window, or
+ * FreeSurfer's colours for a segmentation.
+ * @param {any} nv - the Niivue instance (for its colormaps)
+ * @param {any} NVImage
+ * @param {ViewVolume} volume
+ * @param {boolean} over - drawn over another volume
+ */
+export async function imageFor(nv, NVImage, volume, over) {
+  const d = displayOf(volume.meta);
+  const r = windowOf(d, volume.data);
+  const image = await NVImage.new(
+    niftiFor(NVImage, volume).buffer, `${volume.key}.nii`, d.colormap, over ? d.opacity : 1, null,
+    r ? r[0] : NaN, r ? r[1] : NaN, r !== null,
+  );
+  if (d.labels) image.setColormapLabel(nv.colormapFromKey('freesurfer'));
+  return image;
+}
 
 /**
  * A mask being drawn on with NiiVue's brush, over `volume` (on its grid).
@@ -84,7 +89,7 @@ export async function drawnVoxels(nv) {
 
 /**
  * @param {{ volume: ViewVolume | null, overlay?: ViewVolume | null, drawing?: ViewDrawing | null, emptyText?: string,
- *   title?: string, onReady?: (nv: any) => void, label?: string }} props - `overlay`: a mask drawn over `volume` (on the
+ *   title?: string, onReady?: (nv: any) => void, label?: string }} props - `overlay`: a mask or segmentation drawn over `volume` (on the
  *   same grid); `drawing`: a mask to draw on instead; `title`: what the toolbar calls it (else the item's label);
  *   `onReady`: given the NiiVue instance once a volume is shown (the compare view links their crosshairs); `label`: the
  *   region's accessible name
@@ -118,14 +123,8 @@ export function Viewer({ volume, overlay = null, drawing = null, emptyText = 'No
           nv.current = new Niivue({ backColor: [0, 0, 0, 1], show3Dcrosshair: true, logLevel: 'error', isResizeCanvas: true });
           await nv.current.attachToCanvas(canvas.current);
         }
-        const r = defaultRange(volume.meta);
-        const image = await NVImage.new(
-          niftiFor(NVImage, volume).buffer, `${volume.key}.nii`, 'gray', 1, null,
-          r ? r[0] : NaN, r ? r[1] : NaN, r !== null,
-        );
-        const over = overlay
-          ? await NVImage.new(niftiFor(NVImage, overlay).buffer, `${overlay.key}.nii`, OVERLAY.colormap, OVERLAY.opacity, null, 0, 1, true)
-          : null;
+        const image = await imageFor(nv.current, NVImage, volume, false);
+        const over = overlay ? await imageFor(nv.current, NVImage, overlay, true) : null;
         if (cancelled) return;
         for (const old of [...nv.current.volumes]) nv.current.removeVolume(old);
         nv.current.addVolume(image);
