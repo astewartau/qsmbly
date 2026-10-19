@@ -312,6 +312,8 @@ function PlanDrawer({ session, runner, expect, plan, dl, models, problems, onClo
                   ${p.where === 'data' && html` <button type="button" class="link" onClick=${openData}>Open Data</button>`}</li>`)}
               </ul>`
             : html`<p class="small">Problems: none.</p>`}
+          ${(plan.adjustments ?? []).length > 0 && html`<ul class="notes small" data-testid="drawer-adjustments">
+            ${(plan.adjustments ?? []).map((a) => html`<li data-setting=${a.setting}>${a.message}</li>`)}</ul>`}
           ${plan.notes.length > 0 && html`<ul class="notes small">${plan.notes.map((n) => html`<li>${n}</li>`)}</ul>`}
           ${missing.length > 0 && html`
             <p class="small">Networks to download: ${missing.map((m) => `${m.name} ${formatBytes(m.missing ?? m.bytes)}${m.license ? ` (${m.license})` : ''}`).join(', ')}.

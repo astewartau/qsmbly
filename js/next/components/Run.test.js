@@ -110,6 +110,15 @@ describe('the run bar', () => {
     expect(root.querySelector('[data-testid="download-now"]')).not.toBeNull();
   });
 
+  test('the plan drawer says which settings the engine turned on, and why', async () => {
+    const config = { ...browser, pipeline: { ...browser.pipeline, do_r2primemap: true } };
+    const { session, store, runner } = await setup({ config });
+    const root = await mount(html`<${RunBar} session=${session} store=${store} models=${models} runner=${runner} />`);
+    await act(() => /** @type {HTMLButtonElement} */ (root.querySelector('[data-testid="plan-drawer-toggle"]')).click());
+    const said = root.querySelector('[data-testid="drawer-adjustments"] li[data-setting="pipeline.do_r2starmap"]');
+    expect(said?.textContent).toBe('The R2* map is computed: R2′ is computed from it');
+  });
+
   test('while running: Cancel, the step in progress and its progress; after: how it ended', async () => {
     const { session, store, runner } = await setup();
     const cancel = jest.spyOn(runner, 'cancel').mockImplementation(() => {});

@@ -38,7 +38,8 @@ test.describe('the Data step', () => {
     await expect(fact(page, 'echo_times').getByTestId('fact-source')).toHaveText('sidecars');
     await expect(page.getByTestId('fact-b0_dir')).toHaveValue('0, 0, 1');
     await expect(fact(page, 'magnitude').getByTestId('fact-value')).toHaveText('yes');
-    await expect(fact(page, 'manufacturer').getByTestId('fact-value')).toHaveText('Siemens');
+    // The manufacturer can be typed in (it sets the phase sign of real/imaginary parts).
+    await expect(fact(page, 'manufacturer').locator('input')).toHaveValue('Siemens');
     // The plan is for this scan now.
     await expect(page.getByTestId('plan-status')).toHaveText('Plan: 10 steps');
     // The first echo's magnitude is shown.
@@ -98,7 +99,8 @@ test.describe('the Data step', () => {
     await expect(page.getByTestId('scan-summary')).toHaveText(/^\s*2 echoes · 3\.00 T · 32×32×12/, { timeout: 60_000 });
     await expect(page.getByTestId('fact-echo_times')).toHaveValue('5, 10');
     await expect(fact(page, 'voxel_size').getByTestId('fact-value')).toHaveText('2 × 2 × 2 mm');
-    await expect(fact(page, 'manufacturer').getByTestId('fact-value')).toHaveText('Siemens');
+    // The manufacturer can be typed in (it sets the phase sign of real/imaginary parts).
+    await expect(fact(page, 'manufacturer').locator('input')).toHaveValue('Siemens');
     await page.locator('.files-roles > summary').click();
     const roles = await page.locator('.file-table select').evaluateAll((els) => els.map((e) => /** @type {HTMLSelectElement} */ (e).value));
     expect(roles.filter((r) => r === 'phase')).toHaveLength(2);

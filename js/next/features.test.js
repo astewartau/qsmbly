@@ -102,6 +102,25 @@ describe('relaxometry', () => {
     expect([engine.items.R2star.units, engine.items.T2star.units]).toEqual(['s-1', 's']);
   });
 
+  test('R2′ on its own: R2* is computed for it, R2PRIMEnet predicts it, and the plan says why R2* runs', () => {
+    const plan = planOf('R2′ from R2PRIMEnet');
+    expect(sectionOf('r2_r2prime')?.id).toBe('relaxometry');
+    expect(stepOf(plan, 't2star_r2star')?.outputs).toEqual(['R2star', 'T2star']);
+    expect(stepOf(plan, 'r2_r2prime')).toMatchObject({ reads: ['BrainMask', 'R2star'], outputs: ['R2prime'], models: ['r2primenet'] });
+    expect(plan.models).toEqual(['r2primenet']);
+    expect(stepOf(plan, 'output_space').outputs).toContain('R2prime');
+    expect(engine.items.R2prime).toMatchObject({ kind: 'relaxometry', published: true, units: 's-1', bids_name: 'R2primemap' });
+    expect(plan.adjustments.map((a) => [a.setting, a.because])).toContainEqual(['pipeline.do_r2starmap', 'pipeline.do_r2primemap']);
+    for (const a of plan.adjustments) expect(a.message).not.toMatch(/--/);
+  });
+
+  test('R2 measured from a MESE, and R2′ from R2* − R2 with its coverage', () => {
+    const plan = planOf('R2 and R2′ from a MESE');
+    expect(stepOf(plan, 'r2_r2prime').outputs).toEqual(['R2', 'R2primeCoverage', 'R2prime']);
+    expect(stepOf(plan, 'r2_r2prime').reads).toEqual(expect.arrayContaining(['MeseMagnitude(1)', 'MeseMagnitude(4)']));
+    expect(stepOf(plan, 'output_space').outputs).toEqual(expect.arrayContaining(['R2', 'R2prime', 'R2primeCoverage']));
+  });
+
   test('R2PRIMEnet runs at the browser profile\'s patch', () => {
     expect(engine.browser.separation.r2primenet.patch).toEqual([128, 128, 64]);
   });
