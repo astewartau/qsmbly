@@ -234,6 +234,9 @@
  * @property {number} peak_memory_bytes
  * @property {Check} check
  * @property {string[]} notes
+ * @property {{ setting: string, because: string, message: string }[]} [adjustments] - settings the engine turned on
+ *   because another needs them (`PipelineConfig::normalised`), each said in plain words
+ * @property {Record<string, any>} [config] - the configuration the run takes, after those adjustments
  * @property {boolean} two_pass
  * @property {boolean} motion_corrected
  */

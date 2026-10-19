@@ -5999,6 +5999,60 @@
       "browser": "available"
     },
     {
+      "path": "separation.chi_sepnet.patch",
+      "label": "Patch",
+      "full_label": "χ-sepnet Patch",
+      "context": "χ-sepnet",
+      "help": "Sliding-window patch D H W, each a multiple of 16",
+      "type": "int-vec3",
+      "optional": false,
+      "units": "voxels",
+      "min": 16,
+      "step": 1,
+      "default": [
+        192,
+        192,
+        128
+      ],
+      "browser_default": [
+        128,
+        128,
+        64
+      ],
+      "level": "advanced",
+      "tab": "separation",
+      "section": "separation",
+      "order": 266,
+      "parent": "separation.algorithm",
+      "cli_flag": "--chi-sepnet-patch",
+      "browser": "available"
+    },
+    {
+      "path": "separation.susep_net.patch",
+      "label": "Sliding Window",
+      "full_label": "SUSEP-Net Sliding Window",
+      "context": "SUSEP-Net",
+      "help": "Patch size for running SUSEP-Net piece by piece, which needs less memory; empty runs the whole volume at once",
+      "type": "int-vec3",
+      "optional": true,
+      "units": "voxels",
+      "min": 8,
+      "step": 1,
+      "default": null,
+      "browser_default": [
+        96,
+        96,
+        64
+      ],
+      "level": "advanced",
+      "tab": "separation",
+      "section": "separation",
+      "order": 267,
+      "parent": "separation.algorithm",
+      "cli_flag": "--susep-net-patch",
+      "browser": "available"
+    },
+    {
       "path": "separation.custom_qsm_tool",
       "label": "Custom QSM tool",
       "full_label": "Custom QSM",
@@ -6014,7 +6068,7 @@
         "swi-smwi",
         "segmentation"
       ],
-      "order": 266,
+      "order": 268,
       "cli_flag": "--use-custom-qsm",
       "browser": "supplied-file",
       "item": "SuppliedChi",
@@ -6032,7 +6086,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 267,
+      "order": 269,
       "cli_flag": "--do-swi",
       "browser": "available"
     },
@@ -6069,7 +6123,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 268,
+      "order": 270,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-unwrapping",
       "browser": "available"
@@ -6119,7 +6173,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 269,
+      "order": 271,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-scaling",
       "browser": "available"
@@ -6137,7 +6191,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 270,
+      "order": 272,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-strength",
       "browser": "available"
@@ -6164,7 +6218,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 271,
+      "order": 273,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-hp-sigma",
       "browser": "available"
@@ -6185,7 +6239,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 272,
+      "order": 274,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-mip-window",
       "browser": "available"
@@ -6202,7 +6256,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 273,
+      "order": 275,
       "cli_flag": "--do-smwi",
       "browser": "available"
     },
@@ -6220,7 +6274,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 274,
+      "order": 276,
       "parent": "pipeline.do_smwi",
       "cli_flag": "--smwi-threshold",
       "browser": "available"
@@ -6239,7 +6293,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 275,
+      "order": 277,
       "parent": "pipeline.do_smwi",
       "cli_flag": "--smwi-power",
       "browser": "available"
@@ -6260,7 +6314,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 276,
+      "order": 278,
       "parent": "pipeline.do_smwi",
       "cli_flag": "--smwi-mip-window",
       "browser": "available"
@@ -6277,7 +6331,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 277,
+      "order": 279,
       "cli_flag": "--do-t2starmap",
       "browser": "available"
     },
@@ -6293,7 +6347,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 278,
+      "order": 280,
       "cli_flag": "--do-r2starmap",
       "browser": "available"
     },
@@ -6309,7 +6363,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 279,
+      "order": 281,
       "cli_flag": "--do-r2map",
       "browser": "available"
     },
@@ -6325,7 +6379,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 280,
+      "order": 282,
       "parent": "pipeline.do_r2map",
       "cli_flag": "--use-custom-r2",
       "browser": "supplied-file",
@@ -6344,7 +6398,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 281,
+      "order": 283,
       "cli_flag": "--do-r2primemap",
       "browser": "available"
     },
@@ -6360,7 +6414,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 282,
+      "order": 284,
       "parent": "pipeline.do_r2primemap",
       "cli_flag": "--use-custom-r2prime",
       "browser": "supplied-file",
@@ -6399,7 +6453,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 283,
+      "order": 285,
       "parent": "pipeline.do_r2primemap",
       "cli_flag": "--r2prime-strategy",
       "browser": "available"
@@ -6417,7 +6471,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 284,
+      "order": 286,
       "parent": "separation.r2prime_strategy",
       "cli_flag": "--r2primenet-ignore-field-mismatch",
       "browser": "available"
@@ -6446,7 +6500,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 285,
+      "order": 287,
       "parent": "separation.r2prime_strategy",
       "cli_flag": "--r2primenet-patch",
       "browser": "available"
@@ -6463,7 +6517,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 286,
+      "order": 288,
       "cli_flag": "--do-segmentation",
       "browser": "available"
     },
@@ -6479,7 +6533,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 287,
+      "order": 289,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--use-custom-dseg",
       "browser": "supplied-file",
@@ -6512,7 +6566,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 288,
+      "order": 290,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-version",
       "browser": "available"
@@ -6532,7 +6586,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 289,
+      "order": 291,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-crop",
       "browser": "available"
@@ -6552,7 +6606,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 290,
+      "order": 292,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-patch",
       "browser": "available"
@@ -6569,7 +6623,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 291,
+      "order": 293,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--no-synthseg-flip-averaging",
       "browser": "available"
@@ -6586,7 +6640,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 292,
+      "order": 294,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--no-synthseg-topology-cleanup",
       "browser": "available"
@@ -6608,7 +6662,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 293,
+      "order": 295,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-sigma",
       "browser": "available"
@@ -6625,7 +6679,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 294,
+      "order": 296,
       "cli_flag": "--do-analysis",
       "browser": "available"
     },
@@ -6641,7 +6695,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "export",
-      "order": 295,
+      "order": 297,
       "cli_flag": "--export-dicom",
       "browser": "unavailable"
     }

@@ -16,6 +16,7 @@
 import { html } from '../html.js';
 import { useState } from 'preact/hooks';
 import { itemMeta } from '../items.js';
+import { isOverlay } from '../display.js';
 import { outputPrefix } from '../inputs.js';
 import { decodeForViewer } from '../scan.js';
 import { isAside } from '../store/volumes.js';
@@ -201,10 +202,11 @@ export function Outputs({ session, store, runner, engine, history }) {
   };
 
   const overlay = session.ui.overlay.value;
-  // A mask is drawn over what is shown (click it again to take it off); anything else is shown.
+  // A mask or segmentation is drawn over what is shown (click it again to take it off); anything
+  // else is shown.
   const view = async (key) => {
-    const mask = itemMeta(key).kind === 'mask';
-    if (mask && viewing && viewing !== key && itemMeta(viewing).kind !== 'mask') {
+    const mask = isOverlay(itemMeta(key));
+    if (mask && viewing && viewing !== key && !isOverlay(itemMeta(viewing))) {
       session.ui.overlay.value = overlay === key ? null : key;
       return;
     }

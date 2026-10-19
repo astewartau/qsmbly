@@ -158,7 +158,8 @@ test.describe('next.html', () => {
     await expect(page.getByLabel('Segmentation', exact)).toBeDisabled();
     await expect(page.getByLabel('Segmentation', exact)).toBeChecked();
     await expect(stepRow(page, 'segmentation').getByTestId('forced')).toHaveText('On because Per-structure Statistics needs it.');
-    await expect(page.getByTestId('plan-status')).toHaveText('Plan: 11 steps');
+    // The plan takes the segmentation it forces, and the statistics after it.
+    await expect(page.getByTestId('plan-status')).toHaveText('Plan: 12 steps');
 
     // Search finds an advanced setting by its flag and opens it.
     await page.getByLabel('Search settings').fill('--vsharp-max-radius');

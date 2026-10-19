@@ -39,6 +39,7 @@
  */
 import { signal, batch } from '@preact/signals-core';
 import { itemMeta } from './items.js';
+import { isOverlay } from './display.js';
 import { downloadModels, withCacheState, planModels, weightBase } from './models.js';
 
 /** Log lines kept, the most recent. */
@@ -182,11 +183,11 @@ export function createRunner({ session, store, createWorker, registry, now = () 
         addLog({ level: m.level, message: m.message, step: m.step, at: t() });
         break;
       case 'output': {
-        // Follow the run: each whole-scan output as it arrives, a mask over what is shown.
+        // Follow the run: each whole-scan output as it arrives, a mask or segmentation over what is shown.
         const meta = itemMeta(m.key);
         if (!follow.peek() || meta.echo != null || meta.coil != null) break;
         batch(() => {
-          if (meta.kind === 'mask') {
+          if (isOverlay(meta)) {
             if (session.ui.viewing.peek()) session.ui.overlay.value = m.key;
             else session.ui.viewing.value = m.key;
           } else {

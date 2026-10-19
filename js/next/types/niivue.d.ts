@@ -12,6 +12,7 @@ export class NVImage {
   cal_min: number;
   cal_max: number;
   colormap: string;
+  setColormapLabel(cm: Record<string, unknown>): void;
 }
 export class Niivue {
   constructor(options?: Record<string, unknown>);
@@ -21,6 +22,7 @@ export class Niivue {
   setSliceType(type: number): this;
   updateGLVolume(): void;
   drawScene(): void;
+  colormapFromKey(name: string): Record<string, unknown>;
   volumes: NVImage[];
   opts: Record<string, any>;
   loadDrawing(drawing: NVImage): boolean;
