@@ -108,9 +108,41 @@ export function createRunner({ session, store, createWorker, registry, now = () 
     }
   }
 
+  /**
+   * The mask preview in progress (`preview`): what the worker posts ends it, and its step
+   * events are not the run's.
+   * @type {{ resolve: (m: Extract<RunMessage, { type: 'previewed' }>) => void, reject: (e: Error) => void } | null}
+   */
+  let previewing = null;
+  /** Settles when no preview is in progress: a run waits for it. */
+  let previewSettled = Promise.resolve();
+
   /** @param {number} id @param {RunMessage} m */
   function onMessage(id, m) {
     if (id !== runId) return;
+    if (previewing) {
+      switch (m.type) {
+        case 'previewed': {
+          const p = previewing;
+          previewing = null;
+          p.resolve(m);
+          return;
+        }
+        case 'failed': {
+          const p = previewing;
+          previewing = null;
+          p.reject(Object.assign(new Error(m.message), { kind: m.kind, step: m.step }));
+          return;
+        }
+        case 'stage':
+        case 'progress':
+        case 'output':
+        case 'done':
+          return;
+        default:
+          break;
+      }
+    }
     switch (m.type) {
       case 'begin':
         store.begin(m.grid);
@@ -233,6 +265,17 @@ export function createRunner({ session, store, createWorker, registry, now = () 
   }
 
   /**
+   * Download the weights of `models` that are not in the browser's cache yet.
+   * @param {string[]} models
+   * @param {(d: { model: string, done: number, total: number }) => void} [onProgress]
+   */
+  async function ensureWeights(models, onProgress) {
+    const need = (await cacheState(planModels(models, registry), registry)).filter((m) => (m.missing ?? 0) > 0);
+    if (need.length) await download(need.map((m) => m.id), registry, onProgress ?? (() => {}));
+    return need.length > 0;
+  }
+
+  /**
    * What the worker is given: every volume the page keeps (inputs and supplied files as their
    * NIfTI files, computed volumes as they are), the record, and the scan as the engine reads it.
    * @param {Plan} p
@@ -288,6 +331,9 @@ export function createRunner({ session, store, createWorker, registry, now = () 
       if (this.busy()) return;
       const p = session.plan.peek();
       if (!p) throw new Error('There is no plan to run');
+      // A mask preview in progress finishes first: it may be taking the steps before the mask.
+      status.value = 'starting';
+      await previewSettled;
       const id = ++runId;
       batch(() => {
         plan.value = p;
@@ -318,6 +364,39 @@ export function createRunner({ session, store, createWorker, registry, now = () 
       } catch (e) {
         if (id === runId) onMessage(id, { type: 'failed', message: e instanceof Error ? e.message : String(e), kind: null, step: null });
       }
+    },
+    /**
+     * Preview a mask recipe: the mask `config`'s recipe makes on the loaded scan (or `sections`
+     * of it, e.g. the reliable mask's), computed by the run's own masking in the run worker. The
+     * steps the mask reads from are taken as a run takes them (and kept, so the run reuses
+     * them); the brain mask and everything after it are left as they are. The weights of
+     * `models` (the mask step's) are downloaded first when they are not cached.
+     * @param {{ config: Record<string, any>, sections?: any[] | null, upto?: import('./protocol.js').MaskPreviewUpto, models?: string[] }} request
+     * @returns {Promise<Extract<RunMessage, { type: 'previewed' }>>}
+     */
+    async preview({ config, sections = null, upto = 'recipe', models = [] }) {
+      if (this.busy()) throw new Error('A run is in progress');
+      if (previewing) throw new Error('A preview is in progress');
+      /** @type {() => void} */
+      let settle = () => {};
+      previewSettled = new Promise((resolve) => { settle = resolve; });
+      try {
+        await ensureWeights(models);
+        await ensureWorker();
+        const p = session.plan.peek();
+        const j = { ...(await job(/** @type {Plan} */ ({ ...(p ?? {}), models }))), config, sections, upto };
+        return await new Promise((resolve, reject) => {
+          previewing = { resolve, reject };
+          /** @type {WorkerLike} */ (w).postMessage({ type: 'preview', job: j });
+        });
+      } finally {
+        previewing = null;
+        settle();
+      }
+    },
+    /** Whether a mask preview is in progress. */
+    previewing() {
+      return previewing !== null;
     },
     /**
      * Stop the run: the worker is terminated, so only the step in progress is lost. The next

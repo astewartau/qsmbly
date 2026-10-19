@@ -696,6 +696,15 @@ U4 is qsmbly `next-rerun`, on QSMxT #388 (E9) and #389 (E2, `run::dry_run`): row
 "Re-run n steps" button from the engine's dry run over the page's record and volumes, run history
 (the latest two runs plus pinned ones, with the memory only they hold), and the compare view.
 
+U5 is qsmbly #175, on QSMxT #390 (E10, E11). The mask builder previews its recipe through the
+engine (`run::preview_mask`, the run's own masking): the preview is the run's mask bit for bit,
+and the section images are kept between previews. On 6.3 M voxels natively, a threshold or
+morphology edit takes 70–115 ms. Building the phase-quality image once takes about 0.8 s. The
+viewer shows the preview over its input, with Otsu's threshold. A mask edited by hand with the
+viewer's brush, or uploaded and repaired with the axis flips, becomes a supplied mask. It is
+downloaded as `derivatives/qsmbly/sub-*/anat/<run>_mask.nii.gz`, and the methods text of the run
+says the brain mask was supplied.
+
 Order and parallelism:
 
 - **U1 starts now.** U0's issues go to QSMxT now as well, because E1, E3, E4, E6, E7 and E12

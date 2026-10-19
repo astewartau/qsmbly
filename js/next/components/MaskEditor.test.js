@@ -61,7 +61,8 @@ describe('the mask builder', () => {
     expect(q(root, '[id="Mask-0-input"]').value).toBe('phase-quality');
     expect(q(root, '[id="Mask-0-method"]').value).toBe('threshold-otsu');
     expect([...root.querySelectorAll('.ops .row.op')].map((r) => r.textContent.match(/Dilate|Fill holes|Erode/)?.[0])).toEqual(['Dilate', 'Fill holes', 'Erode']);
-    expect(button(root, 'Preview mask').disabled).toBe(true);
+    // Previews come from the run worker (mask-preview.js): without one there is nothing to ask.
+    expect(button(root, 'Preview mask')).toBeUndefined();
   });
 
   test('a preset replaces the recipe in one undoable change', async () => {

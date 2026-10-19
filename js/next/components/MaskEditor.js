@@ -5,7 +5,13 @@
  * two-pass reliable mask; or a mask file the user supplies instead. Every edit writes the recipe
  * in the config, so it is undoable and re-plans. Every name, help text, parameter and default is
  * the engine's (mask.js); what is wrong with a value is the engine's `settings_view` error, shown
- * under the part of the recipe it is in. Previews come from the engine's masking in U5.
+ * under the part of the recipe it is in.
+ *
+ * Previews are the engine's (mask-preview.js): the mask the recipe makes, computed by the run's
+ * own masking, shown over the image it was made from, with Otsu's threshold of that image. The
+ * preview (or the run's mask) can be edited by hand with the viewer's brush, and a mask file can
+ * be uploaded and its axes repaired; either is then a mask supplied for the run, exported as a
+ * BIDS derivative (supplied-mask.js).
  *
  * @typedef {import('../store/session.js').Session} Session
  * @typedef {import('../store/volumes.js').VolumeStore} VolumeStore
@@ -16,9 +22,10 @@
  * @typedef {import('../mask.js').MaskSection} MaskSection
  * @typedef {import('../mask.js').MaskParam} MaskParam
  * @typedef {import('../mask.js').MaskStep} MaskStep
+ * @typedef {import('../mask-preview.js').MaskPreview} MaskPreview
  */
 import { html } from '../html.js';
-import { useState } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import { useFollow } from './follow.js';
 import {
   stepOf, stepKinds, defaultOp, paramApplies, parseParam, hdBetChoice, presetOf, presetRecipe, recipeSettings,
@@ -26,12 +33,17 @@ import {
 import { WASM_HEAP_BYTES } from '../protocol.js';
 import { formatBytes } from '../format.js';
 import { SettingRow, sectionRows } from './Settings.js';
+import { SUPPLIED_TOOL } from '../schema.js';
 import { Icon } from './icons.js';
+import { slowSteps, SUPPLIED_MASK, PREVIEW_MASK, CUSTOM_MASK_PATH, EDITED_NAME } from '../mask-preview.js';
+import { suppliedMaskEntry, repairSuppliedMask, sameGrid, runName, REFERENCE_KEYS } from '../supplied-mask.js';
 
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
-/** @param {{ session: Session, store: VolumeStore, schema: Schema, kit: MaskKit }} props */
-export function MaskEditor({ session, store, schema, kit }) {
+/**
+ * @param {{ session: Session, store: VolumeStore, schema: Schema, kit: MaskKit, preview?: MaskPreview, engine?: any, busy?: boolean }} props
+ */
+export function MaskEditor({ session, store, schema, kit, preview, engine, busy = false }) {
   const config = session.config.value;
   const view = session.view.value;
   const m = config.masking;
@@ -53,6 +65,14 @@ export function MaskEditor({ session, store, schema, kit }) {
     return error && html`<p class="sub err" role="alert" data-testid="engine-error">${error}</p>`;
   };
   const combine = byPath.get('masking.combine');
+
+  // While the recipe is open, previews follow its edits.
+  useEffect(() => {
+    if (!preview || own) return undefined;
+    preview.follow();
+    if (!preview.result.peek() || preview.stale.peek()) preview.edited();
+    return () => preview.stop();
+  }, [preview, own]);
 
   const useRecipe = () => {
     setWantFile(false);
@@ -76,7 +96,7 @@ export function MaskEditor({ session, store, schema, kit }) {
       </div>
       ${own && html`
         ${settingRow('masking.custom_mask_tool')}
-        <p class="sub">The file is exported as a BIDS derivative (derivatives/qsmbly/), so QSMxT uses the same mask.</p>`}
+        <${SuppliedMask} session=${session} store=${store} engine=${engine} />`}
       ${!own && html`
         <div class=${`row${recipeChanged ? ' changed' : ''}`} data-path="masking.preset">
           <div class="lab"><span class="dot" aria-hidden="true"></span><label for="mask-preset">Preset</label></div>
@@ -116,10 +136,7 @@ export function MaskEditor({ session, store, schema, kit }) {
               label="Reliable mask" setSections=${(x) => session.set('masking.two_pass_sections', x)} />
             ${engineError('masking.two_pass_sections')}
           </section>`}
-        <div class="mask-actions">
-          <button type="button" class="btn small" disabled title="Comes with the engine's mask previews">${Icon.eye} Preview mask</button>
-          <span class="muted">Coming with the engine's mask previews.</span>
-        </div>`}
+        ${preview && html`<${PreviewPanel} session=${session} store=${store} kit=${kit} preview=${preview} busy=${busy} />`}`}
     </div>
   `;
 }
@@ -312,5 +329,187 @@ function Num({ id = undefined, value, param, label, set, title, error, setError 
         setError(r.error);
         if (!r.error) set(r.value);
       }} />
+  `;
+}
+
+/** A number of voxels as a share of the volume. @param {number} n @param {number} total */
+const share = (n, total) => `${((100 * n) / Math.max(1, total)).toFixed(1)} %`;
+
+/** A threshold as it is shown: four significant figures. @param {number} v */
+const thresholdText = (v) => (Math.abs(v) >= 1000 ? v.toFixed(0) : v.toPrecision(4));
+
+/**
+ * The preview: what the recipe makes (a share of the volume, Otsu's threshold of its input), the
+ * button that asks for it, and the hand edit.
+ * @param {{ session: Session, store: VolumeStore, kit: MaskKit, preview: MaskPreview, busy: boolean }} props
+ */
+function PreviewPanel({ session, store, kit, preview, busy }) {
+  const status = preview.status.value;
+  const result = preview.result.value;
+  const stale = preview.stale.value;
+  const drawing = preview.drawing.value;
+  const m = session.config.value.masking;
+  store.version.value;
+  const loaded = session.loaded.value;
+  const slow = slowSteps(kit, m.sections, m.refinements);
+  const editable = !!(store.entry(PREVIEW_MASK)?.data || store.entry('BrainMask')?.data);
+  const [failed, setFailed] = useState(/** @type {string | null} */ (null));
+  if (drawing) return html`<${Drawing} preview=${preview} drawing=${drawing} failed=${failed} setFailed=${setFailed} />`;
+  return html`
+    <div class="mask-preview" data-testid="mask-preview" data-status=${status} data-stale=${stale ? 'yes' : 'no'}>
+      <div class="mask-actions">
+        <button type="button" class="btn small" data-testid="preview-mask" disabled=${!loaded || busy || status === 'working'}
+          onClick=${() => preview.now('recipe')}>${Icon.eye} ${result && !stale ? 'Preview again' : 'Preview mask'}</button>
+        <button type="button" class="btn small" data-testid="edit-mask" disabled=${!editable || busy}
+          title=${editable ? 'Paint into the mask or erase from it in the viewer' : 'Preview the mask, or run, to have a mask to edit'}
+          onClick=${() => { setFailed(null); preview.startDrawing(); }}>Edit by hand</button>
+      </div>
+      ${!loaded && html`<p class="sub muted">Load a scan to preview the mask.</p>`}
+      ${loaded && slow.length > 0 && html`
+        <p class="sub muted" data-testid="preview-on-request">${slow.map((s) => s.name).join(' and ')} ${slow.length > 1 ? 'preview' : 'previews'} when you ask: Preview mask.</p>`}
+      ${status === 'working' && html`<p class="sub" role="status">Computing the preview…</p>`}
+      ${status === 'failed' && html`<p class="sub err" role="alert" data-testid="preview-error">${preview.error.value}</p>`}
+      ${result && status !== 'failed' && html`
+        <p class="sub" data-testid="preview-result" aria-live="polite">
+          ${'Mask: '}<strong data-testid="preview-coverage">${share(result.voxels, result.total)}</strong>
+          ${` of the volume (${result.voxels.toLocaleString('en')} voxels). Otsu threshold of ${result.inputLabel.toLowerCase()}: `}
+          <strong data-testid="preview-otsu">${thresholdText(result.otsu)}</strong>.
+          ${stale && html`<span class="muted"> The recipe has changed since.</span>`}
+        </p>`}
+    </div>
+  `;
+}
+
+/**
+ * Editing the mask by hand with the viewer's brush.
+ * @param {{ preview: MaskPreview, drawing: import('../mask-preview.js').Drawing, failed: string | null, setFailed: (e: string | null) => void }} props
+ */
+function Drawing({ preview, drawing, failed, setFailed }) {
+  const [saving, setSaving] = useState(false);
+  return html`
+    <div class="mask-draw" role="group" aria-label="Edit the mask by hand" data-testid="mask-draw">
+      <div class="row">
+        <div class="lab"><span id="brush-mode">Brush</span></div>
+        <div class="ctl">
+          <span class="seg" role="radiogroup" aria-labelledby="brush-mode">
+            <button type="button" role="radio" aria-checked=${drawing.pen === 1} onClick=${() => preview.setBrush({ pen: 1 })}>Paint</button>
+            <button type="button" role="radio" aria-checked=${drawing.pen === 0} onClick=${() => preview.setBrush({ pen: 0 })}>Erase</button>
+          </span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="lab"><label for="brush-size">Brush size</label></div>
+        <div class="ctl">
+          <input type="number" class="num" id="brush-size" min="1" max="40" step="1" value=${drawing.size}
+            onChange=${(e) => { const v = Math.round(Number(e.currentTarget.value)); if (v >= 1) preview.setBrush({ size: Math.min(v, 40) }); }} />
+          <span class="unit">voxels</span>
+        </div>
+      </div>
+      <p class="sub">Drag in the viewer to paint into the mask or erase from it. The edited mask is used for this run as a
+        supplied mask: the export includes it as a BIDS derivative and adds --use-custom-masks qsmbly to the command.</p>
+      ${failed && html`<p class="sub err" role="alert">${failed}</p>`}
+      <div class="mask-actions">
+        <button type="button" class="btn small primary" data-testid="use-drawing" disabled=${saving} onClick=${async () => {
+          setSaving(true);
+          try {
+            await preview.useDrawing();
+            setFailed(null);
+          } catch (e) {
+            setFailed(e instanceof Error ? e.message : String(e));
+          } finally {
+            setSaving(false);
+          }
+        }}>Use this mask</button>
+        <button type="button" class="btn small" onClick=${() => preview.cancelDrawing()}>Cancel</button>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * The supplied mask: where it came from, the repair of an uploaded mask's axes, showing it over
+ * the scan, and its BIDS derivative.
+ * @param {{ session: Session, store: VolumeStore, engine?: any }} props
+ */
+function SuppliedMask({ session, store, engine }) {
+  store.version.value;
+  const entry = store.entry(SUPPLIED_MASK);
+  const name = session.ui.supplied.value[CUSTOM_MASK_PATH];
+  const uses = session.config.value.masking.custom_mask_tool === SUPPLIED_TOOL && !!entry;
+  // The upload as it was given, which repairs start from (not a repaired copy).
+  const original = useRef(/** @type {Uint8Array | null} */ (null));
+  const made = useRef(/** @type {WeakSet<Uint8Array>} */ (new WeakSet()));
+  if (entry?.nifti && !made.current.has(entry.nifti)) original.current = entry.nifti;
+  const [flips, setFlips] = useState(/** @type {[boolean, boolean, boolean]} */ ([false, false, false]));
+  const [note, setNote] = useState(/** @type {{ text: string, error?: boolean } | null} */ (null));
+  const [path, setPath] = useState(/** @type {string | null} */ (null));
+  const refKey = REFERENCE_KEYS.find((k) => store.has(k));
+  const aligned = sameGrid(entry?.grid, refKey ? store.entry(refKey)?.grid : null);
+  const edited = name === EDITED_NAME;
+  if (!uses) {
+    return html`<p class="sub">A mask supplied here is used for the run in place of the recipe, and exported as a BIDS derivative (derivatives/qsmbly/), so QSMxT uses the same mask.</p>`;
+  }
+  const show = () => {
+    const background = ['CombinedMagnitude', 'Magnitude(1)', ...REFERENCE_KEYS].find((k) => {
+      const e = store.entry(k);
+      return e && sameGrid(e.grid, entry?.grid);
+    });
+    session.ui.viewing.value = background ?? SUPPLIED_MASK;
+    session.ui.overlay.value = background ? SUPPLIED_MASK : null;
+  };
+  const repair = async () => {
+    if (!original.current) return;
+    try {
+      const count = await repairSuppliedMask({ session, store, original: original.current, flips });
+      const now = store.entry(SUPPLIED_MASK)?.nifti;
+      if (now) made.current.add(now);
+      setNote({ text: `Aligned with the scan: ${count.toLocaleString('en')} voxels in the mask.` });
+      show();
+    } catch (e) {
+      setNote({ text: e instanceof Error ? e.message : String(e), error: true });
+    }
+  };
+  const download = async () => {
+    try {
+      const file = await suppliedMaskEntry({ session, store, engine, run: runName(session) });
+      if (!file) return;
+      setPath(file.path);
+      const url = URL.createObjectURL(new Blob([/** @type {BlobPart} */ (file.bytes)], { type: 'application/gzip' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.path.split('/').pop() ?? 'mask.nii.gz';
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      setNote({ text: e instanceof Error ? e.message : String(e), error: true });
+    }
+  };
+  const axes = ['left–right', 'front–back', 'up–down'];
+  return html`
+    <div class="supplied-mask" data-testid="supplied-mask">
+      <p class="sub note" data-testid="supplied-banner">This run uses a supplied mask${edited ? ', edited by hand' : ''}. The export includes it as a BIDS
+        derivative and adds --use-custom-masks qsmbly to the command. Choose Recipe to go back to the recipe.</p>
+      ${!edited && html`
+        <div class="mask-align" role="group" aria-label="Align the mask with the scan" data-testid="mask-align">
+          <p class="sub">${aligned ? 'The mask is on the scan\'s grid. If it does not lie on the brain, flip its axes:'
+            : 'The mask\'s header places it differently from the scan. Take the scan\'s header, flipping axes if it does not lie on the brain:'}</p>
+          <div class="row">
+            <div class="lab"><span>Flip</span></div>
+            <div class="ctl">
+              ${axes.map((a, i) => html`<label class="check"><input type="checkbox" checked=${flips[i]}
+                onChange=${(e) => setFlips(/** @type {[boolean, boolean, boolean]} */ (flips.map((f, j) => (j === i ? e.currentTarget.checked : f))))} /> ${a}</label>`)}
+              <button type="button" class="btn small" data-testid="align-mask" onClick=${repair}>Apply</button>
+            </div>
+          </div>
+        </div>`}
+      ${note && html`<p class=${`sub${note.error ? ' err' : ''}`} role=${note.error ? 'alert' : 'status'}>${note.text}</p>`}
+      <div class="mask-actions">
+        <button type="button" class="btn small" onClick=${show}>${Icon.eye} Show over the scan</button>
+        <button type="button" class="btn small" data-testid="download-supplied-mask" disabled=${!engine} onClick=${download}>Download as BIDS derivative</button>
+      </div>
+      ${path && html`<p class="sub muted" data-testid="supplied-path">Put it at ${path} in the BIDS directory.</p>`}
+    </div>
   `;
 }

@@ -20,6 +20,7 @@ import { createRunner } from './run.js';
 import { createScanLoader, withSupplied } from './scan.js';
 import { createHistory } from './history.js';
 import { createExpectations } from './rerun.js';
+import { createMaskPreview, recipeKey } from './mask-preview.js';
 
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
 
@@ -79,7 +80,23 @@ try {
     registry: models,
     createWorker: () => /** @type {any} */ (new Worker(runWorkerUrl, { type: 'module' })),
   });
-  const loader = createScanLoader({ session, store, engine, preview: facts, onNewInputs: () => runner.reset() });
+  const mask = { schema: schema.mask, defaults: maskDefaults };
+  const maskPreview = createMaskPreview({ session, store, runner, kit: mask, engine });
+  const loader = createScanLoader({
+    session, store, engine, preview: facts,
+    onNewInputs: () => {
+      runner.reset();
+      maskPreview.reset();
+    },
+  });
+  // The mask builder's previews follow the recipe's edits.
+  let recipe = recipeKey(session.config.peek());
+  effect(() => {
+    const now = recipeKey(session.config.value);
+    if (now === recipe) return;
+    recipe = now;
+    maskPreview.edited();
+  });
   // A supplied file (a brain mask, χ, ...) put in or taken out of the store is a fact found or not.
   let supplied = '';
   effect(() => {
@@ -101,12 +118,12 @@ try {
     superseded: (e) => e instanceof Superseded,
   });
 
-  const workspace = { schema, mask: { schema: schema.mask, defaults: maskDefaults }, models, versions, engine, runner, loader, history, expect };
+  const workspace = { schema, mask, models, versions, engine, runner, loader, history, expect, maskPreview };
   // The graph, command and settings-file answers, for the Pipeline and Command tabs.
   const providers = engineProviders(engine);
   render(html`<${App} session=${session} store=${store} workspace=${workspace} providers=${providers} />`, root);
   // For the smoke tests and for poking at it from the console.
-  Object.assign(globalThis, { qsmblyNext: { session, store, workspace, providers, runner, loader, history, expect, Superseded } });
+  Object.assign(globalThis, { qsmblyNext: { session, store, workspace, providers, runner, loader, history, expect, maskPreview, Superseded } });
 } catch (e) {
   root.textContent = `The workspace could not start: ${e instanceof Error ? e.message : e}`;
   throw e;

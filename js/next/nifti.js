@@ -40,6 +40,16 @@ export async function gunzip(bytes) {
 }
 
 /**
+ * Gzip with the platform's CompressionStream.
+ * @param {Uint8Array} bytes
+ * @returns {Promise<Uint8Array>}
+ */
+export async function gzip(bytes) {
+  const stream = new Blob([/** @type {BlobPart} */ (bytes)]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/**
  * @param {Uint8Array} file - a .nii or .nii.gz file
  * @returns {Promise<NiftiVolume>}
  */

@@ -17,6 +17,7 @@
  * @property {import('../scan.js').ScanLoader} loader
  * @property {import('../history.js').History} [history]
  * @property {import('../rerun.js').Expectations} [expect]
+ * @property {import('../mask-preview.js').MaskPreview} [maskPreview]
  */
 import { html } from '../html.js';
 import { useState, useEffect } from 'preact/hooks';
@@ -42,7 +43,8 @@ export function App({ session, store, workspace, providers }) {
       <${Header} session=${session} versions=${workspace.versions} />
       <div class="main">
         <${Pipeline} session=${session} store=${store} schema=${workspace.schema} mask=${workspace.mask}
-          runner=${workspace.runner} loader=${workspace.loader} expect=${workspace.expect} />
+          runner=${workspace.runner} loader=${workspace.loader} expect=${workspace.expect}
+          maskPreview=${workspace.maskPreview} engine=${workspace.engine} />
         <${TabbedPane} session=${session} store=${store} providers=${providers} workspace=${workspace} />
       </div>
       <${RunBar} session=${session} store=${store} models=${workspace.models} runner=${workspace.runner} schema=${workspace.schema}
@@ -163,6 +165,13 @@ function ViewerPane({ session, store, workspace }) {
   const overlay = volume && over?.data && sameGrid(over.grid, grid) && over.data.length === entry?.data?.length
     ? { key: /** @type {string} */ (overlayKey), data: over.data, grid: /** @type {any} */ (over.grid), meta: itemMeta(/** @type {string} */ (overlayKey)) }
     : null;
+  // A mask being drawn on (the mask builder's hand edit), over the volume in view.
+  const d = workspace.maskPreview?.drawing.value;
+  const source = d ? store.entry(d.source)?.data : undefined;
+  const drawing = d && volume && source && source.length === volume.data.length
+    ? { mask: source instanceof Uint8Array ? source : Uint8Array.from(source, (v) => (v > 0.5 ? 1 : 0)), pen: d.pen, size: d.size,
+      onCapture: (fn) => workspace.maskPreview?.setCapture(fn) }
+    : null;
   const empty = session.loaded.value
     ? (keys.length ? 'Choose an output below.' : 'Run the pipeline to see its outputs here.')
     : 'Load a scan in the Data step, or try the example.';
@@ -170,7 +179,7 @@ function ViewerPane({ session, store, workspace }) {
     <div class="viewer-body">
       ${comparing && history
         ? html`<${Compare} history=${history} />`
-        : html`<${Viewer} volume=${volume} overlay=${overlay} emptyText=${empty}
+        : html`<${Viewer} volume=${volume} overlay=${drawing ? null : overlay} drawing=${drawing} emptyText=${empty}
             title=${past && pastEntry ? `${itemMeta(/** @type {string} */ (viewing)).label} (run ${past.id})` : undefined} />`}
       <${Outputs} session=${session} store=${store} runner=${workspace.runner} engine=${workspace.engine} history=${history} />
     </div>
