@@ -1,0 +1,208 @@
+name: Parity with qsmxt run
+
+# qsmbly and `qsmxt run` must stay at parity: the same settings give the same plan, step keys,
+# output names and sidecars, command, settings file, graph and methods text, and the same outputs.
+# Both front ends call QSMxT's engine (qsmxt-engine, pinned in rust-wasm/Cargo.toml); these jobs
+# check that what the browser gets from it, compiled to WebAssembly and asked through qsmbly's
+# bindings and JS, is what `qsmxt run` gets natively, at the pinned commit.
+#
+# - engine: no algorithm runs. Every config in scripts/next-engine/cases.mjs and every option of
+#   the settings schema (scripts/next-engine/options.mjs), asked of the bundle under Node and of
+#   qsmxt-engine natively (scripts/next-engine-parity.mjs).
+# - e2e: a handful of runs with the fastest algorithms on a 24×24×20 phantom: qsmbly's run and
+#   export bundle under Node, against `qsmxt run` with the bundle's command and with its settings
+#   file (scripts/parity/e2e.mjs). Masks bitwise, other outputs within 2e-6 (relative).
+#
+# Whether each algorithm is right in WebAssembly is QSM.rs's to test (its wasm harness), not here.
+#
+# The bundle is a build without threads (a threaded one needs a browser's workers), with the
+# deploy's SIMD; the deploy's own bundle runs in the browser smoke tests (ci.yml). The native side
+# is built from the pinned QSMxT commit or tag, cached by that pin.
+on:
+  pull_request:
+  push:
+    branches: [main, staging]
+  # The qsmxt-engine bump workflow dispatches this on its PR branch, as it does ci.yml.
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bundle:
+    name: Bundle for Node (wasm32, no threads)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The bundle is a function of the Rust crate (its source, Cargo.toml and Cargo.lock, so the
+      # qsmxt-engine pin too) and this workflow.
+      - name: Restore a bundle built from the same inputs
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: parity-bundle/
+          key: parity-bundle-${{ hashFiles('rust-wasm/**', '.github/workflows/parity.yml') }}
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-wasm
+          key: parity-bundle
+
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
+        working-directory: rust-wasm
+        run: wasm-pack build --target web --release --out-dir ../parity-bundle --features simd
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: parity-bundle
+          path: parity-bundle/
+          retention-days: 1
+          if-no-files-found: error
+
+  native:
+    name: qsmxt and qsmxt-engine at the pin (native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The one pin on the QSM stack: a rev during development, a release tag after a bump.
+      - name: Read the qsmxt-engine pin
+        id: pin
+        run: |
+          line=$(grep -E '^qsmxt-engine = \{ git = "https://github.com/QSMxT/QSMxT.git"' rust-wasm/Cargo.toml)
+          ref=$(echo "$line" | sed -nE 's/.*(rev|tag) = "([^"]+)".*/\2/p')
+          if [ -z "$ref" ]; then echo "::error::no rev or tag in: $line"; exit 1; fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "qsmxt-engine is pinned to $ref"
+
+      - name: Check out QSMxT at the pin
+        uses: actions/checkout@v4
+        with:
+          repository: QSMxT/QSMxT
+          ref: ${{ steps.pin.outputs.ref }}
+          path: qsmxt
+
+      - name: Restore the binaries built at this pin
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: native-bin/
+          key: parity-native-${{ steps.pin.outputs.ref }}-${{ hashFiles('scripts/next-engine/main.rs', 'scripts/next-engine-parity.mjs', '.github/workflows/parity.yml') }}
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      # The compiled dependencies, for a new pin: most of them do not change from one to the next.
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: qsmxt
+          key: parity-native
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # `qsmxt` without deep learning: the end-to-end cases run classical algorithms only, and the
+      # wiring is the same with or without it. The oracle shares the build directory.
+      - name: Build qsmxt and the engine oracle
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/qsmxt/target
+        run: |
+          mkdir -p native-bin
+          cargo build --release --locked --no-default-features --bin qsmxt --manifest-path qsmxt/Cargo.toml
+          cp qsmxt/target/release/qsmxt native-bin/
+          node scripts/next-engine-parity.mjs --build-oracle qsmxt native-bin/oracle
+          git -C qsmxt rev-parse HEAD > native-bin/commit
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: parity-native
+          path: native-bin/
+          retention-days: 1
+          if-no-files-found: error
+
+  engine:
+    name: Engine answers (every option, no runs)
+    runs-on: ubuntu-latest
+    needs: [bundle, native]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: parity-bundle
+          path: parity-bundle/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: parity-native
+          path: native-bin/
+
+      - name: The browser's answers against qsmxt-engine's
+        env:
+          PARITY_ORACLE_BIN: native-bin/oracle
+        run: |
+          chmod +x native-bin/oracle
+          echo "QSMxT at $(cat native-bin/commit)"
+          node scripts/next-engine-parity.mjs - parity-bundle
+
+  e2e:
+    name: End to end (tiny phantom)
+    runs-on: ubuntu-latest
+    needs: [bundle, native]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: parity-bundle
+          path: parity-bundle/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: parity-native
+          path: native-bin/
+
+      - name: qsmbly's runs against qsmxt run
+        run: |
+          chmod +x native-bin/qsmxt
+          echo "QSMxT at $(cat native-bin/commit)"
+          node scripts/parity/e2e.mjs parity-bundle native-bin/qsmxt "$RUNNER_TEMP/parity"
+
+      - name: Keep both sides' outputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-e2e-outputs
+          path: ${{ runner.temp }}/parity/
+          retention-days: 7

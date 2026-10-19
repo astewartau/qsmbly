@@ -9,8 +9,9 @@ name: Bump qsmxt-engine pin
 #
 # A PR opened with the workflow's GITHUB_TOKEN triggers no `pull_request` workflows, so CI would
 # never run on it. workflow_dispatch is the exception GitHub makes for GITHUB_TOKEN, so after
-# opening the PR this dispatches ci.yml on the bump branch; its checks land on the branch's head
-# commit and show on the PR like any other CI run.
+# opening the PR this dispatches ci.yml and parity.yml (qsmbly against `qsmxt run` at the new pin)
+# on the bump branch; their checks land on the branch's head commit and show on the PR like any
+# other CI run.
 on:
   repository_dispatch:
     types: [qsmxt-engine-release]
@@ -23,7 +24,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: write  # dispatch ci.yml on the bump branch
+  actions: write  # dispatch ci.yml and parity.yml on the bump branch
 
 jobs:
   bump:
@@ -90,4 +91,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: bump-qsmxt-engine-${{ steps.ver.outputs.version }}
-        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+        run: |
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+          gh workflow run parity.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
