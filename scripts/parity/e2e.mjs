@@ -51,7 +51,7 @@ import { phantomFiles } from '../../tests/e2e/phantom.js';
  * is compared is the wiring around them.
  */
 export const CASES = {
-  tkd: { settings: { 'inversion.algorithm': 'tkd' } },
+  tkd: { settings: { 'inversion.algorithm': 'tkd', 'inversion.tkd.threshold': 0.2 } },
   'tkd-two-pass': { settings: { 'inversion.algorithm': 'tkd', 'masking.two_pass': true } },
   'tkd-swi-t2star': { settings: { 'inversion.algorithm': 'tkd', 'pipeline.do_swi': true, 'pipeline.do_t2starmap': true, 'pipeline.do_r2starmap': true } },
   'tkd-oblique-resampled': { settings: { 'inversion.algorithm': 'tkd', 'pipeline.axial_resampling': true }, tilt: 20 },
@@ -232,23 +232,25 @@ function compare(name, browserDir, nativeDir, browser, toml) {
   const rows = [];
   const nativeFiles = filesUnder(nativeDir);
   const prefix = `${browser.run}`;
-  // Published outputs: by name.
-  const ours = new Set(browser.files.map((f) => f.path));
-  const theirs = new Set([...nativeFiles.keys()].filter((p) => /\.nii(\.gz)?$/.test(p) && p.startsWith(`${prefix}/`)));
+  // Published outputs: by name, as each side wrote them.
+  const bundled = filesUnder(join(browserDir, DERIVATIVES));
+  const published = (files) => new Set([...files.keys()].filter((p) => /\.nii(\.gz)?$/.test(p) && p.startsWith(`${prefix}/`)));
+  const ours = published(bundled);
+  const theirs = published(nativeFiles);
   for (const p of ours) if (!theirs.has(p)) problems.push(`${p}: published by the browser, not by qsmxt run`);
   for (const p of theirs) if (!ours.has(p)) problems.push(`${p}: published by qsmxt run, not by the browser`);
   // Sidecars, and voxels.
   for (const f of browser.files) {
-    if (!theirs.has(f.path)) continue;
+    if (!theirs.has(f.path) || !ours.has(f.path)) continue;
     if (f.sidecar_path) {
-      const nat = nativeFiles.get(f.sidecar_path);
-      if (!nat) problems.push(`${f.sidecar_path}: no sidecar from qsmxt run`);
+      const [mine, nat] = [bundled.get(f.sidecar_path), nativeFiles.get(f.sidecar_path)];
+      if (!nat || !mine) problems.push(`${f.sidecar_path}: no sidecar from ${nat ? 'the browser' : 'qsmxt run'}`);
       else {
-        const d = sidecarDifference(f.sidecar, readFileSync(nat, 'utf8'));
+        const d = sidecarDifference(readFileSync(mine, 'utf8'), readFileSync(nat, 'utf8'));
         if (d) problems.push(`${f.sidecar_path}: sidecars differ: ${d}`);
       }
     }
-    const a = niftiVoxels(join(browserDir, DERIVATIVES, f.path));
+    const a = niftiVoxels(bundled.get(f.path));
     const b = niftiVoxels(nativeFiles.get(f.path));
     if (a.dims.join() !== b.dims.join()) {
       problems.push(`${f.path}: dims ${a.dims} vs ${b.dims}`);
