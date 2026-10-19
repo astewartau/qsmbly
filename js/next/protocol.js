@@ -139,6 +139,8 @@
  * @property {ItemKey[]} reads
  * @property {ItemKey[]} outputs
  * @property {string[]} models - QSM.rs model ids the step runs
+ * @property {number} [memory_bytes] - the WASM heap it is estimated to take at its peak, the
+ *   run's weights included (qsmxt-engine `memory::estimate`, for the browser)
  */
 
 /**
@@ -179,7 +181,10 @@
  * @property {'error' | 'warning'} severity
  * @property {string | null} setting - config path of the setting asking for the output
  * @property {string | null} implied_by - for a warning, the option that implied the output
+ * @property {string[]} [settings] - every setting the problem involves, by config path (for a
+ *   step the heap may not hold, the settings that bring its memory down)
  * @property {string} reason
+ * @property {string} [message] - the whole problem in a sentence
  */
 
 /**
@@ -252,7 +257,12 @@
  * @property {PlanStep[]} steps
  * @property {ItemMeta[]} [items]
  * @property {string[]} models - every model the run needs, each once
- * @property {number} peak_memory_bytes
+ * @property {number} peak_memory_bytes - the largest of the steps' `memory_bytes`
+ * @property {string | null} [peak_memory_step] - the name of the step that sets it
+ * @property {number | null} [memory_budget_bytes] - the most the heap can hold
+ * @property {{ step: string, bytes: number, budget_bytes: number, settings: string[] } | null} [over_budget] -
+ *   the first step estimated to need more than that, and the settings that bring it down (its
+ *   warning is among `check`'s)
  * @property {Check} check
  * @property {string[]} notes
  * @property {{ setting: string, because: string, message: string }[]} [adjustments] - settings the engine turned on

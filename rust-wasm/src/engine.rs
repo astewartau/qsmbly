@@ -130,12 +130,29 @@ pub fn nifti_geometry_wasm(nifti: &[u8]) -> Result<String, JsValue> {
     serde_json::to_string(&geometry).map_err(js_err)
 }
 
-/// A plan as JSON (`qsmxt_engine::plan::Plan`): each step's `name` (`mask`, `invert-reliable`,
-/// ...: the name its events and cache use), `label`, `algorithm` and `algorithm_label`, and the
-/// items it `reads` and `outputs` by their keys ([`item_key`]); `items` says what each of those
-/// is (`Item::meta`, with its `key`), in the order they first appear.
-pub(crate) fn plan_json(config: &PipelineConfig, facts: &ScanFacts) -> Result<String, String> {
-    let plan = qsmxt_engine::plan::plan(config, facts);
+/// The threads the run worker computes a plan on, of the page's `threads`: a plan with networks
+/// runs on the deep-learning bundle, whose pool has 4 threads (js/next/engine/run-worker.js).
+pub(crate) const DL_THREADS: usize = 4;
+
+/// A run's plan as the browser runs it on `threads` threads: its memory figures are for the WASM
+/// heap, with the volumes kept in the page (`MemoryProfile::browser`), and a step the heap
+/// cannot hold is among its warnings.
+pub(crate) fn browser_plan(config: &PipelineConfig, facts: &ScanFacts, threads: usize) -> qsmxt_engine::plan::Plan {
+    use qsmxt_engine::memory::MemoryProfile;
+    let plan = qsmxt_engine::plan::plan_for(config, facts, &MemoryProfile::browser(threads.max(1)));
+    if plan.models.is_empty() || threads == DL_THREADS {
+        return plan;
+    }
+    qsmxt_engine::plan::plan_for(config, facts, &MemoryProfile::browser(DL_THREADS))
+}
+
+/// A plan as JSON (`qsmxt_engine::plan::Plan`, as [`browser_plan`] makes it on `threads`): each
+/// step's `name` (`mask`, `invert-reliable`, ...: the name its events and cache use), `label`,
+/// `algorithm` and `algorithm_label`, `memory_bytes`, and the items it `reads` and `outputs` by
+/// their keys ([`item_key`]); `items` says what each of those is (`Item::meta`, with its `key`),
+/// in the order they first appear.
+pub(crate) fn plan_json(config: &PipelineConfig, facts: &ScanFacts, threads: usize) -> Result<String, String> {
+    let plan = browser_plan(config, facts, threads);
     let mut json = serde_json::to_value(&plan).map_err(|e| e.to_string())?;
     let mut items: Vec<Item> = Vec::new();
     if let Some(steps) = json.get_mut("steps").and_then(|s| s.as_array_mut()) {
@@ -161,12 +178,13 @@ pub(crate) fn plan_json(config: &PipelineConfig, facts: &ScanFacts) -> Result<St
 
 /// What `qsmxt run` will do with `config` (PipelineConfig JSON) on the scan `facts` (ScanFacts
 /// JSON) describes: its steps in order, the deep-learning models they need (`models`: the
-/// weights to provide before running), its memory estimate, what the data cannot produce
+/// weights to provide before running), each step's memory and the run's peak in the WASM heap on
+/// `threads` threads (4 when not given), what the data cannot produce or the heap cannot hold
 /// (`check`), and notes. Pure: it reads nothing but its arguments.
 #[wasm_bindgen]
-pub fn plan_wasm(config_json: &str, facts_json: &str) -> Result<String, JsValue> {
+pub fn plan_wasm(config_json: &str, facts_json: &str, threads: Option<u32>) -> Result<String, JsValue> {
     let facts = crate::settings::parse_facts(facts_json).map_err(js_err)?;
-    plan_json(&parse_config(config_json)?, &facts).map_err(js_err)
+    plan_json(&parse_config(config_json)?, &facts, threads.map_or(DL_THREADS, |t| t as usize)).map_err(js_err)
 }
 
 /// Hand over a deep-learning weight file (by its name in the model registry), for every run in
@@ -755,9 +773,10 @@ impl Engine {
         serde_json::to_string(&self.facts).map_err(js_err)
     }
 
-    /// What a run of `config_json` (PipelineConfig JSON) on this scan will do: [`plan_wasm`].
-    pub fn plan(&self, config_json: &str) -> Result<String, JsValue> {
-        plan_json(&parse_config(config_json)?, &self.facts).map_err(js_err)
+    /// What a run of `config_json` (PipelineConfig JSON) on this scan will do, on `threads`
+    /// threads: [`plan_wasm`].
+    pub fn plan(&self, config_json: &str, threads: Option<u32>) -> Result<String, JsValue> {
+        plan_json(&parse_config(config_json)?, &self.facts, threads.map_or(DL_THREADS, |t| t as usize)).map_err(js_err)
     }
 
     /// The pipeline a run of `config_json` on this scan will take, as a graph

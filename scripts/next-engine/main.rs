@@ -41,8 +41,10 @@ fn item_info(item: &Item) -> Value {
     info
 }
 
+/// The plan as the browser makes it on 4 threads (the parity script asks the bundle for that).
 fn plan(config: &PipelineConfig, facts: &ScanFacts) -> Value {
-    let plan = qsmxt_engine::plan::plan(config, facts);
+    let browser = qsmxt_engine::memory::MemoryProfile::browser(4);
+    let plan = qsmxt_engine::plan::plan_for(config, facts, &browser);
     let mut json = serde_json::to_value(&plan).expect("plan");
     let mut items: Vec<Item> = Vec::new();
     for (value, step) in json["steps"].as_array_mut().expect("steps").iter_mut().zip(&plan.steps) {

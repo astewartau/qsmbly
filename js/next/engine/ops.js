@@ -18,6 +18,9 @@
  * @typedef {Record<string, any>} PipelineConfig
  */
 
+/** The threads this device gives a run: what the run worker sizes its pool to. */
+const deviceThreads = () => Math.max(1, globalThis.navigator?.hardwareConcurrency || 4);
+
 /**
  * The ops over a bundle's exports.
  * @param {Record<string, any>} wasm - the bundle's module, initialised
@@ -45,8 +48,12 @@ export function engineOps(wasm) {
     pruneHidden: (config, f) => JSON.parse(call(wasm.prune_hidden_wasm, json(config), facts(f))),
     /** `config` with `path` set through the config's own serde; throws the engine's reason. */
     set: (config, path, value) => JSON.parse(call(wasm.set_setting_wasm, json(config), path, json(value))),
-    /** @param {PipelineConfig} config @param {ScanFacts} f @returns {Plan} */
-    plan: (config, f) => JSON.parse(call(wasm.plan_wasm, json(config), json(f))),
+    /**
+     * The run's plan as the browser runs it, its memory figures for the WASM heap on `threads`
+     * threads (the device's, by default; a plan with networks runs on the deep-learning bundle's 4).
+     * @param {PipelineConfig} config @param {ScanFacts} f @param {number} [threads] @returns {Plan}
+     */
+    plan: (config, f, threads = deviceThreads()) => JSON.parse(call(wasm.plan_wasm, json(config), json(f), threads)),
     /**
      * What a run of `config` would do with each step, given what the page holds (`run::dry_run`
      * over the page's record and the keys of the volumes it keeps): the steps it would reuse and

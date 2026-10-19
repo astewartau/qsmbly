@@ -25,6 +25,8 @@ import { DataPanel } from './DataPanel.js';
 import { MaskEditor } from './MaskEditor.js';
 import { Icon } from './icons.js';
 import { rowStatus, ROW_STATES } from '../rerun.js';
+import { formatBytes } from '../format.js';
+import { memoryClass } from './RunBar.js';
 
 /** @param {Setting | undefined} s */
 const nameOf = (s) => s?.full_label ?? s?.label;
@@ -76,6 +78,24 @@ export function Pipeline({ session, store, schema, mask, runner, loader, expect,
 }
 
 /**
+ * The most memory a row's steps are estimated to take, as the row shows it: over the heap, the
+ * run's peak, or neither. `null` for a row with no step in the plan.
+ * @param {import('../protocol.js').Plan | null} plan @param {OutlineRow} row
+ * @returns {{ bytes: number, cls: string, title: string } | null}
+ */
+export function rowMemory(plan, row) {
+  if (!plan || row.state !== 'planned') return null;
+  const steps = row.steps.filter((s) => s.memory_bytes);
+  if (!steps.length) return null;
+  const top = steps.reduce((a, b) => ((b.memory_bytes ?? 0) > (a.memory_bytes ?? 0) ? b : a));
+  const cls = memoryClass(plan, top);
+  const title = cls === 'memory-over'
+    ? `${top.label} is estimated to need more memory than a browser run has`
+    : `Estimated memory at its peak (${top.label})${cls === 'memory-peak' ? ': the most of any step' : ''}`;
+  return { bytes: /** @type {number} */ (top.memory_bytes), cls, title };
+}
+
+/**
  * One step: its row (and switch), its status, and its settings when open.
  * @param {{ row: OutlineRow, session: Session, store: VolumeStore, schema: Schema, mask: MaskKit, open: boolean,
  *   forcedBy: (path: string) => string | null, runner?: Runner, expect?: Expectations, loader?: ScanLoader, busy: boolean,
@@ -90,9 +110,11 @@ function Step({ row, session, store, schema, mask, open, forcedBy, runner, expec
   const on = state !== 'off';
   const settings = schema.settings.filter((s) => section.schema.includes(s.section));
   const changed = settings.some((s) => isChanged(s, valueOf(s, config)));
+  // A problem belongs to its setting's row; one that names no single setting, to the rows of the
+  // settings it lists (a step the heap cannot hold: the settings that bring it down), else Data.
   const problems = (session.plan.value?.check.problems ?? []).filter((p) => (p.setting
     ? settings.some((s) => s.path === p.setting)
-    : section.id === 'data'));
+    : p.settings?.length ? settings.some((s) => p.settings?.includes(s.path)) : section.id === 'data'));
   const inputErrors = section.id === 'data' && session.loaded.value
     ? (session.scan.value?.problems ?? []).filter((p) => p.severity === 'error').length : 0;
 
@@ -120,6 +142,7 @@ function Step({ row, session, store, schema, mask, open, forcedBy, runner, expec
     blocked: !!inputErrors || problems.some((p) => p.severity === 'error'),
   });
   const toggleOpen = () => { session.ui.section.value = open ? null : section.id; };
+  const memory = rowMemory(session.plan.value, row);
 
   return html`
     <li class=${`step state-${state}${problems.length ? ' has-problem' : ''}${changed ? ' has-changes' : ''}`} data-step=${section.id} data-open=${open}
@@ -130,6 +153,7 @@ function Step({ row, session, store, schema, mask, open, forcedBy, runner, expec
           ${Icon.chevron}
           <span class="step-title">${section.label}</span>
           <span class="step-sum" data-testid="summary">${summary}</span>
+          ${memory && html`<span class=${`step-memory ${memory.cls}`} data-testid="row-memory" title=${memory.title}>${formatBytes(memory.bytes)}</span>`}
           ${run && html`<${RowBadge} status=${run} />`}
         </button>
         ${toggle && html`

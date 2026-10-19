@@ -145,7 +145,7 @@ const browserConfig = engine.browserConfig();
 const browserSide = cases.map(({ name, edits, facts: f, inputs, held }) => {
   try {
     const config = edits.reduce((c, [path, value]) => engine.set(c, path, value), browserConfig);
-    const plan = engine.plan(config, f);
+    const plan = engine.plan(config, f, 4);
     return {
       name,
       config,
