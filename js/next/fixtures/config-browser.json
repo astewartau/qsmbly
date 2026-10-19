@@ -407,6 +407,7 @@
     "flip_averaging": true,
     "topology_cleanup": true,
     "sigma_smoothing": 0.5,
+    "patch": 96,
     "custom_dseg_tool": null
   },
   "bet": {
