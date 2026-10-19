@@ -147,6 +147,11 @@ a:hover { text-decoration: underline; }
 .problems { margin: 4px 0; padding-left: 16px; font-size: 12px; }
 .problem-error { color: var(--error); }
 .problem-warning { color: var(--warn); }
+/* A step's estimated memory: over the heap, or the run's peak. */
+.memory-over { color: var(--warn); font-weight: 600; }
+.memory-peak { font-weight: 600; }
+.step-memory { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.step-memory.memory-over { color: var(--warn); }
 
 /* Setting rows: label left, control right, one line. */
 .row {

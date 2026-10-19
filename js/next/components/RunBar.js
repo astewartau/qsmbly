@@ -93,6 +93,16 @@ export function formatElapsed(ms) {
  * @param {{ session: Session, store: VolumeStore, models: ModelEntry[], runner: Runner,
  *   schema?: { settings: { path: string, label: string, full_label?: string }[] }, expect?: Expectations, history?: History }} props
  */
+/**
+ * How a step's memory figure reads in the plan: over the heap, the run's peak, or neither.
+ * @param {import('../protocol.js').Plan} plan @param {import('../protocol.js').PlanStep} step
+ */
+export function memoryClass(plan, step) {
+  const budget = plan.memory_budget_bytes ?? WASM_HEAP_BYTES;
+  if ((step.memory_bytes ?? 0) > budget) return 'memory-over';
+  return step.name === plan.peak_memory_step ? 'memory-peak' : 'muted';
+}
+
 export function RunBar({ session, store, models, runner, schema, expect, history }) {
   const plan = session.plan.value;
   const error = session.planError.value;
@@ -121,6 +131,9 @@ export function RunBar({ session, store, models, runner, schema, expect, history
   const missing = dl.reduce((t, m) => t + (m.missing ?? 0), 0);
   const peak = plan?.peak_memory_bytes ?? 0;
   const fraction = Math.min(1, peak / WASM_HEAP_BYTES);
+  const over = plan?.over_budget ?? null;
+  const peakStep = plan?.steps.find((s) => s.name === plan.peak_memory_step) ?? null;
+  const overStep = over ? plan?.steps.find((s) => s.name === over.step) ?? null : null;
 
   let label = 'Run';
   let action = () => { runner.start(); };
@@ -146,6 +159,11 @@ export function RunBar({ session, store, models, runner, schema, expect, history
   } else {
     const again = runLabel(expected);
     label = again.label;
+    if (over && !again.nothing) {
+      // The estimate is conservative: the run is allowed, after saying what may not fit.
+      label = `${again.label} anyway`;
+      title = `${overStep?.label ?? over.step} is estimated to need ${formatBytes(over.bytes)}, more than the ${formatBytes(over.budget_bytes)} a browser run has; it may run out of memory`;
+    }
     if (again.nothing) {
       disabled = true;
       title = "Every step's outputs are up to date with these settings; change a setting to re-run";
@@ -173,8 +191,9 @@ export function RunBar({ session, store, models, runner, schema, expect, history
             title="Show the pipeline graph">${statusText}</button>`
         : html`<span class="runbar-item runbar-status" data-testid="plan-status">${statusText}</span>`)}
       ${plan && !busy && html`
-        <span class="runbar-item" data-testid="memory">
-          <span>Peak ${formatBytes(peak)} of ${formatBytes(WASM_HEAP_BYTES)}</span>
+        <span class=${`runbar-item${over ? ' problem-warning' : ''}`} data-testid="memory"
+          title=${peakStep ? `The most memory a step takes: ${peakStep.label}` : 'Estimated peak memory'}>
+          <span>Peak ${formatBytes(peak)} of ${formatBytes(WASM_HEAP_BYTES)}${over ? ` · ${overStep?.label ?? over.step} may not fit` : ''}</span>
           <meter min="0" max="1" low="0.6" high="0.85" optimum="0" value=${fraction} aria-label="Estimated peak memory"></meter>
         </span>
         <span class="runbar-item" data-testid="downloads">
@@ -280,12 +299,14 @@ function PlanDrawer({ session, runner, expect, plan, dl, models, problems, onClo
     <section class="plan-drawer" aria-label="Plan" data-testid="plan-drawer">
       <div class="drawer-head">
         <h2 class="tab-title">The plan: ${plan.steps.length} steps</h2>
-        <span class="muted small">Estimated peak memory ${formatBytes(plan.peak_memory_bytes)} of ${formatBytes(WASM_HEAP_BYTES)}</span>
+        <span class="muted small" data-testid="drawer-memory">Estimated peak memory ${formatBytes(plan.peak_memory_bytes)} of ${formatBytes(WASM_HEAP_BYTES)}${
+          plan.peak_memory_step ? `, in ${plan.steps.find((s) => s.name === plan.peak_memory_step)?.label ?? plan.peak_memory_step}` : ''}</span>
         <button type="button" class="btn small drawer-close" onClick=${onClose}>Close</button>
       </div>
       <div class="drawer-body">
         <table class="plan-table">
           <thead><tr><th>#</th><th>Step</th><th>Method</th><th>State</th>
+            <th title="The memory the step is estimated to take at its peak, the run's networks included">Memory</th>
             <th title="The WASM heap's size when the step finished in the last run: it only grows, so this is the run's peak so far">Heap</th>
             <th>Downloads</th><th>Outputs</th></tr></thead>
           <tbody>
@@ -296,6 +317,7 @@ function PlanDrawer({ session, runner, expect, plan, dl, models, problems, onClo
                 <td>${s.algorithm_label ?? '—'}</td>
                 <td data-testid="step-state" data-state=${stateOf(s.name)?.state ?? ''} title=${stateOf(s.name)?.title ?? ''}>
                   <span aria-hidden="true">${ROW_STATES[stateOf(s.name)?.state ?? 'will-run'].icon} </span>${stateText(s.name)}</td>
+                <td data-testid="step-memory" class=${memoryClass(plan, s)}>${s.memory_bytes ? formatBytes(s.memory_bytes) : '—'}</td>
                 <td class="muted">${steps.get(s.name)?.heap ? formatBytes(/** @type {number} */ (steps.get(s.name)?.heap)) : '—'}</td>
                 <td>${s.models.length ? s.models.map((id) => {
                   const m = dl.find((d) => d.id === id);

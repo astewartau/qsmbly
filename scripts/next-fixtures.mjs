@@ -104,7 +104,7 @@ const cases = CASES.map(({ name, edits, scan }) => {
     plan: (({ items: planItems = [], ...plan }) => {
       for (const meta of planItems) items[meta.key] = meta;
       return { ...plan, items: planItems.map((meta) => meta.key) };
-    })(engine.plan(config, f)),
+    })(engine.plan(config, f, 4)),
   };
 });
 write('engine-cases.json', { browser, paths, items, cases }, true);

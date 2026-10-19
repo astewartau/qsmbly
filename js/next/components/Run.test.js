@@ -9,7 +9,8 @@ import '@preact/signals';
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { html } from '../html.js';
-import { RunBar, runProblems, formatElapsed } from './RunBar.js';
+import { RunBar, runProblems, formatElapsed, memoryClass } from './RunBar.js';
+import { rowMemory } from './Pipeline.js';
 import { Outputs, outputGroups, families, fileName } from './Outputs.js';
 import { createSession } from '../store/session.js';
 import { VolumeStore } from '../store/volumes.js';
@@ -108,6 +109,48 @@ describe('the run bar', () => {
     await act(() => /** @type {HTMLButtonElement} */ (root.querySelector('[data-testid="plan-drawer-toggle"]')).click());
     expect(root.querySelector('tr[data-step="invert"]')?.textContent).toContain('xQSM 19.9 MB');
     expect(root.querySelector('[data-testid="download-now"]')).not.toBeNull();
+  });
+
+  test("the drawer gives each step's estimated memory and marks the step that sets the peak", async () => {
+    const { session, store, runner } = await setup();
+    const plan = /** @type {any} */ (session.plan.value);
+    expect(plan.peak_memory_step).toBe('unwrap');
+    const root = await mount(html`<${RunBar} session=${session} store=${store} models=${models} runner=${runner} />`);
+    expect(root.querySelector('[data-testid="memory"]')?.getAttribute('title')).toBe('The most memory a step takes: Field map');
+    await act(() => /** @type {HTMLButtonElement} */ (root.querySelector('[data-testid="plan-drawer-toggle"]')).click());
+    const cell = (step) => root.querySelector(`tr[data-step="${step}"] [data-testid="step-memory"]`);
+    expect(cell('unwrap')?.className).toBe('memory-peak');
+    expect(cell('mask')?.className).toBe('muted');
+    expect(cell('mask')?.textContent).toMatch(/^\d+(\.\d)? (MB|GB)$/);
+    expect(root.querySelector('[data-testid="drawer-memory"]')?.textContent).toContain(', in Field map');
+    expect(button(root).textContent).toBe('Run');
+  });
+
+  test('a run the heap may not hold is allowed, after saying which step', async () => {
+    const { session, store, runner } = await setup();
+    // The recorded plan, with its inversion estimated over the heap (as the engine marks it).
+    const plan = JSON.parse(JSON.stringify(session.plan.value));
+    const invert = plan.steps.find((s) => s.name === 'invert');
+    invert.memory_bytes = 5 * 1024 ** 3;
+    Object.assign(plan, {
+      peak_memory_bytes: invert.memory_bytes, peak_memory_step: 'invert', memory_budget_bytes: 4 * 1024 ** 3,
+      over_budget: { step: 'invert', bytes: invert.memory_bytes, budget_bytes: 4 * 1024 ** 3, settings: ['inversion.algorithm'] },
+    });
+    const message = 'Dipole inversion is estimated to need 5.0 GB of memory, more than the 4.0 GB a browser run has';
+    plan.check = { ...plan.check, warnings: [message], problems: [{ severity: 'warning', setting: null, implied_by: null,
+      settings: ['inversion.algorithm'], reason: message, message }] };
+    session.plan.value = plan;
+    const root = await mount(html`<${RunBar} session=${session} store=${store} models=${models} runner=${runner} />`);
+    expect(button(root).textContent).toBe('Run anyway');
+    expect(button(root).disabled).toBe(false);
+    expect(button(root).title).toContain('Dipole inversion is estimated to need 5.0 GB');
+    expect(root.querySelector('[data-testid="memory"]')?.textContent).toContain('Dipole inversion may not fit');
+    expect(root.querySelector('[data-testid="problems"]')?.textContent?.trim()).toBe('1 warning');
+    expect(memoryClass(plan, invert)).toBe('memory-over');
+    const row = { section: /** @type {any} */ ({ id: 'inversion' }), steps: [invert], state: /** @type {const} */ ('planned') };
+    expect(rowMemory(plan, row)).toEqual({ bytes: invert.memory_bytes, cls: 'memory-over',
+      title: 'Dipole inversion is estimated to need more memory than a browser run has' });
+    expect(rowMemory(plan, { ...row, state: 'off' })).toBeNull();
   });
 
   test('the plan drawer says which settings the engine turned on, and why', async () => {
