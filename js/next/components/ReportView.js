@@ -1,7 +1,7 @@
 /**
  * A run's text or JSON output, shown in the viewer's place (reports.js): the per-structure
  * statistics as a table (one map at a time, sortable by any column), a lookup table as a table,
- * and any other report as its JSON.
+ * the motion report as each echo's motion, and any other report as its JSON.
  *
  * @typedef {import('../reports.js').Report} Report
  */
@@ -88,11 +88,39 @@ function TsvTable({ text }) {
     </div>`;
 }
 
+/**
+ * The motion report (qsmxt-engine `stages::motion::report`): each echo's registration to the
+ * reference echo, with the ones that may have failed marked.
+ * @param {{ value: any }} props
+ */
+export function MotionReport({ value }) {
+  const echoes = Array.isArray(value?.echoes) ? value.echoes : [];
+  const f = (x, d = 2) => (typeof x === 'number' ? x.toFixed(d) : '');
+  return html`
+    <div class="report motion" data-testid="motion-report">
+      <div class="report-head small">
+        Reference echo ${value?.reference_echo ?? '?'} · largest displacement ${f(value?.max_displacement_mm)} mm ·
+        B0 direction spread ${f(value?.rotation_spread_deg)}°
+      </div>
+      <div class="report-scroll">
+        <table class="plan-table">
+          <thead><tr><th>Echo</th><th>Rotation (°)</th><th>Translation (mm)</th><th>Max displacement (mm)</th><th>NCC</th><th>Overlap</th><th></th></tr></thead>
+          <tbody>${echoes.map((e) => html`<tr data-echo=${e.echo} class=${e.suspect ? 'suspect' : ''}>
+            <td>${e.echo}</td><td class="num">${f(e.rotation_deg)}</td><td class="num">${f(e.translation_mm)}</td>
+            <td class="num">${f(e.max_displacement_mm)}</td><td class="num">${f(e.ncc, 3)}</td><td class="num">${f(e.overlap)}</td>
+            <td>${e.suspect ? html`<span class="problem-warning">suspect registration</span>` : ''}</td></tr>`)}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
 /** @param {{ report: Report }} props */
 export function ReportView({ report }) {
   const label = itemMeta(report.key).label;
   let body;
   if (report.key === 'RegionStats' && typeof report.value === 'string') body = html`<${StatsTable} text=${report.value} />`;
+  else if (report.key === 'MotionReport') body = html`<${MotionReport} value=${report.value} />`;
   else if (typeof report.value === 'string') body = html`<${TsvTable} text=${report.value} />`;
   else body = html`<pre class="report-json">${JSON.stringify(report.value, null, 2)}</pre>`;
   return html`

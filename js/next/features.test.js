@@ -171,3 +171,28 @@ describe('segmentation, region referencing and per-structure statistics', () => 
     expect(stepOf(ref, 'reference').reads).toContain('SuppliedSegmentation');
   });
 });
+
+describe('motion correction', () => {
+  test('the switch and settings are the schema\'s, in the Motion correction row', () => {
+    expect(SECTIONS.find((s) => s.id === 'motion')?.toggle).toBe('motion_correction.enabled');
+    expectSettingsIn('motion', ['motion_correction.enabled', 'motion_correction.reference', 'motion_correction.chain',
+      'motion_correction.chain_levels', 'motion_correction.min_ncc']);
+  });
+
+  test('registers every echo, and the field map reads the corrected echoes', () => {
+    const plan = planOf('motion correction');
+    expect(plan.motion_corrected).toBe(true);
+    const motion = stepOf(plan, 'motion');
+    expect(motion.outputs).toEqual(expect.arrayContaining(['CorrectedPhase(1)', 'CorrectedMagnitude(5)', 'CoverageMask', 'MotionReport']));
+    expect(stepOf(plan, 'unwrap').reads).toEqual(expect.arrayContaining(['CorrectedPhase(1)', 'CorrectedMagnitude(1)']));
+    expect(engine.items.CoverageMask).toMatchObject({ kind: 'mask', published: true });
+    expect(engine.items.MotionReport.kind).toBe('report');
+    expect(plan.models).toEqual([]);
+  });
+
+  test('switched off, the motion step passes the echoes through and the row is off', () => {
+    const plan = planOf('the browser profile');
+    expect(plan.motion_corrected).toBe(false);
+    expect(stepOf(plan, 'motion').outputs).toEqual([]);
+  });
+});

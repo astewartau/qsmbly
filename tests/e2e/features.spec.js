@@ -109,3 +109,16 @@ test('a supplied segmentation: χ referenced to the thalamus, the statistics tab
   expect(await publishedPaths(page)).toContain('sub-phantom/anat/sub-phantom_desc-segmentation_stats.tsv');
   expect(errors).toEqual([]);
 });
+
+test('motion correction: the corrected echoes feed the field map, and the motion report is shown', async ({ page }) => {
+  test.setTimeout(5 * 60_000);
+  const errors = watchErrors(page);
+  await run(page, [['inversion.algorithm', 'tkd'], ['motion_correction.enabled', true]]);
+  const reads = await page.evaluate(() => globalThis.qsmblyNext.runner.plan.value.steps.find((s) => s.name === 'unwrap').reads);
+  expect(reads).toContain('CorrectedPhase(1)');
+  await expect(page.locator('.output-chip[data-key="CoverageMask"]')).toBeVisible();
+  await page.locator('.output-chip[data-key="MotionReport"]').click();
+  await expect(page.getByTestId('motion-report').locator('tbody tr')).toHaveCount(3);
+  expect(await publishedPaths(page)).toContain('sub-phantom/anat/sub-phantom_desc-motioncoverage_mask.nii');
+  expect(errors).toEqual([]);
+});
