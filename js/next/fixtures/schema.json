@@ -3136,24 +3136,6 @@
       "browser": "available"
     },
     {
-      "path": "inversion.tfi.merit",
-      "label": "MERIT",
-      "full_label": "MERIT",
-      "context": "TFI",
-      "help": "Iteratively down-weight voxels whose residual stays large",
-      "type": "bool",
-      "optional": false,
-      "default": false,
-      "browser_default": false,
-      "level": "advanced",
-      "tab": "qsm",
-      "section": "inversion",
-      "order": 135,
-      "parent": "inversion.algorithm",
-      "cli_flag": "--tfi-merit",
-      "browser": "available"
-    },
-    {
       "path": "inversion.tfi.data_weighting",
       "label": "Data Weighting",
       "full_label": "Data Weighting",
@@ -3180,7 +3162,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 136,
+      "order": 135,
       "parent": "inversion.algorithm",
       "cli_flag": "--tfi-data-weighting",
       "browser": "available"
@@ -3198,7 +3180,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 137,
+      "order": 136,
       "parent": "inversion.algorithm",
       "cli_flag": "--ilsqr-tol",
       "browser": "available"
@@ -3217,7 +3199,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 138,
+      "order": 137,
       "parent": "inversion.algorithm",
       "cli_flag": "--ilsqr-max-iter",
       "browser": "available"
@@ -3237,7 +3219,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 139,
+      "order": 138,
       "parent": "inversion.algorithm",
       "cli_flag": "--ilsqr-pad-mm",
       "browser": "available"
@@ -3255,7 +3237,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 140,
+      "order": 139,
       "parent": "inversion.algorithm",
       "cli_flag": "--lsqr-residual-weighting",
       "browser": "available"
@@ -3273,7 +3255,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 141,
+      "order": 140,
       "parent": "inversion.algorithm",
       "cli_flag": "--no-lsqr-global-offset",
       "browser": "available"
@@ -3291,7 +3273,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 142,
+      "order": 141,
       "parent": "inversion.algorithm",
       "cli_flag": "--lsqr-tol",
       "browser": "available"
@@ -3311,7 +3293,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 143,
+      "order": 142,
       "parent": "inversion.algorithm",
       "cli_flag": "--lsqr-max-iter",
       "browser": "available"
@@ -3331,7 +3313,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 144,
+      "order": 143,
       "parent": "inversion.algorithm",
       "cli_flag": "--heidi-cone-threshold",
       "browser": "available"
@@ -3350,7 +3332,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 145,
+      "order": 144,
       "parent": "inversion.algorithm",
       "cli_flag": "--heidi-gradient-threshold",
       "browser": "available"
@@ -3368,7 +3350,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 146,
+      "order": 145,
       "parent": "inversion.algorithm",
       "cli_flag": "--no-heidi-laplacian-correction",
       "browser": "available"
@@ -3386,7 +3368,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 147,
+      "order": 146,
       "parent": "inversion.heidi.apply_laplacian_correction",
       "cli_flag": "--heidi-laplacian-threshold",
       "browser": "available"
@@ -3404,7 +3386,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 148,
+      "order": 147,
       "parent": "inversion.algorithm",
       "cli_flag": "--heidi-gradient-mask-floor",
       "browser": "available"
@@ -3423,7 +3405,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 149,
+      "order": 148,
       "parent": "inversion.algorithm",
       "cli_flag": "--heidi-continuation-steps",
       "browser": "available"
@@ -3442,7 +3424,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 150,
+      "order": 149,
       "parent": "inversion.algorithm",
       "cli_flag": "--heidi-inner-iterations",
       "browser": "available"
@@ -3462,7 +3444,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 151,
+      "order": 150,
       "parent": "inversion.algorithm",
       "cli_flag": "--heidi-mu-min",
       "browser": "available"
@@ -3480,7 +3462,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 152,
+      "order": 151,
       "parent": "inversion.algorithm",
       "cli_flag": "--heidi-tol",
       "browser": "available"
@@ -3498,7 +3480,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 153,
+      "order": 152,
       "parent": "inversion.algorithm",
       "cli_flag": "--no-heidi-denoise",
       "browser": "available"
@@ -3517,7 +3499,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 154,
+      "order": 153,
       "parent": "inversion.heidi.denoise",
       "cli_flag": "--heidi-denoise-iterations",
       "browser": "available"
@@ -3535,7 +3517,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 155,
+      "order": 154,
       "parent": "inversion.heidi.denoise",
       "cli_flag": "--heidi-denoise-time-step",
       "browser": "available"
@@ -3553,7 +3535,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 156,
+      "order": 155,
       "parent": "inversion.heidi.denoise",
       "cli_flag": "--heidi-denoise-conductance",
       "browser": "available"
@@ -3621,7 +3603,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 157,
+      "order": 156,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-inversion",
       "browser": "available"
@@ -3641,7 +3623,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 158,
+      "order": 157,
       "parent": "inversion.qsmart.inversion",
       "cli_flag": "--qsmart-ilsqr-max-iter",
       "browser": "available"
@@ -3661,7 +3643,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 159,
+      "order": 158,
       "parent": "inversion.qsmart.inversion",
       "cli_flag": "--qsmart-ilsqr-pad-mm",
       "browser": "available"
@@ -3680,7 +3662,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 160,
+      "order": 159,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-sdf-sigma1-stage1",
       "browser": "available"
@@ -3699,7 +3681,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 161,
+      "order": 160,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-sdf-sigma2-stage1",
       "browser": "available"
@@ -3718,7 +3700,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 162,
+      "order": 161,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-sdf-sigma1-stage2",
       "browser": "available"
@@ -3737,29 +3719,9 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 163,
+      "order": 162,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-sdf-sigma2-stage2",
-      "browser": "available"
-    },
-    {
-      "path": "inversion.qsmart.sdf_spatial_radius",
-      "label": "SDF Radius",
-      "full_label": "SDF Radius",
-      "context": "QSMART",
-      "help": "SDF spatial filtering radius",
-      "type": "int",
-      "optional": false,
-      "units": "voxels",
-      "step": 1,
-      "default": 8,
-      "browser_default": 8,
-      "level": "advanced",
-      "tab": "qsm",
-      "section": "inversion",
-      "order": 164,
-      "parent": "inversion.algorithm",
-      "cli_flag": "--qsmart-sdf-spatial-radius",
       "browser": "available"
     },
     {
@@ -3775,7 +3737,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 165,
+      "order": 163,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-sdf-lower-lim",
       "browser": "available"
@@ -3793,7 +3755,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 166,
+      "order": 164,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-sdf-curv-constant",
       "browser": "available"
@@ -3813,7 +3775,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 167,
+      "order": 165,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-vasc-sphere-radius",
       "browser": "available"
@@ -3832,7 +3794,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 168,
+      "order": 166,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-frangi-scale-min",
       "browser": "available"
@@ -3851,7 +3813,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 169,
+      "order": 167,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-frangi-scale-max",
       "browser": "available"
@@ -3870,7 +3832,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 170,
+      "order": 168,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-frangi-scale-ratio",
       "browser": "available"
@@ -3888,7 +3850,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 171,
+      "order": 169,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-frangi-c",
       "browser": "available"
@@ -3906,7 +3868,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 172,
+      "order": 170,
       "parent": "inversion.algorithm",
       "cli_flag": "--ndi-tau",
       "browser": "available"
@@ -3924,7 +3886,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 173,
+      "order": 171,
       "parent": "inversion.algorithm",
       "cli_flag": "--ndi-alpha",
       "browser": "available"
@@ -3944,7 +3906,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 174,
+      "order": 172,
       "parent": "inversion.algorithm",
       "cli_flag": "--ndi-max-iter",
       "browser": "available"
@@ -3962,7 +3924,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 175,
+      "order": 173,
       "parent": "inversion.algorithm",
       "cli_flag": "--ndi-phase-scale",
       "browser": "available"
@@ -3980,7 +3942,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 176,
+      "order": 174,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-alpha1",
       "browser": "available"
@@ -3998,7 +3960,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 177,
+      "order": 175,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-mu1",
       "browser": "available"
@@ -4016,7 +3978,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 178,
+      "order": 176,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-mu2",
       "browser": "available"
@@ -4034,7 +3996,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 179,
+      "order": 177,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-alpha0",
       "browser": "available"
@@ -4052,7 +4014,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 180,
+      "order": 178,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-mu0",
       "browser": "available"
@@ -4072,7 +4034,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 181,
+      "order": 179,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-max-iter",
       "browser": "available"
@@ -4090,7 +4052,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 182,
+      "order": 180,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-tol-update",
       "browser": "available"
@@ -4108,7 +4070,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 183,
+      "order": 181,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-tol-delta",
       "browser": "available"
@@ -4126,7 +4088,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 184,
+      "order": 182,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-phase-scale",
       "browser": "available"
@@ -4144,7 +4106,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 185,
+      "order": 183,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-alpha1",
       "browser": "available"
@@ -4162,7 +4124,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 186,
+      "order": 184,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-mu1",
       "browser": "available"
@@ -4180,7 +4142,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 187,
+      "order": 185,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-mu2",
       "browser": "available"
@@ -4198,7 +4160,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 188,
+      "order": 186,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-mu3",
       "browser": "available"
@@ -4216,7 +4178,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 189,
+      "order": 187,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-lambda",
       "browser": "available"
@@ -4236,7 +4198,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 190,
+      "order": 188,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-max-iter",
       "browser": "available"
@@ -4254,7 +4216,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 191,
+      "order": 189,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-tol-update",
       "browser": "available"
@@ -4272,7 +4234,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 192,
+      "order": 190,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-tol-delta",
       "browser": "available"
@@ -4290,7 +4252,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 193,
+      "order": 191,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-phase-scale",
       "browser": "available"
@@ -4308,7 +4270,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 194,
+      "order": 192,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-alpha1",
       "browser": "available"
@@ -4326,7 +4288,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 195,
+      "order": 193,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-mu1",
       "browser": "available"
@@ -4344,7 +4306,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 196,
+      "order": 194,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-mu2",
       "browser": "available"
@@ -4362,7 +4324,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 197,
+      "order": 195,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-beta",
       "browser": "available"
@@ -4380,7 +4342,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 198,
+      "order": 196,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-muh",
       "browser": "available"
@@ -4399,7 +4361,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 199,
+      "order": 197,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-max-iter",
       "browser": "available"
@@ -4417,7 +4379,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 200,
+      "order": 198,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-tol-update",
       "browser": "available"
@@ -4435,7 +4397,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 201,
+      "order": 199,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-tol-delta",
       "browser": "available"
@@ -4453,7 +4415,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 202,
+      "order": 200,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-phase-scale",
       "browser": "available"
@@ -4472,7 +4434,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 203,
+      "order": 201,
       "parent": "inversion.algorithm",
       "cli_flag": "--hdqsm-alpha-l2",
       "browser": "available"
@@ -4492,7 +4454,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 204,
+      "order": 202,
       "parent": "inversion.algorithm",
       "cli_flag": "--hdqsm-mu1-l2",
       "browser": "available"
@@ -4510,7 +4472,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 205,
+      "order": 203,
       "parent": "inversion.algorithm",
       "cli_flag": "--hdqsm-mu2",
       "browser": "available"
@@ -4529,7 +4491,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 206,
+      "order": 204,
       "parent": "inversion.algorithm",
       "cli_flag": "--hdqsm-max-iter-l1",
       "browser": "available"
@@ -4548,7 +4510,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 207,
+      "order": 205,
       "parent": "inversion.algorithm",
       "cli_flag": "--hdqsm-max-iter-l2",
       "browser": "available"
@@ -4566,7 +4528,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 208,
+      "order": 206,
       "parent": "inversion.algorithm",
       "cli_flag": "--hdqsm-tol-update",
       "browser": "available"
@@ -4587,7 +4549,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 209,
+      "order": 207,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-wave-order",
       "browser": "available"
@@ -4607,7 +4569,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 210,
+      "order": 208,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-nlevel",
       "browser": "available"
@@ -4625,7 +4587,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 211,
+      "order": 209,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-wave-pec",
       "browser": "available"
@@ -4644,7 +4606,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 212,
+      "order": 210,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-simulated-te",
       "browser": "available"
@@ -4664,7 +4626,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 213,
+      "order": 211,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-max-linearization-ite",
       "browser": "available"
@@ -4682,7 +4644,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 214,
+      "order": 212,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-tikhonov-beta",
       "browser": "available"
@@ -4700,7 +4662,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 215,
+      "order": 213,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-damp-rate-sig",
       "browser": "available"
@@ -4718,7 +4680,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 216,
+      "order": 214,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-damp-rate-par",
       "browser": "available"
@@ -4737,7 +4699,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 217,
+      "order": 215,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-max-pe-spar-ite",
       "browser": "available"
@@ -4756,7 +4718,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 218,
+      "order": 216,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-max-pe-est-ite",
       "browser": "available"
@@ -4774,7 +4736,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 219,
+      "order": 217,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-cvg-thd",
       "browser": "available"
@@ -4796,7 +4758,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 220,
+      "order": 218,
       "parent": "inversion.algorithm",
       "cli_flag": "--tile-size",
       "browser": "available"
@@ -4815,7 +4777,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 221,
+      "order": 219,
       "parent": "inversion.tile_size",
       "cli_flag": "--tile-halo",
       "browser": "available"
@@ -4846,7 +4808,7 @@
       "level": "basic",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 222,
+      "order": 220,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--multi-orientation-algorithm",
       "browser": "available"
@@ -4863,7 +4825,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 223,
+      "order": 221,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--multi-orientation-lambda",
       "browser": "available"
@@ -4880,7 +4842,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 224,
+      "order": 222,
       "parent": "multi_orientation.algorithm",
       "cli_flag": "--cosmos-magnitude-weighting",
       "browser": "available"
@@ -4899,7 +4861,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 225,
+      "order": 223,
       "parent": "multi_orientation.magnitude_weighting",
       "cli_flag": "--cosmos-tol",
       "browser": "available"
@@ -4918,7 +4880,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 226,
+      "order": 224,
       "parent": "multi_orientation.magnitude_weighting",
       "cli_flag": "--cosmos-max-iter",
       "browser": "available"
@@ -4935,7 +4897,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 227,
+      "order": 225,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--no-orientation-registration",
       "browser": "available"
@@ -4952,7 +4914,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 228,
+      "order": 226,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--multi-orientation-force",
       "browser": "available"
@@ -4989,7 +4951,7 @@
       "level": "basic",
       "tab": "qsm",
       "section": "reference",
-      "order": 229,
+      "order": 227,
       "cli_flag": "--qsm-reference",
       "browser": "available"
     },
@@ -5289,7 +5251,7 @@
       "level": "basic",
       "tab": "qsm",
       "section": "reference",
-      "order": 230,
+      "order": 228,
       "parent": "qsm.reference",
       "cli_flag": "--qsm-reference",
       "browser": "available"
@@ -5306,7 +5268,7 @@
       "level": "basic",
       "tab": "separation",
       "section": "separation",
-      "order": 231,
+      "order": 229,
       "cli_flag": "--do-chisep",
       "browser": "available"
     },
@@ -5372,7 +5334,7 @@
       "level": "basic",
       "tab": "separation",
       "section": "separation",
-      "order": 232,
+      "order": 230,
       "parent": "pipeline.do_chi_separation",
       "cli_flag": "--chisep",
       "browser": "available"
@@ -5391,7 +5353,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 233,
+      "order": 231,
       "parent": "separation.algorithm",
       "cli_flag": "--r2star-qsm-r-const-3t",
       "browser": "available"
@@ -5410,7 +5372,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 234,
+      "order": 232,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-n-inner",
       "browser": "available"
@@ -5430,7 +5392,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 235,
+      "order": 233,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-chi-bound",
       "browser": "available"
@@ -5449,7 +5411,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 236,
+      "order": 234,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-max-lm-iter",
       "browser": "available"
@@ -5468,7 +5430,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 237,
+      "order": 235,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-dr-pos",
       "browser": "available"
@@ -5487,7 +5449,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 238,
+      "order": 236,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-dr-neg",
       "browser": "available"
@@ -5505,7 +5467,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 239,
+      "order": 237,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-lambda1",
       "browser": "available"
@@ -5523,7 +5485,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 240,
+      "order": 238,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-percentage",
       "browser": "available"
@@ -5542,7 +5504,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 241,
+      "order": 239,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-r2p-min",
       "browser": "available"
@@ -5561,7 +5523,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 242,
+      "order": 240,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-r2p-max",
       "browser": "available"
@@ -5580,7 +5542,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 243,
+      "order": 241,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-max-iter",
       "browser": "available"
@@ -5598,7 +5560,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 244,
+      "order": 242,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-tol",
       "browser": "available"
@@ -5617,7 +5579,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 245,
+      "order": 243,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-cg-max-iter",
       "browser": "available"
@@ -5635,7 +5597,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 246,
+      "order": 244,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-cg-tol",
       "browser": "available"
@@ -5653,7 +5615,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 247,
+      "order": 245,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-lambda-para",
       "browser": "available"
@@ -5671,7 +5633,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 248,
+      "order": 246,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-lambda-dia",
       "browser": "available"
@@ -5691,7 +5653,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 249,
+      "order": 247,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-lambda-cpl",
       "browser": "available"
@@ -5710,7 +5672,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 250,
+      "order": 248,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-dr-pos",
       "browser": "available"
@@ -5729,7 +5691,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 251,
+      "order": 249,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-dr-neg",
       "browser": "available"
@@ -5747,7 +5709,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 252,
+      "order": 250,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-percentage",
       "browser": "available"
@@ -5765,7 +5727,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 253,
+      "order": 251,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-cg-tol",
       "browser": "available"
@@ -5784,7 +5746,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 254,
+      "order": 252,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-cg-max-iter",
       "browser": "available"
@@ -5803,7 +5765,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 255,
+      "order": 253,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-max-iter",
       "browser": "available"
@@ -5821,7 +5783,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 256,
+      "order": 254,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-tol",
       "browser": "available"
@@ -5840,7 +5802,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 257,
+      "order": 255,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-dr-pos",
       "browser": "available"
@@ -5859,7 +5821,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 258,
+      "order": 256,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-dr-neg",
       "browser": "available"
@@ -5877,7 +5839,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 259,
+      "order": 257,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-alpha",
       "browser": "available"
@@ -5895,7 +5857,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 260,
+      "order": 258,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-lambda",
       "browser": "available"
@@ -5916,7 +5878,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 261,
+      "order": 259,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-wavelet-order",
       "browser": "available"
@@ -5935,7 +5897,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 262,
+      "order": 260,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-max-iter",
       "browser": "available"
@@ -5953,7 +5915,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 263,
+      "order": 261,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-tol",
       "browser": "available"
@@ -5974,7 +5936,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 264,
+      "order": 262,
       "parent": "separation.algorithm",
       "cli_flag": "--hc-chisep-dr-pos-3t",
       "browser": "available"
@@ -5993,7 +5955,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 265,
+      "order": 263,
       "parent": "separation.algorithm",
       "cli_flag": "--hc-chisep-bin-hz",
       "browser": "available"
@@ -6022,7 +5984,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 266,
+      "order": 264,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sepnet-patch",
       "browser": "available"
@@ -6047,7 +6009,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 267,
+      "order": 265,
       "parent": "separation.algorithm",
       "cli_flag": "--susep-net-patch",
       "browser": "available"
@@ -6068,7 +6030,7 @@
         "swi-smwi",
         "segmentation"
       ],
-      "order": 268,
+      "order": 266,
       "cli_flag": "--use-custom-qsm",
       "browser": "supplied-file",
       "item": "SuppliedChi",
@@ -6086,7 +6048,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 269,
+      "order": 267,
       "cli_flag": "--do-swi",
       "browser": "available"
     },
@@ -6123,7 +6085,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 270,
+      "order": 268,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-unwrapping",
       "browser": "available"
@@ -6173,7 +6135,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 271,
+      "order": 269,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-scaling",
       "browser": "available"
@@ -6191,7 +6153,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 272,
+      "order": 270,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-strength",
       "browser": "available"
@@ -6218,7 +6180,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 273,
+      "order": 271,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-hp-sigma",
       "browser": "available"
@@ -6239,7 +6201,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 274,
+      "order": 272,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-mip-window",
       "browser": "available"
@@ -6256,7 +6218,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 275,
+      "order": 273,
       "cli_flag": "--do-smwi",
       "browser": "available"
     },
@@ -6274,7 +6236,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 276,
+      "order": 274,
       "parent": "pipeline.do_smwi",
       "cli_flag": "--smwi-threshold",
       "browser": "available"
@@ -6293,7 +6255,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 277,
+      "order": 275,
       "parent": "pipeline.do_smwi",
       "cli_flag": "--smwi-power",
       "browser": "available"
@@ -6314,7 +6276,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 278,
+      "order": 276,
       "parent": "pipeline.do_smwi",
       "cli_flag": "--smwi-mip-window",
       "browser": "available"
@@ -6331,7 +6293,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 279,
+      "order": 277,
       "cli_flag": "--do-t2starmap",
       "browser": "available"
     },
@@ -6347,7 +6309,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 280,
+      "order": 278,
       "cli_flag": "--do-r2starmap",
       "browser": "available"
     },
@@ -6363,7 +6325,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 281,
+      "order": 279,
       "cli_flag": "--do-r2map",
       "browser": "available"
     },
@@ -6379,7 +6341,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 282,
+      "order": 280,
       "parent": "pipeline.do_r2map",
       "cli_flag": "--use-custom-r2",
       "browser": "supplied-file",
@@ -6398,7 +6360,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 283,
+      "order": 281,
       "cli_flag": "--do-r2primemap",
       "browser": "available"
     },
@@ -6414,7 +6376,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 284,
+      "order": 282,
       "parent": "pipeline.do_r2primemap",
       "cli_flag": "--use-custom-r2prime",
       "browser": "supplied-file",
@@ -6453,7 +6415,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 285,
+      "order": 283,
       "parent": "pipeline.do_r2primemap",
       "cli_flag": "--r2prime-strategy",
       "browser": "available"
@@ -6471,7 +6433,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 286,
+      "order": 284,
       "parent": "separation.r2prime_strategy",
       "cli_flag": "--r2primenet-ignore-field-mismatch",
       "browser": "available"
@@ -6500,7 +6462,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 287,
+      "order": 285,
       "parent": "separation.r2prime_strategy",
       "cli_flag": "--r2primenet-patch",
       "browser": "available"
@@ -6517,7 +6479,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 288,
+      "order": 286,
       "cli_flag": "--do-segmentation",
       "browser": "available"
     },
@@ -6533,7 +6495,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 289,
+      "order": 287,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--use-custom-dseg",
       "browser": "supplied-file",
@@ -6566,7 +6528,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 290,
+      "order": 288,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-version",
       "browser": "available"
@@ -6586,7 +6548,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 291,
+      "order": 289,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-crop",
       "browser": "available"
@@ -6606,7 +6568,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 292,
+      "order": 290,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-patch",
       "browser": "available"
@@ -6623,7 +6585,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 293,
+      "order": 291,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--no-synthseg-flip-averaging",
       "browser": "available"
@@ -6640,7 +6602,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 294,
+      "order": 292,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--no-synthseg-topology-cleanup",
       "browser": "available"
@@ -6662,7 +6624,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 295,
+      "order": 293,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-sigma",
       "browser": "available"
@@ -6679,7 +6641,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 296,
+      "order": 294,
       "cli_flag": "--do-analysis",
       "browser": "available"
     },
@@ -6695,7 +6657,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "export",
-      "order": 297,
+      "order": 295,
       "cli_flag": "--export-dicom",
       "browser": "unavailable"
     }
