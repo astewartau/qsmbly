@@ -588,7 +588,6 @@ async function runQsmartCore({
   const sdf_sigma2_stage1 = qsmartSettings.sdf_sigma2_stage1;
   const sdf_sigma1_stage2 = qsmartSettings.sdf_sigma1_stage2;
   const sdf_sigma2_stage2 = qsmartSettings.sdf_sigma2_stage2;
-  const sdf_spatial_radius = qsmartSettings.sdf_spatial_radius;
   const sdf_lower_lim = qsmartSettings.sdf_lower_lim;
   const sdf_curv_constant = qsmartSettings.sdf_curv_constant;
   const useCurvature = qsmartSettings.useCurvature !== false;
@@ -698,7 +697,6 @@ async function runQsmartCore({
       fieldPpm, weightedMask, onesArray,
       nx, ny, nz,
       sdf_sigma1_stage1, sdf_sigma2_stage1,
-      sdf_spatial_radius,
       sdf_lower_lim, sdf_curv_constant,
       useCurvature,
       sdfProgress1
@@ -747,7 +745,6 @@ async function runQsmartCore({
       tfsWeighted, weightedMask, vascOnly,
       nx, ny, nz,
       sdf_sigma1_stage2, sdf_sigma2_stage2,
-      sdf_spatial_radius,
       sdf_lower_lim, sdf_curv_constant,
       useCurvature,
       sdfProgress2

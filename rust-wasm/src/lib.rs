@@ -920,7 +920,6 @@ pub fn sdf_wasm_with_progress(
     nz: usize,
     sigma1: f64,
     sigma2: f64,
-    spatial_radius: i32,
     lower_lim: f64,
     curv_constant: f64,
     use_curvature: bool,
@@ -936,7 +935,6 @@ pub fn sdf_wasm_with_progress(
     let params = qsm_core::bgremove::sdf::SdfParams {
         sigma1,
         sigma2,
-        spatial_radius,
         lower_lim,
         curv_constant,
         use_curvature,

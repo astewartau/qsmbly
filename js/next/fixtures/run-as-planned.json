@@ -199,7 +199,6 @@
       "tfi": {
         "lambda": 0.000075,
         "precond": 30.0,
-        "merit": false,
         "data_weighting": 1,
         "percentage": 0.9,
         "cg_tol": 0.01,
@@ -224,7 +223,6 @@
         "ilsqr_max_iter": 50,
         "ilsqr_pad_mm": 6.0,
         "vasc_sphere_radius": 8,
-        "sdf_spatial_radius": 8,
         "inversion": "ilsqr",
         "sdf_sigma1_stage1": 10.0,
         "sdf_sigma2_stage1": 10.0,
@@ -338,8 +336,8 @@
         "cg_tol": 0.05
       },
       "chi_sep_medi": {
-        "lambda_para": 1000.0,
-        "lambda_dia": 1000.0,
+        "lambda_para": 30.0,
+        "lambda_dia": 30.0,
         "lambda_cpl": 100.0,
         "dr_pos": 137.0,
         "dr_neg": 137.0,
@@ -381,6 +379,20 @@
           64
         ],
         "ignore_field_mismatch": false
+      },
+      "chi_sepnet": {
+        "patch": [
+          128,
+          128,
+          64
+        ]
+      },
+      "susep_net": {
+        "patch": [
+          96,
+          96,
+          64
+        ]
       }
     },
     "qsm": {
@@ -408,6 +420,7 @@
       "flip_averaging": true,
       "topology_cleanup": true,
       "sigma_smoothing": 0.5,
+      "patch": 96,
       "custom_dseg_tool": null
     },
     "bet": {
