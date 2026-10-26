@@ -23,7 +23,6 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { engineOps } from '../js/next/engine/ops.js';
 import { changesFrom } from '../js/next/engine/recorded.js';
-import { setPath } from '../js/next/store/session.js';
 import { EXAMPLE_SCAN } from '../js/next/fixtures.js';
 import { CASES, IMPORTS } from './next-engine/cases.mjs';
 
@@ -70,11 +69,8 @@ const answer = (fn) => {
     return { error: e instanceof Error ? e.message : String(e) };
   }
 };
-// Settings the schema leaves out, which a front end writes itself (the recipe chosen for the mask,
-// `masking.recipe_chosen`): set as the session sets them, without the schema's checks.
-const UNSCHEMED = new Set(['masking.recipe_chosen']);
 const cases = CASES.map(({ name, edits, scan }) => {
-  const config = edits.reduce((c, [path, value]) => (UNSCHEMED.has(path) ? setPath(c, path, value) : engine.set(c, path, value)), browser);
+  const config = edits.reduce((c, [path, value]) => engine.set(c, path, value), browser);
   const f = { ...facts, ...scan };
   const view = engine.settingsView(config, f);
   if (JSON.stringify(view.map((v) => v.path)) !== JSON.stringify(paths)) throw new Error(`${name}: settings_view lists other settings`);

@@ -154,7 +154,7 @@ fn case(c: &Value, facts: &ScanFacts, versions: &Value) -> Result<Value, String>
     for e in c["edits"].as_array().cloned().unwrap_or_default() {
         schema::set(&mut config, e[0].as_str().ok_or("path")?, e[1].clone())?;
     }
-    let view_facts = ViewFacts { num_echoes: Some(facts.n_echoes), multi_coil: Some(facts.n_coils > 1), ..ViewFacts::default() };
+    let view_facts = ViewFacts { num_echoes: Some(facts.n_echoes), multi_coil: Some(facts.n_coils > 1), has_magnitude: Some(facts.has_magnitude), ..ViewFacts::default() };
     let the_plan = qsmxt_engine::plan::plan(&config, facts);
     let graph = pipeline_graph(&the_plan, &config, facts, None);
     let mut graph_json = serde_json::to_value(&graph).expect("graph");

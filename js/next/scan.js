@@ -18,7 +18,7 @@
  * @typedef {import('./protocol.js').FactOverrides} FactOverrides
  */
 import { batch } from '@preact/signals-core';
-import { sortFiles, inputKeys } from './inputs.js';
+import { sortFiles, inputKeys, firstImage } from './inputs.js';
 import { readNifti } from './nifti.js';
 
 /** The items a supplied-file setting fills, and the fact that says it was found. */
@@ -41,6 +41,19 @@ export function withSupplied(facts, has) {
   const out = { ...facts };
   for (const [key, fact] of SUPPLIED_FACTS) out[fact] = has(key);
   return out;
+}
+
+/**
+ * The scan's facts with its voxel size, from its first image's header as the engine read it
+ * (`qsmxt run` reads it from the loaded scan): the pipeline rules that depend on the voxel size
+ * stay silent without it.
+ * @param {ScanFacts} facts
+ * @param {InputFile[]} files
+ * @returns {ScanFacts}
+ */
+export function withVoxelSize(facts, files) {
+  const voxelSize = firstImage(files)?.geometry?.voxel_size;
+  return voxelSize ? { ...facts, voxel_size: /** @type {[number, number, number]} */ ([...voxelSize]) } : facts;
 }
 
 /**
@@ -86,7 +99,7 @@ export function createScanLoader({ session, store, engine, preview, onNewInputs 
     if (id !== asked) return;
     batch(() => {
       session.scan.value = report;
-      session.facts.value = report.facts ? withSupplied(report.facts, (k) => store.has(k)) : null;
+      session.facts.value = report.facts ? withVoxelSize(withSupplied(report.facts, (k) => store.has(k)), session.files.peek()) : null;
     });
   }
 

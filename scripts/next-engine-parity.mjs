@@ -222,6 +222,8 @@ function withoutTarget(answer) {
       row[k] = row[k].filter((r) => !WASM_RULE.test(r.rule));
       if (!row[k].length) delete row[k];
     }
+    // A marker only those rules made goes with them.
+    if (row.marker && !(row.recommendations ?? []).some((r) => r.departs)) delete row.marker;
   }
   const check = out.plan?.check;
   if (check?.errors) {

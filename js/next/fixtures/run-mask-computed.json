@@ -639,7 +639,7 @@
         "strength": "reference",
         "basis": "reference_choice",
         "setting": "field_mapping.unwrapping_algorithm",
-        "label": "Phase Unwrapping",
+        "label": "Phase unwrapping",
         "trigger": {
           "setting": "inversion.algorithm",
           "value": "ilsqr",
@@ -674,7 +674,7 @@
         "strength": "reference",
         "basis": "reference_choice",
         "setting": "field_mapping.b0_weight_type",
-        "label": "Echo Weighting",
+        "label": "Echo weighting",
         "trigger": {
           "setting": "inversion.algorithm",
           "value": "ilsqr",

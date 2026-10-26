@@ -57,39 +57,12 @@ afterEach(() => {
 describe('QSMART\'s mask', () => {
   const engine = recordedEngine(fixture('engine-cases.json'));
 
-  test('an unchosen recipe is QSMART\'s BET, shown as the run takes it, and the plan says why', async () => {
+  test('choosing QSMART leaves the recipe as it is', async () => {
     const { session, root, flush } = await setup({ engine, plans: true });
     await act(() => { session.set('inversion.algorithm', 'qsmart'); });
     await flush();
-    expect(masking(session).recipe_chosen).toBeUndefined();
-    expect(q(root, '[data-testid="mask-adjustment"]').textContent).toContain('The brain mask is made with BET: QSMART needs a tight brain mask');
-    expect(q(root, '[id="Mask-0-method"]').value).toBe('bet');
-    expect(q(root, '[data-testid="mask-warning"]')).toBeNull();
-  });
-
-  test('choosing the threshold recipe keeps it, and the engine warns that QSMART may streak', async () => {
-    const { session, root, flush } = await setup({ engine, plans: true });
-    await act(() => { session.set('inversion.algorithm', 'qsmart'); });
-    await flush();
-    await change(q(root, '#mask-preset'), 'robust-threshold');
-    await flush();
-    expect(masking(session).recipe_chosen).toBe(true);
-    expect(q(root, '[data-testid="mask-adjustment"]')).toBeNull();
+    expect(q(root, '#mask-preset').value).toBe('robust-threshold');
     expect(q(root, '[id="Mask-0-method"]').value).toBe('threshold-otsu');
-    expect(q(root, '[data-testid="mask-warning"]').textContent).toContain('QSMART needs a tight brain mask');
-    // Resetting the recipe gives the choice back to the engine.
-    await act(() => { button(root, 'Reset the mask recipe')?.click(); });
-    await flush();
-    expect(masking(session).recipe_chosen).toBeUndefined();
-    expect(q(root, '[data-testid="mask-adjustment"]')).not.toBeNull();
-  });
-
-  test('a recipe other than the default is the user\'s own without saying so', async () => {
-    const { session, root } = await setup();
-    await change(q(root, '#mask-preset'), 'bet-and-phase');
-    expect(masking(session).recipe_chosen).toBeUndefined();
-    await change(q(root, '#mask-preset'), 'robust-threshold');
-    expect(masking(session).recipe_chosen).toBe(true);
   });
 });
 

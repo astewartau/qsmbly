@@ -23,6 +23,7 @@ import { createExpectations } from './rerun.js';
 import { createMaskPreview, recipeKey } from './mask-preview.js';
 import { bundleContributors } from './bundle.js';
 import { suppliedMaskFiles } from './supplied-mask.js';
+import { createRecommendations } from './recommend.js';
 
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
 
@@ -67,7 +68,7 @@ try {
   const session = createSession({
     defaults: browserConfig,
     planner: (config, f) => engine.plan(config, f),
-    settingsView: (config, f) => engine.settingsView(config, f),
+    settingsView: (config, f, loaded) => engine.settingsView(config, f, loaded),
     storage: storage(),
     initial: saved.config,
     notices: saved.notices,
@@ -127,12 +128,14 @@ try {
   // The bundle carries a supplied mask as the derivative `qsmxt run --use-custom-masks qsmbly` reads.
   bundleContributors.push(suppliedMaskFiles);
 
-  const workspace = { schema, mask, models, versions, engine, runner, loader, history, expect, maskPreview };
+  // The pipeline rules' findings: the pop-up an edit opens, and the dismissals the engine keeps.
+  const recommendations = createRecommendations({ session, engine });
+  const workspace = { schema, mask, models, versions, engine, runner, loader, history, expect, maskPreview, recommendations };
   // The graph, command and settings-file answers, for the Pipeline and Command tabs.
   const providers = engineProviders(engine);
   render(html`<${App} session=${session} store=${store} workspace=${workspace} providers=${providers} />`, root);
   // For the smoke tests and for poking at it from the console.
-  Object.assign(globalThis, { qsmblyNext: { session, store, workspace, providers, runner, loader, history, expect, maskPreview, Superseded } });
+  Object.assign(globalThis, { qsmblyNext: { session, store, workspace, providers, runner, loader, history, expect, maskPreview, recommendations, Superseded } });
 } catch (e) {
   root.textContent = `The workspace could not start: ${e instanceof Error ? e.message : e}`;
   throw e;

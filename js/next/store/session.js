@@ -21,7 +21,7 @@
  *
  * @typedef {(config: PipelineConfig, facts: ScanFacts) => Plan | Promise<Plan>} Planner
  * @typedef {import('../protocol.js').SettingView} SettingView
- * @typedef {(config: PipelineConfig, facts: ScanFacts | null) => SettingView[] | Promise<SettingView[]>} SettingsViewFn
+ * @typedef {(config: PipelineConfig, facts: ScanFacts | null, loaded: boolean) => SettingView[] | Promise<SettingView[]>} SettingsViewFn
  */
 import { signal, computed, effect, batch } from '@preact/signals-core';
 import { scanInputs as scanInputsOf } from '../inputs.js';
@@ -120,6 +120,13 @@ export function createSession({ defaults, planner, settingsView = null, storage 
   const planning = signal(false);
   /** Which settings apply to the config, by path; null until known (every setting then shows). */
   const view = signal(/** @type {Map<string, SettingView> | null} */ (null));
+  /** How many edits the user had made when `view` was asked for (see `edits`). */
+  const viewEdits = signal(0);
+  /**
+   * The user's edits so far: each `setConfig` (a setting set, a recommendation applied or
+   * dismissed, a file imported, a reset) counts one; undo, redo and `replaceConfig` do not.
+   */
+  const edits = signal(0);
   /** UI state that is not part of the run. */
   const ui = {
     /** The open pipeline step, or none. */
@@ -149,6 +156,7 @@ export function createSession({ defaults, planner, settingsView = null, storage 
       undoStack.value = [...undoStack.peek(), config.peek()].slice(-HISTORY_LIMIT);
       redoStack.value = [];
       config.value = next;
+      edits.value = edits.peek() + 1;
     });
   }
 
@@ -160,9 +168,10 @@ export function createSession({ defaults, planner, settingsView = null, storage 
   async function review() {
     if (!settingsView) return;
     const id = ++viewRequested;
+    const asked = edits.peek();
     try {
-      const rows = await settingsView(config.peek(), facts.peek());
-      if (id === viewRequested) view.value = new Map(rows.map((r) => [r.path, r]));
+      const rows = await settingsView(config.peek(), facts.peek(), loaded.peek());
+      if (id === viewRequested) batch(() => { viewEdits.value = asked; view.value = new Map(rows.map((r) => [r.path, r])); });
     } catch (e) {
       if (id === viewRequested) view.value = null;
     }
@@ -229,12 +238,22 @@ export function createSession({ defaults, planner, settingsView = null, storage 
     planError,
     planning,
     view,
+    viewEdits,
+    edits,
     changes,
     canUndo,
     canRedo,
     ui,
     defaults,
     setConfig,
+    /**
+     * Change the config without making it an edit of the user's (no undo step): the engine
+     * tidying it, e.g. dropping dismissals that no longer hold.
+     * @param {PipelineConfig} next
+     */
+    replaceConfig(next) {
+      if (next !== config.peek()) config.value = next;
+    },
     /**
      * @param {string} path - e.g. `inversion.algorithm`
      * @param {unknown} value
