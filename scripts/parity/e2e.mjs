@@ -47,14 +47,17 @@ import { phantomFiles } from '../../tests/e2e/phantom.js';
 
 /**
  * The cases: the browser profile with `settings`, on the browser tests' phantom
- * (tests/e2e/phantom.js) at `dims`, tilted about x by `tilt` degrees. Fast algorithms only: what
- * is compared is the wiring around them.
+ * (tests/e2e/phantom.js) at `dims`, tilted about x by `tilt` degrees, its files named with the BIDS
+ * `entities` (`sub-phantom` by default). Fast algorithms only: what is compared is the wiring
+ * around them.
  */
 export const CASES = {
   tkd: { settings: { 'inversion.algorithm': 'tkd', 'inversion.tkd.threshold': 0.2 } },
   'tkd-two-pass': { settings: { 'inversion.algorithm': 'tkd', 'masking.two_pass': true } },
   'tkd-swi-t2star': { settings: { 'inversion.algorithm': 'tkd', 'pipeline.do_swi': true, 'pipeline.do_t2starmap': true, 'pipeline.do_r2starmap': true } },
   'tkd-oblique-resampled': { settings: { 'inversion.algorithm': 'tkd', 'pipeline.axial_resampling': true }, tilt: 20 },
+  // A session and further entities: `qsmxt run` nests the run's folders by them.
+  'tkd-session': { settings: { 'inversion.algorithm': 'tkd' }, entities: 'sub-phantom_ses-1_acq-bridge_run-1' },
 };
 const DIMS = [24, 24, 20];
 
@@ -71,14 +74,27 @@ await wasm.default({ module_or_path: readFileSync(resolve(bundle, 'qsm_wasm_bg.w
 const ops = engineOps(wasm);
 const providers = engineProviders(ops);
 
-/** The phantom as a BIDS dataset under `work`, for both sides. */
-function writePhantom(name, tilt = 0) {
+/** The phantom as a BIDS dataset under `work`, for both sides: `sub-X/[ses-Y/]anat/`. */
+function writePhantom(name, tilt = 0, entities = 'sub-phantom') {
   const dir = resolve(work, name, 'phantom');
   rmSync(dir, { recursive: true, force: true });
-  mkdirSync(join(dir, 'sub-phantom', 'anat'), { recursive: true });
+  const anat = join(dir, ...entities.split('_').filter((e) => /^(sub|ses)-/.test(e)), 'anat');
+  mkdirSync(anat, { recursive: true });
   writeFileSync(join(dir, 'dataset_description.json'), `${JSON.stringify({ Name: 'qsmbly parity phantom', BIDSVersion: '1.10.0' })}\n`);
-  for (const f of phantomFiles({ dims: DIMS, tilt })) writeFileSync(join(dir, 'sub-phantom', 'anat', f.name), f.buffer);
+  for (const f of phantomFiles({ dims: DIMS, tilt, entities })) writeFileSync(join(anat, f.name), f.buffer);
   return dir;
+}
+
+/**
+ * The folder under `workflow/` where `qsmxt run` keeps the run named `prefix` (its BIDS name): the
+ * one holding `<prefix>_runrecord.json`. qsmxt nests it by the run's entities
+ * (`workflow/sub-1/ses-2/acq-x_run-1/`), so it is found rather than built. Null if there is none.
+ * @param {Map<string, string>} files - the derivatives' files, by relative path
+ * @param {string} prefix
+ */
+function workflowRunDir(files, prefix) {
+  const record = [...files.keys()].find((p) => p.startsWith('workflow/') && p.split('/').pop() === `${prefix}_runrecord.json`);
+  return record ? dirname(record) : null;
 }
 
 /** Every file under `dir`, by its path relative to it. */
@@ -234,7 +250,8 @@ function compare(name, browserDir, nativeDir, browser, toml) {
   const prefix = `${browser.run}`;
   // Published outputs: by name, as each side wrote them.
   const bundled = filesUnder(join(browserDir, DERIVATIVES));
-  const published = (files) => new Set([...files.keys()].filter((p) => /\.nii(\.gz)?$/.test(p) && p.startsWith(`${prefix}/`)));
+  // The run's published images: named after it, outside workflow/.
+  const published = (files) => new Set([...files.keys()].filter((p) => /\.nii(\.gz)?$/.test(p) && !p.startsWith('workflow/') && p.split('/').pop().startsWith(`${prefix}_`)));
   const ours = published(bundled);
   const theirs = published(nativeFiles);
   for (const p of ours) if (!theirs.has(p)) problems.push(`${p}: published by the browser, not by qsmxt run`);
@@ -282,13 +299,14 @@ function compare(name, browserDir, nativeDir, browser, toml) {
   };
   same('pipeline_config.toml', toml, text(join(nativeDir, 'pipeline_config.toml')));
   // The run's own graph and methods, beside its record.
-  const run = join(nativeDir, 'workflow', prefix);
+  const runDir = workflowRunDir(nativeFiles, prefix);
+  const run = join(nativeDir, runDir ?? join('workflow', prefix));
   // The run's graph as planned: qsmxt writes it beside the run's record. (Its dataset-level
   // pipeline.mmd adds what the dataset's runs decided, e.g. "1 run: Resampled …"; the bundle has
   // one run's.)
-  same('pipeline graph (Mermaid)', text(join(browserDir, DERIVATIVES, 'pipeline.mmd')), text(join(nativeDir, 'workflow', prefix, `${prefix}_pipeline.mmd`)));
-  const ranGraph = `workflow/${prefix}/${prefix}_desc-ran_pipeline.mmd`;
-  const [ourRan, theirRan] = [text(join(browserDir, DERIVATIVES, ranGraph)), text(join(nativeDir, ranGraph))];
+  same('pipeline graph (Mermaid)', text(join(browserDir, DERIVATIVES, 'pipeline.mmd')), text(join(run, `${prefix}_pipeline.mmd`)));
+  const ranGraph = `${prefix}_desc-ran_pipeline.mmd`;
+  const [ourRan, theirRan] = [text(join(browserDir, DERIVATIVES, 'workflow', prefix, ranGraph)), text(join(run, ranGraph))];
   if (ourRan != null || theirRan != null) same(`the graph the run took (${ranGraph})`, ourRan ?? '(none)', theirRan ?? '(none)');
   // The tool's own name and its reference are each front end's.
   const tool = (s) => s?.replace(/^- Stewart, A\. \(\d{4}\)\. (QSMbly|QSMxT)\b.*\n/m, '').replace(/\b(QSMbly|qsmxt)\b/g, '<tool>');
@@ -303,11 +321,11 @@ function compare(name, browserDir, nativeDir, browser, toml) {
 }
 
 let failed = 0;
-for (const [name, { settings, tilt }] of Object.entries(CASES)) {
+for (const [name, { settings, tilt, entities }] of Object.entries(CASES)) {
   if (only.length && !only.includes(name)) continue;
   const dir = resolve(work, name);
   rmSync(dir, { recursive: true, force: true });
-  const phantom = writePhantom(name, tilt);
+  const phantom = writePhantom(name, tilt, entities);
   const problems = [];
   try {
     const t0 = Date.now();
