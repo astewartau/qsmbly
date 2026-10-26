@@ -36,15 +36,16 @@ export function niftiFloat32(dims, data, voxel = [1, 1, 1], tiltDeg = 0) {
 /**
  * The phantom's files: `{ name, mimeType, buffer }` for Playwright's setInputFiles.
  * @param {{ dims?: number[], echoTimes?: number[], fieldStrength?: number, sidecars?: boolean, emptyMagnitude?: boolean, tilt?: number,
- *   encoding?: 'magnitude-phase' | 'real-imaginary' | 'coils', manufacturer?: string }} [options] -
+ *   encoding?: 'magnitude-phase' | 'real-imaginary' | 'coils', manufacturer?: string, entities?: string }} [options] -
  *   `encoding`: each echo as its magnitude and phase images (the default), as real and imaginary parts (BIDS
  *   `part-real`/`part-imag`, the phase negated as GE stores it when `manufacturer` is GE), or as two uncombined
  *   coils (`coil-1`, `coil-2`) with smooth sensitivities and their own phase offsets;
  *   `emptyMagnitude`: all-zero magnitude images, which no mask can be made from; `tilt`: the grid rotated about x
- *   by this many degrees, with no B0 direction in the sidecars
+ *   by this many degrees, with no B0 direction in the sidecars; `entities`: the BIDS entities the files are named
+ *   with, before the echo (`sub-phantom_ses-1_run-1`)
  */
 export function phantomFiles({ dims = [48, 48, 36], echoTimes = [0.004, 0.009, 0.014], fieldStrength = 3, sidecars = true, emptyMagnitude = false, tilt = 0,
-  encoding = 'magnitude-phase', manufacturer = 'Siemens' } = {}) {
+  encoding = 'magnitude-phase', manufacturer = 'Siemens', entities = 'sub-phantom' } = {}) {
   const [nx, ny, nz] = dims;
   const n = nx * ny * nz;
   const gamma = 42.576e6;
@@ -83,7 +84,7 @@ export function phantomFiles({ dims = [48, 48, 36], echoTimes = [0.004, 0.009, 0
       const rad = 2 * Math.PI * gamma * fieldStrength * field[j] * 1e-6 * te;
       phase[j] = inside[j] ? Math.atan2(Math.sin(rad), Math.cos(rad)) : Math.sin(j * 2.3) * Math.PI;
     }
-    const base = `sub-phantom_echo-${e + 1}`;
+    const base = `${entities}_echo-${e + 1}`;
     /** @type {[string, Float32Array][]} */
     let images;
     if (encoding === 'real-imaginary') {
