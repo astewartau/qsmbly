@@ -580,3 +580,26 @@ label.btn.disabled { opacity: 0.45; pointer-events: none; }
 .report-scroll td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .stats-table th button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 .report-json { overflow: auto; padding: 8px; font-size: 12px; margin: 0; }
+
+/* The pipeline rules' findings: the ⚑ badge (a recommendation to review), the ⓘ marker (a
+   departure that is information only), the reference line, and the pop-up. */
+.rec-badge { border: 0; background: none; padding: 0 2px; color: var(--warn); cursor: pointer; font-size: 12px; line-height: 1; }
+.step-rec { cursor: inherit; }
+.rec-info { border: 0; background: none; color: var(--muted); font-size: 12px; padding: 0 2px; cursor: pointer; line-height: 1; }
+.sub.reference { color: var(--muted); font-size: 11.5px; }
+.sub.reference .departs { color: var(--text-2); }
+.rec-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.rec-modal {
+  background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+  max-width: 520px; width: 100%; padding: 16px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+.rec-modal h2 { margin: 0 0 8px; font-size: 15px; }
+.rec-modal p { margin: 4px 0; }
+.rec-why { color: var(--muted); }
+.rec-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.rec-line { margin: 0; }
+.rec-text { font-size: 11.5px; margin-left: 2px; }
+.rec-section { font-size: 12.5px; margin: 10px 0 2px; color: var(--muted); font-weight: 600; }
+.rec-row { border-top: 1px solid var(--border); padding-top: 6px; margin-top: 6px; }
+.rec-modal { max-height: calc(100vh - 32px); overflow: auto; }
+.rec-pick { display: flex; gap: 6px; align-items: center; }

@@ -5,6 +5,7 @@
 // example data is online only.
 import { test, expect } from '@playwright/test';
 import { phantomFiles } from './phantom.js';
+import { closeOffers } from './rec-helpers.js';
 
 /** Collect uncaught page errors and console errors, minus noise that is not ours. */
 function watchErrors(page) {
@@ -30,7 +31,11 @@ const expected = (page) => page.evaluate(() => {
 /** The steps a dry run says are computed. */
 const toCompute = (states) => Object.entries(states ?? {}).filter(([, s]) => ['will_run', 'changed', 'stale'].includes(s)).map(([k]) => k);
 const rowState = (page, id) => page.locator(`.step[data-step="${id}"] [data-testid="run-state"]`);
-const set = (page, path, value) => page.evaluate(([p, v]) => globalThis.qsmblyNext.session.set(p, v), [path, value]);
+/** Set a setting as the user does, closing any reference pipeline it offers. */
+async function set(page, path, value) {
+  await page.evaluate(([p, v]) => globalThis.qsmblyNext.session.set(p, v), [path, value]);
+  await closeOffers(page);
+}
 const runIds = (page) => page.evaluate(() => globalThis.qsmblyNext.history.runs.value.map((r) => r.id));
 
 async function runToEnd(page, timeout = 4 * 60_000) {

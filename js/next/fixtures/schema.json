@@ -97,7 +97,7 @@
     {
       "path": "multi_orientation.group_by",
       "label": "Orientations",
-      "full_label": "Orientation Grouping",
+      "full_label": "Orientation grouping",
       "help": "Runs that are the same object at a different angle, matched by an entity (acq, run, rec, inv), a glob (*acq-dir*) or re:<regex>; empty turns grouping off. How the orientations are combined is set under Multi-orientation",
       "type": "text",
       "optional": false,
@@ -113,8 +113,8 @@
     },
     {
       "path": "pipeline.axial_resampling",
-      "label": "Axial Resampling",
-      "full_label": "Axial Resampling",
+      "label": "Axial resampling",
+      "full_label": "Axial resampling",
       "help": "Resample oblique acquisitions onto an axial grid when they are tilted more than the threshold. Off: reconstruct on the acquired grid with the true B0 direction",
       "type": "bool",
       "optional": false,
@@ -129,8 +129,8 @@
     },
     {
       "path": "pipeline.obliquity_threshold",
-      "label": "Obliquity Threshold (°)",
-      "full_label": "Obliquity Threshold",
+      "label": "Obliquity threshold (°)",
+      "full_label": "Obliquity threshold",
       "help": "Resample only data more oblique than this",
       "type": "float",
       "optional": false,
@@ -148,8 +148,8 @@
     },
     {
       "path": "pipeline.output_space",
-      "label": "Output Space",
-      "full_label": "Output Space",
+      "label": "Output space",
+      "full_label": "Output space",
       "help": "The grid derivatives are written on, when an oblique run was resampled to axial",
       "type": "enum",
       "options": [
@@ -179,8 +179,8 @@
     },
     {
       "path": "masking.inhomogeneity_correction",
-      "label": "Inhomog. Correction",
-      "full_label": "Inhomogeneity Correction",
+      "label": "Inhomog. correction",
+      "full_label": "Inhomogeneity correction",
       "help": "Apply B1 field correction to magnitude (improves masking, ROMEO weights, SWI)",
       "type": "bool",
       "optional": false,
@@ -196,7 +196,7 @@
     {
       "path": "masking.inhomogeneity_method",
       "label": "Method",
-      "full_label": "Inhomogeneity Correction Method",
+      "full_label": "Inhomogeneity correction method",
       "help": "How the magnitude is corrected for inhomogeneity",
       "type": "enum",
       "options": [
@@ -228,7 +228,7 @@
     {
       "path": "homogeneity.sigma_mm",
       "label": "Sigma (mm)",
-      "full_label": "Bias Field Sigma",
+      "full_label": "Bias field sigma",
       "help": "Smoothing sigma of the bias-field estimate",
       "type": "float",
       "optional": false,
@@ -245,8 +245,8 @@
     },
     {
       "path": "homogeneity.nbox",
-      "label": "Box Passes",
-      "full_label": "Box Filter Passes",
+      "label": "Box passes",
+      "full_label": "Box filter passes",
       "help": "Box-filter passes approximating the Gaussian",
       "type": "int",
       "optional": false,
@@ -264,8 +264,8 @@
     },
     {
       "path": "n4.shrink_factor",
-      "label": "Shrink Factor",
-      "full_label": "Shrink Factor",
+      "label": "Shrink factor",
+      "full_label": "Shrink factor",
       "context": "N4",
       "help": "Subsample the image by this factor before fitting the bias field",
       "type": "int",
@@ -285,7 +285,7 @@
     {
       "path": "n4.max_iterations",
       "label": "Iterations",
-      "full_label": "Iterations per Level",
+      "full_label": "Iterations per level",
       "context": "N4",
       "help": "Maximum iterations at each fitting level, one number a level (e.g. 50 50 50 50); the B-spline mesh doubles from one level to the next",
       "type": "int-list",
@@ -314,7 +314,7 @@
     {
       "path": "n4.convergence_threshold",
       "label": "Convergence",
-      "full_label": "Convergence Threshold",
+      "full_label": "Convergence threshold",
       "context": "N4",
       "help": "Stop a level once the change in the bias field (its coefficient of variation) falls to this; 0 runs every iteration",
       "type": "float",
@@ -333,7 +333,7 @@
     {
       "path": "n4.mesh",
       "label": "Mesh",
-      "full_label": "B-spline Mesh",
+      "full_label": "B-spline mesh",
       "context": "N4",
       "help": "B-spline mesh elements per axis at the first level (x y z)",
       "type": "int-vec3",
@@ -360,8 +360,8 @@
     },
     {
       "path": "n4.spline_order",
-      "label": "Spline Order",
-      "full_label": "B-spline Order",
+      "label": "Spline order",
+      "full_label": "B-spline order",
       "context": "N4",
       "help": "Order of the B-spline bias field: 1, 2 or 3",
       "type": "int",
@@ -382,7 +382,7 @@
     {
       "path": "n4.bias_field_fwhm",
       "label": "Bias FWHM",
-      "full_label": "Bias Field FWHM",
+      "full_label": "Bias field FWHM",
       "context": "N4",
       "help": "FWHM of the Gaussian modelling the bias field's blurring of the log-intensity histogram",
       "type": "float",
@@ -401,8 +401,8 @@
     },
     {
       "path": "n4.wiener_noise",
-      "label": "Wiener Noise",
-      "full_label": "Wiener Noise",
+      "label": "Wiener noise",
+      "full_label": "Wiener noise",
       "context": "N4",
       "help": "Noise term of the Wiener deconvolution of the histogram",
       "type": "float",
@@ -420,8 +420,8 @@
     },
     {
       "path": "n4.histogram_bins",
-      "label": "Histogram Bins",
-      "full_label": "Histogram Bins",
+      "label": "Histogram bins",
+      "full_label": "Histogram bins",
       "context": "N4",
       "help": "Bins of the log-intensity histogram",
       "type": "int",
@@ -440,8 +440,8 @@
     },
     {
       "path": "pipeline.ignore_slice_gap",
-      "label": "Ignore Slice Gap",
-      "full_label": "Ignore Slice Gap",
+      "label": "Ignore slice gap",
+      "full_label": "Ignore slice gap",
       "help": "Reconstruct even if the sidecar's SliceThickness is thinner than the slice pitch (gapped 2D data gives a wrong map)",
       "type": "bool",
       "optional": false,
@@ -456,8 +456,8 @@
     },
     {
       "path": "pipeline.crop_to_mask",
-      "label": "Crop to Mask",
-      "full_label": "Crop to Mask",
+      "label": "Crop to mask",
+      "full_label": "Crop to mask",
       "help": "Run the FFT-bound stages on a box around the mask (faster; outputs stay on the full grid)",
       "type": "bool",
       "optional": false,
@@ -472,8 +472,8 @@
     },
     {
       "path": "pipeline.crop_margin_mm",
-      "label": "Crop Margin (mm)",
-      "full_label": "Crop Margin",
+      "label": "Crop margin (mm)",
+      "full_label": "Crop margin",
       "help": "Margin around the mask; below about 32 mm results start to differ, and it must clear the largest SMV kernel",
       "type": "float",
       "optional": false,
@@ -490,8 +490,8 @@
     },
     {
       "path": "pipeline.fft_padding",
-      "label": "FFT Padding",
-      "full_label": "FFT Padding",
+      "label": "FFT padding",
+      "full_label": "FFT padding",
       "help": "Pad the grid to an FFT-friendly size before the FFT-bound stages (faster on awkward grids; shifts results slightly)",
       "type": "bool",
       "optional": false,
@@ -506,8 +506,8 @@
     },
     {
       "path": "field_mapping.coil_combination_sigma",
-      "label": "Coil Comb. Sigma",
-      "full_label": "Coil Combination Sigma",
+      "label": "Coil comb. sigma",
+      "full_label": "Coil combination sigma",
       "help": "MCPC-3D-S smoothing of the per-coil phase offsets (x y z); only for uncombined multi-coil data",
       "type": "float-vec3",
       "optional": false,
@@ -592,8 +592,8 @@
     },
     {
       "path": "masking.combine",
-      "label": "Combined With",
-      "full_label": "Combined With",
+      "label": "Combined with",
+      "full_label": "Combined with",
       "help": "How the sections are combined: OR keeps a voxel any section keeps, AND only one every section keeps",
       "type": "enum",
       "options": [
@@ -622,8 +622,8 @@
     },
     {
       "path": "masking.refinements",
-      "label": "Combined Mask Steps",
-      "full_label": "Combined Mask Steps",
+      "label": "Combined mask steps",
+      "full_label": "Combined mask steps",
       "help": "Refinement steps run on the combined mask, after the sections are combined",
       "type": "mask-ops",
       "optional": false,
@@ -639,7 +639,7 @@
     {
       "path": "masking.custom_mask_tool",
       "label": "Use custom masks",
-      "full_label": "Custom Mask",
+      "full_label": "Custom mask",
       "help": "Use a mask from <bids>/derivatives/<tool>/ instead of computing one: * for any tool, or a tool name (e.g. bet); empty to always compute it. Where none is found, the mask is computed",
       "type": "text",
       "optional": true,
@@ -656,8 +656,8 @@
     },
     {
       "path": "masking.two_pass",
-      "label": "Two-pass Artefact Reduction",
-      "full_label": "Two-pass Artefact Reduction",
+      "label": "Two-pass artefact reduction",
+      "full_label": "Two-pass artefact reduction",
       "help": "Reconstruct again on a mask whose holes are left unfilled and keep that result where it is defined — keeps streaking from strong sources out of the rest of the brain, at roughly double the reconstruction time (doi:10.1002/mrm.29048)",
       "type": "bool",
       "optional": false,
@@ -692,8 +692,8 @@
     },
     {
       "path": "bet.gradient_threshold",
-      "label": "Gradient Threshold",
-      "full_label": "Gradient Threshold",
+      "label": "Gradient threshold",
+      "full_label": "Gradient threshold",
       "context": "BET",
       "help": "BET gradient threshold, from -1 to 1 (shared by every BET step)",
       "type": "float",
@@ -748,8 +748,8 @@
     },
     {
       "path": "masking.two_pass_sections",
-      "label": "Reliable Mask",
-      "full_label": "Reliable Mask",
+      "label": "Reliable mask",
+      "full_label": "Reliable mask",
       "help": "The mask the second pass reconstructs on: its holes are left unfilled. Empty = the main mask without its hole filling",
       "type": "mask-sections",
       "optional": true,
@@ -764,8 +764,8 @@
     },
     {
       "path": "motion_correction.enabled",
-      "label": "Motion Correction",
-      "full_label": "Motion Correction",
+      "label": "Motion correction",
+      "full_label": "Motion correction",
       "help": "Rigidly co-register every echo onto a reference echo before any other stage (multi-echo, needs magnitude)",
       "type": "bool",
       "optional": false,
@@ -781,9 +781,9 @@
     {
       "path": "motion_correction.reference",
       "label": "Reference",
-      "full_label": "Reference Echo",
+      "full_label": "Reference echo",
       "help": "The echo every other echo is aligned onto",
-      "value_label": "Echo Number",
+      "value_label": "Echo number",
       "value_help": "The echo the others are aligned onto, counted from 1",
       "type": "echo-reference",
       "options": [
@@ -805,7 +805,7 @@
           "value": "1",
           "label": "echo",
           "name": "Echo number",
-          "help": "Align every echo onto a given echo (Reference Echo)",
+          "help": "Align every echo onto a given echo (Reference echo)",
           "kind": "echo-number",
           "min": 1
         }
@@ -824,7 +824,7 @@
     {
       "path": "motion_correction.chain",
       "label": "Chain",
-      "full_label": "Chain Registrations",
+      "full_label": "Chain registrations",
       "help": "Seed each echo's registration from its neighbour's solution",
       "type": "bool",
       "optional": false,
@@ -840,8 +840,8 @@
     },
     {
       "path": "motion_correction.chain_levels",
-      "label": "Chain Levels",
-      "full_label": "Chain Levels",
+      "label": "Chain levels",
+      "full_label": "Chain levels",
       "help": "Pyramid levels for a seeded registration",
       "type": "int",
       "optional": false,
@@ -876,7 +876,7 @@
     {
       "path": "registration.levels",
       "label": "Levels",
-      "full_label": "Pyramid Levels",
+      "full_label": "Pyramid levels",
       "context": "Registration",
       "help": "Pyramid levels: the capture range; do not lower",
       "type": "int",
@@ -896,8 +896,8 @@
     },
     {
       "path": "registration.max_samples",
-      "label": "Max Samples",
-      "full_label": "Maximum Samples",
+      "label": "Max samples",
+      "full_label": "Maximum samples",
       "context": "Registration",
       "help": "Voxels sampled per metric evaluation, per level",
       "type": "int",
@@ -917,8 +917,8 @@
     },
     {
       "path": "registration.max_iterations",
-      "label": "Max Iterations",
-      "full_label": "Maximum Iterations",
+      "label": "Max iterations",
+      "full_label": "Maximum iterations",
       "context": "Registration",
       "help": "Powell cycles per level",
       "type": "int",
@@ -938,8 +938,8 @@
     },
     {
       "path": "registration.max_evaluations",
-      "label": "Max Evaluations",
-      "full_label": "Maximum Evaluations",
+      "label": "Max evaluations",
+      "full_label": "Maximum evaluations",
       "context": "Registration",
       "help": "Metric evaluations across all levels (hard stop)",
       "type": "int",
@@ -979,8 +979,8 @@
     },
     {
       "path": "registration.rotation_step_deg",
-      "label": "Rotation Step (deg)",
-      "full_label": "Rotation Step",
+      "label": "Rotation step (deg)",
+      "full_label": "Rotation step",
       "context": "Registration",
       "help": "Initial rotation step at the finest level",
       "type": "float",
@@ -1000,8 +1000,8 @@
     },
     {
       "path": "registration.translation_step_mm",
-      "label": "Translation Step (mm)",
-      "full_label": "Translation Step",
+      "label": "Translation step (mm)",
+      "full_label": "Translation step",
       "context": "Registration",
       "help": "Initial translation step at the finest level",
       "type": "float",
@@ -1021,8 +1021,8 @@
     },
     {
       "path": "registration.min_overlap",
-      "label": "Min Overlap",
-      "full_label": "Minimum Overlap",
+      "label": "Min overlap",
+      "full_label": "Minimum overlap",
       "context": "Registration",
       "help": "Smallest fraction of sampled voxels that must overlap",
       "type": "float",
@@ -1042,7 +1042,7 @@
     {
       "path": "field_mapping.unwrapping_algorithm",
       "label": "Unwrapping",
-      "full_label": "Phase Unwrapping",
+      "full_label": "Phase unwrapping",
       "help": "How the wrapped phase is unwrapped",
       "type": "enum",
       "options": [
@@ -1074,7 +1074,7 @@
     {
       "path": "field_mapping.laplacian_solver",
       "label": "Solver",
-      "full_label": "Laplacian Solver",
+      "full_label": "Laplacian solver",
       "help": "How Laplacian unwrapping's Poisson equation is solved",
       "type": "enum",
       "options": [
@@ -1094,7 +1094,7 @@
           "value": "mirror",
           "label": "mirror",
           "name": "Mirror",
-          "help": "Schofield & Zhu sin/cos Laplacian, FFT solve on the volume mirrored along each axis (QSMART's; the default with QSMART)"
+          "help": "Schofield & Zhu sin/cos Laplacian, FFT solve on the volume mirrored along each axis (QSMART's reference)"
         }
       ],
       "optional": false,
@@ -1110,8 +1110,8 @@
     },
     {
       "path": "field_mapping.laplacian_fft_pad",
-      "label": "FFT Pad (voxels)",
-      "full_label": "Laplacian FFT Padding",
+      "label": "FFT pad (voxels)",
+      "full_label": "Laplacian FFT padding",
       "help": "Zero-padding per side: one value for every axis, or three (x y z)",
       "type": "int-vec3",
       "optional": false,
@@ -1137,8 +1137,8 @@
     },
     {
       "path": "field_mapping.phase_offset_removal",
-      "label": "Phase Offset Removal",
-      "full_label": "Phase Offset Removal",
+      "label": "Phase offset removal",
+      "full_label": "Phase offset removal",
       "help": "Remove spatially-varying phase offset using HIP (Eckstein et al., 2018); multi-echo only",
       "type": "bool",
       "optional": false,
@@ -1155,7 +1155,7 @@
     {
       "path": "field_mapping.phase_offset_sigma_mm",
       "label": "Sigma (mm)",
-      "full_label": "Phase Offset Sigma",
+      "full_label": "Phase offset sigma",
       "help": "Gaussian smoothing sigma (x y z)",
       "type": "float-vec3",
       "optional": false,
@@ -1180,8 +1180,8 @@
     },
     {
       "path": "field_mapping.bipolar_correction",
-      "label": "Bipolar Correction",
-      "full_label": "Bipolar Correction",
+      "label": "Bipolar correction",
+      "full_label": "Bipolar correction",
       "help": "Remove the linear phase artefact of bipolar readout gradients (needs at least 3 echoes; fewer: skipped)",
       "type": "bool",
       "optional": false,
@@ -1197,8 +1197,8 @@
     },
     {
       "path": "field_mapping.romeo.individual",
-      "label": "Individual Mode",
-      "full_label": "Unwrap Echoes Individually",
+      "label": "Individual mode",
+      "full_label": "Unwrap echoes individually",
       "context": "ROMEO",
       "help": "Unwrap each echo independently (recommended). Off = template-based temporal unwrapping.",
       "type": "bool",
@@ -1215,8 +1215,8 @@
     },
     {
       "path": "field_mapping.romeo.template",
-      "label": "Template Echo",
-      "full_label": "Template Echo",
+      "label": "Template echo",
+      "full_label": "Template echo",
       "context": "ROMEO",
       "help": "Echo used for spatial unwrapping, counted from 0",
       "type": "int",
@@ -1234,8 +1234,8 @@
     },
     {
       "path": "field_mapping.romeo.correct_global",
-      "label": "Correct Global",
-      "full_label": "Correct Global Offsets",
+      "label": "Correct global",
+      "full_label": "Correct global offsets",
       "context": "ROMEO",
       "help": "Correct inter-echo 2π offsets after unwrapping",
       "type": "bool",
@@ -1252,8 +1252,8 @@
     },
     {
       "path": "field_mapping.romeo.phase_coherence",
-      "label": "Phase Coherence",
-      "full_label": "Phase Coherence",
+      "label": "Phase coherence",
+      "full_label": "Phase coherence",
       "context": "ROMEO",
       "help": "Weight edges by neighbour phase coherence",
       "type": "bool",
@@ -1270,8 +1270,8 @@
     },
     {
       "path": "field_mapping.romeo.phase_gradient_coherence",
-      "label": "Phase Gradient Coherence",
-      "full_label": "Phase Gradient Coherence",
+      "label": "Phase gradient coherence",
+      "full_label": "Phase gradient coherence",
       "context": "ROMEO",
       "help": "Weight edges by inter-echo phase-gradient consistency (multi-echo)",
       "type": "bool",
@@ -1288,8 +1288,8 @@
     },
     {
       "path": "field_mapping.romeo.phase_linearity",
-      "label": "Phase Linearity",
-      "full_label": "Phase Linearity",
+      "label": "Phase linearity",
+      "full_label": "Phase linearity",
       "context": "ROMEO",
       "help": "Weight edges by second-derivative smoothness",
       "type": "bool",
@@ -1306,8 +1306,8 @@
     },
     {
       "path": "field_mapping.romeo.mag_coherence",
-      "label": "Mag Coherence",
-      "full_label": "Magnitude Coherence",
+      "label": "Mag coherence",
+      "full_label": "Magnitude coherence",
       "context": "ROMEO",
       "help": "Weight edges by neighbour magnitude coherence",
       "type": "bool",
@@ -1324,8 +1324,8 @@
     },
     {
       "path": "field_mapping.romeo.mag_weight",
-      "label": "Mag Weight",
-      "full_label": "Magnitude Weight",
+      "label": "Mag weight",
+      "full_label": "Magnitude weight",
       "context": "ROMEO",
       "help": "Penalise low-signal voxels",
       "type": "bool",
@@ -1342,8 +1342,8 @@
     },
     {
       "path": "field_mapping.romeo.mag_weight2",
-      "label": "Mag Weight 2",
-      "full_label": "Magnitude Weight 2",
+      "label": "Mag weight 2",
+      "full_label": "Magnitude weight 2",
       "context": "ROMEO",
       "help": "Penalise abnormally high signal and flow artefacts",
       "type": "bool",
@@ -1360,8 +1360,8 @@
     },
     {
       "path": "field_mapping.romeo.bestpath",
-      "label": "Best-path Weights",
-      "full_label": "Best-path Weights",
+      "label": "Best-path weights",
+      "full_label": "Best-path weights",
       "context": "ROMEO",
       "help": "Use Abdul-Rahman best-path weights instead of ROMEO weights",
       "type": "bool",
@@ -1378,11 +1378,11 @@
     },
     {
       "path": "field_mapping.romeo.temporal_uncertain_unwrapping",
-      "label": "Temporal Uncertain",
-      "full_label": "Temporal Uncertain Unwrapping",
+      "label": "Temporal uncertain",
+      "full_label": "Temporal uncertain unwrapping",
       "context": "ROMEO",
       "help": "Re-unwrap voxels whose temporal unwrapping is uncertain",
-      "value_label": "Quality Threshold",
+      "value_label": "Quality threshold",
       "value_help": "Quality threshold (0, 1] below which a voxel is re-unwrapped",
       "type": "float",
       "optional": false,
@@ -1399,8 +1399,8 @@
     },
     {
       "path": "field_mapping.romeo.max_seeds",
-      "label": "Max Seeds",
-      "full_label": "Maximum Seeds",
+      "label": "Max seeds",
+      "full_label": "Maximum seeds",
       "context": "ROMEO",
       "help": "Maximum number of seed regions",
       "type": "int",
@@ -1418,8 +1418,8 @@
     },
     {
       "path": "field_mapping.romeo.merge_regions",
-      "label": "Merge Regions",
-      "full_label": "Merge Regions",
+      "label": "Merge regions",
+      "full_label": "Merge regions",
       "context": "ROMEO",
       "help": "Merge neighbouring regions after unwrapping",
       "type": "bool",
@@ -1436,8 +1436,8 @@
     },
     {
       "path": "field_mapping.romeo.correct_regions",
-      "label": "Correct Regions",
-      "full_label": "Correct Regions",
+      "label": "Correct regions",
+      "full_label": "Correct regions",
       "context": "ROMEO",
       "help": "Shift each region by a multiple of 2π to bring its median nearest 0",
       "type": "bool",
@@ -1454,8 +1454,8 @@
     },
     {
       "path": "field_mapping.romeo.wrap_addition",
-      "label": "Wrap Addition",
-      "full_label": "Wrap Addition",
+      "label": "Wrap addition",
+      "full_label": "Wrap addition",
       "context": "ROMEO",
       "help": "Extra phase tolerance beyond π for neighbour differences, from 0 to π",
       "type": "float",
@@ -1472,8 +1472,8 @@
     },
     {
       "path": "field_mapping.b0_estimation",
-      "label": "B0 Estimation",
-      "full_label": "B0 Estimation",
+      "label": "B0 estimation",
+      "full_label": "B0 estimation",
       "help": "How the unwrapped echoes are combined into one field map",
       "type": "enum",
       "options": [
@@ -1499,7 +1499,7 @@
           "value": "qsmart-echofit",
           "label": "qsmart-echofit",
           "name": "QSMART echo fit",
-          "help": "QSMART's: magnitude-weighted fit of phase vs TE through the origin, each echo unwrapped over the whole volume; marks the voxels QSMART leaves out. Needs Laplacian unwrapping (the default with QSMART)"
+          "help": "QSMART's: magnitude-weighted fit of phase vs TE through the origin, each echo unwrapped over the whole volume; marks the voxels QSMART leaves out. Needs Laplacian unwrapping"
         },
         {
           "value": "complex-fit",
@@ -1520,8 +1520,8 @@
     },
     {
       "path": "field_mapping.qsmart_fit_threshold_mode",
-      "label": "Fit Threshold",
-      "full_label": "QSMART Fit Threshold",
+      "label": "Fit threshold",
+      "full_label": "QSMART fit threshold",
       "help": "How the fit residual at which a voxel is left out of QSMART's reconstruction is set",
       "type": "enum",
       "options": [
@@ -1551,8 +1551,8 @@
     },
     {
       "path": "field_mapping.qsmart_fit_percentile",
-      "label": "Fit Percentile",
-      "full_label": "QSMART Fit Percentile",
+      "label": "Fit percentile",
+      "full_label": "QSMART fit percentile",
       "help": "Percentile of the blurred fit residual above which a voxel is left out of QSMART's reconstruction",
       "type": "float",
       "optional": false,
@@ -1571,8 +1571,8 @@
     },
     {
       "path": "field_mapping.qsmart_fit_threshold",
-      "label": "Fit Residual",
-      "full_label": "QSMART Fit Residual",
+      "label": "Fit residual",
+      "full_label": "QSMART fit residual",
       "help": "Blurred fit residual above which a voxel is left out of QSMART's reconstruction",
       "type": "float",
       "optional": false,
@@ -1590,8 +1590,8 @@
     },
     {
       "path": "field_mapping.b0_weight_type",
-      "label": "Weight Type",
-      "full_label": "Echo Weighting",
+      "label": "Weight type",
+      "full_label": "Echo weighting",
       "help": "How each echo is weighted in the average",
       "type": "enum",
       "options": [
@@ -1665,8 +1665,8 @@
     },
     {
       "path": "field_mapping.linear_fit.estimate_offset",
-      "label": "Estimate Offset",
-      "full_label": "Estimate Offset",
+      "label": "Estimate offset",
+      "full_label": "Estimate offset",
       "context": "Echo-time fit",
       "help": "Fit a phase-offset term in the echo-time fit (robust fit: needs 4 echoes with it, 3 without)",
       "type": "bool",
@@ -1683,8 +1683,8 @@
     },
     {
       "path": "field_mapping.linear_fit.reliability_threshold_percentile",
-      "label": "Reliability Mask",
-      "full_label": "Reliability Mask",
+      "label": "Reliability mask",
+      "full_label": "Reliability mask",
       "context": "Echo-time fit",
       "help": "Report the fit's reliability mask; does not change the field map",
       "value_label": "Percentile",
@@ -1707,7 +1707,7 @@
     {
       "path": "field_mapping.robust_fit.loss",
       "label": "Loss",
-      "full_label": "Loss Function",
+      "full_label": "Loss function",
       "context": "Robust fit",
       "help": "The loss that down-weights an echo departing from the straight line through the others",
       "type": "enum",
@@ -1739,7 +1739,7 @@
     {
       "path": "field_mapping.robust_fit.tuning",
       "label": "Tuning",
-      "full_label": "Tuning Radius",
+      "full_label": "Tuning radius",
       "context": "Robust fit",
       "help": "Tuning radius in robust-scale units; empty for the conventional value (Tukey 4.685, Huber 1.345)",
       "type": "float",
@@ -1759,7 +1759,7 @@
     {
       "path": "field_mapping.robust_fit.iterations",
       "label": "Iterations",
-      "full_label": "Reweighting Passes",
+      "full_label": "Reweighting passes",
       "context": "Robust fit",
       "help": "Iteratively reweighted passes (0 reports only: the field map is the linear fit's)",
       "type": "int",
@@ -1777,8 +1777,8 @@
     },
     {
       "path": "field_mapping.robust_fit.downweight_level",
-      "label": "Downweight Level",
-      "full_label": "Downweight Level",
+      "label": "Downweight level",
+      "full_label": "Downweight level",
       "context": "Robust fit",
       "help": "Reporting only: a weight below this counts as down-weighted",
       "type": "float",
@@ -1798,8 +1798,8 @@
     },
     {
       "path": "field_mapping.robust_fit.flag_ratio",
-      "label": "Flag Ratio",
-      "full_label": "Flag Ratio",
+      "label": "Flag ratio",
+      "full_label": "Flag ratio",
       "context": "Robust fit",
       "help": "Reporting only: flag an echo whose outlier score exceeds this multiple of the best echo's",
       "type": "float",
@@ -1817,8 +1817,8 @@
     },
     {
       "path": "field_mapping.complex_fit.reltol",
-      "label": "Rel Tolerance",
-      "full_label": "Relative Tolerance",
+      "label": "Rel tolerance",
+      "full_label": "Relative tolerance",
       "context": "Complex fit",
       "help": "The fit stops once its update is this fraction of the first estimate, over the whole volume",
       "type": "float",
@@ -1836,8 +1836,8 @@
     },
     {
       "path": "field_mapping.complex_fit.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "Complex fit",
       "help": "Gauss-Newton iterations at most",
       "type": "int",
@@ -1855,9 +1855,9 @@
     },
     {
       "path": "bg_removal.algorithm",
-      "label": "BG Removal",
-      "full_label": "Background Removal",
-      "help": "How the background field, from sources outside the mask, is removed to leave the local field. Unless one is chosen, MEDI takes PDF, as its authors' pipeline does",
+      "label": "BG removal",
+      "full_label": "Background removal",
+      "help": "How the background field, from sources outside the mask, is removed to leave the local field",
       "type": "enum",
       "options": [
         {
@@ -1980,8 +1980,8 @@
     },
     {
       "path": "bg_removal.vsharp.max_radius",
-      "label": "Max Radius",
-      "full_label": "Maximum Radius",
+      "label": "Max radius",
+      "full_label": "Maximum radius",
       "context": "V-SHARP",
       "help": "Largest SMV kernel radius",
       "type": "float",
@@ -1999,8 +1999,8 @@
     },
     {
       "path": "bg_removal.vsharp.min_radius",
-      "label": "Min Radius",
-      "full_label": "Minimum Radius",
+      "label": "Min radius",
+      "full_label": "Minimum radius",
       "context": "V-SHARP",
       "help": "Smallest SMV kernel radius",
       "type": "float",
@@ -2020,8 +2020,8 @@
     },
     {
       "path": "bg_removal.vsharp.radius_step",
-      "label": "Radius Step",
-      "full_label": "Radius Step",
+      "label": "Radius step",
+      "full_label": "Radius step",
       "context": "V-SHARP",
       "help": "Step between SMV kernel radii, from the largest down to the smallest",
       "type": "float",
@@ -2041,8 +2041,8 @@
     },
     {
       "path": "bg_removal.vsharp.grid",
-      "label": "Working Grid",
-      "full_label": "Working Grid",
+      "label": "Working grid",
+      "full_label": "Working grid",
       "context": "V-SHARP",
       "help": "The voxel grid V-SHARP runs on",
       "type": "enum",
@@ -2063,7 +2063,7 @@
           "value": "isotropic",
           "label": "isotropic",
           "name": "Isotropic",
-          "help": "An isotropic grid of Grid Spacing mm; the background is interpolated back, the local field keeps native resolution"
+          "help": "An isotropic grid of Grid spacing mm; the background is interpolated back, the local field keeps native resolution"
         }
       ],
       "optional": false,
@@ -2079,8 +2079,8 @@
     },
     {
       "path": "bg_removal.vsharp.grid_spacing",
-      "label": "Grid Spacing",
-      "full_label": "Grid Spacing",
+      "label": "Grid spacing",
+      "full_label": "Grid spacing",
       "context": "V-SHARP",
       "help": "Isotropic working-grid spacing",
       "type": "float",
@@ -2118,8 +2118,8 @@
     },
     {
       "path": "bg_removal.pdf.n_cg",
-      "label": "CG Iter",
-      "full_label": "CG Iterations",
+      "label": "CG iter",
+      "full_label": "CG iterations",
       "context": "PDF",
       "help": "Maximum conjugate-gradient iterations",
       "type": "int",
@@ -2227,8 +2227,8 @@
     },
     {
       "path": "bg_removal.ismv.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "iSMV",
       "help": "Maximum iterations",
       "type": "int",
@@ -2324,8 +2324,8 @@
     },
     {
       "path": "bg_removal.resharp.tik_reg",
-      "label": "Tik Reg",
-      "full_label": "Tikhonov Regularisation",
+      "label": "Tik reg",
+      "full_label": "Tikhonov regularisation",
       "context": "RESHARP",
       "help": "Tikhonov regularisation parameter",
       "type": "float",
@@ -2360,8 +2360,8 @@
     },
     {
       "path": "bg_removal.resharp.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "RESHARP",
       "help": "Maximum CG iterations",
       "type": "int",
@@ -2399,8 +2399,8 @@
     },
     {
       "path": "bg_removal.harperella.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "HARPERELLA",
       "help": "Maximum iterations",
       "type": "int",
@@ -2464,8 +2464,8 @@
     },
     {
       "path": "bg_removal.iharperella.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "iHARPERELLA",
       "help": "Maximum iterations",
       "type": "int",
@@ -2551,8 +2551,8 @@
     },
     {
       "path": "inversion.algorithm",
-      "label": "QSM Inversion",
-      "full_label": "QSM Inversion",
+      "label": "QSM inversion",
+      "full_label": "QSM inversion",
       "help": "How the field is inverted into a susceptibility map",
       "type": "enum",
       "options": [
@@ -2867,8 +2867,8 @@
     },
     {
       "path": "inversion.rts.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "RTS",
       "help": "Maximum ADMM iterations",
       "type": "int",
@@ -2886,8 +2886,8 @@
     },
     {
       "path": "inversion.rts.lsmr_iter",
-      "label": "LSMR Iter",
-      "full_label": "LSMR Iterations",
+      "label": "LSMR iter",
+      "full_label": "LSMR iterations",
       "context": "RTS",
       "help": "LSMR iterations for step 1 (well-conditioned solve)",
       "type": "int",
@@ -2997,8 +2997,8 @@
     },
     {
       "path": "inversion.tv.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "TV-ADMM",
       "help": "Maximum ADMM iterations",
       "type": "int",
@@ -3139,8 +3139,8 @@
     },
     {
       "path": "inversion.tgv.step_size",
-      "label": "Step Size",
-      "full_label": "Step Size",
+      "label": "Step size",
+      "full_label": "Step size",
       "context": "TGV",
       "help": "Primal step-size multiplier",
       "type": "float",
@@ -3157,11 +3157,11 @@
     },
     {
       "path": "inversion.tgv.te",
-      "label": "Echo Time",
-      "full_label": "Echo Time",
+      "label": "Echo time",
+      "full_label": "Echo time",
       "context": "TGV",
       "help": "The echo time the field is converted to phase at (several echoes; a single echo is at its own); the weights are in radians at it",
-      "value_label": "Echo Time",
+      "value_label": "Echo time",
       "value_help": "The echo time the field is converted to phase at, in ms",
       "type": "echo-time",
       "options": [
@@ -3199,7 +3199,7 @@
           },
           "label": "ms",
           "name": "Echo time",
-          "help": "A given echo time (Echo Time)",
+          "help": "A given echo time (Echo time)",
           "kind": "time"
         }
       ],
@@ -3308,8 +3308,8 @@
     },
     {
       "path": "inversion.nltv.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "NLTV",
       "help": "Maximum ADMM iterations",
       "type": "int",
@@ -3328,8 +3328,8 @@
     },
     {
       "path": "inversion.nltv.tol_newton",
-      "label": "Newton Tol",
-      "full_label": "Newton Tolerance",
+      "label": "Newton tol",
+      "full_label": "Newton tolerance",
       "context": "NLTV",
       "help": "Convergence tolerance of the Newton iterations of the data-term subproblem",
       "type": "float",
@@ -3346,8 +3346,8 @@
     },
     {
       "path": "inversion.nltv.max_iter_newton",
-      "label": "Newton Iter",
-      "full_label": "Newton Iterations",
+      "label": "Newton iter",
+      "full_label": "Newton iterations",
       "context": "NLTV",
       "help": "Maximum Newton iterations of the data-term subproblem",
       "type": "int",
@@ -3366,11 +3366,11 @@
     },
     {
       "path": "inversion.nltv.te",
-      "label": "Echo Time",
-      "full_label": "Echo Time",
+      "label": "Echo time",
+      "full_label": "Echo time",
       "context": "NLTV",
       "help": "The echo time the field is converted to phase at",
-      "value_label": "Echo Time",
+      "value_label": "Echo time",
       "value_help": "The echo time the field is converted to phase at, in ms",
       "type": "echo-time",
       "options": [
@@ -3408,7 +3408,7 @@
           },
           "label": "ms",
           "name": "Echo time",
-          "help": "A given echo time (Echo Time)",
+          "help": "A given echo time (Echo time)",
           "kind": "time"
         }
       ],
@@ -3425,8 +3425,8 @@
     },
     {
       "path": "inversion.medi.smv",
-      "label": "SMV Mode",
-      "full_label": "SMV Mode",
+      "label": "SMV mode",
+      "full_label": "SMV mode",
       "context": "MEDI",
       "help": "High-pass the local field with a spherical mean value (SMV) filter, removing residual background near the brain edge (MEDI-SMV)",
       "type": "bool",
@@ -3443,8 +3443,8 @@
     },
     {
       "path": "inversion.medi.smv_radius",
-      "label": "SMV Radius",
-      "full_label": "SMV Radius",
+      "label": "SMV radius",
+      "full_label": "SMV radius",
       "context": "MEDI",
       "help": "SMV radius (also mSMV's)",
       "type": "float",
@@ -3462,8 +3462,8 @@
     },
     {
       "path": "inversion.medi.smv_shrink_mask",
-      "label": "Shrink Mask",
-      "full_label": "SMV Mask Shrinking",
+      "label": "Shrink mask",
+      "full_label": "SMV mask shrinking",
       "context": "MEDI",
       "help": "With SMV, shrink the mask to where the SMV of the mask exceeds 0.999, dropping the edge band whose SMV reaches outside it. Off keeps the full mask",
       "type": "bool",
@@ -3498,8 +3498,8 @@
     },
     {
       "path": "inversion.medi.msmv_maxk",
-      "label": "mSMV Max K",
-      "full_label": "mSMV Maximum k",
+      "label": "mSMV max K",
+      "full_label": "mSMV maximum k",
       "context": "MEDI",
       "help": "mSMV's boundary correction makes at most this many passes, less one",
       "type": "int",
@@ -3518,8 +3518,8 @@
     },
     {
       "path": "inversion.medi.msmv_vessel_radius",
-      "label": "mSMV Vessel Radius",
-      "full_label": "mSMV Vessel Radius",
+      "label": "mSMV vessel radius",
+      "full_label": "mSMV vessel radius",
       "context": "MEDI",
       "help": "Largest vessel thickness of mSMV's vessel mask. Empty: 15 voxels, or 8 times the largest voxel dimension if that is more",
       "type": "float",
@@ -3539,8 +3539,8 @@
     },
     {
       "path": "inversion.medi.msmv_prefilter",
-      "label": "mSMV Prefilter",
-      "full_label": "mSMV Prefilter",
+      "label": "mSMV prefilter",
+      "full_label": "mSMV prefilter",
       "context": "MEDI",
       "help": "SMV-filter the field before mSMV, as the authors do. Off diverges after PDF, V-SHARP or LBV (expert)",
       "type": "bool",
@@ -3593,8 +3593,8 @@
     },
     {
       "path": "inversion.medi.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "MEDI",
       "help": "Maximum outer iterations",
       "type": "int",
@@ -3613,8 +3613,8 @@
     },
     {
       "path": "inversion.medi.cg_max_iter",
-      "label": "CG Max Iter",
-      "full_label": "CG Maximum Iterations",
+      "label": "CG max iter",
+      "full_label": "CG maximum iterations",
       "context": "MEDI",
       "help": "Maximum conjugate gradient iterations",
       "type": "int",
@@ -3633,8 +3633,8 @@
     },
     {
       "path": "inversion.medi.cg_tol",
-      "label": "CG Tolerance",
-      "full_label": "CG Tolerance",
+      "label": "CG tolerance",
+      "full_label": "CG tolerance",
       "context": "MEDI",
       "help": "CG convergence tolerance",
       "type": "float",
@@ -3687,8 +3687,8 @@
     },
     {
       "path": "inversion.medi.csf",
-      "label": "CSF Reference",
-      "full_label": "CSF Zero Reference (MEDI+0)",
+      "label": "CSF reference",
+      "full_label": "CSF zero reference (MEDI+0)",
       "context": "MEDI",
       "help": "Zero-reference the susceptibility to the ventricular CSF, found from R2*, and keep it uniform there (MEDI+0); needs at least three echoes, with fewer MEDI runs without it",
       "type": "bool",
@@ -3706,7 +3706,7 @@
     {
       "path": "inversion.medi.lambda_csf",
       "label": "Lambda CSF",
-      "full_label": "CSF Weight",
+      "full_label": "CSF weight",
       "context": "MEDI",
       "help": "Weight of the CSF uniformity term",
       "type": "float",
@@ -3724,8 +3724,8 @@
     },
     {
       "path": "inversion.medi.csf_r2s_threshold",
-      "label": "CSF R2* Threshold",
-      "full_label": "CSF R2* Threshold",
+      "label": "CSF R2* threshold",
+      "full_label": "CSF R2* threshold",
       "context": "MEDI",
       "help": "Voxels below this R2* are CSF candidates",
       "type": "float",
@@ -3745,8 +3745,8 @@
     },
     {
       "path": "inversion.medi.csf_erode",
-      "label": "CSF Erode",
-      "full_label": "Erode Before Finding CSF",
+      "label": "CSF erode",
+      "full_label": "Erode before finding CSF",
       "context": "MEDI",
       "help": "Erode the mask by a 10 mm sphere before finding the CSF",
       "type": "bool",
@@ -3763,8 +3763,8 @@
     },
     {
       "path": "inversion.medi.zeropad",
-      "label": "Zero Padding",
-      "full_label": "Zero Padding",
+      "label": "Zero padding",
+      "full_label": "Zero padding",
       "context": "MEDI",
       "help": "Voxels of zeros appended at the end of each axis before the inversion; the result is cropped back",
       "type": "int-vec3",
@@ -3791,8 +3791,8 @@
     },
     {
       "path": "inversion.medi.data_weighting",
-      "label": "Data Weighting",
-      "full_label": "Data Weighting",
+      "label": "Data weighting",
+      "full_label": "Data weighting",
       "context": "MEDI",
       "help": "How the voxels of the field are weighted in the data term",
       "type": "enum",
@@ -3823,11 +3823,11 @@
     },
     {
       "path": "inversion.medi.te",
-      "label": "Echo Time",
-      "full_label": "Echo Time",
+      "label": "Echo time",
+      "full_label": "Echo time",
       "context": "MEDI",
       "help": "The echo time the field is converted to phase at",
-      "value_label": "Echo Time",
+      "value_label": "Echo time",
       "value_help": "The echo time the field is converted to phase at, in ms",
       "type": "echo-time",
       "options": [
@@ -3865,7 +3865,7 @@
           },
           "label": "ms",
           "name": "Echo time",
-          "help": "A given echo time (Echo Time)",
+          "help": "A given echo time (Echo time)",
           "kind": "time"
         }
       ],
@@ -3936,8 +3936,8 @@
     },
     {
       "path": "inversion.tfi.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "TFI",
       "help": "Maximum outer iterations",
       "type": "int",
@@ -3956,8 +3956,8 @@
     },
     {
       "path": "inversion.tfi.cg_max_iter",
-      "label": "CG Max Iter",
-      "full_label": "CG Maximum Iterations",
+      "label": "CG max iter",
+      "full_label": "CG maximum iterations",
       "context": "TFI",
       "help": "Maximum conjugate gradient iterations",
       "type": "int",
@@ -3976,8 +3976,8 @@
     },
     {
       "path": "inversion.tfi.cg_tol",
-      "label": "CG Tolerance",
-      "full_label": "CG Tolerance",
+      "label": "CG tolerance",
+      "full_label": "CG tolerance",
       "context": "TFI",
       "help": "CG convergence tolerance",
       "type": "float",
@@ -4030,8 +4030,8 @@
     },
     {
       "path": "inversion.tfi.linear",
-      "label": "Linear Data Term",
-      "full_label": "Linear Data Term",
+      "label": "Linear data term",
+      "full_label": "Linear data term",
       "context": "TFI",
       "help": "Fit the field linearly, as the TFI paper does; off uses MEDI's exponential data term",
       "type": "bool",
@@ -4048,8 +4048,8 @@
     },
     {
       "path": "inversion.tfi.data_weighting",
-      "label": "Data Weighting",
-      "full_label": "Data Weighting",
+      "label": "Data weighting",
+      "full_label": "Data weighting",
       "context": "TFI",
       "help": "How the voxels of the field are weighted in the data term",
       "type": "enum",
@@ -4080,11 +4080,11 @@
     },
     {
       "path": "inversion.tfi.te",
-      "label": "Echo Time",
-      "full_label": "Echo Time",
+      "label": "Echo time",
+      "full_label": "Echo time",
       "context": "TFI",
       "help": "The echo time the field is converted to phase at",
-      "value_label": "Echo Time",
+      "value_label": "Echo time",
       "value_help": "The echo time the field is converted to phase at, in ms",
       "type": "echo-time",
       "options": [
@@ -4122,7 +4122,7 @@
           },
           "label": "ms",
           "name": "Echo time",
-          "help": "A given echo time (Echo Time)",
+          "help": "A given echo time (Echo time)",
           "kind": "time"
         }
       ],
@@ -4157,8 +4157,8 @@
     },
     {
       "path": "inversion.ilsqr.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "iLSQR",
       "help": "Maximum iterations",
       "type": "int",
@@ -4224,11 +4224,11 @@
     },
     {
       "path": "inversion.star.te",
-      "label": "Echo Time",
-      "full_label": "Echo Time",
+      "label": "Echo time",
+      "full_label": "Echo time",
       "context": "STAR-QSM",
       "help": "The echo time the field is converted to phase at; STAR-QSM's result depends on it",
-      "value_label": "Echo Time",
+      "value_label": "Echo time",
       "value_help": "The echo time the field is converted to phase at, in ms",
       "type": "echo-time",
       "options": [
@@ -4266,7 +4266,7 @@
           },
           "label": "ms",
           "name": "Echo time",
-          "help": "A given echo time (Echo Time)",
+          "help": "A given echo time (Echo time)",
           "kind": "time"
         }
       ],
@@ -4283,8 +4283,8 @@
     },
     {
       "path": "inversion.lsqr.residual_weighting",
-      "label": "Residual Weight",
-      "full_label": "Residual Weight",
+      "label": "Residual weight",
+      "full_label": "Residual weight",
       "context": "LSQR",
       "help": "Weight w on the residual field, the only regularisation. Empty: scaled from B0; 0 drops the term and streaks badly",
       "type": "float",
@@ -4301,8 +4301,8 @@
     },
     {
       "path": "inversion.lsqr.fit_global_offset",
-      "label": "Fit Global Offset",
-      "full_label": "Fit Global Offset",
+      "label": "Fit global offset",
+      "full_label": "Fit global offset",
       "context": "LSQR",
       "help": "Fit a single global field offset alongside χ",
       "type": "bool",
@@ -4319,8 +4319,8 @@
     },
     {
       "path": "inversion.lsqr.tol",
-      "label": "LSQR Tolerance",
-      "full_label": "LSQR Tolerance",
+      "label": "LSQR tolerance",
+      "full_label": "LSQR tolerance",
       "context": "LSQR",
       "help": "LSQR convergence tolerance",
       "type": "float",
@@ -4337,8 +4337,8 @@
     },
     {
       "path": "inversion.lsqr.max_iter",
-      "label": "LSQR Max Iter",
-      "full_label": "LSQR Maximum Iterations",
+      "label": "LSQR max iter",
+      "full_label": "LSQR maximum iterations",
       "context": "LSQR",
       "help": "Maximum LSQR iterations",
       "type": "int",
@@ -4357,8 +4357,8 @@
     },
     {
       "path": "inversion.heidi.cone_threshold",
-      "label": "Cone Threshold",
-      "full_label": "Cone Threshold",
+      "label": "Cone threshold",
+      "full_label": "Cone threshold",
       "context": "HEIDI",
       "help": "|D(k)| above which a coefficient is taken from the LSQR seed unchanged",
       "type": "float",
@@ -4377,8 +4377,8 @@
     },
     {
       "path": "inversion.heidi.gradient_threshold",
-      "label": "Gradient Threshold",
-      "full_label": "Gradient Threshold",
+      "label": "Gradient threshold",
+      "full_label": "Gradient threshold",
       "context": "HEIDI",
       "help": "Field-gradient threshold; below it a direction reads as homogeneous",
       "type": "float",
@@ -4396,8 +4396,8 @@
     },
     {
       "path": "inversion.heidi.apply_laplacian_correction",
-      "label": "Laplacian Correction",
-      "full_label": "Laplacian Correction",
+      "label": "Laplacian correction",
+      "full_label": "Laplacian correction",
       "context": "HEIDI",
       "help": "Open the homogeneity masks where the field's Laplacian is large",
       "type": "bool",
@@ -4414,8 +4414,8 @@
     },
     {
       "path": "inversion.heidi.laplacian_threshold",
-      "label": "Laplacian Threshold",
-      "full_label": "Laplacian Threshold",
+      "label": "Laplacian threshold",
+      "full_label": "Laplacian threshold",
       "context": "HEIDI",
       "help": "Field-Laplacian threshold (ppm per voxel²)",
       "type": "float",
@@ -4432,8 +4432,8 @@
     },
     {
       "path": "inversion.heidi.gradient_mask_floor",
-      "label": "Gradient Mask Floor",
-      "full_label": "Gradient Mask Floor",
+      "label": "Gradient mask floor",
+      "full_label": "Gradient mask floor",
       "context": "HEIDI",
       "help": "TV weight kept where every direction reads as an edge (0 = upstream's binarised masks)",
       "type": "float",
@@ -4450,8 +4450,8 @@
     },
     {
       "path": "inversion.heidi.continuation_steps",
-      "label": "Continuation Steps",
-      "full_label": "Continuation Steps",
+      "label": "Continuation steps",
+      "full_label": "Continuation steps",
       "context": "HEIDI",
       "help": "NESTA continuation steps on μ",
       "type": "int",
@@ -4469,8 +4469,8 @@
     },
     {
       "path": "inversion.heidi.inner_iterations",
-      "label": "Inner Iterations",
-      "full_label": "Inner Iterations",
+      "label": "Inner iterations",
+      "full_label": "Inner iterations",
       "context": "HEIDI",
       "help": "Accelerated-gradient iterations per continuation step",
       "type": "int",
@@ -4488,8 +4488,8 @@
     },
     {
       "path": "inversion.heidi.mu_min",
-      "label": "Mu Min",
-      "full_label": "Final Mu",
+      "label": "Mu min",
+      "full_label": "Final mu",
       "context": "HEIDI",
       "help": "Final (smallest) smoothing parameter μ",
       "type": "float",
@@ -4508,8 +4508,8 @@
     },
     {
       "path": "inversion.heidi.tol",
-      "label": "HEIDI Tolerance",
-      "full_label": "HEIDI Tolerance",
+      "label": "HEIDI tolerance",
+      "full_label": "HEIDI tolerance",
       "context": "HEIDI",
       "help": "Relative objective change that ends an inner loop early (the default runs every iteration)",
       "type": "float",
@@ -4526,11 +4526,11 @@
     },
     {
       "path": "inversion.heidi.te",
-      "label": "Echo Time",
-      "full_label": "Echo Time",
+      "label": "Echo time",
+      "full_label": "Echo time",
       "context": "HEIDI",
       "help": "The echo time the field is converted to phase at, in the conversion to HEIDI's units",
-      "value_label": "Echo Time",
+      "value_label": "Echo time",
       "value_help": "The echo time the field is converted to phase at, in ms",
       "type": "echo-time",
       "options": [
@@ -4568,7 +4568,7 @@
           },
           "label": "ms",
           "name": "Echo time",
-          "help": "A given echo time (Echo Time)",
+          "help": "A given echo time (Echo time)",
           "kind": "time"
         }
       ],
@@ -4585,8 +4585,8 @@
     },
     {
       "path": "inversion.heidi.denoise",
-      "label": "Denoise Field",
-      "full_label": "Denoise Field",
+      "label": "Denoise field",
+      "full_label": "Denoise field",
       "context": "HEIDI",
       "help": "Anisotropic-diffusion smoothing of the field before its gradients are taken",
       "type": "bool",
@@ -4603,8 +4603,8 @@
     },
     {
       "path": "inversion.heidi.denoise_iterations",
-      "label": "Denoise Iter",
-      "full_label": "Denoise Iterations",
+      "label": "Denoise iter",
+      "full_label": "Denoise iterations",
       "context": "HEIDI",
       "help": "Anisotropic-diffusion iterations",
       "type": "int",
@@ -4622,8 +4622,8 @@
     },
     {
       "path": "inversion.heidi.denoise_time_step",
-      "label": "Time Step",
-      "full_label": "Time Step",
+      "label": "Time step",
+      "full_label": "Time step",
       "context": "HEIDI",
       "help": "Anisotropic-diffusion time step",
       "type": "float",
@@ -4658,8 +4658,8 @@
     },
     {
       "path": "inversion.qsmart.inversion",
-      "label": "Inner Inversion",
-      "full_label": "Inner Inversion",
+      "label": "Inner inversion",
+      "full_label": "Inner inversion",
       "context": "QSMART",
       "help": "The dipole inversion QSMART runs in each of its two stages",
       "type": "enum",
@@ -4726,8 +4726,8 @@
     },
     {
       "path": "inversion.qsmart.ilsqr_max_iter",
-      "label": "iLSQR Max Iter",
-      "full_label": "iLSQR Maximum Iterations",
+      "label": "iLSQR max iter",
+      "full_label": "iLSQR maximum iterations",
       "context": "QSMART",
       "help": "Maximum iLSQR iterations per stage (tolerance: iLSQR's)",
       "type": "int",
@@ -4746,8 +4746,8 @@
     },
     {
       "path": "inversion.qsmart.ilsqr_pad_mm",
-      "label": "iLSQR Pad (mm)",
-      "full_label": "iLSQR Padding",
+      "label": "iLSQR pad (mm)",
+      "full_label": "iLSQR padding",
       "context": "QSMART",
       "help": "Zero-padding of the inner iLSQR solves, per side",
       "type": "float",
@@ -4766,8 +4766,8 @@
     },
     {
       "path": "inversion.qsmart.sdf_sigma1_stage1",
-      "label": "SDF Sigma1 (s1)",
-      "full_label": "SDF Sigma 1, Stage 1",
+      "label": "SDF sigma1 (s1)",
+      "full_label": "SDF sigma 1, stage 1",
       "context": "QSMART",
       "help": "Stage 1 SDF kernel sigma 1",
       "type": "float",
@@ -4785,8 +4785,8 @@
     },
     {
       "path": "inversion.qsmart.sdf_sigma2_stage1",
-      "label": "SDF Sigma2 (s1)",
-      "full_label": "SDF Sigma 2, Stage 1",
+      "label": "SDF sigma2 (s1)",
+      "full_label": "SDF sigma 2, stage 1",
       "context": "QSMART",
       "help": "Stage 1 SDF kernel sigma 2",
       "type": "float",
@@ -4804,8 +4804,8 @@
     },
     {
       "path": "inversion.qsmart.sdf_sigma1_stage2",
-      "label": "SDF Sigma1 (s2)",
-      "full_label": "SDF Sigma 1, Stage 2",
+      "label": "SDF sigma1 (s2)",
+      "full_label": "SDF sigma 1, stage 2",
       "context": "QSMART",
       "help": "Stage 2 SDF kernel sigma 1",
       "type": "float",
@@ -4823,8 +4823,8 @@
     },
     {
       "path": "inversion.qsmart.sdf_sigma2_stage2",
-      "label": "SDF Sigma2 (s2)",
-      "full_label": "SDF Sigma 2, Stage 2",
+      "label": "SDF sigma2 (s2)",
+      "full_label": "SDF sigma 2, stage 2",
       "context": "QSMART",
       "help": "Stage 2 SDF kernel sigma 2",
       "type": "float",
@@ -4842,8 +4842,8 @@
     },
     {
       "path": "inversion.qsmart.sdf_lower_lim",
-      "label": "SDF Lower Lim",
-      "full_label": "SDF Lower Limit",
+      "label": "SDF lower lim",
+      "full_label": "SDF lower limit",
       "context": "QSMART",
       "help": "SDF proximity lower limit",
       "type": "float",
@@ -4860,8 +4860,8 @@
     },
     {
       "path": "inversion.qsmart.sdf_curv_constant",
-      "label": "SDF Curv Const",
-      "full_label": "SDF Curvature Constant",
+      "label": "SDF curv const",
+      "full_label": "SDF curvature constant",
       "context": "QSMART",
       "help": "SDF curvature constant",
       "type": "float",
@@ -4878,8 +4878,8 @@
     },
     {
       "path": "inversion.qsmart.vessel_magnitude",
-      "label": "Vessel Magnitude",
-      "full_label": "Vessel Detection Magnitude",
+      "label": "Vessel magnitude",
+      "full_label": "Vessel detection magnitude",
       "context": "QSMART",
       "help": "The magnitude vessels are detected on",
       "type": "enum",
@@ -4910,8 +4910,8 @@
     },
     {
       "path": "inversion.qsmart.vessel_size_units",
-      "label": "Vessel Size Units",
-      "full_label": "Vessel Size Units",
+      "label": "Vessel size units",
+      "full_label": "Vessel size units",
       "context": "QSMART",
       "help": "The units of the vasculature sphere radius and the Frangi scales",
       "type": "enum",
@@ -4942,8 +4942,8 @@
     },
     {
       "path": "inversion.qsmart.vasc_sphere_radius",
-      "label": "Vasc Radius",
-      "full_label": "Vasculature Sphere Radius",
+      "label": "Vasc radius",
+      "full_label": "Vasculature sphere radius",
       "context": "QSMART",
       "help": "Bottom-hat sphere radius for vasculature detection, in the vessel size units",
       "type": "int",
@@ -4961,8 +4961,8 @@
     },
     {
       "path": "inversion.qsmart.frangi_scale_min",
-      "label": "Frangi Min",
-      "full_label": "Frangi Minimum Scale",
+      "label": "Frangi min",
+      "full_label": "Frangi minimum scale",
       "context": "QSMART",
       "help": "Frangi minimum vessel radius, in the vessel size units",
       "type": "float",
@@ -4979,8 +4979,8 @@
     },
     {
       "path": "inversion.qsmart.frangi_scale_max",
-      "label": "Frangi Max",
-      "full_label": "Frangi Maximum Scale",
+      "label": "Frangi max",
+      "full_label": "Frangi maximum scale",
       "context": "QSMART",
       "help": "Frangi maximum vessel radius, in the vessel size units",
       "type": "float",
@@ -4997,8 +4997,8 @@
     },
     {
       "path": "inversion.qsmart.frangi_scale_ratio",
-      "label": "Frangi Step",
-      "full_label": "Frangi Scale Step",
+      "label": "Frangi step",
+      "full_label": "Frangi scale step",
       "context": "QSMART",
       "help": "Frangi scale step, in the vessel size units",
       "type": "float",
@@ -5071,7 +5071,7 @@
     },
     {
       "path": "inversion.ndi.max_iter",
-      "label": "Max Iter",
+      "label": "Max iter",
       "full_label": "Iterations",
       "context": "NDI",
       "help": "Number of iterations",
@@ -5091,8 +5091,8 @@
     },
     {
       "path": "inversion.ndi.auto_stop",
-      "label": "Auto Stop",
-      "full_label": "Auto Stop",
+      "label": "Auto stop",
+      "full_label": "Auto stop",
       "context": "NDI",
       "help": "Stop automatically once noise starts to build up along the dipole cone (FANSI ndi_auto)",
       "type": "bool",
@@ -5109,11 +5109,11 @@
     },
     {
       "path": "inversion.ndi.te",
-      "label": "Echo Time",
-      "full_label": "Echo Time",
+      "label": "Echo time",
+      "full_label": "Echo time",
       "context": "NDI",
       "help": "The echo time the field is converted to phase at",
-      "value_label": "Echo Time",
+      "value_label": "Echo time",
       "value_help": "The echo time the field is converted to phase at, in ms",
       "type": "echo-time",
       "options": [
@@ -5151,7 +5151,7 @@
           },
           "label": "ms",
           "name": "Echo time",
-          "help": "A given echo time (Echo Time)",
+          "help": "A given echo time (Echo time)",
           "kind": "time"
         }
       ],
@@ -5263,7 +5263,7 @@
     },
     {
       "path": "inversion.fansi.max_iter",
-      "label": "Max Iter",
+      "label": "Max iter",
       "full_label": "Iterations",
       "context": "FANSI",
       "help": "Number of outer ADMM iterations",
@@ -5283,8 +5283,8 @@
     },
     {
       "path": "inversion.fansi.tol_update",
-      "label": "Tol Update",
-      "full_label": "Update Tolerance",
+      "label": "Tol update",
+      "full_label": "Update tolerance",
       "context": "FANSI",
       "help": "Percent-update stopping tolerance",
       "type": "float",
@@ -5301,8 +5301,8 @@
     },
     {
       "path": "inversion.fansi.tol_delta",
-      "label": "Tol Delta",
-      "full_label": "Newton Tolerance",
+      "label": "Tol delta",
+      "full_label": "Newton tolerance",
       "context": "FANSI",
       "help": "Inner Newton convergence tolerance",
       "type": "float",
@@ -5319,11 +5319,11 @@
     },
     {
       "path": "inversion.fansi.te",
-      "label": "Echo Time",
-      "full_label": "Echo Time",
+      "label": "Echo time",
+      "full_label": "Echo time",
       "context": "FANSI",
       "help": "The echo time the field is converted to phase at",
-      "value_label": "Echo Time",
+      "value_label": "Echo time",
       "value_help": "The echo time the field is converted to phase at, in ms",
       "type": "echo-time",
       "options": [
@@ -5361,7 +5361,7 @@
           },
           "label": "ms",
           "name": "Echo time",
-          "help": "A given echo time (Echo Time)",
+          "help": "A given echo time (Echo time)",
           "kind": "time"
         }
       ],
@@ -5470,7 +5470,7 @@
     },
     {
       "path": "inversion.l1qsm.max_iter",
-      "label": "Max Iter",
+      "label": "Max iter",
       "full_label": "Iterations",
       "context": "L1-QSM",
       "help": "Number of outer ADMM iterations",
@@ -5490,8 +5490,8 @@
     },
     {
       "path": "inversion.l1qsm.tol_update",
-      "label": "Tol Update",
-      "full_label": "Update Tolerance",
+      "label": "Tol update",
+      "full_label": "Update tolerance",
       "context": "L1-QSM",
       "help": "Percent-update stopping tolerance",
       "type": "float",
@@ -5508,8 +5508,8 @@
     },
     {
       "path": "inversion.l1qsm.tol_delta",
-      "label": "Tol Delta",
-      "full_label": "Newton Tolerance",
+      "label": "Tol delta",
+      "full_label": "Newton tolerance",
       "context": "L1-QSM",
       "help": "Inner Newton convergence tolerance",
       "type": "float",
@@ -5526,11 +5526,11 @@
     },
     {
       "path": "inversion.l1qsm.te",
-      "label": "Echo Time",
-      "full_label": "Echo Time",
+      "label": "Echo time",
+      "full_label": "Echo time",
       "context": "L1-QSM",
       "help": "The echo time the field is converted to phase at",
-      "value_label": "Echo Time",
+      "value_label": "Echo time",
       "value_help": "The echo time the field is converted to phase at, in ms",
       "type": "echo-time",
       "options": [
@@ -5568,7 +5568,7 @@
           },
           "label": "ms",
           "name": "Echo time",
-          "help": "A given echo time (Echo Time)",
+          "help": "A given echo time (Echo time)",
           "kind": "time"
         }
       ],
@@ -5675,8 +5675,8 @@
     },
     {
       "path": "inversion.whqsm.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "WH-QSM",
       "help": "Maximum outer iterations",
       "type": "int",
@@ -5694,8 +5694,8 @@
     },
     {
       "path": "inversion.whqsm.tol_update",
-      "label": "Tol Update",
-      "full_label": "Update Tolerance",
+      "label": "Tol update",
+      "full_label": "Update tolerance",
       "context": "WH-QSM",
       "help": "Percent-update stopping tolerance",
       "type": "float",
@@ -5712,8 +5712,8 @@
     },
     {
       "path": "inversion.whqsm.tol_delta",
-      "label": "Tol Delta",
-      "full_label": "Newton Tolerance",
+      "label": "Tol delta",
+      "full_label": "Newton tolerance",
       "context": "WH-QSM",
       "help": "Inner Newton stopping tolerance",
       "type": "float",
@@ -5730,8 +5730,8 @@
     },
     {
       "path": "inversion.whqsm.weight",
-      "label": "Data Weight",
-      "full_label": "Data Weight",
+      "label": "Data weight",
+      "full_label": "Data weight",
       "context": "WH-QSM",
       "help": "How the voxels of the field are weighted in the data term",
       "type": "enum",
@@ -5768,11 +5768,11 @@
     },
     {
       "path": "inversion.whqsm.te",
-      "label": "Echo Time",
-      "full_label": "Echo Time",
+      "label": "Echo time",
+      "full_label": "Echo time",
       "context": "WH-QSM",
       "help": "The echo time the field is converted to phase at",
-      "value_label": "Echo Time",
+      "value_label": "Echo time",
       "value_help": "The echo time the field is converted to phase at, in ms",
       "type": "echo-time",
       "options": [
@@ -5810,7 +5810,7 @@
           },
           "label": "ms",
           "name": "Echo time",
-          "help": "A given echo time (Echo Time)",
+          "help": "A given echo time (Echo time)",
           "kind": "time"
         }
       ],
@@ -5884,8 +5884,8 @@
     },
     {
       "path": "inversion.hdqsm.max_iter_l1",
-      "label": "Max Iter L1",
-      "full_label": "L1 Iterations",
+      "label": "Max iter L1",
+      "full_label": "L1 iterations",
       "context": "HD-QSM",
       "help": "Stage-1 (L1) iterations",
       "type": "int",
@@ -5903,8 +5903,8 @@
     },
     {
       "path": "inversion.hdqsm.max_iter_l2",
-      "label": "Max Iter L2",
-      "full_label": "L2 Iterations",
+      "label": "Max iter L2",
+      "full_label": "L2 iterations",
       "context": "HD-QSM",
       "help": "Stage-2 (L2) iterations",
       "type": "int",
@@ -5922,8 +5922,8 @@
     },
     {
       "path": "inversion.hdqsm.tol_update",
-      "label": "Tol Update",
-      "full_label": "Update Tolerance",
+      "label": "Tol update",
+      "full_label": "Update tolerance",
       "context": "HD-QSM",
       "help": "Stage-2 percent-update stopping tolerance",
       "type": "float",
@@ -5940,8 +5940,8 @@
     },
     {
       "path": "inversion.amp_pe.wave_order",
-      "label": "Wave Order",
-      "full_label": "Wavelet Order",
+      "label": "Wave order",
+      "full_label": "Wavelet order",
       "context": "AMP-PE",
       "help": "Daubechies wavelet order (1=db1, 2=db2)",
       "type": "int",
@@ -5961,8 +5961,8 @@
     },
     {
       "path": "inversion.amp_pe.nlevel",
-      "label": "N Level",
-      "full_label": "Wavelet Levels",
+      "label": "N level",
+      "full_label": "Wavelet levels",
       "context": "AMP-PE",
       "help": "Wavelet decomposition levels",
       "type": "int",
@@ -5981,8 +5981,8 @@
     },
     {
       "path": "inversion.amp_pe.wave_pec",
-      "label": "Wave Pec",
-      "full_label": "Energy Retention",
+      "label": "Wave pec",
+      "full_label": "Energy retention",
       "context": "AMP-PE",
       "help": "Morphology-mask energy retention fraction (0.0-1.0)",
       "type": "float",
@@ -6018,8 +6018,8 @@
     },
     {
       "path": "inversion.amp_pe.max_linearization_ite",
-      "label": "Max Linearization Ite",
-      "full_label": "Linearisation Iterations",
+      "label": "Max linearization ite",
+      "full_label": "Linearisation iterations",
       "context": "AMP-PE",
       "help": "Linearisation iterations per stage",
       "type": "int",
@@ -6038,8 +6038,8 @@
     },
     {
       "path": "inversion.amp_pe.tikhonov_beta",
-      "label": "Tikhonov Beta",
-      "full_label": "Tikhonov Beta",
+      "label": "Tikhonov beta",
+      "full_label": "Tikhonov beta",
       "context": "AMP-PE",
       "help": "L2-seed Tikhonov weight",
       "type": "float",
@@ -6056,8 +6056,8 @@
     },
     {
       "path": "inversion.amp_pe.damp_rate_sig",
-      "label": "Damp Rate (signal)",
-      "full_label": "Signal Damping Rate",
+      "label": "Damp rate (signal)",
+      "full_label": "Signal damping rate",
       "context": "AMP-PE",
       "help": "GAMP signal-update damping rate",
       "type": "float",
@@ -6074,8 +6074,8 @@
     },
     {
       "path": "inversion.amp_pe.damp_rate_par",
-      "label": "Damp Rate (params)",
-      "full_label": "Parameter Damping Rate",
+      "label": "Damp rate (params)",
+      "full_label": "Parameter damping rate",
       "context": "AMP-PE",
       "help": "Parameter-estimation learning rate (kappa)",
       "type": "float",
@@ -6092,8 +6092,8 @@
     },
     {
       "path": "inversion.amp_pe.max_pe_spar_ite",
-      "label": "Sparse Recon Ite",
-      "full_label": "Sparse Reconstruction Iterations",
+      "label": "Sparse recon ite",
+      "full_label": "Sparse reconstruction iterations",
       "context": "AMP-PE",
       "help": "Inner sparse-reconstruction iterations",
       "type": "int",
@@ -6111,8 +6111,8 @@
     },
     {
       "path": "inversion.amp_pe.max_pe_est_ite",
-      "label": "Param Est Ite",
-      "full_label": "Parameter Estimation Iterations",
+      "label": "Param est ite",
+      "full_label": "Parameter estimation iterations",
       "context": "AMP-PE",
       "help": "Inner parameter-estimation iterations",
       "type": "int",
@@ -6131,7 +6131,7 @@
     {
       "path": "inversion.amp_pe.cvg_thd",
       "label": "Convergence",
-      "full_label": "Convergence Threshold",
+      "full_label": "Convergence threshold",
       "context": "AMP-PE",
       "help": "GAMP inner convergence threshold",
       "type": "float",
@@ -6148,10 +6148,10 @@
     },
     {
       "path": "inversion.tile_size",
-      "label": "Tiled Inference",
-      "full_label": "Tiled Inference",
+      "label": "Tiled inference",
+      "full_label": "Tiled inference",
       "help": "Run the network on overlapping tiles: bounded memory, approximate. Off = whole volume",
-      "value_label": "Tile Size",
+      "value_label": "Tile size",
       "value_help": "Core size of each overlapping tile",
       "type": "int",
       "optional": true,
@@ -6170,8 +6170,8 @@
     },
     {
       "path": "inversion.tile_halo",
-      "label": "Tile Halo",
-      "full_label": "Tile Halo",
+      "label": "Tile halo",
+      "full_label": "Tile halo",
       "help": "Context margin around each tile (empty = 8)",
       "type": "int",
       "optional": true,
@@ -6190,7 +6190,7 @@
     {
       "path": "multi_orientation.algorithm",
       "label": "Combine as",
-      "full_label": "Combine As",
+      "full_label": "Combine as",
       "help": "How the orientations of a group are combined into one map",
       "type": "enum",
       "options": [
@@ -6237,8 +6237,8 @@
     },
     {
       "path": "multi_orientation.magnitude_weighting",
-      "label": "COSMOS Magnitude Weighting",
-      "full_label": "COSMOS Magnitude Weighting",
+      "label": "COSMOS magnitude weighting",
+      "full_label": "COSMOS magnitude weighting",
       "help": "COSMOS groups: weight each orientation by its combined magnitude (conjugate-gradient solve). Off = closed-form least squares",
       "type": "bool",
       "optional": false,
@@ -6254,8 +6254,8 @@
     },
     {
       "path": "multi_orientation.cosmos_tol",
-      "label": "CG Tolerance",
-      "full_label": "CG Tolerance",
+      "label": "CG tolerance",
+      "full_label": "CG tolerance",
       "help": "Conjugate-gradient tolerance of weighted COSMOS",
       "type": "float",
       "optional": false,
@@ -6273,8 +6273,8 @@
     },
     {
       "path": "multi_orientation.cosmos_max_iter",
-      "label": "CG Max Iterations",
-      "full_label": "CG Maximum Iterations",
+      "label": "CG max iterations",
+      "full_label": "CG maximum iterations",
       "help": "Conjugate-gradient iteration cap of weighted COSMOS",
       "type": "int",
       "optional": false,
@@ -6310,7 +6310,7 @@
     {
       "path": "multi_orientation.force",
       "label": "Force",
-      "full_label": "Force Reconstruction",
+      "full_label": "Force reconstruction",
       "help": "Reconstruct even when the B0 directions look degenerate (wrong metadata gives a plausible wrong map)",
       "type": "bool",
       "optional": false,
@@ -6326,8 +6326,8 @@
     },
     {
       "path": "qsm.reference",
-      "label": "QSM Reference",
-      "full_label": "QSM Reference",
+      "label": "QSM reference",
+      "full_label": "QSM reference",
       "help": "What the susceptibility map is referenced to: the value that reads as zero",
       "type": "enum",
       "options": [
@@ -6347,7 +6347,7 @@
           "value": "region",
           "label": "region",
           "name": "Region",
-          "help": "Reference χ to the mean of a SynthSeg region (Reference Region). Enables SynthSeg"
+          "help": "Reference χ to the mean of a SynthSeg region (Reference region). Enables SynthSeg"
         }
       ],
       "optional": false,
@@ -6362,8 +6362,8 @@
     },
     {
       "path": "qsm.reference_region",
-      "label": "Reference Region",
-      "full_label": "Reference Region",
+      "label": "Reference region",
+      "full_label": "Reference region",
       "help": "The SynthSeg region whose mean susceptibility is zero. Enables SynthSeg",
       "type": "enum",
       "options": [
@@ -6680,7 +6680,7 @@
     {
       "path": "separation.algorithm",
       "label": "Method",
-      "full_label": "χ-separation Method",
+      "full_label": "χ-separation method",
       "help": "The χ-separation method, and the maps it reads",
       "type": "enum",
       "options": [
@@ -6747,7 +6747,7 @@
     {
       "path": "separation.r2star_qsm.r_const_3t",
       "label": "Relaxometric const @3T",
-      "full_label": "Relaxometric Constant at 3 T",
+      "full_label": "Relaxometric constant at 3 T",
       "context": "R2*-QSM",
       "help": "Relaxometric constant at 3 T (scales with B0)",
       "type": "float",
@@ -6766,7 +6766,7 @@
     {
       "path": "separation.decompose.n_inner",
       "label": "Inner passes",
-      "full_label": "Inner Passes",
+      "full_label": "Inner passes",
       "context": "DECOMPOSE-QSM",
       "help": "Alternating 3-stage fit passes per voxel",
       "type": "int",
@@ -6785,7 +6785,7 @@
     {
       "path": "separation.decompose.chi_bound",
       "label": "Chi bound (ppm)",
-      "full_label": "χ Bound",
+      "full_label": "χ bound",
       "context": "DECOMPOSE-QSM",
       "help": "Upper bound on |χ| in the fit",
       "type": "float",
@@ -6805,7 +6805,7 @@
     {
       "path": "separation.decompose.max_lm_iter",
       "label": "Max LM iter",
-      "full_label": "Maximum LM Iterations",
+      "full_label": "Maximum LM iterations",
       "context": "DECOMPOSE-QSM",
       "help": "Maximum Levenberg–Marquardt iterations",
       "type": "int",
@@ -6824,7 +6824,7 @@
     {
       "path": "separation.chi_sep_ilsqr.dr_pos",
       "label": "Dr+ (Hz/ppm)",
-      "full_label": "Paramagnetic Constant (Dr+)",
+      "full_label": "Paramagnetic constant (Dr+)",
       "context": "χ-separation (iLSQR)",
       "help": "Paramagnetic relaxometric constant",
       "type": "float",
@@ -6843,7 +6843,7 @@
     {
       "path": "separation.chi_sep_ilsqr.dr_neg",
       "label": "Dr- (Hz/ppm)",
-      "full_label": "Diamagnetic Constant (Dr−)",
+      "full_label": "Diamagnetic constant (Dr−)",
       "context": "χ-separation (iLSQR)",
       "help": "Diamagnetic relaxometric constant",
       "type": "float",
@@ -6898,7 +6898,7 @@
     {
       "path": "separation.chi_sep_ilsqr.r2p_min",
       "label": "R2' min (Hz)",
-      "full_label": "R2' Minimum",
+      "full_label": "R2' minimum",
       "context": "χ-separation (iLSQR)",
       "help": "Lower end of the R2' reliability window",
       "type": "float",
@@ -6917,7 +6917,7 @@
     {
       "path": "separation.chi_sep_ilsqr.r2p_max",
       "label": "R2' max (Hz)",
-      "full_label": "R2' Maximum",
+      "full_label": "R2' maximum",
       "context": "χ-separation (iLSQR)",
       "help": "Upper end of the R2' reliability window",
       "type": "float",
@@ -6935,8 +6935,8 @@
     },
     {
       "path": "separation.chi_sep_ilsqr.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "χ-separation (iLSQR)",
       "help": "Outer Gauss-Newton iterations",
       "type": "int",
@@ -6972,8 +6972,8 @@
     },
     {
       "path": "separation.chi_sep_ilsqr.cg_max_iter",
-      "label": "CG Max Iter",
-      "full_label": "CG Maximum Iterations",
+      "label": "CG max iter",
+      "full_label": "CG maximum iterations",
       "context": "χ-separation (iLSQR)",
       "help": "Inner CG max iterations",
       "type": "int",
@@ -6991,8 +6991,8 @@
     },
     {
       "path": "separation.chi_sep_ilsqr.cg_tol",
-      "label": "CG Tolerance",
-      "full_label": "CG Tolerance",
+      "label": "CG tolerance",
+      "full_label": "CG tolerance",
       "context": "χ-separation (iLSQR)",
       "help": "Inner CG relative tolerance",
       "type": "float",
@@ -7009,8 +7009,8 @@
     },
     {
       "path": "separation.chi_sep_ilsqr.qsm_ilsqr.max_iter",
-      "label": "QSM Max Iter",
-      "full_label": "QSM Maximum Iterations",
+      "label": "QSM max iter",
+      "full_label": "QSM maximum iterations",
       "help": "Maximum iterations of the iLSQR that reconstructs the QSM separated",
       "type": "int",
       "optional": false,
@@ -7028,8 +7028,8 @@
     },
     {
       "path": "separation.chi_sep_ilsqr.qsm_ilsqr.tol",
-      "label": "QSM Tolerance",
-      "full_label": "QSM Tolerance",
+      "label": "QSM tolerance",
+      "full_label": "QSM tolerance",
       "help": "Tolerance of the iLSQR that reconstructs the QSM separated",
       "type": "float",
       "optional": false,
@@ -7045,8 +7045,8 @@
     },
     {
       "path": "separation.chi_sep_ilsqr.qsm_ilsqr.pad_mm",
-      "label": "QSM Pad (mm)",
-      "full_label": "QSM Padding",
+      "label": "QSM pad (mm)",
+      "full_label": "QSM padding",
       "help": "Zero-padding per side of the iLSQR that reconstructs the QSM separated",
       "type": "float",
       "optional": false,
@@ -7065,7 +7065,7 @@
     {
       "path": "separation.chi_sep_medi.lambda_para",
       "label": "Lambda para",
-      "full_label": "Paramagnetic Lambda",
+      "full_label": "Paramagnetic lambda",
       "context": "χ-separation (MEDI)",
       "help": "Paramagnetic L1 weight",
       "type": "float",
@@ -7083,7 +7083,7 @@
     {
       "path": "separation.chi_sep_medi.lambda_dia",
       "label": "Lambda dia",
-      "full_label": "Diamagnetic Lambda",
+      "full_label": "Diamagnetic lambda",
       "context": "χ-separation (MEDI)",
       "help": "Diamagnetic L1 weight",
       "type": "float",
@@ -7101,7 +7101,7 @@
     {
       "path": "separation.chi_sep_medi.lambda_cpl",
       "label": "Lambda cpl",
-      "full_label": "Coupling Lambda",
+      "full_label": "Coupling lambda",
       "context": "χ-separation (MEDI)",
       "help": "Field/R2' coupling weight",
       "type": "float",
@@ -7121,7 +7121,7 @@
     {
       "path": "separation.chi_sep_medi.dr_pos",
       "label": "Dr+ (Hz/ppm)",
-      "full_label": "Paramagnetic Constant (Dr+)",
+      "full_label": "Paramagnetic constant (Dr+)",
       "context": "χ-separation (MEDI)",
       "help": "Paramagnetic relaxivity",
       "type": "float",
@@ -7140,7 +7140,7 @@
     {
       "path": "separation.chi_sep_medi.dr_neg",
       "label": "Dr- (Hz/ppm)",
-      "full_label": "Diamagnetic Constant (Dr−)",
+      "full_label": "Diamagnetic constant (Dr−)",
       "context": "χ-separation (MEDI)",
       "help": "Diamagnetic relaxivity",
       "type": "float",
@@ -7176,8 +7176,8 @@
     },
     {
       "path": "separation.chi_sep_medi.cg_tol",
-      "label": "CG Tolerance",
-      "full_label": "CG Tolerance",
+      "label": "CG tolerance",
+      "full_label": "CG tolerance",
       "context": "χ-separation (MEDI)",
       "help": "Inner CG tolerance",
       "type": "float",
@@ -7194,8 +7194,8 @@
     },
     {
       "path": "separation.chi_sep_medi.cg_max_iter",
-      "label": "CG Max Iter",
-      "full_label": "CG Maximum Iterations",
+      "label": "CG max iter",
+      "full_label": "CG maximum iterations",
       "context": "χ-separation (MEDI)",
       "help": "Inner CG max iterations",
       "type": "int",
@@ -7213,8 +7213,8 @@
     },
     {
       "path": "separation.chi_sep_medi.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "χ-separation (MEDI)",
       "help": "Outer Gauss-Newton iterations",
       "type": "int",
@@ -7251,7 +7251,7 @@
     {
       "path": "separation.wavesep.dr_pos",
       "label": "Dr+ (Hz/ppm)",
-      "full_label": "Paramagnetic Constant (Dr+)",
+      "full_label": "Paramagnetic constant (Dr+)",
       "context": "WaveSep",
       "help": "Paramagnetic relaxivity",
       "type": "float",
@@ -7270,7 +7270,7 @@
     {
       "path": "separation.wavesep.dr_neg",
       "label": "Dr- (Hz/ppm)",
-      "full_label": "Diamagnetic Constant (Dr−)",
+      "full_label": "Diamagnetic constant (Dr−)",
       "context": "WaveSep",
       "help": "Diamagnetic relaxivity",
       "type": "float",
@@ -7325,7 +7325,7 @@
     {
       "path": "separation.wavesep.wavelet_order",
       "label": "Wavelet order",
-      "full_label": "Wavelet Order",
+      "full_label": "Wavelet order",
       "context": "WaveSep",
       "help": "Daubechies order",
       "type": "int",
@@ -7345,8 +7345,8 @@
     },
     {
       "path": "separation.wavesep.max_iter",
-      "label": "Max Iter",
-      "full_label": "Maximum Iterations",
+      "label": "Max iter",
+      "full_label": "Maximum iterations",
       "context": "WaveSep",
       "help": "ISTA max iterations",
       "type": "int",
@@ -7383,7 +7383,7 @@
     {
       "path": "separation.hc_chisep.dr_pos_3t",
       "label": "Dr+ @3T (Hz/ppm)",
-      "full_label": "Paramagnetic Constant at 3 T (Dr+)",
+      "full_label": "Paramagnetic constant at 3 T (Dr+)",
       "context": "Hollow-cylinder χ-separation",
       "help": "Paramagnetic relaxivity at 3T",
       "type": "float",
@@ -7404,7 +7404,7 @@
     {
       "path": "separation.hc_chisep.bin_hz",
       "label": "R2' bin (Hz)",
-      "full_label": "R2' Bin Width",
+      "full_label": "R2' bin width",
       "context": "Hollow-cylinder χ-separation",
       "help": "R2' bin width for the anchored grid search",
       "type": "float",
@@ -7423,7 +7423,7 @@
     {
       "path": "separation.chi_sepnet.patch",
       "label": "Patch",
-      "full_label": "χ-sepnet Patch",
+      "full_label": "χ-sepnet patch",
       "context": "χ-sepnet",
       "help": "Sliding-window patch D H W, each a multiple of 16",
       "type": "int-vec3",
@@ -7451,8 +7451,8 @@
     },
     {
       "path": "separation.susep_net.patch",
-      "label": "Sliding Window",
-      "full_label": "SUSEP-Net Sliding Window",
+      "label": "Sliding window",
+      "full_label": "SUSEP-Net sliding window",
       "context": "SUSEP-Net",
       "help": "Patch size for running SUSEP-Net piece by piece, which needs less memory; empty runs the whole volume at once",
       "type": "int-vec3",
@@ -7515,7 +7515,7 @@
     {
       "path": "swi.unwrap",
       "label": "Unwrapping",
-      "full_label": "SWI Unwrapping",
+      "full_label": "SWI unwrapping",
       "context": "SWI",
       "help": "How the phase is unwrapped and high-pass filtered for SWI",
       "type": "enum",
@@ -7553,7 +7553,7 @@
     {
       "path": "swi.scaling",
       "label": "Scaling",
-      "full_label": "Phase Scaling",
+      "full_label": "Phase scaling",
       "context": "SWI",
       "help": "How the filtered phase is turned into the mask the magnitude is multiplied by",
       "type": "enum",
@@ -7620,8 +7620,8 @@
     },
     {
       "path": "swi.hp_sigma",
-      "label": "HP Sigma (x y z)",
-      "full_label": "High-pass Sigma",
+      "label": "HP sigma (x y z)",
+      "full_label": "High-pass sigma",
       "context": "SWI",
       "help": "High-pass filter sigma per axis (x y z): background phase removal. Set z to 0 for thin axial slices",
       "type": "float-vec3",
@@ -7647,8 +7647,8 @@
     },
     {
       "path": "swi.mip_window",
-      "label": "mIP Window",
-      "full_label": "mIP Window",
+      "label": "mIP window",
+      "full_label": "mIP window",
       "context": "SWI",
       "help": "Minimum-intensity-projection window",
       "type": "int",
@@ -7722,8 +7722,8 @@
     },
     {
       "path": "smwi.mip_window",
-      "label": "mIP Window",
-      "full_label": "mIP Window",
+      "label": "mIP window",
+      "full_label": "mIP window",
       "context": "SMWI",
       "help": "Minimum-intensity-projection window",
       "type": "int",
@@ -7743,8 +7743,8 @@
     },
     {
       "path": "pipeline.do_t2starmap",
-      "label": "Compute T2* Map",
-      "full_label": "Compute T2* Map",
+      "label": "Compute T2* map",
+      "full_label": "Compute T2* map",
       "help": "Compute T2* relaxation map (requires 3+ echoes with magnitude)",
       "type": "bool",
       "optional": false,
@@ -7759,8 +7759,8 @@
     },
     {
       "path": "pipeline.do_r2starmap",
-      "label": "Compute R2* Map",
-      "full_label": "Compute R2* Map",
+      "label": "Compute R2* map",
+      "full_label": "Compute R2* map",
       "help": "Compute R2* decay rate map (requires 3+ echoes with magnitude)",
       "type": "bool",
       "optional": false,
@@ -7775,8 +7775,8 @@
     },
     {
       "path": "pipeline.do_r2map",
-      "label": "Compute R2 Map",
-      "full_label": "Compute R2 Map",
+      "label": "Compute R2 map",
+      "full_label": "Compute R2 map",
       "help": "R2 map from a multi-echo spin-echo (MESE) acquisition via EPG. Forced on when χ-separation needs it",
       "type": "bool",
       "optional": false,
@@ -7810,8 +7810,8 @@
     },
     {
       "path": "pipeline.do_r2primemap",
-      "label": "Compute R2' Map",
-      "full_label": "Compute R2' Map",
+      "label": "Compute R2' map",
+      "full_label": "Compute R2' map",
       "help": "R2' = R2* − R2; needs GRE magnitude and a MESE acquisition, or R2PRIMEnet. Forced on when χ-separation needs it",
       "type": "bool",
       "optional": false,
@@ -7845,8 +7845,8 @@
     },
     {
       "path": "separation.r2prime_strategy",
-      "label": "R2' Source",
-      "full_label": "R2' Source",
+      "label": "R2' source",
+      "full_label": "R2' source",
       "help": "How R2' is obtained when no R2' map is supplied",
       "type": "enum",
       "options": [
@@ -7883,7 +7883,7 @@
     {
       "path": "separation.r2primenet.ignore_field_mismatch",
       "label": "R2PRIMEnet off 3 T",
-      "full_label": "R2PRIMEnet Away From 3 T",
+      "full_label": "R2PRIMEnet away from 3 T",
       "context": "R2PRIMEnet",
       "help": "Run R2PRIMEnet on non-3 T data (trained at 3 T only; the R2' is uncalibrated). Off: auto skips R2', r2primenet errors",
       "type": "bool",
@@ -7900,8 +7900,8 @@
     },
     {
       "path": "separation.r2primenet.patch",
-      "label": "R2PRIMEnet Patch",
-      "full_label": "R2PRIMEnet Patch",
+      "label": "R2PRIMEnet patch",
+      "full_label": "R2PRIMEnet patch",
       "context": "R2PRIMEnet",
       "help": "Sliding-window patch D H W, each a multiple of 16",
       "type": "int-vec3",
@@ -7946,7 +7946,7 @@
     {
       "path": "segmentation.custom_dseg_tool",
       "label": "Derivatives tool",
-      "full_label": "Custom Segmentation",
+      "full_label": "Custom segmentation",
       "help": "Use a segmentation (dseg) from <bids>/derivatives/<tool>/ instead of running SynthSeg: * for any tool, or a tool name. SynthSeg runs where none is found",
       "type": "text",
       "optional": true,
@@ -7964,8 +7964,8 @@
     },
     {
       "path": "segmentation.version",
-      "label": "SynthSeg Version",
-      "full_label": "SynthSeg Version",
+      "label": "SynthSeg version",
+      "full_label": "SynthSeg version",
       "help": "Which SynthSeg model segments the brain",
       "type": "enum",
       "options": [
@@ -8015,8 +8015,8 @@
     },
     {
       "path": "segmentation.patch",
-      "label": "Sliding Window",
-      "full_label": "Sliding Window",
+      "label": "Sliding window",
+      "full_label": "Sliding window",
       "help": "Patch size for running SynthSeg piece by piece, which needs less memory; empty runs the whole volume at once",
       "type": "int",
       "optional": true,
@@ -8035,8 +8035,8 @@
     },
     {
       "path": "segmentation.flip_averaging",
-      "label": "Flip Averaging",
-      "full_label": "Flip Averaging",
+      "label": "Flip averaging",
+      "full_label": "Flip averaging",
       "help": "Average with a left-right flipped second pass (SynthSeg's default). Doubles inference time",
       "type": "bool",
       "optional": false,
@@ -8052,8 +8052,8 @@
     },
     {
       "path": "segmentation.topology_cleanup",
-      "label": "Topology Cleanup",
-      "full_label": "Topology Cleanup",
+      "label": "Topology cleanup",
+      "full_label": "Topology cleanup",
       "help": "Reset each topological class to its largest connected component",
       "type": "bool",
       "optional": false,
@@ -8069,8 +8069,8 @@
     },
     {
       "path": "segmentation.sigma_smoothing",
-      "label": "Posterior Smoothing",
-      "full_label": "Posterior Smoothing",
+      "label": "Posterior smoothing",
+      "full_label": "Posterior smoothing",
       "help": "Gaussian blur on the posteriors before the labels are taken",
       "value_label": "Sigma",
       "value_help": "Gaussian sigma of the posterior blur",
@@ -8092,7 +8092,7 @@
     {
       "path": "pipeline.do_analysis",
       "label": "Per-structure statistics",
-      "full_label": "Per-structure Statistics",
+      "full_label": "Per-structure statistics",
       "help": "Summarise every map the run makes (χ, χ+/χ−, T2*, R2*, R2, R2') per structure into a TSV: mean, SD, median, min, max, 5th/95th percentiles. Implies segmentation; implies QSM only if no other map is enabled",
       "type": "bool",
       "optional": false,
@@ -8231,7 +8231,7 @@
         "params": [
           {
             "key": "fractional_intensity",
-            "label": "Fractional Intensity",
+            "label": "Fractional intensity",
             "help": "Smaller values give a larger brain",
             "type": "float",
             "optional": false,
@@ -8241,7 +8241,7 @@
           },
           {
             "key": "voxel_scale",
-            "label": "Voxel Scale",
+            "label": "Voxel scale",
             "help": "Voxel sizes are multiplied by this before BET runs: its surface model is tuned to a human brain in mm, so preclinical data needs presenting at human scale (10 for mouse); 1 keeps the acquired geometry",
             "type": "float",
             "optional": false,
@@ -8319,7 +8319,7 @@
           },
           {
             "key": "tile_step",
-            "label": "Patch Step",
+            "label": "Patch step",
             "help": "Sliding-window step, as a fraction of the patch: larger steps mean fewer patches and a shorter run, at softer patch seams",
             "type": "float",
             "optional": false,
@@ -8380,7 +8380,7 @@
           },
           {
             "key": "tile_step",
-            "label": "Patch Step",
+            "label": "Patch step",
             "help": "Sliding-window step, as a fraction of the patch: larger steps mean fewer patches and a shorter run, at softer patch seams",
             "type": "float",
             "optional": false,
@@ -8483,7 +8483,7 @@
         "params": [
           {
             "key": "max_size",
-            "label": "Largest Hole",
+            "label": "Largest hole",
             "help": "The largest hole filled; 0 fills holes up to 5% of the volume",
             "type": "int",
             "optional": false,
@@ -8551,7 +8551,7 @@
           },
           {
             "key": "depth_cap",
-            "label": "Depth Cap",
+            "label": "Depth cap",
             "help": "How far below the original surface removal may reach; 0 for no cap",
             "type": "int",
             "optional": false,
@@ -8561,7 +8561,7 @@
           },
           {
             "key": "global_erosions",
-            "label": "Plain Erosions",
+            "label": "Plain erosions",
             "help": "Plain erosions before the gate: unlike a separate erode step they spend the depth budget and leave the gate unchanged",
             "type": "int",
             "optional": false,
@@ -8570,7 +8570,7 @@
           },
           {
             "key": "bias_sigma",
-            "label": "Bias Sigma",
+            "label": "Bias sigma",
             "help": "Gaussian scale of the receive-coil bias estimate divided out of the magnitude",
             "type": "float",
             "optional": false,
@@ -8581,7 +8581,7 @@
           },
           {
             "key": "min_component",
-            "label": "Minimum Component",
+            "label": "Minimum component",
             "help": "Keep every connected component at least this large, not just the largest",
             "type": "int",
             "optional": false,

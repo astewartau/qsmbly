@@ -38,6 +38,7 @@
  * @property {boolean} has_magnitude
  * @property {number} n_coils
  * @property {boolean} real_imaginary
+ * @property {[number, number, number]} [voxel_size] - mm, once a loaded scan's header gives it
  * @property {number} field_strength - tesla
  * @property {[number, number, number] | null} b0_dir - null until a loaded scan's affine gives it
  * @property {number[] | null} mese_echo_times
@@ -202,6 +203,49 @@
  * @property {string} [forced_by] - the setting that forces this one on
  * @property {string} [error] - what is wrong with its value: out of range, or refused by a rule
  * @property {string} [warning] - what may go wrong with its value (a mask QSMART may streak with)
+ * @property {Recommendation[]} [reference] - every pipeline rule of the chosen methods that covers
+ *   the setting, departed from or not: its reference value and source, shown always
+ * @property {Recommendation[]} [recommendations] - the rules of `reference` the setting departs
+ *   from, strongest first
+ * @property {Marker} [marker] - what to show next to it when it departs from a rule
+ */
+
+/**
+ * A setting's marker (qsmxt-engine `recommendations::Marker`): ⚑ when `actionable` (a finding
+ * offered as a change and not kept), else ⓘ; `text` names whose rule and what it uses
+ * ("MEDI: BET", "MEDI, PDF: BET").
+ * @typedef {{ actionable: boolean, text: string }} Marker
+ */
+
+/**
+ * The choice a rule is scoped to (qsmxt-engine `recommendations::Trigger`): "MEDI".
+ * @typedef {{ setting: string, value: unknown, name: string }} Trigger
+ */
+
+/**
+ * A value of a setting, with its display name (qsmxt-engine `recommendations::Named`).
+ * @typedef {{ value: unknown, name: string }} Named
+ */
+
+/**
+ * One pipeline rule that applies to a config, in QSMxT's settings (qsmxt-engine
+ * `recommendations::Recommendation`). With `departs`, a finding.
+ * @typedef {object} Recommendation
+ * @property {string} rule - QSM.rs's id (`medi.bg-pdf`)
+ * @property {'required' | 'recommended' | 'discouraged' | 'reference'} strength
+ * @property {'stated' | 'measured' | 'reference_choice' | 'implementation'} basis
+ * @property {string} setting - its config path
+ * @property {string} label - the setting's display name
+ * @property {Trigger} trigger - the choice it is scoped to ("MEDI")
+ * @property {Named[]} current - the setting's value now
+ * @property {Named} recommended - what Apply sets
+ * @property {{ test: 'one_of' | 'none_of', values: Named[] } | { test: 'range', min?: number, max?: number }} allowed
+ * @property {string} reason - why, in one line
+ * @property {string} source - the authors' code or paper, or the QSM.rs docs recording a measurement
+ * @property {boolean} [needs_scan]
+ * @property {boolean} departs - the setting departs from it
+ * @property {boolean} [dismissed] - dismissed for this value of the setting
+ * @property {boolean} [conflict] - another as strong on the setting recommends something else
  */
 
 /**

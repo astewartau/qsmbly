@@ -56,6 +56,8 @@ const step = (session, store, id) => {
     skip=${section.toggle ? [section.toggle] : []} />`);
 };
 const row = (root, path) => root.querySelector(`.row[data-path="${path}"]`);
+/** A setting's label as the schema gives it (the tests do not spell labels out). @param {string} path */
+const labelOf = (path) => { const s = schema.settings.find((x) => x.path === path); return s.full_label ?? s.label; };
 const optionIndex = (path, value) => String(schema.settings.find((s) => s.path === path).options.findIndex((o) => o.value === value));
 
 /** Fire a native change (what Preact's onChange listens to) on an input. */
@@ -314,16 +316,15 @@ describe('editing', () => {
     await flush();
   });
 
-  test('where the run takes a method\'s own value, the row says so', async () => {
+  test('choosing a method changes no other setting', async () => {
     const { session, store, flush } = setup();
     session.set('inversion.algorithm', 'medi');
     await flush();
     const root = await step(session, store, 'background');
-    // The setting keeps the user's value; the engine's adjustment is said under it.
+    // The background removal stays as it is; MEDI's reference (PDF) is offered, not taken.
     expect(row(root, 'bg_removal.algorithm').querySelector('select').value).toBe(optionIndex('bg_removal.algorithm', 'vsharp'));
-    const note = root.querySelector('[data-testid="adjustment"]').textContent;
-    const adjustment = session.plan.value.adjustments.find((x) => x.setting === 'bg_removal.algorithm');
-    expect(note).toBe(`${adjustment.message}.`);
+    expect(session.plan.value.config.bg_removal.algorithm).toBe('vsharp');
+    expect(root.querySelector('[data-testid="adjustment"]')).toBeNull();
     await flush();
   });
 });
@@ -369,7 +370,7 @@ describe('the pipeline column', () => {
     const root = await show(session, store);
     const box = row(root, 'pipeline.do_segmentation').querySelector('input');
     expect([box.checked, box.disabled]).toEqual([true, true]);
-    expect(root.querySelector('[data-testid="forced"]').textContent).toBe('On because Per-structure Statistics needs it.');
+    expect(root.querySelector('[data-testid="forced"]').textContent).toBe(`On because ${labelOf('pipeline.do_analysis')} needs it.`);
   });
 
   test('search opens the step of an advanced setting and shows it', async () => {
@@ -379,7 +380,7 @@ describe('the pipeline column', () => {
     const search = root.querySelector('input[type="search"]');
     await change(search, '--vsharp-min-radius');
     const hit = root.querySelector('.results button');
-    expect(hit.textContent).toContain('V-SHARP: Minimum Radius');
+    expect(hit.textContent).toContain(`V-SHARP: ${labelOf('bg_removal.vsharp.min_radius')}`);
     await act(() => hit.click());
     await flush();
     expect(session.ui.section.value).toBe('background');

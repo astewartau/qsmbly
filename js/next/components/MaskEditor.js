@@ -43,8 +43,6 @@ const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 /** The parts of the mask config that make up its recipe. */
 const RECIPE_KEYS = ['sections', 'combine', 'refinements'];
 
-/** @param {Record<string, any>} o @param {string[]} keys */
-const pick = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
 
 /**
  * @param {{ session: Session, store: VolumeStore, schema: Schema, kit: MaskKit, preview?: MaskPreview, engine?: any, busy?: boolean }} props
@@ -53,31 +51,21 @@ export function MaskEditor({ session, store, schema, kit, preview, engine, busy 
   const config = session.config.value;
   const view = session.view.value;
   const defaults = session.defaults.masking;
-  // The recipe a run takes: the config's, unless the engine replaces a recipe the user has not
-  // chosen (QSMART's BET in place of the default threshold, `PipelineConfig::normalised`). The
-  // editor shows that one, and an edit makes it the user's own.
-  const plan = session.plan.value;
-  const adjustment = !config.masking.recipe_chosen
-    ? (plan?.adjustments ?? []).find((a) => a.setting === 'masking.sections') ?? null : null;
-  const m = adjustment && plan?.config ? { ...config.masking, ...pick(plan.config.masking, RECIPE_KEYS) } : config.masking;
+  // The recipe a run takes is the config's: no method replaces it (a method's reference mask is
+  // offered in its reference pipeline pop-up, js/next/recommend.js).
+  const m = config.masking;
   const [wantFile, setWantFile] = useState(!!m.custom_mask_tool);
   const own = wantFile || !!m.custom_mask_tool;
   const preset = presetOf(kit, m);
   const recipeKeys = RECIPE_KEYS;
-  const recipeChanged = recipeKeys.some((k) => !same(config.masking[k], defaults[k])) || !!config.masking.recipe_chosen;
+  const recipeChanged = recipeKeys.some((k) => !same(config.masking[k], defaults[k]));
   /**
-   * Write the recipe, as the user's choice: what is shown, with `change` applied. A recipe that is
-   * the default one is marked chosen (`masking.recipe_chosen`), so the engine keeps it rather than
-   * replacing it with an inversion's own default (QSMART's BET); any other recipe says so itself.
+   * Write the recipe: what is shown, with `change` applied.
    * @param {Record<string, unknown>} change
    */
   const choose = (change) => {
     const recipe = Object.fromEntries(recipeKeys.map((k) => [k, k in change ? change[k] : m[k]]));
-    const isDefault = recipeKeys.every((k) => same(recipe[k], defaults[k]));
-    session.setAll([
-      ...recipeKeys.map((k) => /** @type {[string, unknown]} */ ([`masking.${k}`, recipe[k]])),
-      ['masking.recipe_chosen', isDefault ? true : undefined],
-    ]);
+    session.setAll(recipeKeys.map((k) => /** @type {[string, unknown]} */ ([`masking.${k}`, recipe[k]])));
   };
   /** The engine's warning about the recipe (a mask QSMART may streak with). */
   const warning = view?.get('masking.sections')?.warning;
@@ -137,12 +125,10 @@ export function MaskEditor({ session, store, schema, kit, preview, engine, busy 
               ${!preset && html`<option value="" selected>custom</option>`}
             </select>
             <button type="button" class="reset" aria-label="Reset the mask recipe" title="Reset the mask recipe" hidden=${!recipeChanged}
-              onClick=${() => session.setAll([...recipeKeys.map((k) => /** @type {[string, unknown]} */ ([`masking.${k}`, defaults[k]])),
-                ['masking.recipe_chosen', undefined]])}>${Icon.reset}</button>
+              onClick=${() => session.setAll(recipeKeys.map((k) => /** @type {[string, unknown]} */ ([`masking.${k}`, defaults[k]])))}>${Icon.reset}</button>
           </div>
         </div>
         ${preset && html`<p class="sub option-help">${preset.help}</p>`}
-        ${adjustment && html`<p class="sub note" data-testid="mask-adjustment">${adjustment.message}. Choose a preset or edit the recipe to use another.</p>`}
         <${Sections} kit=${kit} sections=${m.sections} combine=${m.combine} combineSetting=${combine} label="Mask"
           setSections=${(x) => choose({ sections: x })} setCombine=${(v) => choose({ combine: v })} />
         ${engineError('masking.sections')}

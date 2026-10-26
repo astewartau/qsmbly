@@ -10,6 +10,8 @@
  * @typedef {import('../protocol.js').ScanFacts} ScanFacts
  * @typedef {import('../protocol.js').Plan} Plan
  * @typedef {import('../protocol.js').SettingView} SettingView
+ * @typedef {import('../protocol.js').Recommendation} Recommendation
+ * @typedef {import('../protocol.js').Trigger} Trigger
  * @typedef {import('../protocol.js').PipelineGraph} PipelineGraph
  * @typedef {import('../protocol.js').Methods} Methods
  * @typedef {import('../protocol.js').ItemMeta} ItemMeta
@@ -42,8 +44,50 @@ export function engineOps(wasm) {
     browserConfig: () => JSON.parse(call(wasm.browser_config_wasm)),
     /** The mask recipe's presets, step defaults and reliable mask, as the browser runs them. @returns {MaskDefaults} */
     maskDefaults: () => JSON.parse(call(wasm.browser_mask_defaults_wasm)),
-    /** @param {PipelineConfig} config @param {ScanFacts | null} f @returns {SettingView[]} */
-    settingsView: (config, f) => JSON.parse(call(wasm.settings_view_wasm, json(config), facts(f))),
+    /**
+     * Which settings apply to `config`, what is wrong with them, and the pipeline rules' reference
+     * values and findings on each. `scan`: `f` is a loaded scan's (its field strength, matrix and
+     * voxel size then reach the rules), not the example's.
+     * @param {PipelineConfig} config @param {ScanFacts | null} f @param {boolean} [scan] @returns {SettingView[]}
+     */
+    settingsView: (config, f, scan = false) => JSON.parse(call(wasm.settings_view_wasm, json(config), facts(f), scan)),
+    /**
+     * `config` with the finding of `rule` resolved (`recommendations::apply`): to the rule's
+     * recommended value, or to `pick`, another value it allows.
+     * @param {PipelineConfig} config @param {string} rule @param {unknown} [pick] @returns {PipelineConfig}
+     */
+    applyRecommendation: (config, rule, pick) => JSON.parse(call(wasm.apply_recommendation_wasm, json(config), rule, pick === undefined ? undefined : json(pick))),
+    /**
+     * `config` with the finding of `rule` dismissed for its setting's current value.
+     * @param {PipelineConfig} config @param {string} rule @param {ScanFacts | null} f @param {boolean} [scan] @returns {PipelineConfig}
+     */
+    dismissRecommendation: (config, rule, f, scan = false) => JSON.parse(call(wasm.dismiss_recommendation_wasm, json(config), rule, facts(f), scan)),
+    /** `config` with its dismissal of `rule` taken back. @param {PipelineConfig} config @param {string} rule @returns {PipelineConfig} */
+    undismissRecommendation: (config, rule) => JSON.parse(call(wasm.undismiss_recommendation_wasm, json(config), rule)),
+    /**
+     * `config` less the dismissals that no longer match a finding (its setting changed).
+     * @param {PipelineConfig} config @param {ScanFacts | null} f @param {boolean} [scan] @returns {PipelineConfig}
+     */
+    pruneDismissals: (config, f, scan = false) => JSON.parse(call(wasm.prune_dismissals_wasm, json(config), facts(f), scan)),
+    /**
+     * The choices in `config` that have a reference pipeline (`chosen_methods`); one that appears
+     * after a change is a method just chosen.
+     * @param {PipelineConfig} config @param {ScanFacts | null} f @param {boolean} [scan] @returns {Trigger[]}
+     */
+    chosenMethods: (config, f, scan = false) => JSON.parse(call(wasm.chosen_methods_wasm, json(config), facts(f), scan)),
+    /**
+     * For each method of `methods`: its reference pipeline's title, and where `config` differs
+     * from it and has not kept its own value (`reference_title`, `reference_differences`).
+     * @param {PipelineConfig} config @param {ScanFacts | null} f @param {boolean} scan @param {Trigger[]} methods
+     * @returns {{ method: Trigger, title: string, differences: Recommendation[] }[]}
+     */
+    referenceOffers: (config, f, scan, methods) => JSON.parse(call(wasm.reference_offers_wasm, json(config), facts(f), scan, json(methods))),
+    /** "MEDI's reference pipeline", for each method. @param {Trigger[]} methods @returns {string[]} */
+    referenceTitles: (methods) => JSON.parse(call(wasm.reference_titles_wasm, json(methods))),
+    /** "Keep mine": each finding kept at its current value (`keep`). @param {PipelineConfig} config @param {Recommendation[]} findings @returns {PipelineConfig} */
+    keepFindings: (config, findings) => JSON.parse(call(wasm.keep_findings_wasm, json(config), json(findings))),
+    /** "Apply all": each finding's recommended value (`apply_all`). @param {PipelineConfig} config @param {Recommendation[]} findings @returns {PipelineConfig} */
+    applyAll: (config, findings) => JSON.parse(call(wasm.apply_all_wasm, json(config), json(findings))),
     /** @param {PipelineConfig} config @param {ScanFacts | null} f @returns {PipelineConfig} */
     pruneHidden: (config, f) => JSON.parse(call(wasm.prune_hidden_wasm, json(config), facts(f))),
     /** `config` with `path` set through the config's own serde; throws the engine's reason. */

@@ -21,6 +21,7 @@ import { outlineRows, visibleRows, unplacedSteps } from '../outline.js';
 import { searchSettings, formatValue, isChanged, valueOf } from '../schema.js';
 import { maskSummary } from '../mask.js';
 import { StepSettings } from './Settings.js';
+import { marker } from '../recommend.js';
 import { DataPanel } from './DataPanel.js';
 import { MaskEditor } from './MaskEditor.js';
 import { Icon } from './icons.js';
@@ -142,6 +143,9 @@ function Step({ row, session, store, schema, mask, open, forcedBy, runner, expec
     blocked: !!inputErrors || problems.some((p) => p.severity === 'error'),
   });
   const toggleOpen = () => { session.ui.section.value = open ? null : section.id; };
+  // The step's settings with a finding to review (⚑ on the step, as on the settings).
+  const view = session.view.value;
+  const toReview = settings.filter((s) => view?.get(s.path)?.visible !== false && marker(view?.get(s.path)) === 'open').length;
   const memory = rowMemory(session.plan.value, row);
 
   return html`
@@ -151,7 +155,8 @@ function Step({ row, session, store, schema, mask, open, forcedBy, runner, expec
         <button type="button" class="step-head" aria-expanded=${open} aria-controls=${`step-${section.id}`} data-section=${section.id}
           onClick=${toggleOpen}>
           ${Icon.chevron}
-          <span class="step-title">${section.label}</span>
+          <span class="step-title">${section.label}${toReview > 0 && html` <span class="rec-badge step-rec" data-testid="step-rec"
+            title=${`${toReview} recommendation${toReview === 1 ? '' : 's'} to review`}>⚑</span>`}</span>
           <span class="step-sum" data-testid="summary">${summary}</span>
           ${memory && html`<span class=${`step-memory ${memory.cls}`} data-testid="row-memory" title=${memory.title}>${formatBytes(memory.bytes)}</span>`}
           ${run && html`<${RowBadge} status=${run} />`}

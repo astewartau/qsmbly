@@ -18,6 +18,7 @@
  * @property {string | null} forcedBy
  * @property {string | null} error - the engine's: what is wrong with the value
  * @property {boolean} basic - shown without "advanced": basic, or changed
+ * @property {SettingView | undefined} view - what the engine says of it (`settings_view`)
  */
 import { html } from '../html.js';
 import { useState } from 'preact/hooks';
@@ -28,6 +29,7 @@ import {
 } from '../schema.js';
 import { readNifti } from '../nifti.js';
 import { Icon } from './icons.js';
+import { RecMarker, ReferenceLine } from './Recommendation.js';
 
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 /** @param {string} path */
@@ -52,7 +54,8 @@ export function sectionRows(schema, sections, config, view, skip = []) {
       const value = valueOf(setting, config);
       const changed = isChanged(setting, value);
       const v = view?.get(setting.path);
-      return { setting, value, changed, forcedBy: v?.forced_by ?? null, error: v?.error ?? null, basic: setting.level === 'basic' || changed || !!v?.error };
+      return { setting, value, changed, forcedBy: v?.forced_by ?? null, error: v?.error ?? null, basic: setting.level === 'basic' || changed || !!v?.error,
+        view: v };
     });
 }
 
@@ -182,6 +185,8 @@ export function SettingRow({ row, session, store, byPath, depth = 0 }) {
     ${control.kind === 'echo-time' && html`<${EchoTimeValue} ...${props} style=${style} />`}
     ${control.kind === 'file' && html`<${SuppliedName} ...${props} style=${style} />`}
     ${help && html`<p class="sub help" id=${helpId} style=${style} hidden=${!helpOpen}>${help}</p>`}
+    <${RecMarker} path=${setting.path} view=${row.view} label=${label} style=${style} />
+    <${ReferenceLine} view=${row.view} style=${style} />
     ${forcer && html`<p class="sub note" style=${style} data-testid="forced">On because ${forcer.full_label ?? forcer.label} needs it.</p>`}
     ${adjustment && html`<p class="sub note" style=${style} data-testid="adjustment">${adjustment.message}.</p>`}
     ${badge && html`

@@ -20,6 +20,7 @@
  * @property {import('../history.js').History} [history]
  * @property {import('../rerun.js').Expectations} [expect]
  * @property {import('../mask-preview.js').MaskPreview} [maskPreview]
+ * @property {import('../recommend.js').Recommendations} [recommendations]
  */
 import { html } from '../html.js';
 import { useState, useEffect, useRef } from 'preact/hooks';
@@ -36,6 +37,7 @@ import { decodeForViewer } from '../scan.js';
 import { Compare } from './Compare.js';
 import { ReportView } from './ReportView.js';
 import { reportsOf } from '../reports.js';
+import { RecommendationsContext, RecommendationModal, RecommendationError } from './Recommendation.js';
 
 export const THEME_STORAGE_KEY = 'qsmbly.next.theme';
 const THEMES = /** @type {const} */ (['auto', 'light', 'dark']);
@@ -43,7 +45,9 @@ const THEMES = /** @type {const} */ (['auto', 'light', 'dark']);
 /** @param {{ session: Session, store: VolumeStore, workspace: Workspace, providers: Providers }} props */
 export function App({ session, store, workspace, providers }) {
   useEffect(() => installUndoKeys(window, session), [session]);
+  const recs = workspace.recommendations ?? null;
   return html`
+    <${RecommendationsContext.Provider} value=${recs}>
     <div class="workspace">
       <${Header} session=${session} store=${store} providers=${providers} workspace=${workspace} />
       <div class="main">
@@ -55,6 +59,8 @@ export function App({ session, store, workspace, providers }) {
       <${RunBar} session=${session} store=${store} models=${workspace.models} runner=${workspace.runner} schema=${workspace.schema}
         expect=${workspace.expect} history=${workspace.history} />
     </div>
+    ${recs && html`<${RecommendationModal} recs=${recs} />`}
+    </${RecommendationsContext.Provider}>
   `;
 }
 
@@ -128,6 +134,7 @@ function Header({ session, store, providers, workspace }) {
       ${exporting && html`<${ExportPanel} session=${session} store=${store} providers=${providers} engine=${workspace.engine}
         versions=${versions} onClose=${closeExport} />`}
       <${Notices} session=${session} />
+      ${workspace.recommendations && html`<div class="notices"><${RecommendationError} recs=${workspace.recommendations} /></div>`}
     </header>
   `;
 }

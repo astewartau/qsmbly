@@ -5,6 +5,7 @@
 // in QSM.rs; here only that they are wired.
 import { test, expect } from '@playwright/test';
 import { phantomFiles, niftiFloat32 } from './phantom.js';
+import { closeOffers } from './rec-helpers.js';
 
 function watchErrors(page) {
   const errors = [];
@@ -28,6 +29,7 @@ async function run(page, settings, before = async () => {}, files = phantomFiles
     const { session } = globalThis.qsmblyNext;
     for (const [path, value] of s) session.set(path, value);
   }, settings);
+  await closeOffers(page);
   await page.getByTestId('run-button').click();
   await expect.poll(() => page.evaluate(() => globalThis.qsmblyNext.runner.status.value), { timeout: 4 * 60_000 })
     .toMatch(/done|failed/);

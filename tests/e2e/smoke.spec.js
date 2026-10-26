@@ -1,6 +1,7 @@
 // Smoke tests: the new workspace (next.html) on QSMxT's engine (the built WASM bundle), and today's
 // UI still loading and running.
 import { test, expect } from '@playwright/test';
+import { closeOffers } from './rec-helpers.js';
 import { readFileSync, rmSync } from 'node:fs';
 import { phantomFiles } from './phantom.js';
 
@@ -37,6 +38,23 @@ test.describe('next.html', () => {
   const stepRow = (page, id) => page.locator(`.step[data-step="${id}"]`);
   const get = (page, path) => page.evaluate((p) => globalThis.qsmblyNext.session.get(p) ?? null, path);
   const exact = { exact: true };
+  // Settings are found by their config path; their labels are the schema's (they are not spelled
+  // out here, so a change of wording in QSMxT changes nothing here).
+  const labelOf = (page, path) => page.evaluate((p) => {
+    const s = globalThis.qsmblyNext.workspace.schema.settings.find((x) => x.path === p);
+    return s.full_label ?? s.label;
+  }, path);
+  const field = async (page, path) => page.getByLabel(await labelOf(page, path), exact);
+  /** A mask step parameter's label (`key`, e.g. `fractional_intensity`), from the mask schema. */
+  const maskParamLabel = (page, key) => page.evaluate((k) => {
+    const find = (o) => {
+      if (!o || typeof o !== 'object') return null;
+      if (o.key === k && typeof o.label === 'string') return o.label;
+      for (const v of Object.values(o)) { const l = find(v); if (l) return l; }
+      return null;
+    };
+    return find(globalThis.qsmblyNext.workspace.mask.schema);
+  }, key);
 
   test('shows the pipeline beside the viewer, planned by the engine', async ({ page }, testInfo) => {
     const errors = watchErrors(page);
@@ -91,7 +109,7 @@ test.describe('next.html', () => {
     await expect(stepRow(page, 'background').getByRole('link', { name: 'Reference' })).toHaveAttribute('href', /doi\.org/);
 
     // A value out of range (an exclusive bound) is written, and the engine says what is wrong.
-    const minRadius = page.getByLabel('Minimum Radius', exact);
+    const minRadius = (await field(page, 'bg_removal.vsharp.min_radius'));
     await minRadius.fill('0');
     await minRadius.press('Enter');
     await expect(stepRow(page, 'background').getByTestId('engine-error')).toHaveText('Must be finite and > 0 mm');
@@ -110,7 +128,8 @@ test.describe('next.html', () => {
     await expect(stepRow(page, 'background').locator('.sub.err')).toHaveCount(0);
 
     // Another method: its own settings replace V-SHARP's.
-    await page.getByLabel('Background Removal', exact).selectOption({ label: 'PDF' });
+    await (await field(page, 'bg_removal.algorithm')).selectOption({ label: 'PDF' });
+    await closeOffers(page);
     await expect(row(page, 'bg_removal.pdf.tol')).toBeVisible();
     await expect(row(page, 'bg_removal.vsharp.max_radius')).toHaveCount(0);
     await expect(stepRow(page, 'background').getByTestId('summary')).toHaveText('PDF');
@@ -123,27 +142,29 @@ test.describe('next.html', () => {
     await expect(row(page, 'bg_removal.pdf.tol')).toBeVisible();
     await page.keyboard.press('Control+z');
     // With the focus in a committed field too: back to 0, which the engine refuses again.
-    await page.getByLabel('Minimum Radius', exact).focus();
+    await (await field(page, 'bg_removal.vsharp.min_radius')).focus();
     await page.keyboard.press('Control+z');
-    await expect(page.getByLabel('Minimum Radius', exact)).toHaveValue('0');
+    await expect((await field(page, 'bg_removal.vsharp.min_radius'))).toHaveValue('0');
     await expect(stepRow(page, 'background').getByTestId('engine-error')).toHaveText('Must be finite and > 0 mm');
     await page.keyboard.press('Control+z');
     expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(2);
-    await expect(page.getByLabel('Minimum Radius', exact)).toHaveValue('2');
+    await expect((await field(page, 'bg_removal.vsharp.min_radius'))).toHaveValue('2');
     await page.keyboard.press('Control+Shift+z');
     await page.keyboard.press('Control+Shift+z');
     await row(page, 'bg_removal.vsharp.min_radius').hover();
-    await row(page, 'bg_removal.vsharp.min_radius').getByRole('button', { name: 'Reset Minimum Radius' }).click();
+    await row(page, 'bg_removal.vsharp.min_radius').getByRole('button', { name: `Reset ${await labelOf(page, 'bg_removal.vsharp.min_radius')}` }).click();
     expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(2);
 
     // An inversion that removes the background itself: the Background step leaves the pipeline.
     await page.locator('[data-section="inversion"]').click();
-    await page.getByLabel('QSM Inversion', exact).selectOption({ label: 'TGV' });
+    await (await field(page, 'inversion.algorithm')).selectOption({ label: 'TGV' });
+    await closeOffers(page);
     await expect(stepRow(page, 'background')).toHaveCount(0);
     await expect(page.getByTestId('plan-status')).toHaveText('Plan: 9 steps');
 
     // A deep-learning inversion re-plans: its weights appear in the run bar.
-    await page.getByLabel('QSM Inversion', exact).selectOption({ label: 'xQSM' });
+    await (await field(page, 'inversion.algorithm')).selectOption({ label: 'xQSM' });
+    await closeOffers(page);
     await expect(page.getByTestId('downloads')).toHaveText(/Downloads: xQSM 19\.9 MB/);
     await expect(stepRow(page, 'background')).toHaveCount(1);
     await page.locator('.viewer-canvas').click();
@@ -154,10 +175,10 @@ test.describe('next.html', () => {
 
     // An output another one needs is forced on, and says why.
     await stepRow(page, 'segmentation').locator('.step-head').click();
-    await page.getByLabel('Per-structure Statistics', exact).check();
-    await expect(page.getByLabel('Segmentation', exact)).toBeDisabled();
-    await expect(page.getByLabel('Segmentation', exact)).toBeChecked();
-    await expect(stepRow(page, 'segmentation').getByTestId('forced')).toHaveText('On because Per-structure Statistics needs it.');
+    await (await field(page, 'pipeline.do_analysis')).check();
+    await expect((await field(page, 'pipeline.do_segmentation'))).toBeDisabled();
+    await expect((await field(page, 'pipeline.do_segmentation'))).toBeChecked();
+    await expect(stepRow(page, 'segmentation').getByTestId('forced')).toHaveText(`On because ${await labelOf(page, 'pipeline.do_analysis')} needs it.`);
     // The plan takes the segmentation it forces, and the statistics after it.
     await expect(page.getByTestId('plan-status')).toHaveText('Plan: 12 steps');
 
@@ -165,7 +186,7 @@ test.describe('next.html', () => {
     await page.getByLabel('Search settings').fill('--vsharp-max-radius');
     await page.getByRole('list', { name: 'Matching settings' }).getByRole('button').first().click();
     await expect(stepRow(page, 'background')).toHaveAttribute('data-open', 'true');
-    await expect(page.getByLabel('Maximum Radius', exact)).toBeFocused();
+    await expect((await field(page, 'bg_removal.vsharp.max_radius'))).toBeFocused();
     expect(errors).toEqual([]);
   });
 
@@ -185,10 +206,11 @@ test.describe('next.html', () => {
     await section2.getByRole('button', { name: 'Add a step' }).click();
     await section2.getByRole('button', { name: 'Signal-gated erosion' }).click();
     await expect(stepRow(page, 'masking').getByTestId('summary')).toContainText('Signal-gated erosion');
-    const fi = editor.getByLabel('Fractional Intensity', exact);
+    const fiLabel = await maskParamLabel(page, 'fractional_intensity');
+    const fi = editor.getByLabel(fiLabel, exact);
     await fi.fill('1.2');
     await fi.press('Enter');
-    await expect(editor.getByTestId('engine-error')).toContainText('Fractional Intensity');
+    await expect(editor.getByTestId('engine-error')).toContainText(fiLabel);
     const shot = await page.screenshot({ path: testInfo.outputPath('mask-recipe.png') });
     await testInfo.attach('mask recipe', { body: shot, contentType: 'image/png' });
 
@@ -199,7 +221,7 @@ test.describe('next.html', () => {
     await expect(editor.getByTestId('engine-error')).toHaveCount(0);
     await page.keyboard.press('Control+z');
     await expect(section2.locator('.ops .row.op')).toHaveCount(3);
-    await page.getByLabel('Two-pass Artefact Reduction', exact).check();
+    await (await field(page, 'masking.two_pass')).check();
     await expect(editor.getByRole('region', { name: 'Reliable mask', exact: true })).toBeVisible();
     await expect(stepRow(page, 'masking').getByTestId('summary')).toContainText('two-pass');
     expect(errors).toEqual([]);
@@ -210,7 +232,7 @@ test.describe('next.html', () => {
     await page.goto('next.html');
     await page.locator('[data-section="masking"]').click();
     await page.getByRole('radio', { name: 'Your own file' }).click();
-    await page.getByLabel('Custom Mask', exact).setInputFiles({ name: 'mask.nii', mimeType: 'application/octet-stream', buffer: tinyNifti() });
+    await (await field(page, 'masking.custom_mask_tool')).setInputFiles({ name: 'mask.nii', mimeType: 'application/octet-stream', buffer: tinyNifti() });
     await expect(stepRow(page, 'masking').getByTestId('supplied-name')).toHaveText('mask.nii');
     await expect(stepRow(page, 'masking').getByTestId('summary')).toHaveText('your own file');
     const state = await page.evaluate(() => {
@@ -251,7 +273,8 @@ test.describe('next.html', () => {
 
     // A change of algorithm redraws the graph: TGV removes the background itself.
     await page.locator('[data-section="inversion"]').click();
-    await page.getByLabel('QSM Inversion', exact).selectOption({ label: 'TGV' });
+    await (await field(page, 'inversion.algorithm')).selectOption({ label: 'TGV' });
+    await closeOffers(page);
     await expect(box('bgremove')).toHaveCount(0);
     await expect(box('tgv')).toContainText('TGV');
 
@@ -353,7 +376,8 @@ test.describe('next.html', () => {
 
     // A change of algorithm rewrites the methods: TGV, in its own box.
     await page.locator('[data-section="inversion"]').click();
-    await page.getByLabel('QSM Inversion', exact).selectOption({ label: 'TGV' });
+    await (await field(page, 'inversion.algorithm')).selectOption({ label: 'TGV' });
+    await closeOffers(page);
     await expect(methods.getByTestId('methods-text')).toContainText('Total Generalized Variation');
     await expect(methods.getByTestId('methods-text')).not.toContainText('iLSQR');
     await sentence('QSM was computed using the Total Generalized Variation').hover();

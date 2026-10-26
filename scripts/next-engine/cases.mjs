@@ -29,7 +29,6 @@ export const CASES = [
   { name: 'xQSM untiled', edits: [['inversion.algorithm', 'xqsm'], ['inversion.tile_size', null]] },
   { name: 'TGV', edits: [['inversion.algorithm', 'tgv']] },
   { name: 'QSMART', edits: [['inversion.algorithm', 'qsmart']] },
-  { name: 'QSMART keeping the threshold mask', edits: [['inversion.algorithm', 'qsmart'], ['masking.recipe_chosen', true]] },
   { name: 'QSMART fit threshold absolute', edits: [['inversion.algorithm', 'qsmart'], ['field_mapping.qsmart_fit_threshold_mode', 'absolute']] },
   { name: 'MEDI', edits: [['inversion.algorithm', 'medi']] },
   { name: 'MEDI with mSMV', edits: [['inversion.algorithm', 'medi'], ['inversion.medi.msmv', true]] },
