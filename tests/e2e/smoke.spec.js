@@ -53,6 +53,17 @@ test.describe('next.html', () => {
     await expect(stepRow(page, 'masking').getByTestId('summary')).toHaveText('Robust threshold');
     await expect(stepRow(page, 'motion').getByTestId('summary')).toHaveText('off');
     await expect(stepRow(page, 'swi').getByTestId('summary')).toHaveText('off');
+    // Each step's run state sits on its header's one line, after the title.
+    await expect(stepRow(page, 'inversion').getByTestId('run-state')).toBeVisible();
+    const misplaced = await pipeline.locator('.step-head').evaluateAll((heads) => heads.flatMap((h) => {
+      const state = h.querySelector('[data-testid="run-state"]');
+      if (!state) return [];
+      const head = h.getBoundingClientRect();
+      const box = state.getBoundingClientRect();
+      const title = h.querySelector('.step-title').getBoundingClientRect();
+      return box.top >= head.top && box.bottom <= head.bottom && box.left > title.left ? [] : [h.dataset.section];
+    }));
+    expect(misplaced).toEqual([]);
 
     // The engine worker loaded the bindings, which link QSMxT.
     expect(await page.evaluate(() => globalThis.qsmblyNext.workspace.versions.qsmxt.version)).toBeTruthy();

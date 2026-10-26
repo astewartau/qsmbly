@@ -125,7 +125,10 @@ a:hover { text-decoration: underline; }
 .step { border-bottom: 1px solid var(--divider); }
 .step-head-wrap { position: relative; }
 .step-head {
-  display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto; align-items: center; gap: 6px;
+  /* Chevron, title, then one auto column each for what follows (summary, memory, run state): a
+     fixed column count wrapped the run state onto a second line under the chevron. */
+  display: grid; grid-template-columns: 14px minmax(0, 1fr); grid-auto-flow: column; grid-auto-columns: auto;
+  align-items: center; gap: 6px;
   width: 100%; height: 34px; padding: 0 10px 0 8px; border: 0; background: none; cursor: pointer; text-align: left;
 }
 .step-head:has(+ .step-switch) { padding-right: 46px; }
