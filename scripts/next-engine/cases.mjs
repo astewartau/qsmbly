@@ -19,7 +19,7 @@ export const CASES = [
   // Background removal
   { name: 'V-SHARP max radius 10', edits: [['bg_removal.vsharp.max_radius', 10]] },
   { name: 'V-SHARP min radius 0 (out of range)', edits: [['bg_removal.vsharp.min_radius', 0]] },
-  { name: 'V-SHARP min radius 2', edits: [['bg_removal.vsharp.min_radius', 2]] },
+  { name: 'V-SHARP min radius 3', edits: [['bg_removal.vsharp.min_radius', 3]] },
   { name: 'PDF', edits: [['bg_removal.algorithm', 'pdf']] },
   { name: 'LBV', edits: [['bg_removal.algorithm', 'lbv']] },
   // Inversion
@@ -30,6 +30,14 @@ export const CASES = [
   { name: 'TGV', edits: [['inversion.algorithm', 'tgv']] },
   { name: 'QSMART', edits: [['inversion.algorithm', 'qsmart']] },
   { name: 'QSMART keeping the threshold mask', edits: [['inversion.algorithm', 'qsmart'], ['masking.recipe_chosen', true]] },
+  { name: 'QSMART fit threshold absolute', edits: [['inversion.algorithm', 'qsmart'], ['field_mapping.qsmart_fit_threshold_mode', 'absolute']] },
+  { name: 'MEDI', edits: [['inversion.algorithm', 'medi']] },
+  { name: 'MEDI with mSMV', edits: [['inversion.algorithm', 'medi'], ['inversion.medi.msmv', true]] },
+  { name: 'MEDI with mSMV, two echoes', edits: [['inversion.algorithm', 'medi'], ['inversion.medi.msmv', true]], scan: { n_echoes: 2, echo_times: [0.005, 0.011] } },
+  { name: 'STAR-QSM', edits: [['inversion.algorithm', 'star']] },
+  { name: 'STAR-QSM at 20 ms', edits: [['inversion.algorithm', 'star'], ['inversion.star.te', { seconds: 0.02 }]] },
+  { name: 'NLTV at the last echo time', edits: [['inversion.algorithm', 'nltv'], ['inversion.nltv.te', 'last']] },
+  { name: 'complex-fit field map', edits: [['field_mapping.b0_estimation', 'complex-fit']] },
   { name: 'no QSM', edits: [['pipeline.do_qsm', false]] },
   // Field map, motion
   { name: 'Laplacian unwrapping', edits: [['field_mapping.unwrapping_algorithm', 'laplacian']] },
@@ -62,6 +70,8 @@ export const CASES = [
   { name: 'erode 0 (out of range)', edits: [['masking.sections', withRefinement(robust, 2, { iterations: 0 })]] },
   { name: 'erode 3', edits: [['masking.sections', withRefinement(robust, 2, { iterations: 3 })]] },
   { name: 'two-pass', edits: [['masking.two_pass', true]] },
+  { name: 'N4 inhomogeneity correction', edits: [['masking.inhomogeneity_method', 'n4']] },
+  { name: 'N4 with two levels', edits: [['masking.inhomogeneity_method', 'n4'], ['n4.max_iterations', [50, 40]]] },
   // Other scans
   { name: 'no magnitude', edits: [], scan: { has_magnitude: false } },
   { name: 'one echo', edits: [], scan: { n_echoes: 1, echo_times: [0.005] } },

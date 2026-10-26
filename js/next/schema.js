@@ -12,11 +12,12 @@
  * @property {string} name - its display name (`iLSQR`)
  * @property {string} help
  * @property {string} [url]
- * @property {'named' | 'echo-number'} [kind] - an echo reference's: a named echo, or any echo by
- *   its number (the setting's value is then the number as a string)
+ * @property {'named' | 'echo-number' | 'time'} [kind] - an echo reference's or echo time's: a named
+ *   echo (`first`), any echo by its number (the setting's value is then the number as a string),
+ *   or a time the user gives (the value is then `{ seconds }`, edited in ms)
  * @property {number} [min] - for `echo-number`: the first echo number
  *
- * @typedef {'bool' | 'int' | 'float' | 'int-vec3' | 'float-vec3' | 'text' | 'enum' | 'echo-reference' | 'mask-sections' | 'mask-ops'} SettingType
+ * @typedef {'bool' | 'int' | 'float' | 'int-vec3' | 'float-vec3' | 'int-list' | 'text' | 'enum' | 'echo-reference' | 'echo-time' | 'mask-sections' | 'mask-ops'} SettingType
  *
  * @typedef {object} Setting - qsmxt-engine `schema::Setting`, as JSON
  * @property {string} path
@@ -27,7 +28,7 @@
  * @property {string} [value_label] - for a checkbox with a value (`off` set): the value's label
  * @property {string} [value_help]
  * @property {SettingType} type
- * @property {SchemaOption[]} [options] - enum and echo-reference
+ * @property {SchemaOption[]} [options] - enum, echo-reference and echo-time
  * @property {boolean} optional - the value may be null
  * @property {unknown} [off] - the value that turns a checkbox-with-a-value setting off
  * @property {string} [units]
@@ -112,6 +113,13 @@ export function formatValue(setting, value) {
   if (setting.off !== undefined && same(value, setting.off)) return 'off';
   if (value === null || value === undefined) return 'unset';
   if (setting.type === 'bool') return value ? 'on' : 'off';
+  if (setting.type === 'echo-time') {
+    const { named, ms } = echoTimeChoice(setting, value);
+    if (ms !== null) return `${ms} ms`;
+    const option = named.find((o) => same(o.value, value));
+    if (option) return option.name;
+  }
+  if (setting.type === 'int-list' && Array.isArray(value)) return value.join(' ');
   if (setting.type === 'enum' || setting.type === 'echo-reference') {
     const { named, echo } = echoChoice(setting, value);
     if (echo !== null) return `echo ${echo}`;
@@ -128,7 +136,7 @@ export function formatValue(setting, value) {
 
 /**
  * @typedef {object} Control
- * @property {'checkbox' | 'number' | 'vec3' | 'select' | 'echo' | 'text' | 'file' | 'recipe' | 'unavailable'} kind
+ * @property {'checkbox' | 'number' | 'vec3' | 'list' | 'select' | 'echo' | 'echo-time' | 'text' | 'file' | 'recipe' | 'unavailable'} kind
  * @property {boolean} toggled - shown as a checkbox with a value under it (`off` set)
  * @property {boolean} nullable - the value may be left unset (an empty field)
  * @property {boolean} integer
@@ -142,7 +150,7 @@ export function formatValue(setting, value) {
  */
 export function controlFor(setting) {
   const toggled = setting.off !== undefined;
-  const integer = setting.type === 'int' || setting.type === 'int-vec3';
+  const integer = setting.type === 'int' || setting.type === 'int-vec3' || setting.type === 'int-list';
   const base = { toggled, nullable: setting.optional && !toggled, integer };
   /** @type {Control['range']} */
   const range = { min: setting.min, max: setting.max, step: setting.step ?? (integer ? 1 : 'any') };
@@ -155,7 +163,9 @@ export function controlFor(setting) {
     case 'int-vec3':
     case 'float-vec3': return { ...base, kind: 'vec3', range };
     case 'enum': return { ...base, kind: 'select' };
+    case 'int-list': return { ...base, kind: 'list', range };
     case 'echo-reference': return { ...base, kind: 'echo', range: { min: setting.options?.find((o) => o.kind === 'echo-number')?.min, step: 1 } };
+    case 'echo-time': return { ...base, kind: 'echo-time' };
     case 'mask-sections':
     case 'mask-ops': return { ...base, kind: 'recipe' };
     default: return { ...base, kind: 'text' };
@@ -178,7 +188,7 @@ export function validate(setting, value) {
   if (setting.off !== undefined && same(value, setting.off)) return null;
   const number = (v) => {
     if (typeof v !== 'number' || !Number.isFinite(v)) return 'Enter a number.';
-    if ((setting.type === 'int' || setting.type === 'int-vec3') && !Number.isInteger(v)) return 'Enter a whole number.';
+    if ((setting.type === 'int' || setting.type === 'int-vec3' || setting.type === 'int-list') && !Number.isInteger(v)) return 'Enter a whole number.';
     return null;
   };
   switch (setting.type) {
@@ -193,6 +203,18 @@ export function validate(setting, value) {
         if (e) return e;
       }
       return null;
+    case 'int-list':
+      if (!Array.isArray(value) || value.length === 0) return 'Enter one number or more.';
+      for (const v of value) {
+        const e = number(v);
+        if (e) return e;
+      }
+      return null;
+    case 'echo-time': {
+      const { named, ms } = echoTimeChoice(setting, value);
+      if (named.some((o) => same(o.value, value))) return null;
+      return ms !== null && Number.isFinite(ms) ? null : 'Enter an echo time in ms.';
+    }
     case 'enum': return setting.options?.some((o) => same(o.value, value)) ? null : 'Not one of the choices.';
     case 'echo-reference': {
       const { named, numbered, echo } = echoChoice(setting, value);
@@ -251,6 +273,36 @@ export function echoChoice(setting, value) {
   const isNamed = named.some((o) => o.value === value);
   const echo = !isNamed && numbered && typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value)) ? Number(value) : null;
   return { named, numbered, echo };
+}
+
+/**
+ * The echo-time choices: the named ones (`first`, `sum`, ...), and the given-time one, whose value
+ * is `{ seconds }`. For a given time, `ms` is it in milliseconds (as the command line takes it);
+ * null for a named one.
+ * @param {Setting} setting
+ * @param {unknown} value
+ * @returns {{ named: SchemaOption[], timed: SchemaOption | undefined, ms: number | null }}
+ */
+export function echoTimeChoice(setting, value) {
+  const options = setting.options ?? [];
+  const named = options.filter((o) => o.kind !== 'time');
+  const timed = options.find((o) => o.kind === 'time');
+  const seconds = value !== null && typeof value === 'object' && !Array.isArray(value) ? /** @type {any} */ (value).seconds : undefined;
+  const ms = typeof seconds === 'number' ? Number((seconds * 1000).toPrecision(12)) : null;
+  return { named, timed, ms };
+}
+
+/**
+ * A list of whole numbers as typed (`50 50 50`, or with commas): the numbers, or the reason it is
+ * not one.
+ * @param {Setting} setting
+ * @param {string} text
+ * @returns {{ value: unknown, error: string | null }}
+ */
+export function parseList(setting, text) {
+  const words = text.trim().split(/[\s,]+/).filter(Boolean);
+  const value = words.map(Number);
+  return { value, error: validate(setting, value) };
 }
 
 /**

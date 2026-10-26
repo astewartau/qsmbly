@@ -23,7 +23,7 @@ import { html } from '../html.js';
 import { useState } from 'preact/hooks';
 import { useFollow } from './follow.js';
 import {
-  valueOf, isChanged, controlFor, validate, parseField, onValue, echoChoice,
+  valueOf, isChanged, controlFor, validate, parseField, parseList, onValue, echoChoice, echoTimeChoice,
   browserDefaultNote, formatValue, SUPPLIED_TOOL,
 } from '../schema.js';
 import { readNifti } from '../nifti.js';
@@ -109,6 +109,9 @@ export function SettingRows({ session, store, schema, paths }) {
  */
 export function SettingRow({ row, session, store, byPath, depth = 0 }) {
   const { setting, value, changed, forcedBy } = row;
+  // Where the run takes another value than the setting's (the engine's adjustments: MEDI's PDF in
+  // place of the default background removal, ...), the row says so: no setting changes silently.
+  const adjustment = (session.plan.value?.adjustments ?? []).find((a) => a.setting === setting.path) ?? null;
   const label = setting.full_label ?? setting.label;
   const [helpOpen, setHelpOpen] = useState(false);
   // What was typed and cannot be a value (not a number, ...): never written to the config.
@@ -116,6 +119,8 @@ export function SettingRow({ row, session, store, byPath, depth = 0 }) {
   const error = typed ?? row.error;
   // Switched on but with no value yet: a setting whose "on" needs a value typed first.
   const [opening, setOpening] = useState(false);
+  // An echo time given in ms, chosen but not typed yet.
+  const [timeOpen, setTimeOpen] = useState(false);
   const control = controlFor(setting);
   const on = !control.toggled || !same(value, setting.off) || opening;
   const id = domId(setting.path);
@@ -133,6 +138,12 @@ export function SettingRow({ row, session, store, byPath, depth = 0 }) {
     setError(problem);
     if (!problem && !same(next, value)) session.set(setting.path, next);
   };
+  const reset = () => {
+    setError(null);
+    setOpening(false);
+    setTimeOpen(false);
+    session.set(setting.path, setting.browser_default);
+  };
   /** @param {boolean} checked */
   const toggle = (checked) => {
     if (!control.toggled) return commit(checked);
@@ -147,7 +158,7 @@ export function SettingRow({ row, session, store, byPath, depth = 0 }) {
     // A setting's label names its on/off box; the value beside it is named by its own label.
     ...(control.toggled ? { 'aria-label': setting.value_label ?? label } : {}),
   };
-  const props = { setting, value, control, id, error, setError, commit, session, store, aria, units, on, toggle, forced: !!forcedBy };
+  const props = { setting, value, control, id, error, setError, commit, session, store, aria, units, on, toggle, forced: !!forcedBy, timeOpen, setTimeOpen };
   const style = `--depth:${depth}`;
 
   return html`
@@ -163,14 +174,16 @@ export function SettingRow({ row, session, store, byPath, depth = 0 }) {
       <div class="ctl">
         <${Control} ...${props} />
         <button type="button" class="reset" aria-label=${`Reset ${label}`} title=${`Reset to ${formatValue(setting, setting.browser_default)}`}
-          hidden=${!changed} onClick=${() => { setError(null); setOpening(false); session.set(setting.path, setting.browser_default); }}>${Icon.reset}</button>
+          hidden=${!changed} onClick=${reset}>${Icon.reset}</button>
       </div>
     </div>
     ${control.kind === 'select' && on && html`<${OptionHelp} setting=${setting} value=${value} style=${style} />`}
     ${control.kind === 'echo' && html`<${EchoNumber} ...${props} style=${style} />`}
+    ${control.kind === 'echo-time' && html`<${EchoTimeValue} ...${props} style=${style} />`}
     ${control.kind === 'file' && html`<${SuppliedName} ...${props} style=${style} />`}
     ${help && html`<p class="sub help" id=${helpId} style=${style} hidden=${!helpOpen}>${help}</p>`}
     ${forcer && html`<p class="sub note" style=${style} data-testid="forced">On because ${forcer.full_label ?? forcer.label} needs it.</p>`}
+    ${adjustment && html`<p class="sub note" style=${style} data-testid="adjustment">${adjustment.message}.</p>`}
     ${badge && html`
       <p class="sub browser-default" style=${style}>
         QSMxT's default is ${badge.native}; the browser uses ${badge.browser} to fit in memory. The exported command includes it.
@@ -213,6 +226,22 @@ function Control(props) {
           ${numbered && html`<option value="echo" selected=${echo !== null}>${numbered.name}</option>`}
         </select>`;
     }
+    case 'list':
+      return html`<${ListInput} ...${props} />`;
+    case 'echo-time': {
+      const { named, timed, ms } = echoTimeChoice(setting, value);
+      const timing = ms !== null || props.timeOpen;
+      return html`
+        <select id=${id} class="sel" ...${aria}
+          onChange=${(e) => {
+            const v = e.currentTarget.value;
+            if (v === 'time') props.setTimeOpen(true);
+            else { props.setTimeOpen(false); commit(v); }
+          }}>
+          ${named.map((o) => html`<option value=${String(o.value)} selected=${!timing && same(value, o.value)}>${o.name}</option>`)}
+          ${timed && html`<option value="time" selected=${timing}>${timed.name}</option>`}
+        </select>`;
+    }
     case 'file':
       return html`<${SuppliedFile} ...${props} />`;
     case 'recipe':
@@ -238,6 +267,22 @@ function NumberInput({ setting, value, control, id, setError, commit, aria }) {
       onInput=${(e) => setText(e.currentTarget.value)}
       onChange=${(e) => {
         const r = parseField(setting, e.currentTarget.value);
+        setError(r.error);
+        if (!r.error) commit(r.value);
+      }} />
+  `;
+}
+
+/** One whole number or more, typed as a list (`50 50 50`). */
+function ListInput({ setting, value, id, setError, commit, aria }) {
+  const shown = Array.isArray(value) ? value.join(' ') : '';
+  const [text, setText] = useState(shown);
+  useFollow(shown, setText);
+  return html`
+    <input type="text" id=${id} class="txt" value=${text} data-committed=${shown} ...${aria}
+      onInput=${(e) => setText(e.currentTarget.value)}
+      onChange=${(e) => {
+        const r = parseList(setting, e.currentTarget.value);
         setError(r.error);
         if (!r.error) commit(r.value);
       }} />
@@ -301,6 +346,32 @@ function EchoNumber({ setting, value, id, setError, commit, style }) {
               setError(null);
               commit(String(n));
             }} />
+          <span class="reset" hidden></span>
+        </div>
+      </div>`}
+    ${chosen?.help && html`<p class="sub option-help" style=${style}>${chosen.help}</p>`}
+  `;
+}
+
+/** For "a given echo time": the time in ms. */
+function EchoTimeValue({ setting, value, id, setError, commit, style, timeOpen }) {
+  const { named, timed, ms } = echoTimeChoice(setting, value);
+  const chosen = ms !== null || timeOpen ? timed : named.find((o) => same(o.value, value));
+  const shown = ms === null ? '' : String(ms);
+  return html`
+    ${(ms !== null || timeOpen) && html`
+      <div class="row" style=${style}>
+        <div class="lab"><span class="dot" aria-hidden="true"></span><label for=${`${id}-ms`}>${setting.value_label ?? timed?.name ?? 'Echo time'}</label></div>
+        <div class="ctl">
+          <input type="text" inputmode="decimal" id=${`${id}-ms`} class="num" value=${shown} data-committed=${shown}
+            onChange=${(e) => {
+              const t = e.currentTarget.value.trim();
+              const n = Number(t);
+              if (t === '' || !Number.isFinite(n)) { setError('Enter an echo time in ms.'); return; }
+              setError(null);
+              commit({ seconds: n / 1000 });
+            }} />
+          <span class="unit">ms</span>
           <span class="reset" hidden></span>
         </div>
       </div>`}

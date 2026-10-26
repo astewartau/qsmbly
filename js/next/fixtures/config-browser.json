@@ -1,5 +1,6 @@
 {
   "description": "",
+  "schema_version": 2,
   "pipeline": {
     "do_qsm": true,
     "do_swi": false,
@@ -22,10 +23,10 @@
   },
   "field_mapping": {
     "phase_offset_removal": true,
-    "phase_offset_sigma": [
-      4,
-      4,
-      4
+    "phase_offset_sigma_mm": [
+      7,
+      7,
+      7
     ],
     "coil_combination_sigma": [
       10,
@@ -60,6 +61,10 @@
       "correct_regions": false,
       "wrap_addition": 0
     },
+    "complex_fit": {
+      "reltol": 0.0001,
+      "max_iter": 30
+    },
     "linear_fit": {
       "estimate_offset": true,
       "reliability_threshold_percentile": 90
@@ -70,10 +75,14 @@
       "iterations": 3,
       "downweight_level": 0.75,
       "flag_ratio": 3
-    }
+    },
+    "qsmart_fit_threshold_mode": "percentile",
+    "qsmart_fit_percentile": 99,
+    "qsmart_fit_threshold": 40
   },
   "masking": {
     "inhomogeneity_correction": true,
+    "inhomogeneity_method": "makehomogeneous",
     "sections": [
       {
         "input": "phase-quality",
@@ -110,12 +119,16 @@
       "deconvolve": false,
       "threshold": 0.2,
       "max_radius": 12,
-      "min_radius": 1,
-      "grid": "native",
+      "min_radius": 2,
+      "radius_step": 1,
+      "grid": "isotropic",
       "grid_spacing": 1
     },
     "pdf": {
-      "tol": 0.00001
+      "tol": 0.1,
+      "n_cg": 300,
+      "space": "image",
+      "n_pad": 40
     },
     "lbv": {
       "tol": 0.000001
@@ -130,25 +143,30 @@
       "radius": 6
     },
     "resharp": {
-      "radius": 6,
+      "radius": 3,
       "tik_reg": 0.0001,
       "tol": 0.000001,
-      "max_iter": 30
+      "max_iter": 200
     },
     "harperella": {
       "radius": 10,
       "max_iter": 40,
-      "tol": 0.000001
+      "tol": 0.001,
+      "pad": [
+        0,
+        0,
+        0
+      ]
     },
     "iharperella": {
       "max_iter": 40,
-      "tol": 0.000001
-    },
-    "msmv": {
-      "radius": 5,
-      "maxk": 5
-    },
-    "msmv_refine": false
+      "tol": 0.001,
+      "pad": [
+        0,
+        0,
+        0
+      ]
+    }
   },
   "inversion": {
     "algorithm": "ilsqr",
@@ -158,11 +176,13 @@
       "rho": 10,
       "tol": 0.01,
       "max_iter": 20,
-      "lsmr_iter": 4
+      "lsmr_iter": 4,
+      "tau": 0.7,
+      "gamma": 5
     },
     "tv": {
-      "lambda": 0.0002,
-      "rho": 0.02,
+      "lambda": 0.001,
+      "rho": null,
       "tol": 0.001,
       "max_iter": 250
     },
@@ -178,45 +198,74 @@
     },
     "nltv": {
       "lambda": 0.001,
+      "rho": null,
       "mu": 1,
       "tol": 0.001,
       "max_iter": 250,
-      "newton_iter": 10
+      "tol_newton": 0.000001,
+      "max_iter_newton": 10,
+      "te": "first"
     },
     "medi": {
-      "lambda": 0.001,
-      "merit": false,
+      "lambda": 1000,
+      "merit": true,
       "smv": true,
       "smv_radius": 5,
+      "smv_shrink_mask": true,
       "data_weighting": 1,
-      "percentage": 0.3,
+      "percentage": 0.9,
       "cg_tol": 0.01,
-      "cg_max_iter": 10,
-      "max_iter": 30,
-      "tol": 0.1
+      "cg_max_iter": 100,
+      "max_iter": 10,
+      "tol": 0.1,
+      "csf": true,
+      "lambda_csf": 100,
+      "csf_r2s_threshold": 5,
+      "csf_erode": true,
+      "zeropad": [
+        0,
+        0,
+        0
+      ],
+      "msmv": false,
+      "msmv_maxk": 5,
+      "msmv_vessel_radius": null,
+      "msmv_prefilter": true,
+      "te": "spacing"
     },
     "tfi": {
-      "lambda": 0.000075,
+      "merit": true,
+      "linear": true,
+      "lambda": 1000,
       "precond": 30,
       "data_weighting": 1,
       "percentage": 0.9,
       "cg_tol": 0.01,
       "cg_max_iter": 100,
       "max_iter": 10,
-      "tol": 0.1
+      "tol": 0.1,
+      "te": "spacing"
     },
     "ilsqr": {
       "tol": 0.001,
-      "max_iter": 100,
-      "pad_mm": 16
+      "max_iter": 40,
+      "pad_mm": 12
+    },
+    "star": {
+      "pad": [
+        8,
+        8,
+        20
+      ],
+      "te": "sum"
     },
     "tgv": {
-      "iterations": 1000,
+      "iterations": null,
       "erosions": 3,
-      "alpha0": 0.0002002475,
-      "alpha1": 0.00006674916,
+      "alpha0": 0.002,
+      "alpha1": 0.003,
       "step_size": 3,
-      "tol": 0.00001
+      "te": "first"
     },
     "qsmart": {
       "ilsqr_max_iter": 50,
@@ -232,54 +281,58 @@
       "frangi_scale_min": 0.5,
       "frangi_scale_max": 6,
       "frangi_scale_ratio": 0.5,
-      "frangi_c": 500
+      "frangi_c": 500,
+      "vessel_magnitude": "mean-n4",
+      "vessel_size_units": "voxels"
     },
     "ndi": {
       "tau": 2,
       "alpha": 0.00001,
-      "max_iter": 200,
-      "phase_scale": 1
+      "max_iter": 100,
+      "auto_stop": false,
+      "te": "first"
     },
     "fansi": {
       "alpha1": 0.0002,
-      "mu1": 0.02,
+      "mu1": null,
       "mu2": 1,
-      "alpha0": 0.0004,
-      "mu0": 0.04,
+      "alpha0": null,
+      "mu0": null,
       "max_iter": 150,
       "tol_update": 0.1,
       "tol_delta": 0.000001,
-      "phase_scale": 1
+      "te": "spacing"
     },
     "l1qsm": {
-      "alpha1": 0.0002,
-      "mu1": 0.02,
+      "alpha1": 0.005,
+      "mu1": null,
       "mu2": 1,
       "mu3": 1,
-      "lambda": 1,
+      "lambda": 0.8,
       "max_iter": 50,
       "tol_update": 1,
       "tol_delta": 0.000001,
-      "phase_scale": 1
+      "te": "first"
     },
     "whqsm": {
       "alpha1": 0.0002,
       "mu1": 0.02,
       "mu2": 1,
       "beta": 150,
-      "muh": 3,
-      "max_iter": 300,
+      "muh": 5,
+      "max_iter": 150,
       "tol_update": 0.1,
       "tol_delta": 0.000001,
-      "phase_scale": 1
+      "weight": "flat",
+      "te": "first"
     },
     "hdqsm": {
-      "alpha_l2": 0.0001,
-      "mu1_l2": 0.01,
+      "alpha_l2": 0.00003,
+      "mu1_l2": null,
       "mu2": 1,
       "max_iter_l1": 20,
       "max_iter_l2": 80,
-      "tol_update": 1
+      "tol_update": 0.01
     },
     "amp_pe": {
       "wave_order": 1,
@@ -307,15 +360,16 @@
       "gradient_threshold": 0.003924908970520748,
       "apply_laplacian_correction": true,
       "laplacian_threshold": 0.05943433583931419,
-      "gradient_mask_floor": 0.1,
+      "gradient_mask_floor": 0,
       "continuation_steps": 8,
       "inner_iterations": 500,
       "mu_min": 2.220446049250313e-16,
-      "tol": 0.001,
+      "tol": 2.220446049250313e-16,
       "denoise": true,
       "denoise_iterations": 5,
       "denoise_time_step": 0.05,
-      "denoise_conductance": 1
+      "denoise_conductance": 1,
+      "te": "last"
     },
     "tile_size": 56,
     "tile_halo": 4
@@ -332,7 +386,12 @@
       "max_iter": 30,
       "tol": 0.01,
       "cg_max_iter": 30,
-      "cg_tol": 0.05
+      "cg_tol": 0.05,
+      "qsm_ilsqr": {
+        "tol": 0.001,
+        "max_iter": 100,
+        "pad_mm": 12
+      }
     },
     "chi_sep_medi": {
       "lambda_para": 30,
@@ -433,6 +492,25 @@
   "homogeneity": {
     "sigma_mm": 7,
     "nbox": 3
+  },
+  "n4": {
+    "shrink_factor": 4,
+    "max_iterations": [
+      50,
+      50,
+      50,
+      50
+    ],
+    "convergence_threshold": 0,
+    "mesh": [
+      1,
+      1,
+      1
+    ],
+    "spline_order": 3,
+    "bias_field_fwhm": 0.15,
+    "wiener_noise": 0.01,
+    "histogram_bins": 200
   },
   "multi_orientation": {
     "group_by": "",

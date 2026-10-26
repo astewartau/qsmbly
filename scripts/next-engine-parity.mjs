@@ -206,7 +206,43 @@ const check = (what, a, b) => {
   const d = difference(a, b);
   if (d) failures.push(`${what}: ${d}`);
 };
-check('schema', engine.schema(), native.schema);
+// Answers that depend on the build the engine runs in, by QSMxT's design, so a native build cannot
+// give the browser's: QSM.rs's rules that hold only on a WebAssembly heap (`*.wasm-heap`,
+// `*.wasm-windows`: their findings, and the plan errors the required ones become), and AMP-PE's
+// decomposition levels, which a 32-bit build caps lower. They are taken out of both sides here;
+// the browser's cap is checked on its own.
+const WASM_RULE = /\.wasm-(heap|windows)$/;
+const WASM_RULE_ERROR = /\(rule [a-z0-9-]+\.wasm-(heap|windows);/;
+const TARGET_MAX = { 'inversion.amp_pe.nlevel': 31 };
+function withoutTarget(answer) {
+  const out = structuredClone(answer);
+  for (const row of Array.isArray(out.view) ? out.view : []) {
+    for (const k of ['reference', 'recommendations']) {
+      if (!row[k]) continue;
+      row[k] = row[k].filter((r) => !WASM_RULE.test(r.rule));
+      if (!row[k].length) delete row[k];
+    }
+  }
+  const check = out.plan?.check;
+  if (check?.errors) {
+    // Each such error is also a problem, worded as the error without its rule id.
+    const gone = check.errors.filter((e) => WASM_RULE_ERROR.test(e)).map((e) => e.replace(/ \(rule [^)]*\)$/, ''));
+    check.errors = check.errors.filter((e) => !WASM_RULE_ERROR.test(e));
+    if (check.problems) check.problems = check.problems.filter((p) => !gone.includes(p.message));
+  }
+  return out;
+}
+/** The schema less its build-dependent maxima. */
+function schemaWithoutTarget(schema, side) {
+  const out = structuredClone(schema);
+  for (const s of out.settings) {
+    if (!(s.path in TARGET_MAX)) continue;
+    if (side === 'browser' && s.max !== TARGET_MAX[s.path]) failures.push(`schema: ${s.path} max ${s.max} in the browser, not ${TARGET_MAX[s.path]}`);
+    delete s.max;
+  }
+  return out;
+}
+check('schema', schemaWithoutTarget(engine.schema(), 'browser'), schemaWithoutTarget(native.schema, 'native'));
 check('browser profile', browserConfig, native.browser);
 const answers = ['config', 'view', 'pruned', 'plan', 'keys', 'outputs', 'graph', 'methods', 'command', 'toml'];
 for (const [i, ours] of browserSide.entries()) {
@@ -215,7 +251,8 @@ for (const [i, ours] of browserSide.entries()) {
     if (ours.error !== theirs.error) failures.push(`${ours.name}: browser ${ours.error ?? 'ok'}, QSMxT ${theirs.error ?? 'ok'}`);
     continue;
   }
-  for (const a of answers) check(`${ours.name}: ${a}`, ours[a], theirs[a]);
+  const [o, t] = [withoutTarget(ours), withoutTarget(theirs)];
+  for (const a of answers) check(`${ours.name}: ${a}`, o[a], t[a]);
 }
 
 // What the configs exercised, so a comparison of nothing shows as such.

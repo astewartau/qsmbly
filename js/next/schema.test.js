@@ -12,7 +12,8 @@ const setting = (path) => schema.settings.find((s) => s.path === path);
 describe('the schema fixture', () => {
   test('has every value type the inspector renders', () => {
     expect(new Set(schema.settings.map((s) => s.type))).toEqual(new Set([
-      'bool', 'int', 'float', 'int-vec3', 'float-vec3', 'text', 'enum', 'echo-reference', 'mask-sections', 'mask-ops',
+      'bool', 'int', 'float', 'int-vec3', 'float-vec3', 'int-list', 'text', 'enum', 'echo-reference', 'echo-time',
+      'mask-sections', 'mask-ops',
     ]));
   });
 

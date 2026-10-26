@@ -58,6 +58,25 @@ export function App({ session, store, workspace, providers }) {
   `;
 }
 
+/**
+ * Messages for the user (what reading the saved settings changed), each until dismissed.
+ * @param {{ session: Session }} props
+ */
+function Notices({ session }) {
+  const notices = session.ui.notices.value;
+  if (!notices.length) return null;
+  const dismiss = (i) => { session.ui.notices.value = notices.filter((_, j) => j !== i); };
+  return html`
+    <div class="notices" role="status" data-testid="notices">
+      ${notices.map((n, i) => html`
+        <p class="notice">
+          <span>${n}</span>
+          <button type="button" class="link" onClick=${() => dismiss(i)}>Dismiss</button>
+        </p>`)}
+    </div>
+  `;
+}
+
 /** The theme kept for this browser: auto (the system's), light or dark. */
 function savedTheme() {
   try {
@@ -108,6 +127,7 @@ function Header({ session, store, providers, workspace }) {
       </span>
       ${exporting && html`<${ExportPanel} session=${session} store=${store} providers=${providers} engine=${workspace.engine}
         versions=${versions} onClose=${closeExport} />`}
+      <${Notices} session=${session} />
     </header>
   `;
 }

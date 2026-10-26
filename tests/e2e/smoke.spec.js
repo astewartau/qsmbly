@@ -94,7 +94,7 @@ test.describe('next.html', () => {
     const minRadius = page.getByLabel('Minimum Radius', exact);
     await minRadius.fill('0');
     await minRadius.press('Enter');
-    await expect(stepRow(page, 'background').getByTestId('engine-error')).toHaveText('Must be greater than 0');
+    await expect(stepRow(page, 'background').getByTestId('engine-error')).toHaveText('Must be finite and > 0 mm');
     await expect(minRadius).toHaveAttribute('aria-invalid', 'true');
     expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(0);
     const shot = await page.screenshot({ path: testInfo.outputPath('engine-error.png') });
@@ -104,7 +104,7 @@ test.describe('next.html', () => {
     await minRadius.press('Enter');
     await expect(stepRow(page, 'background').getByTestId('typed-error')).toHaveText('Enter a number.');
     expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(0);
-    await minRadius.fill('2');
+    await minRadius.fill('3');
     await minRadius.press('Enter');
     await expect(row(page, 'bg_removal.vsharp.min_radius')).toHaveClass(/changed/);
     await expect(stepRow(page, 'background').locator('.sub.err')).toHaveCount(0);
@@ -126,15 +126,15 @@ test.describe('next.html', () => {
     await page.getByLabel('Minimum Radius', exact).focus();
     await page.keyboard.press('Control+z');
     await expect(page.getByLabel('Minimum Radius', exact)).toHaveValue('0');
-    await expect(stepRow(page, 'background').getByTestId('engine-error')).toHaveText('Must be greater than 0');
+    await expect(stepRow(page, 'background').getByTestId('engine-error')).toHaveText('Must be finite and > 0 mm');
     await page.keyboard.press('Control+z');
-    expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(1);
-    await expect(page.getByLabel('Minimum Radius', exact)).toHaveValue('1');
+    expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(2);
+    await expect(page.getByLabel('Minimum Radius', exact)).toHaveValue('2');
     await page.keyboard.press('Control+Shift+z');
     await page.keyboard.press('Control+Shift+z');
     await row(page, 'bg_removal.vsharp.min_radius').hover();
     await row(page, 'bg_removal.vsharp.min_radius').getByRole('button', { name: 'Reset Minimum Radius' }).click();
-    expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(1);
+    expect(await get(page, 'bg_removal.vsharp.min_radius')).toBe(2);
 
     // An inversion that removes the background itself: the Background step leaves the pipeline.
     await page.locator('[data-section="inversion"]').click();

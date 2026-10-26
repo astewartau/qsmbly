@@ -97,6 +97,8 @@ a:hover { text-decoration: underline; }
   color: var(--warn); border: 1px solid currentColor; border-radius: 999px; padding: 0 8px;
 }
 .topbar-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.notices { flex-basis: 100%; }
+.notice { margin: 2px 0; display: flex; gap: 12px; align-items: baseline; color: var(--warn); }
 
 /* Pipeline column */
 .pipeline { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }

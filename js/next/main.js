@@ -10,7 +10,7 @@ import { render } from 'preact';
 import { effect } from '@preact/signals-core';
 import { html } from './html.js';
 import { App } from './components/App.js';
-import { createSession } from './store/session.js';
+import { createSession, readSavedConfig } from './store/session.js';
 import { VolumeStore } from './store/volumes.js';
 import { EXAMPLE_SCAN } from './fixtures.js';
 import { createEngineClient, Superseded } from './engine/client.js';
@@ -62,11 +62,15 @@ try {
   setItemLookup((key) => engine.itemMeta(key));
 
   const store = new VolumeStore();
+  // Settings saved by this page, perhaps by an earlier version of it, read as QSMxT reads them.
+  const saved = await readSavedConfig(storage(), (text) => engine.fromSavedJson(text));
   const session = createSession({
     defaults: browserConfig,
     planner: (config, f) => engine.plan(config, f),
     settingsView: (config, f) => engine.settingsView(config, f),
     storage: storage(),
+    initial: saved.config,
+    notices: saved.notices,
     schedule: (run) => requestAnimationFrame(() => run()),
   });
   effect(() => learnItems(session.plan.value?.items));

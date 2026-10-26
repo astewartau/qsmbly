@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { createSession, setPath, getPath, configChanges, CONFIG_STORAGE_KEY } from './session.js';
+import { createSession, setPath, getPath, configChanges, readSavedConfig, CONFIG_STORAGE_KEY } from './session.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`../fixtures/${name}`, import.meta.url), 'utf8'));
 const defaults = fixture('config-browser.json');
@@ -108,6 +108,29 @@ describe('session', () => {
     second.session.reset();
     expect(storage.getItem(CONFIG_STORAGE_KEY)).toBeNull();
     second.session.dispose();
+  });
+
+  test('saved settings are read back through the engine, which says what it brought up to date', async () => {
+    const storage = memoryStorage();
+    expect(await readSavedConfig(storage, () => { throw new Error('not asked'); })).toEqual({ config: null, notices: [] });
+    storage.setItem(CONFIG_STORAGE_KEY, '{"inversion":{"algorithm":"rts"}}');
+    const asked = [];
+    const read = async (text) => {
+      asked.push(text);
+      return { config: { inversion: { algorithm: 'rts' }, schema_version: 2 }, warnings: ['TGV\'s tolerance was removed.'] };
+    };
+    const saved = await readSavedConfig(storage, read);
+    expect(asked).toEqual(['{"inversion":{"algorithm":"rts"}}']);
+    expect(saved.config.schema_version).toBe(2);
+    expect(saved.notices).toEqual(['Your saved settings were brought up to date: TGV\'s tolerance was removed.']);
+    // The session starts from it, and shows the notice.
+    const session = createSession({ defaults, planner: () => ({}), storage, initial: saved.config, notices: saved.notices, schedule: () => {} });
+    expect(session.get('inversion.algorithm')).toBe('rts');
+    expect(session.ui.notices.value).toHaveLength(1);
+    session.dispose();
+    // Settings the engine refuses give way to the defaults, with the reason.
+    const refused = await readSavedConfig(storage, async () => { throw new Error('unknown field `x`'); });
+    expect(refused).toEqual({ config: null, notices: ['Your saved settings could not be read, so the defaults are used: unknown field `x`'] });
   });
 
   test('storage that throws is ignored', () => {

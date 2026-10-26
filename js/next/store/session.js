@@ -3,6 +3,8 @@
  * them. The UI keeps no parameters of its own; every setting is a path in the config.
  *
  * - `config` has an undo/redo history and is saved to localStorage, so settings survive a reload.
+ *   A saved config is read back through the engine (`readSavedConfig`, main.js), which brings one
+ *   an earlier version of the page saved up to date.
  * - `plan` is recomputed from config and facts by the planner (the engine worker), batched so
  *   that several edits in one task plan once. `view` (which settings apply, and what is wrong
  *   with their values) is recomputed with it, by the engine's `settings_view`.
@@ -80,10 +82,14 @@ export function configChanges(config, base, prefix = '') {
  * @param {PipelineConfig} options.defaults - the engine's browser profile
  * @param {Planner} options.planner
  * @param {Storage | null} [options.storage] - where the config is kept; null keeps nothing
+ * @param {PipelineConfig | null} [options.initial] - the config to start from (the saved one, as the
+ *   engine read it); without it, the one saved in `storage`, or the defaults
+ * @param {string[]} [options.notices] - what to tell the user at start (what reading the saved
+ *   config changed)
  * @param {SettingsViewFn | null} [options.settingsView] - which settings apply to a config
  * @param {(run: () => void) => void} [options.schedule] - when to re-plan after a change
  */
-export function createSession({ defaults, planner, settingsView = null, storage = null, schedule = (run) => queueMicrotask(run) }) {
+export function createSession({ defaults, planner, settingsView = null, storage = null, initial = undefined, notices = [], schedule = (run) => queueMicrotask(run) }) {
   /** The scan's files, each with its role (inputs.js). */
   const files = signal(/** @type {InputFile[]} */ ([]));
   /** What the user typed in for what the files do not say. */
@@ -106,7 +112,7 @@ export function createSession({ defaults, planner, settingsView = null, storage 
       config: signal(/** @type {PipelineConfig | null} */ (null)),
     },
   };
-  const config = signal(/** @type {PipelineConfig} */ (loadConfig(storage) ?? defaults));
+  const config = signal(/** @type {PipelineConfig} */ ((initial === undefined ? loadConfig(storage) : initial) ?? defaults));
   const undoStack = signal(/** @type {PipelineConfig[]} */ ([]));
   const redoStack = signal(/** @type {PipelineConfig[]} */ ([]));
   const plan = signal(/** @type {Plan | null} */ (null));
@@ -126,6 +132,8 @@ export function createSession({ defaults, planner, settingsView = null, storage 
     overlay: signal(/** @type {string | null} */ (null)),
     /** The file name of each supplied-file setting's file, by setting path. */
     supplied: signal(/** @type {Record<string, string>} */ ({})),
+    /** Messages for the user, shown until dismissed (what reading the saved settings changed). */
+    notices: signal(/** @type {string[]} */ (notices)),
     /** Inspector sections showing every setting rather than the basic ones, by section id. */
     advanced: signal(/** @type {Record<string, boolean>} */ (loadJson(storage, UI_STORAGE_KEY)?.advanced ?? {})),
   };
@@ -284,6 +292,31 @@ export function createSession({ defaults, planner, settingsView = null, storage 
  */
 function loadConfig(storage) {
   return loadJson(storage, CONFIG_STORAGE_KEY);
+}
+
+/**
+ * The config saved in `storage`, read back by `read` (the engine's `fromSavedJson`, which brings
+ * a config an earlier version of the page saved up to date): `{ config, notices }`. Nothing saved:
+ * `config` is null. A saved config the engine refuses is dropped, and the notice says why.
+ * @param {Storage | null} storage
+ * @param {(text: string) => Promise<{ config: PipelineConfig, warnings: string[] }>} read
+ * @returns {Promise<{ config: PipelineConfig | null, notices: string[] }>}
+ */
+export async function readSavedConfig(storage, read) {
+  let text = null;
+  try {
+    text = storage?.getItem(CONFIG_STORAGE_KEY) ?? null;
+  } catch {
+    // Storage blocked: nothing saved.
+  }
+  if (!text) return { config: null, notices: [] };
+  try {
+    const { config, warnings } = await read(text);
+    const notices = warnings.length ? [`Your saved settings were brought up to date: ${warnings.join(' ')}`] : [];
+    return { config, notices };
+  } catch (e) {
+    return { config: null, notices: [`Your saved settings could not be read, so the defaults are used: ${e instanceof Error ? e.message : e}`] };
+  }
 }
 
 /**
