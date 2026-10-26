@@ -49,6 +49,7 @@ fn view_facts(facts_json: Option<&str>) -> Result<ViewFacts, String> {
     Ok(ViewFacts {
         num_echoes: Some(facts.n_echoes),
         multi_coil: Some(facts.n_coils > 1),
+        ..ViewFacts::default()
     })
 }
 
@@ -279,6 +280,30 @@ pub fn config_from_toml_wasm(toml: &str) -> Result<String, JsValue> {
     config_from_toml(toml).map_err(js_err)
 }
 
+/// A configuration the page saved (PipelineConfig JSON, possibly from an earlier version of the
+/// page), read as QSMxT reads a saved JSON config (`PipelineConfig::from_json_migrating`: one
+/// without `schema_version` is brought up to date as an older settings file is), then given the
+/// browser profile: `{ config, warnings }`, as [`config_from_toml`]. A config QSMxT would refuse
+/// is refused with its reason.
+pub fn config_from_json(json: &str) -> Result<String, String> {
+    let (mut config, migration) =
+        PipelineConfig::from_json_migrating(json).map_err(|e| e.to_string())?;
+    config.apply_browser_profile();
+    let warnings: Vec<String> = migration
+        .warnings
+        .into_iter()
+        .chain(migration.notes)
+        .collect();
+    let config: Value = serde_json::to_value(&config).map_err(|e| e.to_string())?;
+    Ok(json!({ "config": config, "warnings": warnings }).to_string())
+}
+
+/// [`config_from_json`].
+#[wasm_bindgen]
+pub fn config_from_json_wasm(json: &str) -> Result<String, JsValue> {
+    config_from_json(json).map_err(js_err)
+}
+
 // ============================================================================
 // The pipeline graph and the items
 // ============================================================================
@@ -501,7 +526,10 @@ mod tests {
             .iter()
             .find(|r| r["path"] == "inversion.tkd.threshold")
             .unwrap();
-        assert_eq!(tkd["error"], "Must be greater than 0");
+        assert!(
+            tkd["error"].as_str().is_some_and(|e| !e.is_empty()),
+            "{tkd}"
+        );
         // Without facts every setting the data could need applies.
         assert!(settings_view(&browser(), None).is_ok());
     }
@@ -566,6 +594,31 @@ mod tests {
         )
         .unwrap();
         assert_eq!(old["warnings"].as_array().unwrap().len(), 1);
+    }
+
+    /// A saved config is read back as it was saved; one saved before configs carried
+    /// `schema_version` is brought up to date by the engine, with its notes.
+    #[test]
+    fn a_saved_config_is_read_through_the_engines_migration() {
+        let config = set(&browser(), "inversion.algorithm", json!("rts"));
+        let back: Value = serde_json::from_str(&config_from_json(&config).unwrap()).unwrap();
+        assert_eq!(
+            back["config"],
+            serde_json::from_str::<Value>(&config).unwrap()
+        );
+        assert_eq!(back["warnings"], json!([]));
+        // Saved by an earlier page: no schema_version, and TGV's tolerance (gone since).
+        let mut old: Value = serde_json::from_str(&browser()).unwrap();
+        old.as_object_mut().unwrap().remove("schema_version");
+        old["inversion"]["tgv"]["tol"] = json!(1e-5);
+        let back: Value =
+            serde_json::from_str(&config_from_json(&old.to_string()).unwrap()).unwrap();
+        assert_eq!(
+            back["config"]["schema_version"],
+            json!(qsmxt_engine::migrate::CONFIG_SCHEMA_VERSION)
+        );
+        assert!(back["config"]["inversion"]["tgv"].get("tol").is_none());
+        assert!(config_from_json("{ not json").is_err());
     }
 
     /// The short settings file holds the browser profile's and the user's changes from QSMxT's
@@ -766,8 +819,27 @@ mod tests {
             "{nodes:?}"
         );
         assert!(after["mermaid"].as_str().unwrap().contains("computed"));
-        let methods = methods_after(&config_json, &facts_json, &record).unwrap();
-        assert_eq!(methods, super::methods(&config_json, &facts_json).unwrap());
+        // The same methods as planned; the run's Note may say more, since the run's own scan
+        // reaches the rules (its echo count, say) where the planned Note has only the config.
+        let after: Value =
+            serde_json::from_str(&methods_after(&config_json, &facts_json, &record).unwrap())
+                .unwrap();
+        let planned: Value =
+            serde_json::from_str(&super::methods(&config_json, &facts_json).unwrap()).unwrap();
+        assert_eq!(after["sentences"], planned["sentences"]);
+        assert_eq!(after["references"], planned["references"]);
+        for line in planned["note"]["differences"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            assert!(
+                after["note"]["differences"]
+                    .as_array()
+                    .is_some_and(|a| a.contains(line)),
+                "{line} is in the planned Note but not the run's"
+            );
+        }
         // The record fits the example's plan too, which the page's tests show it on.
         let example: Vec<Value> = serde_json::from_str::<Value>(
             &super::graph(&browser(), &example_facts(), None).unwrap(),

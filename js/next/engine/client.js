@@ -107,6 +107,7 @@ export function createEngineClient(worker) {
     toTomlChanged: op('toTomlChanged'),
     toTomlFull: op('toTomlFull'),
     fromToml: op('fromToml'),
+    fromSavedJson: op('fromSavedJson'),
     itemMeta: op('itemMeta'),
     scanFacts: op('scanFacts'),
     scanReport: op('scanReport'),

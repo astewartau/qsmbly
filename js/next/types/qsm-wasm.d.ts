@@ -37,6 +37,7 @@ export function set_setting_wasm(config_json: string, path: string, value_json: 
 export function command_wasm(config_json: string): string;
 export function config_to_toml_wasm(config_json: string, selected: boolean): string;
 export function config_from_toml_wasm(toml: string): string;
+export function config_from_json_wasm(json: string): string;
 export function pipeline_graph_wasm(config_json: string, facts_json: string, grid_json?: string | null): string;
 export function methods_structured_wasm(config_json: string, facts_json: string): string;
 export function item_meta_wasm(key: string): string | undefined;

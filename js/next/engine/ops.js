@@ -107,6 +107,13 @@ export function engineOps(wasm) {
     toTomlChanged: (config) => call(wasm.config_to_toml_changed_wasm, json(config)),
     /** A QSMxT configuration file read as `qsmxt run --config` does, with the browser profile. */
     fromToml: (text) => /** @type {{ config: PipelineConfig, warnings: string[] }} */ (JSON.parse(call(wasm.config_from_toml_wasm, text))),
+    /**
+     * Settings the page saved (PipelineConfig JSON, perhaps from an earlier version of the page),
+     * brought up to date as QSMxT reads a saved JSON config (`from_json_migrating`), with the
+     * browser profile; `warnings` are the engine's notes on what it changed.
+     * @param {string} text
+     */
+    fromSavedJson: (text) => /** @type {{ config: PipelineConfig, warnings: string[] }} */ (JSON.parse(call(wasm.config_from_json_wasm, text))),
     /** What the item kept under `key` is; null for a key that names no item. @returns {ItemMeta | null} */
     itemMeta: (key) => {
       const meta = call(wasm.item_meta_wasm, key);

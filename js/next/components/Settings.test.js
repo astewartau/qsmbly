@@ -173,19 +173,19 @@ describe('editing', () => {
     expect(session.get('bg_removal.vsharp.min_radius')).toBe(0);
     await flush();
     const error = root.querySelector('[data-testid="engine-error"]');
-    expect(error.textContent).toBe('Must be greater than 0');
+    expect(error.textContent).toBe('Must be finite and > 0 mm');
     expect(input.getAttribute('aria-invalid')).toBe('true');
-    await change(input, '2');
+    await change(input, '3');
     await flush();
-    expect(session.get('bg_removal.vsharp.min_radius')).toBe(2);
+    expect(session.get('bg_removal.vsharp.min_radius')).toBe(3);
     expect(root.querySelector('.sub.err')).toBeNull();
     await act(() => session.undo());
     await flush();
     expect(session.get('bg_removal.vsharp.min_radius')).toBe(0);
     await act(() => session.undo());
     await flush();
-    expect(session.get('bg_removal.vsharp.min_radius')).toBe(1);
-    expect(row(root, 'bg_removal.vsharp.min_radius').querySelector('input').value).toBe('1');
+    expect(session.get('bg_removal.vsharp.min_radius')).toBe(2);
+    expect(row(root, 'bg_removal.vsharp.min_radius').querySelector('input').value).toBe('2');
   });
 
   test('what cannot be a value shows why and writes nothing', async () => {
@@ -197,11 +197,11 @@ describe('editing', () => {
     await change(input, 'two');
     expect(root.querySelector('[data-testid="typed-error"]').textContent).toBe('Enter a number.');
     expect(input.value).toBe('two'); // what was typed stays, to correct
-    expect(session.get('bg_removal.vsharp.min_radius')).toBe(1);
+    expect(session.get('bg_removal.vsharp.min_radius')).toBe(2);
     expect(session.canUndo.value).toBe(false);
   });
 
-  test('exclusive bounds from the engine: TKD\'s threshold must be above 0', async () => {
+  test('exclusive bounds from the engine: TKD\'s threshold must be inside 0 to 2/3', async () => {
     const { session, store, flush } = setup();
     session.set('inversion.algorithm', 'tkd');
     session.ui.advanced.value = { inversion: true };
@@ -209,7 +209,7 @@ describe('editing', () => {
     const root = await step(session, store, 'inversion');
     await change(row(root, 'inversion.tkd.threshold').querySelector('input'), '0');
     await flush();
-    expect(root.querySelector('[data-testid="engine-error"]').textContent).toBe('Must be greater than 0');
+    expect(root.querySelector('[data-testid="engine-error"]').textContent).toBe('Must be from 0 to 2/3 (not 0 or 2/3)');
     expect(session.get('inversion.tkd.threshold')).toBe(0);
   });
 
@@ -276,6 +276,54 @@ describe('editing', () => {
     await change(root.querySelector('#setting-motion-correction-reference-echo'), 'x');
     expect(root.querySelector('.sub.err').textContent).toBe('Enter an echo number.');
     expect(session.get('motion_correction.reference')).toBe('3');
+    await flush();
+  });
+
+  test('an echo time: a named one, or a time in ms', async () => {
+    const { session, store, flush } = setup();
+    session.set('inversion.algorithm', 'star');
+    session.ui.advanced.value = { inversion: true };
+    await flush();
+    const root = await step(session, store, 'inversion');
+    const select = row(root, 'inversion.star.te').querySelector('select');
+    expect(select.selectedOptions[0].textContent).toBe('Sum of echo times');
+    await change(select, 'time');
+    expect(session.get('inversion.star.te')).toBe('sum'); // nothing written until a time is typed
+    const ms = root.querySelector('#setting-inversion-star-te-ms');
+    await change(ms, 'soon');
+    expect(root.querySelector('.sub.err').textContent).toBe('Enter an echo time in ms.');
+    await change(ms, '20');
+    expect(session.get('inversion.star.te')).toEqual({ seconds: 0.02 });
+    await flush();
+    expect(root.querySelector('#setting-inversion-star-te-ms').value).toBe('20');
+  });
+
+  test('a list of whole numbers: N4\'s iterations at each level', async () => {
+    const { session, store, flush } = setup();
+    session.set('masking.inhomogeneity_method', 'n4');
+    session.ui.advanced.value = { geometry: true };
+    await flush();
+    const root = await step(session, store, 'geometry');
+    const input = row(root, 'n4.max_iterations').querySelector('input');
+    expect(input.value).toBe('50 50 50 50');
+    await change(input, '50 4.5');
+    expect(root.querySelector('.sub.err').textContent).toBe('Enter a whole number.');
+    expect(session.get('n4.max_iterations')).toEqual([50, 50, 50, 50]);
+    await change(input, '50, 40');
+    expect(session.get('n4.max_iterations')).toEqual([50, 40]);
+    await flush();
+  });
+
+  test('where the run takes a method\'s own value, the row says so', async () => {
+    const { session, store, flush } = setup();
+    session.set('inversion.algorithm', 'medi');
+    await flush();
+    const root = await step(session, store, 'background');
+    // The setting keeps the user's value; the engine's adjustment is said under it.
+    expect(row(root, 'bg_removal.algorithm').querySelector('select').value).toBe(optionIndex('bg_removal.algorithm', 'vsharp'));
+    const note = root.querySelector('[data-testid="adjustment"]').textContent;
+    const adjustment = session.plan.value.adjustments.find((x) => x.setting === 'bg_removal.algorithm');
+    expect(note).toBe(`${adjustment.message}.`);
     await flush();
   });
 });
