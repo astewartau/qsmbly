@@ -56,3 +56,6 @@ Thumbs.db
 # Playwright (npm run test:e2e)
 test-results/
 playwright-report/
+
+# Claude Code session memory; never part of the repository
+.claude/projects/
