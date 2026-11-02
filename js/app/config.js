@@ -348,6 +348,9 @@ export const TFI_DEFAULTS = {
   tol: _TFI.tol,
 };
 
+// dicompare (DICOM protocol report): embed modules, worker and schema, loaded on first use.
+export const DICOMPARE_BASE = 'https://astewartau.github.io/dicompare-web';
+
 // Example data, fetched from Hugging Face at runtime.
 //
 // Previously this was downloaded from OSF during CI and baked into the deployed site,

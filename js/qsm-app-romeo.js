@@ -1535,11 +1535,12 @@ class QSMApp {
    */
   _loadDicompare() {
     this.dicompareLoad ||= Promise.all([
-      import('https://dicompare.neurodesk.org/embed/DicompareController.js'),
-      import('https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js')
+      import(`${QSMConfig.DICOMPARE_BASE}/embed/DicompareController.js`),
+      import(`${QSMConfig.DICOMPARE_BASE}/embed/DicompareReportRenderer.js`)
     ]).then(([{ DicompareController }, { DicompareReportRenderer }]) => {
       this.dicompareController = new DicompareController({
-        schemaUrl: 'https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json',
+        schemaUrl: `${QSMConfig.DICOMPARE_BASE}/schemas/QSM_Consensus_Guidelines_v1.0.json`,
+        workerUrl: `${QSMConfig.DICOMPARE_BASE}/embed/dicompare-worker.js`,
         updateOutput: (msg) => this.updateOutput(msg)
       });
       this.dicompareRenderer = new DicompareReportRenderer();
@@ -1549,9 +1550,9 @@ class QSMApp {
       const btn = document.getElementById('dicompareReportBtn');
       if (btn) {
         btn.disabled = true;
-        btn.title = 'dicompare could not be loaded from dicompare.neurodesk.org';
+        btn.title = `dicompare could not be loaded from ${QSMConfig.DICOMPARE_BASE}`;
       }
-      this.updateOutput('dicompare report unavailable: could not load it from dicompare.neurodesk.org');
+      this.updateOutput(`dicompare report unavailable: could not load it from ${QSMConfig.DICOMPARE_BASE}`);
       return false;
     });
     return this.dicompareLoad;
