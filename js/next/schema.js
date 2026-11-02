@@ -17,7 +17,7 @@
  *   or a time the user gives (the value is then `{ seconds }`, edited in ms)
  * @property {number} [min] - for `echo-number`: the first echo number
  *
- * @typedef {'bool' | 'int' | 'float' | 'int-vec3' | 'float-vec3' | 'int-list' | 'text' | 'enum' | 'echo-reference' | 'echo-time' | 'mask-sections' | 'mask-ops'} SettingType
+ * @typedef {'bool' | 'int' | 'float' | 'int-vec3' | 'float-vec3' | 'int-list' | 'text' | 'enum' | 'echo-reference' | 'echo-time' | 'number-or-choice' | 'mask-sections' | 'mask-ops'} SettingType
  *
  * @typedef {object} Setting - qsmxt-engine `schema::Setting`, as JSON
  * @property {string} path
@@ -28,7 +28,8 @@
  * @property {string} [value_label] - for a checkbox with a value (`off` set): the value's label
  * @property {string} [value_help]
  * @property {SettingType} type
- * @property {SchemaOption[]} [options] - enum, echo-reference and echo-time
+ * @property {SchemaOption[]} [options] - enum, echo-reference, echo-time and number-or-choice (the
+ *   named choices beside a number, e.g. a bound `echo-spacing` or one in ppm)
  * @property {boolean} optional - the value may be null
  * @property {unknown} [off] - the value that turns a checkbox-with-a-value setting off
  * @property {string} [units]
@@ -120,6 +121,10 @@ export function formatValue(setting, value) {
     if (option) return option.name;
   }
   if (setting.type === 'int-list' && Array.isArray(value)) return value.join(' ');
+  if (setting.type === 'number-or-choice') {
+    const option = (setting.options ?? []).find((o) => same(o.value, value));
+    if (option) return option.name;
+  }
   if (setting.type === 'enum' || setting.type === 'echo-reference') {
     const { named, echo } = echoChoice(setting, value);
     if (echo !== null) return `echo ${echo}`;
@@ -136,7 +141,7 @@ export function formatValue(setting, value) {
 
 /**
  * @typedef {object} Control
- * @property {'checkbox' | 'number' | 'vec3' | 'list' | 'select' | 'echo' | 'echo-time' | 'text' | 'file' | 'recipe' | 'unavailable'} kind
+ * @property {'checkbox' | 'number' | 'vec3' | 'list' | 'select' | 'echo' | 'echo-time' | 'number-or-choice' | 'text' | 'file' | 'recipe' | 'unavailable'} kind
  * @property {boolean} toggled - shown as a checkbox with a value under it (`off` set)
  * @property {boolean} nullable - the value may be left unset (an empty field)
  * @property {boolean} integer
@@ -166,6 +171,7 @@ export function controlFor(setting) {
     case 'int-list': return { ...base, kind: 'list', range };
     case 'echo-reference': return { ...base, kind: 'echo', range: { min: setting.options?.find((o) => o.kind === 'echo-number')?.min, step: 1 } };
     case 'echo-time': return { ...base, kind: 'echo-time' };
+    case 'number-or-choice': return { ...base, kind: 'number-or-choice', range };
     case 'mask-sections':
     case 'mask-ops': return { ...base, kind: 'recipe' };
     default: return { ...base, kind: 'text' };
@@ -216,6 +222,7 @@ export function validate(setting, value) {
       return ms !== null && Number.isFinite(ms) ? null : 'Enter an echo time in ms.';
     }
     case 'enum': return setting.options?.some((o) => same(o.value, value)) ? null : 'Not one of the choices.';
+    case 'number-or-choice': return setting.options?.some((o) => same(o.value, value)) ? null : number(value);
     case 'echo-reference': {
       const { named, numbered, echo } = echoChoice(setting, value);
       if (named.some((o) => o.value === value)) return null;
@@ -256,6 +263,19 @@ export function onValue(setting) {
     if (!same(v, setting.off) && v !== null && v !== undefined) return v;
   }
   if (setting.type === 'text') return '';
+  return setting.min !== undefined && setting.min > 0 ? setting.min : 1;
+}
+
+/**
+ * The number a number-or-choice setting takes when the number is chosen in place of a named
+ * choice: its default if that is a number, or failing that its other default, or the smallest
+ * value it allows.
+ * @param {Setting} setting
+ */
+export function numberOf(setting) {
+  for (const v of [setting.browser_default, setting.default]) {
+    if (typeof v === 'number') return v;
+  }
   return setting.min !== undefined && setting.min > 0 ? setting.min : 1;
 }
 

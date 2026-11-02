@@ -300,6 +300,29 @@ describe('editing', () => {
     expect(root.querySelector('#setting-inversion-star-te-ms').value).toBe('20');
   });
 
+  test('a number or a named choice: DECOMPOSE\'s χ bound', async () => {
+    const { session, store, flush } = setup();
+    session.set('pipeline.do_chi_separation', true);
+    session.set('separation.algorithm', 'decompose');
+    session.ui.advanced.value = { chisep: true };
+    await flush();
+    const root = await step(session, store, 'chisep');
+    const select = row(root, 'separation.decompose.chi_bound').querySelector('select');
+    expect(select.selectedOptions[0].textContent).toBe('χ bound');
+    const value = root.querySelector('#setting-separation-decompose-chi-bound-value');
+    expect(value.value).toBe('0.5');
+    await change(value, 'x');
+    expect(root.querySelector('.sub.err').textContent).toBe('Enter a number.');
+    await change(value, '0.3');
+    expect(session.get('separation.decompose.chi_bound')).toBe(0.3);
+    await change(select, '0');
+    expect(session.get('separation.decompose.chi_bound')).toBe('echo-spacing');
+    await flush();
+    expect(root.querySelector('#setting-separation-decompose-chi-bound-value')).toBeNull();
+    await change(row(root, 'separation.decompose.chi_bound').querySelector('select'), 'number');
+    expect(session.get('separation.decompose.chi_bound')).toBe(0.5);
+  });
+
   test('a list of whole numbers: N4\'s iterations at each level', async () => {
     const { session, store, flush } = setup();
     session.set('masking.inhomogeneity_method', 'n4');

@@ -975,7 +975,7 @@ async function runRs2Net(data) {
 }
 
 async function runApplyMaskOps(data) {
-  const { mask, ops, inputData, magnitude, dims, voxelSize } = data;
+  const { mask, ops, inputData, magnitude, dims, voxelSize, affine } = data;
   try {
     const [nx, ny, nz] = dims;
     const [vsx, vsy, vsz] = voxelSize;
@@ -989,6 +989,8 @@ async function runApplyMaskOps(data) {
       new Float64Array(inputData || []),
       new Float64Array(magnitude || []),
       nx, ny, nz, vsx, vsy, vsz,
+      // BET takes FSL's left-right order from it, MindGrab its orientation; empty when unknown.
+      new Float64Array(affine || []),
     );
     self.postMessage({ type: 'applyMaskOpsComplete', maskData }, [maskData.buffer]);
   } catch (error) {
@@ -1039,6 +1041,8 @@ async function runBET(data) {
       magData, nx, ny, nz, vsx, vsy, vsz,
       fractionalIntensity || 0.5, betSmoothness, betGradient,
       betIterations, betSubdivisions,
+      // FSL runs bet2 on a neurologically stored image with x reversed: the order is the header's.
+      magResult.affine,
       progressCallback
     );
 
