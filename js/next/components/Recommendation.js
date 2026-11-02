@@ -63,19 +63,27 @@ export function ReferenceLine({ view, style }) {
  */
 function Dialog({ title, onClose, children, focus }) {
   const dialog = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     (focus?.current ?? dialog.current)?.focus();
   }, [title]);
-  const onKey = (e) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-    }
-  };
+  // Escape on the window, not the dialog: the focus moves into the dialog only after it is
+  // drawn, and an Escape before that (or with the focus elsewhere) must still close it.
+  useEffect(() => {
+    const onKey = (/** @type {KeyboardEvent} */ e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   return html`
     <div class="rec-backdrop" onClick=${(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div class="rec-modal" role="dialog" aria-modal="true" aria-labelledby="rec-title" tabindex="-1" ref=${dialog}
-        onKeyDown=${onKey} data-testid="rec-modal">
+        data-testid="rec-modal">
         <h2 id="rec-title">${title}</h2>
         ${children}
       </div>
