@@ -121,7 +121,8 @@ test('a departure from a reference pipeline is information only: a marker, never
   await page.screenshot({ path: testInfo.outputPath('rec-reference.png') });
   await expect(page.getByTestId('rec-modal')).toHaveCount(0);
   // The marker opens the details: whose reference it is, why and the source; nothing changes
-  // unless applied, and Keep mine keeps it as an information marker.
+  // unless applied, and Keep mine records nothing (a reference difference is information only):
+  // the marker stays.
   await markerOf(page, 'field_mapping.unwrapping_algorithm').getByTestId('rec-info').click();
   const modal = page.getByTestId('rec-modal');
   await expect(modal).toContainText("iLSQR's reference pipeline uses Laplacian");
@@ -130,8 +131,7 @@ test('a departure from a reference pipeline is information only: a marker, never
   await page.screenshot({ path: testInfo.outputPath('rec-details.png') });
   await modal.getByRole('button', { name: 'Keep mine' }).click();
   await expect(modal).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => globalThis.qsmblyNext.session.config.value.dismissed_recommendations?.map((d) => d.rule)))
-    .toContain('sti.unwrap-laplacian');
+  expect(await page.evaluate(() => globalThis.qsmblyNext.session.config.value.dismissed_recommendations ?? [])).toEqual([]);
   expect(await page.evaluate(() => globalThis.qsmblyNext.session.config.value.field_mapping.unwrapping_algorithm)).toBe('romeo');
   await expect(markerOf(page, 'field_mapping.unwrapping_algorithm').getByTestId('rec-info')).toBeVisible();
   expect(errors).toEqual([]);
@@ -183,16 +183,14 @@ test('Apply all takes the reference pipeline\'s values', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('Keep mine is saved and not offered again; Choose per setting picks each row', async ({ page }, testInfo) => {
+test('Keep mine changes and records nothing; Choose per setting picks each row', async ({ page }, testInfo) => {
   const errors = watchErrors(page);
   let modal = await chooseMedi(page);
   const before = await config(page);
   await modal.getByRole('button', { name: 'Keep mine' }).click();
   await expect(modal).toHaveCount(0);
-  await expect.poll(async () => (await config(page)).dismissed_recommendations?.length ?? 0).toBeGreaterThan(0);
-  const kept = await config(page);
-  expect({ ...kept, dismissed_recommendations: [] }).toEqual({ ...before, dismissed_recommendations: [] });
-  // Another method and back: MEDI's kept values went with it, so it is offered again.
+  expect(await config(page)).toEqual(before);
+  // Another method and back: MEDI is offered again.
   await row(page, 'inversion.algorithm').locator('select').selectOption({ label: 'TKD' });
   await closeOffers(page);
   await row(page, 'inversion.algorithm').locator('select').selectOption({ label: 'MEDI' });
@@ -205,12 +203,13 @@ test('Keep mine is saved and not offered again; Choose per setting picks each ro
   // Keep the first row's value, take the reference for the rest.
   const first = (await rowSettings(modal))[0];
   const value = (c) => first.split('.').reduce((o, k) => o?.[k], c);
-  const mine = value(await config(page));
+  const beforeChoices = await config(page);
+  const mine = value(beforeChoices);
   await picks.first().selectOption('keep');
   await modal.getByRole('button', { name: 'Apply choices' }).click();
   await expect(modal).toHaveCount(0);
   // The first row kept its own value once the choices are in (the others took the reference's).
-  await expect.poll(async () => (await config(page)).dismissed_recommendations?.length ?? 0).toBeGreaterThan(0);
+  await expect.poll(async () => JSON.stringify(await config(page))).not.toBe(JSON.stringify(beforeChoices));
   expect(value(await config(page))).toEqual(mine);
   expect(errors).toEqual([]);
 });

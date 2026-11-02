@@ -144,7 +144,7 @@ fn file_identity(bytes: &[u8]) -> String {
     let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &b| {
         (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
     });
-    format!("the supplied file ({} bytes, {hash:016x})", bytes.len())
+    format!("(file {hash:016x})")
 }
 
 /// The threads the run worker computes a plan on, of the page's `threads`: a plan with networks
