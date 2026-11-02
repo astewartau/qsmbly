@@ -97,6 +97,7 @@ fn keys(config: &PipelineConfig, facts: &ScanFacts, c: &Value) -> Result<Value, 
         dims: first.dims,
         voxel_size: first.voxel_size,
         affine: first.affine,
+        orientation: first.orientation,
         sidecar: inputs.facts().sidecars.into_iter().next(),
     };
     let store = MemoryStore::with_volumes(header, "parity".into(), Held(held));

@@ -782,8 +782,9 @@ mod tests {
     }
 
     /// Choosing MEDI chooses a method with a reference pipeline: the bindings name it, offer where
-    /// the config differs from it under its title, and Keep mine and Apply all each leave nothing
-    /// to offer. The view's marker says whose rule a setting departs from.
+    /// the config differs from it under its title; Keep mine records nothing (a reference
+    /// difference is information only) and Apply all leaves nothing to offer. The view's marker
+    /// says whose rule a setting departs from.
     #[test]
     fn a_chosen_methods_reference_pipeline_is_offered_kept_or_applied() {
         let facts = example_facts();
@@ -819,8 +820,13 @@ mod tests {
             !found.is_empty(),
             "the browser profile differs from MEDI's reference"
         );
-        let found = Value::from(found).to_string();
-        assert!(differences(&keep_findings(&medi, &found).unwrap()).is_empty());
+        let found_json = Value::from(found.clone()).to_string();
+        // A reference difference is information only: keeping it records nothing, so it stays.
+        assert_eq!(
+            differences(&keep_findings(&medi, &found_json).unwrap()),
+            found
+        );
+        let found = found_json;
         assert!(differences(&apply_all(&medi, &found).unwrap()).is_empty());
         assert_eq!(
             reference_titles(&chosen).unwrap(),
@@ -1110,6 +1116,7 @@ mod tests {
             dims: (N, N, N),
             voxel_size: (1.0, 1.0, 1.0),
             affine,
+            orientation: None,
             sidecar: None,
         };
         let mut store = MemoryStore::new(header, json!("phantom-1"));
@@ -1268,12 +1275,15 @@ mod tests {
             far[5 * i] = 1.0;
         }
         far[3] = 1000.0;
-        store.supply_mask(Supplied::Found {
-            origin: "drawn mask".into(),
-            data: vec![1.0; 8],
-            dims: (2, 2, 2),
-            affine: far,
-        });
+        store.supply_mask(
+            Supplied::Found {
+                origin: "drawn mask".into(),
+                data: vec![1.0; 8],
+                dims: (2, 2, 2),
+                affine: far,
+            },
+            "drawn mask",
+        );
         let record = recorded_run("run-mask-computed.json", &config, &facts, &mut store);
         let (config_json, facts_json) = (
             config.to_json().unwrap(),

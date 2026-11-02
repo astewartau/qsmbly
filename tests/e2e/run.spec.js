@@ -114,10 +114,11 @@ test.describe('runs in next.html', () => {
     expect(errors).toEqual([]);
   });
 
-  test('a step that fails is marked, with the engine\'s message, and the log has it', async ({ page }) => {
+  test('a run the engine refuses before its first step fails with the engine\'s message', async ({ page }) => {
     test.setTimeout(3 * 60_000);
     await loadPhantom(page);
-    // A susceptibility map supplied on another grid, for χ-separation: it fails there.
+    // A susceptibility map supplied on another grid, for χ-separation: the run refuses it before
+    // computing anything (QSMxT checks supplied maps' grids up front).
     const chi = [...niftiFloat32([4, 4, 4], new Float32Array(64))];
     await page.evaluate(async (bytes) => {
       const { session, store, loader } = globalThis.qsmblyNext;
@@ -129,13 +130,12 @@ test.describe('runs in next.html', () => {
     await page.getByTestId('run-button').click();
     await expect.poll(() => status(page), { timeout: 2 * 60_000 }).toBe('failed');
     const error = await page.evaluate(() => globalThis.qsmblyNext.runner.error.value);
-    expect(error.step).toBeTruthy();
+    expect(error.step).toBeNull();
+    expect(error.message).toContain('supplied susceptibility map');
+    // Only the load step, which decides the grid the map is checked against, ran.
     const states = await runStates(page);
-    expect(states[error.step]).toBe('failed');
-    await expect(page.getByTestId('run-progress')).toContainText('Failed in');
-    await expect(page.getByTestId('step-error').first()).toHaveText(error.message);
-    await page.getByTestId('log-toggle').click();
-    await expect(page.getByTestId('log-panel')).toContainText(`[${error.step}]`);
+    expect(Object.entries(states).filter(([, s]) => s === 'done').map(([step]) => step)).toEqual(['load']);
+    await expect(page.getByTestId('run-progress')).toContainText(`Failed: ${error.message}`);
   });
 
   test('an oblique scan resampled to axial ends with its outputs on the acquired grid', async ({ page }) => {

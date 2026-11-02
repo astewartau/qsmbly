@@ -24,7 +24,7 @@ import { html } from '../html.js';
 import { useState } from 'preact/hooks';
 import { useFollow } from './follow.js';
 import {
-  valueOf, isChanged, controlFor, validate, parseField, parseList, onValue, echoChoice, echoTimeChoice,
+  valueOf, isChanged, controlFor, validate, parseField, parseList, onValue, numberOf, echoChoice, echoTimeChoice,
   browserDefaultNote, formatValue, SUPPLIED_TOOL,
 } from '../schema.js';
 import { readNifti } from '../nifti.js';
@@ -183,6 +183,7 @@ export function SettingRow({ row, session, store, byPath, depth = 0 }) {
     ${control.kind === 'select' && on && html`<${OptionHelp} setting=${setting} value=${value} style=${style} />`}
     ${control.kind === 'echo' && html`<${EchoNumber} ...${props} style=${style} />`}
     ${control.kind === 'echo-time' && html`<${EchoTimeValue} ...${props} style=${style} />`}
+    ${control.kind === 'number-or-choice' && html`<${NumberOrChoiceValue} ...${props} style=${style} />`}
     ${control.kind === 'file' && html`<${SuppliedName} ...${props} style=${style} />`}
     ${help && html`<p class="sub help" id=${helpId} style=${style} hidden=${!helpOpen}>${help}</p>`}
     <${RecMarker} path=${setting.path} view=${row.view} label=${label} style=${style} />
@@ -245,6 +246,20 @@ function Control(props) {
           }}>
           ${named.map((o) => html`<option value=${String(o.value)} selected=${!timing && same(value, o.value)}>${o.name}</option>`)}
           ${timed && html`<option value="time" selected=${timing}>${timed.name}</option>`}
+        </select>`;
+    }
+    case 'number-or-choice': {
+      const options = setting.options ?? [];
+      const numeric = typeof value === 'number';
+      return html`
+        <select id=${id} class="sel" ...${aria}
+          onChange=${(e) => {
+            const v = e.currentTarget.value;
+            setError(null);
+            commit(v === 'number' ? numberOf(setting) : options[Number(v)].value);
+          }}>
+          ${options.map((o, i) => html`<option value=${String(i)} selected=${!numeric && same(value, o.value)}>${o.name}</option>`)}
+          <option value="number" selected=${numeric}>${setting.value_label ?? 'A value'}</option>
         </select>`;
     }
     case 'file':
@@ -380,6 +395,26 @@ function EchoTimeValue({ setting, value, id, setError, commit, style, timeOpen }
           <span class="reset" hidden></span>
         </div>
       </div>`}
+    ${chosen?.help && html`<p class="sub option-help" style=${style}>${chosen.help}</p>`}
+  `;
+}
+
+/** A number-or-choice setting's number, on a row of its own while it is chosen, or the chosen option's help. */
+function NumberOrChoiceValue(props) {
+  const { setting, value, id, units, style } = props;
+  const numeric = typeof value === 'number';
+  const chosen = (setting.options ?? []).find((o) => same(o.value, value));
+  const label = setting.value_label ?? 'Value';
+  return html`
+    ${numeric && html`
+      <div class="row" style=${style}>
+        <div class="lab"><span class="dot" aria-hidden="true"></span><label for=${`${id}-value`}>${label}</label></div>
+        <div class="ctl">
+          <${NumberInput} ...${props} id=${`${id}-value`} aria=${{}} />${units && html`<span class="unit">${units}</span>`}
+          <span class="reset" hidden></span>
+        </div>
+      </div>
+      ${setting.value_help && html`<p class="sub option-help" style=${style}>${setting.value_help}</p>`}`}
     ${chosen?.help && html`<p class="sub option-help" style=${style}>${chosen.help}</p>`}
   `;
 }

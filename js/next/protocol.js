@@ -56,6 +56,9 @@
  * @property {[number, number, number]} dims
  * @property {[number, number, number]} voxel_size - mm
  * @property {number[]} affine - 16 values, row-major
+ * @property {object} [orientation] - a file's header orientation fields as stored (qsmxt-engine
+ *   `scan::HeaderOrientation`: pixdim, qform, sform), read with its grid: N4 gets the image
+ *   geometry ITK reads from them
  */
 
 /**

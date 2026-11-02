@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import {
   settingsIn, valueOf, isChanged, browserDefaultNote, formatValue, controlFor, validate, parseField,
-  onValue, echoChoice, searchSettings,
+  onValue, numberOf, echoChoice, searchSettings,
 } from './schema.js';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
@@ -13,7 +13,7 @@ describe('the schema fixture', () => {
   test('has every value type the inspector renders', () => {
     expect(new Set(schema.settings.map((s) => s.type))).toEqual(new Set([
       'bool', 'int', 'float', 'int-vec3', 'float-vec3', 'int-list', 'text', 'enum', 'echo-reference', 'echo-time',
-      'mask-sections', 'mask-ops',
+      'number-or-choice', 'mask-sections', 'mask-ops',
     ]));
   });
 
@@ -51,6 +51,7 @@ describe('controlFor', () => {
     ['masking.sections', 'recipe'],
     ['masking.refinements', 'recipe'],
     ['masking.custom_mask_tool', 'file'],
+    ['separation.decompose.chi_bound', 'number-or-choice'],
     ['pipeline.export_dicom', 'unavailable'],
     ['multi_orientation.group_by', 'unavailable'],
   ])('%s is a %s', (path, kind) => {
@@ -109,6 +110,19 @@ describe('validate', () => {
     expect(validate(echo, 'x')).toBe('Enter an echo number.');
     expect(validate(echo, '0')).toBeNull(); // the engine says it is out of range
     expect(validate(setting('multi_orientation.group_by'), 'acq')).toBeNull();
+  });
+});
+
+describe('a number or a named choice', () => {
+  test('either is a value; it reads as the choice\'s name or the number with its units', () => {
+    const bound = setting('separation.decompose.chi_bound');
+    expect(validate(bound, 'echo-spacing')).toBeNull();
+    expect(validate(bound, 0.4)).toBeNull();
+    expect(validate(bound, 'twice')).toBe('Enter a number.');
+    expect(parseField(bound, '0.4')).toEqual({ value: 0.4, error: null });
+    expect(formatValue(bound, 'echo-spacing')).toBe('From the echo spacing');
+    expect(formatValue(bound, 0.4)).toBe('0.4 ppm');
+    expect(numberOf(bound)).toBe(0.5);
   });
 });
 

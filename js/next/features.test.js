@@ -238,8 +238,8 @@ describe('χ-separation', () => {
   test('the switch, the method and every method\'s settings are the schema\'s, in the χ-separation row', () => {
     const method = schema.settings.find((s) => s.path === 'separation.algorithm');
     expect(method.options.map((o) => o.value)).toEqual(ALGORITHMS);
-    expectSettingsIn('chisep', ['pipeline.do_chi_separation', 'separation.algorithm', 'separation.chi_sep_ilsqr.lambda1',
-      'separation.chi_sep_medi.lambda_para', 'separation.wavesep.alpha', 'separation.hc_chisep.bin_hz', 'separation.decompose.n_inner',
+    expectSettingsIn('chisep', ['pipeline.do_chi_separation', 'separation.algorithm', 'separation.chi_sep_ilsqr.d2_thr',
+      'separation.chi_sep_medi.lambda', 'separation.wavesep.alpha', 'separation.hc_chisep.bin_hz', 'separation.decompose.n_inner',
       'separation.r2star_qsm.r_const_3t']);
   });
 
