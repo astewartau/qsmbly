@@ -6760,7 +6760,7 @@
       "order": 284,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--multi-orientation-algorithm",
-      "browser": "available"
+      "browser": "unavailable"
     },
     {
       "path": "multi_orientation.lambda",
@@ -6777,7 +6777,7 @@
       "order": 285,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--multi-orientation-lambda",
-      "browser": "available"
+      "browser": "unavailable"
     },
     {
       "path": "multi_orientation.reference",
@@ -6794,7 +6794,7 @@
       "order": 286,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--orientation-reference",
-      "browser": "available"
+      "browser": "unavailable"
     },
     {
       "path": "multi_orientation.magnitude_weighting",
@@ -6811,7 +6811,7 @@
       "order": 287,
       "parent": "multi_orientation.algorithm",
       "cli_flag": "--cosmos-magnitude-weighting",
-      "browser": "available"
+      "browser": "unavailable"
     },
     {
       "path": "multi_orientation.cosmos_tol",
@@ -6830,7 +6830,7 @@
       "order": 288,
       "parent": "multi_orientation.magnitude_weighting",
       "cli_flag": "--cosmos-tol",
-      "browser": "available"
+      "browser": "unavailable"
     },
     {
       "path": "multi_orientation.cosmos_max_iter",
@@ -6849,7 +6849,7 @@
       "order": 289,
       "parent": "multi_orientation.magnitude_weighting",
       "cli_flag": "--cosmos-max-iter",
-      "browser": "available"
+      "browser": "unavailable"
     },
     {
       "path": "multi_orientation.register",
@@ -6866,7 +6866,7 @@
       "order": 290,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--no-orientation-registration",
-      "browser": "available"
+      "browser": "unavailable"
     },
     {
       "path": "multi_orientation.force",
@@ -6883,7 +6883,7 @@
       "order": 291,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--multi-orientation-force",
-      "browser": "available"
+      "browser": "unavailable"
     },
     {
       "path": "qsm.reference",

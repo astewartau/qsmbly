@@ -13,7 +13,7 @@
 import { html } from '../html.js';
 import { createContext } from 'preact';
 import { useContext, useEffect, useRef, useState } from 'preact/hooks';
-import { referenceLine, currentText, kindLabel, whoSays, applyChoices, startingPicks } from '../recommend.js';
+import { referenceLine, currentText, kindLabel, whoSays, applyChoices, keepPreselected, startingPicks } from '../recommend.js';
 
 /** The workspace's recommendations (createRecommendations), for the rows that show them. */
 export const RecommendationsContext = createContext(/** @type {Recommendations | null} */ (null));
@@ -163,7 +163,7 @@ function RefRowView({ row, index, choosing, pick, setPick }) {
  * A chosen method's reference pipeline: any recommendations the same change created, then each
  * setting where the config differs from the authors'. Apply recommended (preselected, when there
  * are any), Apply all or Apply the authors' settings, Choose per setting, or Keep mine; Close
- * changes nothing. Only authors' settings: nothing is preselected, and the dialog takes the focus.
+ * changes nothing. Only authors' settings: Keep mine is preselected, so Enter changes nothing.
  * @param {{ recs: Recommendations, modal: RefModal }} props
  */
 function ReferencePipeline({ recs, modal }) {
@@ -175,13 +175,18 @@ function ReferencePipeline({ recs, modal }) {
   }, [modal]);
   const setPick = (i, p) => setPicks(picks.map((x, j) => (j === i ? p : x)));
   const first = useRef(/** @type {HTMLButtonElement | null} */ (null));
+  // The button that had the focus is gone once choosing, so the focus moves to the first choice.
+  useEffect(() => {
+    if (choosing) first.current?.closest('[role="dialog"]')?.querySelector('select')?.focus();
+  }, [choosing]);
   const n = modal.recommendations.length;
+  const keepFirst = keepPreselected(modal);
   return html`
-    <${Dialog} title=${modal.title} opened=${modal} onClose=${() => recs.close()} focus=${n > 0 ? first : null}>
+    <${Dialog} title=${modal.title} opened=${modal} onClose=${() => recs.close()} focus=${first}>
       ${n > 0 && html`<h3 class="rec-section reasoned">Recommended, each for the reason given</h3>`}
       ${modal.recommendations.map((row, i) => html`<${RefRowView} row=${row} index=${i} choosing=${choosing} pick=${picks[i]} setPick=${setPick} />`)}
       <h3 class="rec-section reference">Original authors' settings</h3>
-      <p class="sub rec-why">Where yours differ from what the method's authors did. These are not recommendations, so none is preselected.</p>
+      <p class="sub rec-why">Where yours differ from what the method's authors did. These are not recommendations, so none is applied unless you ask.</p>
       ${modal.rows.map((row, i) => html`<${RefRowView} row=${row} index=${n + i} choosing=${choosing} pick=${picks[n + i]} setPick=${setPick} />`)}
       <div class="rec-choices">
         ${choosing
@@ -191,7 +196,8 @@ function ReferencePipeline({ recs, modal }) {
               <button type="button" class=${`btn${c.preselected ? ' primary' : ''}`} ref=${c.preselected ? first : undefined}
                 onClick=${() => recs.answer(c.answer)}>${c.label}</button>`)}
             <button type="button" class="btn" onClick=${() => setChoosing(true)}>Choose per setting</button>
-            <button type="button" class="btn" onClick=${() => recs.answer('keep')}>Keep mine</button>`}
+            <button type="button" class=${`btn${keepFirst ? ' primary' : ''}`} ref=${keepFirst ? first : undefined}
+              onClick=${() => recs.answer('keep')}>Keep mine</button>`}
         <button type="button" class="btn" onClick=${() => recs.close()} title="Change nothing (Esc)">Close</button>
       </div>
     <//>`;

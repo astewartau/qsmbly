@@ -1,7 +1,7 @@
 import { createSession } from './store/session.js';
 import {
   createRecommendations, marker, modalFor, detailsFor, rowsOf, referencesTitle, referenceLine, isOpen, whoSays,
-  kindLabel, applyChoices, startingPicks,
+  kindLabel, applyChoices, keepPreselected, leftNotice, startingPicks,
 } from './recommend.js';
 
 // A tiny mocked config and engine. One setting, `x.te`, with one rule on it, `x.te-first`
@@ -125,6 +125,27 @@ const applyOne = (c, r, pick) => {
     ? { ...c, x: { ...c.x, mode: pick ?? 'ref' } }
     : { ...c, x: { ...c.x, te: pick ?? 'first' } };
 };
+// As the engine's `settle`: on each setting the strongest open finding takes it, unless two as
+// strong want different values.
+const RANK = { reference: 0, discouraged: 1, recommended: 2, required: 3 };
+const settle = (findings) => {
+  const settled = { apply: [], conflicting: [], outranked: [] };
+  for (const setting of new Set(findings.map((f) => f.setting))) {
+    const open = findings.filter((f) => f.setting === setting && f.departs && !f.dismissed);
+    if (!open.length) continue;
+    const top = Math.max(...open.map((f) => RANK[f.strength]));
+    const strongest = open.filter((f) => RANK[f.strength] === top);
+    const value = JSON.stringify(strongest[0].recommended.value);
+    if (strongest.some((f) => JSON.stringify(f.recommended.value) !== value)) {
+      settled.conflicting.push(...strongest);
+      settled.outranked.push(...open.filter((f) => RANK[f.strength] !== top));
+    } else {
+      settled.apply.push(...open.filter((f) => JSON.stringify(f.recommended.value) === value));
+      settled.outranked.push(...open.filter((f) => JSON.stringify(f.recommended.value) !== value));
+    }
+  }
+  return settled;
+};
 const engine = {
   applyRecommendation: async (c, r, pick) => applyOne(c, r, pick),
   dismissRecommendation: async (c, r) => keepAll(c, viewOf(c).flatMap((v) => v.recommendations).filter((f) => f.rule === r)),
@@ -139,7 +160,11 @@ const engine = {
   })),
   referenceTitles: async (methods) => methods.map((m) => `${m.name}'s reference pipeline`),
   keepFindings: async (c, findings) => keepAll(c, findings),
-  applyAll: async (c, findings) => findings.reduce((acc, f) => applyOne(acc, f.rule), c),
+  applyAll: async (c, findings) => {
+    const settled = settle(findings);
+    return { config: settled.apply.reduce((acc, f) => applyOne(acc, f.rule), c), settled };
+  },
+  settle: async (findings) => settle(findings),
 };
 
 function harness() {
@@ -241,6 +266,20 @@ describe('a method chosen with a reference pipeline', () => {
     expect(marker(session.view.value.get('x.mode'))).toBe('info');
   });
 
+  test('only authors\' settings: Keep mine is preselected, and it is no edit', async () => {
+    const { session, recs, flush } = harness();
+    await flush();
+    session.set('x.method', 'y');
+    await flush();
+    expect(keepPreselected(recs.modal.value)).toBe(true);
+    const edits = session.edits.value;
+    const config = session.config.value;
+    await recs.answer('keep');
+    await flush();
+    expect(session.edits.value).toBe(edits);
+    expect(session.config.value).toBe(config);
+  });
+
   test('only authors\' settings: Apply the authors\' settings, not preselected, applies them', async () => {
     const { session, recs, flush } = harness();
     await flush();
@@ -334,6 +373,71 @@ describe('a method chosen with a reference pipeline', () => {
     expect(recs.modal.value?.kind).toBe('reference');
     recs.close();
     expect(recs.modal.value).toBeNull();
+  });
+});
+
+describe('findings chosen together', () => {
+  const authors = (ruleId, value, over = {}) => rule({
+    rule: ruleId, strength: 'reference', setting: 'z.clash', label: 'Clash', trigger: Y,
+    current: [{ value: 'mine', name: 'Mine' }], recommended: { value, name: value },
+    allowed: { test: 'one_of', values: [{ value, name: value }, { value: 'alt', name: 'Alt' }] }, ...over,
+  });
+  /** A reference pipeline pop-up open on these rows. */
+  const open = async (reasoned, differences) => {
+    const h = harness();
+    await h.flush();
+    h.recs.modal.value = { kind: 'reference', title: "Y's reference pipeline", recommendations: rowsOf(reasoned), rows: rowsOf(differences) };
+    return h;
+  };
+  const clash = (session) => session.config.value.z.clash;
+
+  test('picks on two authors\' settings that disagree leave the setting, and a notice says so', async () => {
+    const { session, recs } = await open([], [authors('y.clash-a', 'a'), authors('y.clash-b', 'b')]);
+    await recs.answer({ picks: ['reference', 'reference'] });
+    expect(clash(session)).toBe('mine');
+    expect(session.ui.notices.value).toEqual(['Left Clash as set: the suggestions disagree. Its marker has the choices.']);
+  });
+
+  test('a recommendation picked outranks an authors\' setting picked, whichever is listed first, and a notice says so', async () => {
+    for (const rows of [[authors('y.clash-a', 'a'), authors('y.clash-b', 'b', { strength: 'recommended', kind: 'reasoned' })],
+      [authors('y.clash-b', 'b', { strength: 'recommended', kind: 'reasoned' }), authors('y.clash-a', 'a')]]) {
+      const { session, recs } = await open([], rows);
+      await recs.answer({ picks: ['reference', 'reference'] });
+      expect(clash(session)).toBe('b');
+      expect(session.ui.notices.value).toEqual(['One suggestion for Clash was not applied: a stronger one wants another value.']);
+    }
+  });
+
+  test('a row on Keep mine asks for nothing: the other pick is honoured, even against a recommendation', async () => {
+    const { session, recs } = await open([authors('y.clash-b', 'b', { strength: 'recommended', kind: 'reasoned' })], [authors('y.clash-a', 'a')]);
+    await recs.answer({ picks: ['keep', 'reference'] });
+    expect(clash(session)).toBe('a');
+    expect(session.ui.notices.value).toEqual([]);
+  });
+
+  test('the alternative picked is the value compared and applied', async () => {
+    const { session, recs } = await open([], [authors('y.clash-a', 'a')]);
+    await recs.answer({ picks: [0] });
+    expect(clash(session)).toBe('alt');
+    // Two authors' rows picked to the same value agree, so that value is applied, once.
+    const both = await open([], [authors('y.clash-a', 'a'), authors('y.clash-b', 'b', { allowed: { test: 'one_of', values: [{ value: 'b', name: 'b' }, { value: 'alt', name: 'Alt' }] } })]);
+    await both.recs.answer({ picks: [0, 0] });
+    expect(clash(both.session)).toBe('alt');
+    expect(both.session.ui.notices.value).toEqual([]);
+  });
+
+  test('Apply all leaves what disagrees, applies the rest, and a notice says so', async () => {
+    const { session, recs } = await open([], [authors('y.clash-a', 'a'), authors('y.clash-b', 'b'), yRule(defaults)]);
+    await recs.answer('all');
+    expect(clash(session)).toBe('mine');
+    expect(session.config.value.x.mode).toBe('ref');
+    expect(session.ui.notices.value).toEqual(['Left Clash as set: the suggestions disagree. Its marker has the choices.']);
+  });
+
+  test('the notice names each setting once, and nothing when nothing was left', () => {
+    expect(leftNotice({ apply: [rule()], conflicting: [], outranked: [] })).toBeNull();
+    expect(leftNotice({ apply: [], conflicting: [rule(), rule(), rule({ label: 'Mode' })], outranked: [rule()] }))
+      .toBe('Left Echo Time, Mode as set: the suggestions disagree. Their markers have the choices.');
   });
 });
 
@@ -866,24 +970,24 @@ describe('what a finding shows', () => {
     expect(whoSays(rule({ strength: 'discouraged' }), '')).toBe('X discourages Sum of echo times');
   });
 
-  test('the details of an authors\' setting preselect nothing, and its button says it is theirs', () => {
+  test('the details of an authors\' setting preselect Keep mine, and its button says it is theirs', () => {
     const one = detailsFor([rule({ strength: 'reference' })], ["X's reference pipeline"]);
     expect(one.title).toBe("Original authors' setting: X's reference pipeline");
-    expect(one.preselected).toBeNull();
+    expect(one.preselected).toBe(2);
     expect(one.choices.map((c) => c.label)).toEqual(["Use the authors' setting: First echo time", 'Use Last echo time instead', 'Keep mine']);
     const two = detailsFor([rule({ strength: 'reference' }), rule({ strength: 'reference', rule: 'z', trigger: { ...X, name: 'Z' } })], ['a', 'b']);
     expect(two.title).toBe("Original authors' settings: Echo Time of X, Z");
-    expect(two.preselected).toBeNull();
+    expect(two.choices[two.preselected].label).toBe('Keep mine');
     expect(two.choices[0].label).toBe("Use the authors' setting: First echo time (X, Z)");
   });
 
-  test('the details of a reasoned finding on offer preselect Apply; not once it is kept, or when findings disagree', () => {
+  test('the details of a reasoned finding preselect Apply, kept or not; nothing when findings on offer disagree', () => {
     for (const strength of ['recommended', 'required', 'discouraged']) {
       const details = detailsFor([rule({ strength })], ['']);
       expect(details.preselected).toBe(0);
       expect(details.choices[0].label).toBe('Apply: First echo time');
     }
-    expect(detailsFor([rule({ dismissed: true })], ['']).preselected).toBeNull();
+    expect(detailsFor([rule({ dismissed: true })], ['']).preselected).toBe(0);
     const other = rule({ rule: 'y.te-last', trigger: Y, recommended: { value: 'last', name: 'Last echo time' }, conflict: true });
     expect(detailsFor([rule({ conflict: true }), other], ['', '']).preselected).toBeNull();
   });

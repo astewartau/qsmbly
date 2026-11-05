@@ -46,9 +46,9 @@ import { formatCommand } from '../../js/next/exports.js';
 import { phantomFiles } from '../../tests/e2e/phantom.js';
 
 /**
- * The cases: the browser profile with `settings`, on the browser tests' phantom
- * (tests/e2e/phantom.js) at `dims`, tilted about x by `tilt` degrees, its files named with the BIDS
- * `entities` (`sub-phantom` by default). Fast algorithms only: what is compared is the wiring
+ * The cases: the browser profile with `settings` (after the settings file `imported`, if any), on
+ * the browser tests' phantom (tests/e2e/phantom.js) at `dims`, tilted about x by `tilt` degrees,
+ * its files named with the BIDS `entities` (`sub-phantom` by default). Fast algorithms only: what is compared is the wiring
  * around them.
  */
 export const CASES = {
@@ -66,6 +66,11 @@ export const CASES = {
   'tkd-tukey': { settings: { 'inversion.algorithm': 'tkd', 'pipeline.tukey_window': 0.4 } },
   // The phantom's noisy background in the mask, with a small smoothing kernel: phase offset removal
   // leaves voxels without an offset, so the field mask leaves them out and the methods text says so.
+  // A rule's Note names whose rule it is, here the complex fit's reference pipeline (QSMxT#501).
+  'tkd-complex-fit-note': { settings: { 'inversion.algorithm': 'tkd', 'field_mapping.b0_estimation': 'complex-fit', 'field_mapping.unwrapping_algorithm': 'laplacian' } },
+  // A settings file's multi-orientation settings are cleared on import, so neither the command nor
+  // the methods claim them (QSMxT#499).
+  'tkd-multi-orientation-import': { settings: { 'inversion.algorithm': 'tkd' }, imported: '[multi_orientation]\ngroup_by = "acq"\n' },
   'tkd-field-mask': { settings: { 'inversion.algorithm': 'tkd', 'field_mapping.phase_offset_sigma_mm': [1, 1, 1], 'masking.sections': [{ input: 'magnitude', generator: { op: 'threshold', method: 'fixed', value: 0 }, refinements: [] }] } },
 };
 const DIMS = [24, 24, 20];
@@ -139,14 +144,16 @@ function niftiVoxels(path) {
 }
 
 /** The browser side: the workspace's run and export bundle, written under `out`. */
-async function browserRun(settings, phantom, out) {
+async function browserRun(settings, phantom, out, imported = null) {
   const files = sortFiles([...filesUnder(phantom)].filter(([rel]) => !rel.startsWith('dataset_description')).map(([rel, p]) => ({ name: rel.split('/').pop(), bytes: new Uint8Array(readFileSync(p)) })));
   for (const f of files) if (f.type === 'nifti') f.geometry = ops.geometry(f.bytes);
   const inputs = scanInputs(files);
   const report = ops.scanReport(inputs);
   if (!report.facts) throw new Error(`the phantom's facts: ${JSON.stringify(report)}`);
   const facts = report.facts;
-  const config = Object.entries(settings).reduce((c, [p, v]) => ops.set(c, p, v), ops.browserConfig());
+  const start = imported ? ops.fromToml(imported) : { config: ops.browserConfig(), warnings: [] };
+  if (imported && !start.warnings.length) throw new Error('the import brought no warning');
+  const config = Object.entries(settings).reduce((c, [p, v]) => ops.set(c, p, v), start.config);
 
   const store = new VolumeStore({ shared: false });
   const volumes = {};
@@ -330,7 +337,7 @@ function compare(name, browserDir, nativeDir, browser, toml) {
 }
 
 let failed = 0;
-for (const [name, { settings, tilt, entities }] of Object.entries(CASES)) {
+for (const [name, { settings, tilt, entities, imported }] of Object.entries(CASES)) {
   if (only.length && !only.includes(name)) continue;
   const dir = resolve(work, name);
   rmSync(dir, { recursive: true, force: true });
@@ -338,7 +345,7 @@ for (const [name, { settings, tilt, entities }] of Object.entries(CASES)) {
   const problems = [];
   try {
     const t0 = Date.now();
-    const browser = await browserRun(settings, phantom, join(dir, 'browser'));
+    const browser = await browserRun(settings, phantom, join(dir, 'browser'), imported);
     const t1 = Date.now();
     // Two ways to reproduce the browser's run: the command as the bundle carries it (command.txt,
     // one flag per line, read as a shell reads it), and the bundle's settings file. The command

@@ -122,7 +122,7 @@ describe('session', () => {
     const saved = await readSavedConfig(storage, read);
     expect(asked).toEqual(['{"inversion":{"algorithm":"rts"}}']);
     expect(saved.config.schema_version).toBe(2);
-    expect(saved.notices).toEqual(['Your saved settings were brought up to date: TGV\'s tolerance was removed.']);
+    expect(saved.notices).toEqual(['Some of your saved settings changed when they were read: TGV\'s tolerance was removed.']);
     // The session starts from it, and shows the notice.
     const session = createSession({ defaults, planner: () => ({}), storage, initial: saved.config, notices: saved.notices, schedule: () => {} });
     expect(session.get('inversion.algorithm')).toBe('rts');

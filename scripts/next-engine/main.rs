@@ -12,10 +12,12 @@
 //         Each case is the browser profile with `edits` applied in order through schema::set.
 //         `inputs`, `held` and `scan_file` describe the scan for the dry run and the output names.
 // stdout: { "schema": <schema_json()>, "browser": PipelineConfig::browser(),
-//           "cases": [{ "name", "config", "view", "pruned", "plan", "command", "toml", "graph",
-//                       "methods", "keys", "outputs" } | { "name", "error" }, ...] }
+//           "cases": [{ "name", "config", "view", "settled", "pruned", "plan", "command", "toml",
+//                       "graph", "methods", "keys", "outputs" } | { "name", "error" }, ...] }
 //
 // - `methods`: `methods_structured` for "QSMbly", the text the browser shows and exports.
+// - `settled`: what every finding in the view comes to if all are chosen together
+//   (`recommendations::settle`), which Choose per setting and Apply all follow.
 // - `keys`: what `run::dry_run` says each step of a first run would do, and the key it is cached
 //   under: the step's algorithm, the parameters it hands QSM.rs and the settings it reads, hashed.
 //   Equal keys mean the same settings reach the same algorithm calls, with no algorithm run.
@@ -26,6 +28,7 @@ use qsmxt_engine::inputs::ScanInputs;
 use qsmxt_engine::observe::VolumeData;
 use qsmxt_engine::pipeline_graph::pipeline_graph;
 use qsmxt_engine::qsm_core::pipeline::VolumeRef;
+use qsmxt_engine::recommendations::{self as rec, Recommendation};
 use qsmxt_engine::scan::ScanFacts;
 use qsmxt_engine::schema::{self, ViewFacts};
 use qsmxt_engine::store::{Header, Item, MemoryStore, Volumes};
@@ -142,6 +145,16 @@ fn published(config: &PipelineConfig, facts: &ScanFacts, scan_file: &str, versio
     json!({ "run": basename, "files": files })
 }
 
+/// `recommendations::settle` of every finding in a settings view, in the view's order.
+fn settled(view: &Value) -> Result<Value, String> {
+    let findings: Vec<Recommendation> = view.as_array().ok_or("view")?.iter()
+        .flat_map(|row| row["recommendations"].as_array().cloned().unwrap_or_default())
+        .map(serde_json::from_value)
+        .collect::<Result<_, _>>()
+        .map_err(|e| format!("findings: {e}"))?;
+    serde_json::to_value(rec::settle(&findings)).map_err(|e| e.to_string())
+}
+
 /// An answer, or the engine's reason it has none.
 fn answer(r: Result<Value, String>) -> Value {
     match r {
@@ -161,9 +174,11 @@ fn case(c: &Value, facts: &ScanFacts, versions: &Value) -> Result<Value, String>
     let mut graph_json = serde_json::to_value(&graph).expect("graph");
     graph_json["mermaid"] = graph.to_mermaid().into();
     let methods = qsmxt_engine::methods::methods_structured(&config, &the_plan, "QSMbly");
+    let view = serde_json::to_value(schema::settings_view(&config, &view_facts)).map_err(|e| e.to_string())?;
     Ok(json!({
         "config": config,
-        "view": schema::settings_view(&config, &view_facts),
+        "settled": settled(&view)?,
+        "view": view,
         "pruned": schema::prune_hidden(&config, &view_facts),
         "plan": plan(&config, facts),
         "command": qsmxt_engine::generate_command(&config),

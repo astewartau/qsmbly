@@ -5,16 +5,21 @@
  * here knows a rule or a method.
  *
  * - **Two kinds, labelled apart** (the engine's `kind`, QSMxT#486): a `reasoned` finding (required,
- *   recommended, discouraged) gives a reason why its value is better, and only it is preselected;
- *   a `reference` one is the original authors' setting, with no such reason, and is never
- *   preselected.
+ *   recommended, discouraged) gives a reason why its value is better, and its change is
+ *   preselected; a `reference` one is the original authors' setting, with no such reason, so Keep
+ *   mine is preselected (QSMxT#501). Enter on a pop-up that holds only those changes nothing.
  * - **A method's reference pipeline** is offered when a change chooses a method that has one (the
  *   engine's `chosen_methods`, before and after the change) and the config differs from it
  *   (`reference_differences`): one pop-up, "MEDI's reference pipeline", with a row per setting
  *   (current → reference, why, source) and Apply the authors' settings / Choose per setting / Keep
- *   mine, nothing preselected. Nothing changes unless applied; Close (or Escape) changes nothing.
+ *   mine, Keep mine preselected. Nothing changes unless applied; Close (or Escape) changes nothing.
  *   Keep mine records nothing for an authors' setting, so it is offered again when the method is
  *   chosen again.
+ * - **Findings chosen together** are settled by the engine (`settle`, QSMxT#498), as on every host:
+ *   on each setting the strongest takes it, and two as strong that want different values leave it
+ *   as it is, marked. Choose per setting settles only the rows given a value, each wanting the value
+ *   picked for it: a row on Keep mine asks for nothing, so it cannot outrank a pick. A notice says
+ *   what was left and why.
  * - **A recommendation** (a reasoned finding a change creates, not dismissed) is offered in the
  *   same pop-up, first; Apply recommended is then preselected, and keeps every authors' setting.
  *   Keep mine is kept in the config's `dismissed_recommendations`, so it is not offered again for
@@ -47,8 +52,8 @@
  * @property {Recommendation[]} findings - one, or equally strong ones on one setting that disagree;
  *   for the details, every rule the setting departs from
  * @property {Choice[]} choices
- * @property {number | null} preselected - the choice offered first; none when the findings disagree,
- *   or in the details unless the first finding is one on offer: never for an authors' setting
+ * @property {number | null} preselected - the choice offered first: the first finding's change for
+ *   a recommendation, Keep mine for an authors' setting, none when recommendations disagree
  * @property {string} title
  * @property {boolean} details - a marked setting's details, not a pop-up a change opened
  * @property {string[]} [whose] - for the details, whose rule each finding is ("MEDI's reference
@@ -71,6 +76,7 @@
  * @property {RefRow[]} recommendations - the reasoned rows, offered first
  * @property {RefRow[]} rows - the differences from the authors' settings
  *
+ * @typedef {import('./protocol.js').Settled} Settled
  * @typedef {'recommended' | 'all' | 'keep' | { picks: RefPick[] }} RefAnswer
  * @typedef {'reference' | 'keep' | number} RefPick - a row's value, its current value, or the index
  *   of one of its alternatives
@@ -202,7 +208,8 @@ export function whoSays(r, referenceTitle) {
  * A marked setting's details: every rule it departs from (`findings`, offered ones first), whose
  * each is, and Apply, or Use the authors' setting for a value only the authors' settings have (one
  * per value, naming the methods when several use it), the other allowed values and Keep mine (not
- * when a finding is required). Apply is preselected only for a reasoned finding on offer.
+ * when a finding is required). Apply is preselected for a recommendation, Keep mine for an authors'
+ * setting, and nothing when recommendations on offer disagree.
  * @param {Recommendation[]} findings
  * @param {string[]} titles - the engine's reference title of each finding's trigger
  * @returns {RecModal}
@@ -236,8 +243,11 @@ export function detailsFor(findings, titles) {
   const title = r.kind === 'reference'
     ? (methods.length === 1 ? `Original authors' setting: ${titles[0]}` : `Original authors' settings: ${r.label} of ${methods.join(', ')}`)
     : findings.length > 1 ? `${r.label}: ${findings.length} differences` : modalFor([r]).title;
-  // The first choice is the first finding's value, and offered findings come first.
-  const preselected = isOpen(r) && !findings.some((f) => f.conflict && isOpen(f)) ? 0 : null;
+  // The first choice is the first finding's value, and reasoned findings come before authors' ones.
+  const keep = choices.findIndex((c) => c.kind === 'ignore');
+  const preselected = findings.some((f) => f.conflict && isOpen(f)) ? null
+    : r.kind !== 'reference' ? 0
+      : keep >= 0 ? keep : null;
   return { kind: 'finding', findings, choices, preselected, title, details: true, whose: findings.map((f, i) => whoSays(f, titles[i])) };
 }
 
@@ -281,8 +291,9 @@ export function referencesTitle(titles, methods) {
 }
 
 /**
- * The buttons that apply a reference pipeline pop-up's rows, the first preselected only when it
- * holds recommendations: an authors' setting is applied only when asked for.
+ * The buttons that apply a reference pipeline pop-up's rows, the first preselected when it holds
+ * recommendations. An authors' setting is applied only when asked for, so with only those no such
+ * button is preselected: Keep mine is (`keepPreselected`).
  * @param {RefModal} modal
  * @returns {{ answer: 'recommended' | 'all', label: string, preselected: boolean }[]}
  */
@@ -293,6 +304,32 @@ export function applyChoices(modal) {
       { answer: 'all', label: "Apply all, with the authors' settings", preselected: false },
     ]
     : [{ answer: 'all', label: "Apply the authors' settings", preselected: false }];
+}
+
+/**
+ * Whether a reference pipeline pop-up preselects Keep mine: it holds only authors' settings.
+ * @param {RefModal} modal
+ * @returns {boolean}
+ */
+export const keepPreselected = (modal) => !modal.recommendations.length;
+
+/**
+ * What a settling left, for the notice under the header: the settings it left because the
+ * suggestions disagree, and those where a stronger suggestion wanted another value. Null when it
+ * left nothing.
+ * @param {Settled} settled
+ * @returns {string | null}
+ */
+export function leftNotice(settled) {
+  const labels = (/** @type {Recommendation[]} */ list) => [...new Set(list.map((r) => r.label))];
+  const disagree = labels(settled.conflicting);
+  const outranked = labels(settled.outranked).filter((l) => !disagree.includes(l));
+  const lines = [];
+  if (disagree.length) {
+    lines.push(`Left ${disagree.join(', ')} as set: the suggestions disagree. ${disagree.length === 1 ? 'Its marker has' : 'Their markers have'} the choices.`);
+  }
+  if (outranked.length) lines.push(`One suggestion for ${outranked.join(', ')} was not applied: a stronger one wants another value.`);
+  return lines.length ? lines.join(' ') : null;
 }
 
 /**
@@ -316,7 +353,8 @@ export function startingPicks(modal) {
  *   referenceOffers: (config: any, facts: any, scan: boolean, methods: Trigger[]) => Promise<{ method: Trigger, title: string, differences: Recommendation[] }[]>,
  *   referenceTitles: (methods: Trigger[]) => Promise<string[]>,
  *   keepFindings: (config: any, findings: Recommendation[]) => Promise<any>,
- *   applyAll: (config: any, findings: Recommendation[]) => Promise<any>,
+ *   applyAll: (config: any, findings: Recommendation[]) => Promise<{ config: any, settled: Settled }>,
+ *   settle: (findings: Recommendation[]) => Promise<Settled>,
  * }} options.engine
  */
 export function createRecommendations({ session, engine }) {
@@ -469,6 +507,46 @@ export function createRecommendations({ session, engine }) {
     }
   };
 
+  /**
+   * Choose per setting: the rows given a value, settled by the engine, each applied at most once
+   * per setting; the rows on Keep mine kept.
+   * @param {any} start - the config
+   * @param {RefRow[]} rows
+   * @param {RefPick[]} picks
+   * @returns {Promise<{ config: any, settled: Settled }>}
+   */
+  async function applyPicks(start, rows, picks) {
+    const pickOf = (/** @type {number} */ i) => picks[i] ?? 'keep';
+    const settled = await engine.settle(rows.flatMap((row, i) => {
+      const pick = pickOf(i);
+      if (pick === 'keep') return [];
+      return pick === 'reference' ? row.findings : row.findings.map((f) => ({ ...f, recommended: row.alternatives[pick] }));
+    }));
+    let config = start;
+    const applied = new Set();
+    for (const [i, row] of rows.entries()) {
+      const pick = pickOf(i);
+      if (pick === 'keep') config = await engine.keepFindings(config, row.findings);
+      else if (settled.apply.some((r) => r.rule === row.findings[0].rule) && !applied.has(row.setting)) {
+        applied.add(row.setting);
+        config = await engine.applyRecommendation(config, row.findings[0].rule, pick === 'reference' ? undefined : row.alternatives[pick].value);
+      }
+    }
+    return { config, settled };
+  }
+
+  /**
+   * The config after a pop-up's answer, unless the answer changed nothing: Keep mine on an authors'
+   * setting records nothing, and is no edit to undo.
+   * @param {any} before @param {any} config
+   * @returns {boolean} whether it was an edit
+   */
+  const commit = (before, config) => {
+    if (same(before, config)) return false;
+    session.setConfig(config);
+    return true;
+  };
+
   /** Close the open pop-up; the next waiting one, if any, opens. */
   const next = () => {
     modal.value = queue.shift() ?? null;
@@ -501,20 +579,18 @@ export function createRecommendations({ session, engine }) {
       const findings = open?.kind === 'finding' ? open.findings : [];
       next();
       return act(async () => {
-        let config = session.config.peek();
-        if (choice.kind === 'apply') {
-          config = await engine.applyRecommendation(config, choice.rule, choice.value);
-        } else {
-          config = await engine.keepFindings(config, findings.filter((f) => f.strength !== 'required' && !f.dismissed));
-        }
-        session.setConfig(config);
+        const before = session.config.peek();
+        const config = choice.kind === 'apply'
+          ? await engine.applyRecommendation(before, choice.rule, choice.value)
+          : await engine.keepFindings(before, findings.filter((f) => f.strength !== 'required' && !f.dismissed));
+        commit(before, config);
       });
     },
     /**
      * Answer a reference pipeline pop-up: `recommended` applies the recommendations and keeps every
      * authors' setting as it is, `all` applies every row, `keep` keeps every row as it is, and
      * `picks` (Choose per setting) gives each row's choice: `reference`, `keep`, or the index of
-     * one of its alternatives.
+     * one of its alternatives. What is applied together is the engine's to settle.
      * @param {RefAnswer} answer
      */
     answer(answer) {
@@ -523,24 +599,23 @@ export function createRecommendations({ session, engine }) {
       const rows = [...open.recommendations, ...open.rows];
       next();
       return act(async () => {
-        let config = session.config.peek();
+        const before = session.config.peek();
+        let config = before;
+        /** @type {Settled | null} */
+        let settled = null;
         const findings = rows.flatMap((r) => r.findings);
-        if (answer === 'all') config = await engine.applyAll(config, findings);
+        if (answer === 'all') ({ config, settled } = await engine.applyAll(config, findings));
         else if (answer === 'recommended') {
-          config = await engine.applyAll(config, open.recommendations.flatMap((r) => r.findings));
+          ({ config, settled } = await engine.applyAll(config, open.recommendations.flatMap((r) => r.findings)));
           config = await engine.keepFindings(config, open.rows.flatMap((r) => r.findings));
         } else if (answer === 'keep') config = await engine.keepFindings(config, findings);
-        else {
-          for (const [i, row] of rows.entries()) {
-            const pick = answer.picks[i] ?? 'keep';
-            if (pick === 'keep') config = await engine.keepFindings(config, row.findings);
-            else if (pick === 'reference') config = await engine.applyRecommendation(config, row.findings[0].rule);
-            else config = await engine.applyRecommendation(config, row.findings[0].rule, row.alternatives[pick].value);
-          }
-        }
-        // A method these choices chose is not asked again about the settings they decided.
-        decided = new Set(rows.map((r) => r.setting));
-        session.setConfig(config);
+        else ({ config, settled } = await applyPicks(config, rows, answer.picks));
+        const left = settled && leftNotice(settled);
+        if (left) session.ui.notices.value = [...session.ui.notices.peek(), left];
+        // A method these choices chose is not asked again about the settings they decided. With
+        // no edit there is no view to clear this, and it would hide what the next edit offers.
+        if (!same(before, config)) decided = new Set(rows.map((r) => r.setting));
+        commit(before, config);
       });
     },
     dispose() {

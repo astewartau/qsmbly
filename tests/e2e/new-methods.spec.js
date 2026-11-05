@@ -134,6 +134,67 @@ test('an earlier settings file\'s LBV tolerance is kept, and the row and the met
   await expect(page.getByTestId('methods-text')).toContainText('tolerance = 0.000001');
 });
 
+test('a settings file\'s multi-orientation settings are cleared with a warning, and nothing exported claims them', async ({ page }) => {
+  await load(page);
+  await page.locator('#tab-command').click();
+  await page.getByTestId('import-toml').setInputFiles({
+    name: 'grouped.toml', mimeType: 'text/plain', buffer: Buffer.from('[multi_orientation]\ngroup_by = "acq"\n'),
+  });
+  await expect(page.getByTestId('import-status').locator('.problem-warning')).toContainText('multi_orientation.group_by');
+  await closeOffers(page);
+  expect(await value(page, 'multi_orientation.group_by')).toBe('');
+  const answers = await page.evaluate(async () => {
+    const { session, providers } = globalThis.qsmblyNext;
+    const config = session.config.value;
+    const { command } = await providers.command(config);
+    const { methods } = await providers.methods(config, session.facts.value);
+    return { command, methods };
+  });
+  expect(answers.command).not.toContain('orientation');
+  expect(answers.command).not.toContain('cosmos');
+  expect(JSON.stringify(answers.methods)).not.toMatch(/COSMOS|orientations/);
+});
+
+test('saved multi-orientation settings are cleared on reload, with a notice that says what changed', async ({ page }) => {
+  await page.goto('next.html');
+  await page.waitForFunction(() => globalThis.qsmblyNext?.session.view.value);
+  await page.evaluate(() => {
+    const saved = JSON.parse(JSON.stringify(globalThis.qsmblyNext.session.config.value));
+    saved.multi_orientation.group_by = 'acq';
+    globalThis.qsmblyNext.session.replaceConfig(saved);
+  });
+  await page.reload();
+  const notice = page.getByTestId('notices');
+  await expect(notice).toContainText('Some of your saved settings changed when they were read');
+  await expect(notice).toContainText('multi_orientation.group_by');
+  await page.waitForFunction(() => globalThis.qsmblyNext?.session.view.value);
+  expect(await value(page, 'multi_orientation.group_by')).toBe('');
+  // The cleaned settings are what is saved: the next load has nothing to say.
+  await page.reload();
+  await expect(page.locator('[data-section="data"]')).toBeVisible();
+  await expect(page.getByTestId('notices')).toHaveCount(0);
+});
+
+test('a χ-sepnet sliding window the network cannot take blocks the run, with the row\'s error and no download', async ({ page }) => {
+  await load(page);
+  await set(page, 'pipeline.do_chi_separation', true);
+  await set(page, 'separation.algorithm', 'chi-sepnet');
+  await set(page, 'separation.r2primenet.ignore_field_mismatch', true);
+  await set(page, 'separation.chi_sepnet.ignore_field_mismatch', true);
+  await open(page, 'chisep');
+  await set(page, 'separation.chi_sepnet.frame_patch', [100, 128, 64]);
+  await expect(page.getByTestId('engine-error')).toContainText('multiple of 16');
+  const run = page.getByTestId('run-button');
+  await expect(run).toHaveText(/^Fix \d+ problems?$/);
+  await run.click();
+  await expect(page.getByTestId('plan-drawer')).toContainText('multiple of 16');
+  await expect(page.getByTestId('download-now')).toHaveCount(0);
+  // Back at a size it can take, the run offers the download again.
+  await page.getByTestId('plan-drawer-toggle').click();
+  await set(page, 'separation.chi_sepnet.frame_patch', [128, 128, 64]);
+  await expect(run).toHaveText(/^Download /);
+});
+
 test('voxels without a phase offset: the field mask is an output, in the graph, and in the methods', async ({ page }) => {
   test.setTimeout(3 * 60_000);
   await load(page);

@@ -250,13 +250,27 @@ describe('χ-separation', () => {
     expectPublished(plan, 'chi_separation', OUT, 'chi');
     const reads = stepOf(plan, 'chi_separation').reads;
     const r2prime = !['r2star-qsm', 'decompose'].includes(a);
-    expect(reads.includes('R2prime')).toBe(r2prime);
-    expect(!!stepOf(plan, 'r2_r2prime')).toBe(r2prime);
+    // χ-sepnet's toolbox route estimates its own R2′ unless one can be measured (QSMxT#497).
+    const measures = r2prime && a !== 'chi-sepnet';
+    expect(reads.includes('R2prime')).toBe(measures);
+    expect(!!stepOf(plan, 'r2_r2prime')).toBe(measures);
     expect(reads.includes('R2star')).toBe(a !== 'decompose');
     // The nets need their weights; R2′ comes from R2PRIMEnet without a MESE.
     // χ-sepnet's toolbox route also makes its QSM channel with QSMnetME.
     const nets = { 'susep-net': ['susep-net'], 'chi-sepnet': ['chi-sepnet', 'qsmnetme'] }[a] ?? [];
-    expect(plan.models).toEqual(r2prime ? ['r2primenet', ...nets] : []);
+    expect([...plan.models].sort()).toEqual(r2prime ? ['r2primenet', ...nets].sort() : []);
+  });
+
+  test('χ-sepnet\'s toolbox route keeps R2PRIMEnet without an R2 step; the map asked for or measurable brings the step back', () => {
+    const chiSepnet = planFor('chi-sepnet');
+    expect(stepOf(chiSepnet, 'r2_r2prime')).toBeFalsy();
+    expect(chiSepnet.models).toContain('r2primenet');
+    const asked = planOf('χ-sepnet with an R2′ map asked for');
+    expect(stepOf(asked, 'r2_r2prime')).toBeTruthy();
+    expect(stepOf(asked, 'chi_separation').reads).not.toContain('R2prime');
+    const mese = planOf('χ-sepnet with a MESE to measure R2′ from');
+    expect(stepOf(mese, 'r2_r2prime')).toBeTruthy();
+    expect(stepOf(mese, 'chi_separation').reads).toContain('R2prime');
   });
 
   test('the networks run in the browser profile\'s patches, each patch shown only for its method, and carried in the command', () => {

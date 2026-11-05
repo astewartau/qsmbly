@@ -47,6 +47,7 @@ export function reference_offers_wasm(config_json: string, facts_json: string | 
 export function reference_titles_wasm(methods_json: string): string;
 export function keep_findings_wasm(config_json: string, findings_json: string): string;
 export function apply_all_wasm(config_json: string, findings_json: string): string;
+export function settle_wasm(findings_json: string): string;
 export function pipeline_graph_wasm(config_json: string, facts_json: string, grid_json?: string | null): string;
 export function methods_structured_wasm(config_json: string, facts_json: string): string;
 export function item_meta_wasm(key: string): string | undefined;

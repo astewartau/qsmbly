@@ -88,11 +88,13 @@ pub fn browser_config_wasm() -> Result<String, JsValue> {
 }
 
 /// `config` with each default the browser cannot run replaced by the browser profile's value,
-/// and every value the user set left alone (`PipelineConfig::apply_browser_profile`).
+/// and every other value the user set left alone (`PipelineConfig::apply_browser_profile`):
+/// `{ config, warnings }`, `warnings` naming each setting it cleared.
 pub fn apply_browser_profile(config_json: &str) -> Result<String, String> {
     let mut config = parse_config(config_json)?;
-    config.apply_browser_profile();
-    to_json(&config)
+    let warnings = config.apply_browser_profile();
+    let config: Value = serde_json::to_value(&config).map_err(|e| e.to_string())?;
+    Ok(json!({ "config": config, "warnings": warnings }).to_string())
 }
 
 /// [`apply_browser_profile`].
@@ -109,6 +111,8 @@ pub fn apply_browser_profile_wasm(config_json: &str) -> Result<String, JsValue> 
 /// run uses while `masking.two_pass_sections` is unset (`default_two_pass_sections`). A mask builder writes these, so choosing a preset or adding a step
 /// never brings back a default the browser cannot run.
 pub fn browser_mask_defaults() -> Result<String, String> {
+    // Each config below starts from the browser's defaults, so the profile has no setting of the
+    // user's to clear, and no warning to show.
     let mask = schema::mask_schema();
     let mut presets = serde_json::Map::new();
     for p in &mask.presets {
@@ -116,7 +120,7 @@ pub fn browser_mask_defaults() -> Result<String, String> {
         c.masking.sections = p.sections.clone();
         c.masking.combine = p.combine;
         c.masking.refinements = p.refinements.clone();
-        c.apply_browser_profile();
+        let _ = c.apply_browser_profile();
         let m = &c.masking;
         presets.insert(
             p.value.to_string(),
@@ -129,12 +133,12 @@ pub fn browser_mask_defaults() -> Result<String, String> {
             serde_json::from_value(step.default.clone()).map_err(|e| e.to_string())?;
         let mut c = PipelineConfig::browser();
         c.masking.refinements = vec![op];
-        c.apply_browser_profile();
+        let _ = c.apply_browser_profile();
         steps.insert(step.kind.to_string(), json!(c.masking.refinements[0]));
     }
     let mut c = PipelineConfig::browser();
     c.masking.two_pass_sections = Some(qsmxt_engine::default_two_pass_sections());
-    c.apply_browser_profile();
+    let _ = c.apply_browser_profile();
     let two_pass = c.masking.resolved_two_pass_sections();
     Ok(json!({ "presets": presets, "steps": steps, "two_pass_sections": two_pass }).to_string())
 }
@@ -366,18 +370,33 @@ pub fn keep_findings_wasm(config_json: &str, findings_json: &str) -> Result<Stri
     keep_findings(config_json, findings_json).map_err(js_err)
 }
 
-/// "Apply all": `config` with each finding's recommended value applied
-/// (`recommendations::apply_all`); refused, with each reason, if any could not be.
+/// "Apply all": `config` with what `recommendations::settle` takes of the findings applied
+/// (`recommendations::apply_all`): `{ config, settled }`, `settled` saying what was left and why.
+/// Refused, with each reason, if any could not be applied.
 pub fn apply_all(config_json: &str, findings_json: &str) -> Result<String, String> {
     let mut config = parse_config(config_json)?;
-    rec::apply_all(&mut config, &parse_findings(findings_json)?)?;
-    to_json(&config)
+    let settled = rec::apply_all(&mut config, &parse_findings(findings_json)?)?;
+    let config: Value = serde_json::to_value(&config).map_err(|e| e.to_string())?;
+    Ok(json!({ "config": config, "settled": settled }).to_string())
 }
 
 /// [`apply_all`].
 #[wasm_bindgen]
 pub fn apply_all_wasm(config_json: &str, findings_json: &str) -> Result<String, JsValue> {
     apply_all(config_json, findings_json).map_err(js_err)
+}
+
+/// What findings chosen together come to, setting by setting, with nothing changed
+/// (`recommendations::settle`): `{ apply, conflicting, outranked }`. Choose per setting asks this
+/// of the picks it was given, each finding wanting the value picked for it.
+pub fn settle(findings_json: &str) -> Result<String, String> {
+    serde_json::to_string(&rec::settle(&parse_findings(findings_json)?)).map_err(|e| e.to_string())
+}
+
+/// [`settle`].
+#[wasm_bindgen]
+pub fn settle_wasm(findings_json: &str) -> Result<String, JsValue> {
+    settle(findings_json).map_err(js_err)
 }
 
 /// `config` with every setting that does not apply to it put back to QSMxT's default
@@ -482,12 +501,13 @@ pub fn config_to_toml_changed_wasm(config_json: &str) -> Result<String, JsValue>
 /// A QSMxT configuration file, read as `qsmxt run --config` reads it
 /// (`PipelineConfig::from_toml_migrating`), then given the browser profile
 /// (`apply_browser_profile`: a default the browser cannot run becomes the browser's value; every
-/// value the file sets is kept): `{ config, warnings }`, `warnings` being the engine's notes on
-/// settings older QSMxT versions wrote. A file QSMxT would refuse is refused with its reason.
+/// value the file sets is kept, but for what a page cannot hold, which it clears): `{ config,
+/// warnings }`, `warnings` being the engine's notes on settings older QSMxT versions wrote and on
+/// what the profile cleared. A file QSMxT would refuse is refused with its reason.
 pub fn config_from_toml(toml: &str) -> Result<String, String> {
-    let (mut config, warnings) =
+    let (mut config, mut warnings) =
         PipelineConfig::from_toml_migrating(toml).map_err(|e| e.to_string())?;
-    config.apply_browser_profile();
+    warnings.extend(config.apply_browser_profile());
     let config: Value = serde_json::to_value(&config).map_err(|e| e.to_string())?;
     Ok(json!({ "config": config, "warnings": warnings }).to_string())
 }
@@ -506,11 +526,12 @@ pub fn config_from_toml_wasm(toml: &str) -> Result<String, JsValue> {
 pub fn config_from_json(json: &str) -> Result<String, String> {
     let (mut config, migration) =
         PipelineConfig::from_json_migrating(json).map_err(|e| e.to_string())?;
-    config.apply_browser_profile();
+    let cleared = config.apply_browser_profile();
     let warnings: Vec<String> = migration
         .warnings
         .into_iter()
         .chain(migration.notes)
+        .chain(cleared)
         .collect();
     let config: Value = serde_json::to_value(&config).map_err(|e| e.to_string())?;
     Ok(json!({ "config": config, "warnings": warnings }).to_string())
@@ -818,7 +839,8 @@ mod tests {
             found
         );
         let found = found_json;
-        assert!(differences(&apply_all(&medi, &found).unwrap()).is_empty());
+        let applied: Value = serde_json::from_str(&apply_all(&medi, &found).unwrap()).unwrap();
+        assert!(differences(&applied["config"].to_string()).is_empty());
         assert_eq!(
             reference_titles(&chosen).unwrap(),
             Value::from(
@@ -953,7 +975,13 @@ mod tests {
             PipelineConfig::browser().to_json().unwrap()
         );
         // The profile is idempotent.
-        assert_eq!(apply_browser_profile(&browser()).unwrap(), browser());
+        let again: Value =
+            serde_json::from_str(&apply_browser_profile(&browser()).unwrap()).unwrap();
+        assert_eq!(
+            again["config"],
+            serde_json::from_str::<Value>(&browser()).unwrap()
+        );
+        assert_eq!(again["warnings"], json!([]));
     }
 
     #[test]
@@ -1090,6 +1118,50 @@ mod tests {
         );
         assert!(back["config"]["inversion"]["tgv"].get("tol").is_none());
         assert!(config_from_json("{ not json").is_err());
+    }
+
+    /// A file's or a saved config's multi-orientation settings are cleared, and the warning says
+    /// so: a page holds one scan, and would export a command it did not run (QSMxT#499).
+    #[test]
+    fn multi_orientation_settings_are_cleared_with_a_warning() {
+        let read = |answer: String| -> Value { serde_json::from_str(&answer).unwrap() };
+        let default = serde_json::to_value(PipelineConfig::default().multi_orientation).unwrap();
+        let file = read(config_from_toml("[multi_orientation]\ngroup_by = \"acq\"\n").unwrap());
+        assert_eq!(file["config"]["multi_orientation"], default);
+        let warning = file["warnings"][0].as_str().unwrap();
+        assert!(warning.contains("multi_orientation.group_by"), "{warning}");
+        let command = command(&file["config"].to_string()).unwrap();
+        assert!(!command.contains("orientation"), "{command}");
+
+        let mut saved: Value = serde_json::from_str(&browser()).unwrap();
+        saved["multi_orientation"]["group_by"] = json!("acq");
+        let saved = read(config_from_json(&saved.to_string()).unwrap());
+        assert_eq!(saved["config"]["multi_orientation"], default);
+        assert!(saved["warnings"][0]
+            .as_str()
+            .unwrap()
+            .contains("multi_orientation.group_by"));
+    }
+
+    /// MEDI's PDF and DECOMPOSE's V-SHARP disagree when LBV is chosen: the engine leaves Background
+    /// removal as it is, through both the plain answer and Apply all (QSMxT#498).
+    #[test]
+    fn findings_chosen_together_are_settled_by_the_engine() {
+        let mut c = set(&browser(), "inversion.algorithm", json!("medi"));
+        c = set(&c, "pipeline.do_chi_separation", json!(true));
+        c = set(&c, "separation.algorithm", json!("chi-sep-ilsqr"));
+        c = set(&c, "bg_removal.algorithm", json!("lbv"));
+        let found = row(&view(&c), "bg_removal.algorithm")["recommendations"].clone();
+        let found = found.to_string();
+        let settled: Value = serde_json::from_str(&settle(&found).unwrap()).unwrap();
+        assert!(
+            settled["conflicting"].as_array().unwrap().len() >= 2,
+            "{settled}"
+        );
+        assert_eq!(settled["apply"], json!([]));
+        let applied: Value = serde_json::from_str(&apply_all(&c, &found).unwrap()).unwrap();
+        assert_eq!(applied["settled"], settled);
+        assert_eq!(applied["config"]["bg_removal"]["algorithm"], "lbv");
     }
 
     /// The short settings file holds the browser profile's and the user's changes from QSMxT's
