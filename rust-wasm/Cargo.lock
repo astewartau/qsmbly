@@ -941,7 +941,7 @@ dependencies = [
 [[package]]
 name = "qsmxt-engine"
 version = "0.0.0"
-source = "git+https://github.com/QSMxT/QSMxT.git?rev=4ee93255a957c942dfa6b4d8137b8782adf82ea0#4ee93255a957c942dfa6b4d8137b8782adf82ea0"
+source = "git+https://github.com/QSMxT/QSMxT.git?rev=698ddb3c931e655f7055aa89cfff68217d03dab3#698ddb3c931e655f7055aa89cfff68217d03dab3"
 dependencies = [
  "flate2",
  "getrandom",
