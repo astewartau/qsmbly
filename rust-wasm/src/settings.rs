@@ -37,33 +37,23 @@ fn to_json(config: &PipelineConfig) -> Result<String, String> {
     config.to_json().map_err(|e| e.to_string())
 }
 
-/// What `settings_view` needs to know about the scan: its echo count, whether its coils are
-/// uncombined and whether it has magnitude images (motion correction needs them); with `scan` (the facts are a loaded scan's, not the example's the page plans with
-/// before one is loaded), also its field strength, matrix size and, once read, voxel size, which
-/// the pipeline rules that depend on the scan need. Without facts, nothing is known.
-///
-/// QSMxT has no conversion from `ScanFacts` to `ViewFacts` (its TUI fills `ViewFacts` from its
-/// form), so it is written here; QSMxT/QSMxT#377 asks for it in the engine.
-fn view_facts(facts_json: Option<&str>, scan: bool) -> Result<ViewFacts, String> {
+/// The facts as the engine's settings view takes them: everything a loaded scan's say (`scan`), or
+/// only what example facts may (`ViewFacts::of_example`). Without facts, nothing is known.
+fn parse_view_facts(facts_json: Option<&str>, scan: bool) -> Result<ViewFacts, String> {
     let Some(json) = facts_json.filter(|j| !j.trim().is_empty() && j.trim() != "null") else {
         return Ok(ViewFacts::default());
     };
     let facts = parse_facts(json)?;
-    let (x, y, z) = facts.dims;
-    Ok(ViewFacts {
-        num_echoes: Some(facts.n_echoes),
-        multi_coil: Some(facts.n_coils > 1),
-        has_magnitude: Some(facts.has_magnitude),
-        field_strength: scan.then_some(facts.field_strength),
-        voxel_size: facts.voxel_size.filter(|_| scan).map(|(a, b, c)| [a, b, c]),
-        dims: scan.then_some([x, y, z]),
-        manufacturer: facts.manufacturer.clone().filter(|_| scan),
+    Ok(if scan {
+        ViewFacts::from(&facts)
+    } else {
+        ViewFacts::of_example(&facts)
     })
 }
 
-/// [`view_facts`], as the pipeline rules take them.
+/// [`parse_view_facts`], as the pipeline rules take them.
 fn rule_facts(facts_json: Option<&str>, scan: bool) -> Result<Facts, String> {
-    Ok(Facts::of_view(&view_facts(facts_json, scan)?))
+    Ok(Facts::of_view(&parse_view_facts(facts_json, scan)?))
 }
 
 /// An item's key ([`Item::key`]) and what it is ([`Item::meta`]).
@@ -165,14 +155,14 @@ pub fn browser_mask_defaults_wasm() -> Result<String, JsValue> {
 /// range, not a finite number, or refused by its own rule. `reference` is every pipeline rule of
 /// the chosen methods that covers the setting, and `recommendations` the ones it departs from
 /// (`recommendations::Recommendation`). `scan`: the facts are a loaded scan's (see
-/// [`view_facts`]).
+/// [`parse_view_facts`]).
 pub fn settings_view(
     config_json: &str,
     facts_json: Option<&str>,
     scan: bool,
 ) -> Result<String, String> {
     let config = parse_config(config_json)?;
-    let view = schema::settings_view(&config, &view_facts(facts_json, scan)?);
+    let view = schema::settings_view(&config, &parse_view_facts(facts_json, scan)?);
     serde_json::to_string(&view).map_err(|e| e.to_string())
 }
 
@@ -396,7 +386,7 @@ pub fn prune_hidden(config_json: &str, facts_json: Option<&str>) -> Result<Strin
     let config = parse_config(config_json)?;
     to_json(&schema::prune_hidden(
         &config,
-        &view_facts(facts_json, false)?,
+        &parse_view_facts(facts_json, false)?,
     ))
 }
 
@@ -860,15 +850,96 @@ mod tests {
         facts["voxel_size"] = json!([1.0, 1.0, 2.0]);
         let facts = facts.to_string();
         assert_eq!(
-            view_facts(Some(&facts), false).unwrap().field_strength,
+            parse_view_facts(Some(&facts), false)
+                .unwrap()
+                .field_strength,
             None
         );
-        let loaded = view_facts(Some(&facts), true).unwrap();
+        let loaded = parse_view_facts(Some(&facts), true).unwrap();
         assert_eq!(loaded.field_strength, Some(2.8946));
         assert_eq!(loaded.dims, Some([184, 256, 128]));
         assert_eq!(loaded.voxel_size, Some([1.0, 1.0, 2.0]));
         assert_eq!(loaded.num_echoes, Some(5));
         assert_eq!(loaded.has_magnitude, Some(true));
+    }
+
+    /// The scan's manufacturer reaches the vendor rules, and a loaded scan gets the rule its
+    /// vendor's data calls for: on the setting's reference list always, and among its findings
+    /// and the method's reference offer when the current value departs from it.
+    #[test]
+    fn a_loaded_scans_manufacturer_reaches_the_vendor_rules() {
+        let chi_sepnet = |tukey: f64| {
+            let mut config: Value = serde_json::from_str(&browser()).unwrap();
+            config["pipeline"]["do_chi_separation"] = json!(true);
+            config["separation"]["algorithm"] = json!("chi-sepnet");
+            config["pipeline"]["tukey_window"] = json!(tukey);
+            config.to_string()
+        };
+        let facts = |manufacturer: Option<&str>| {
+            let mut facts: Value = serde_json::from_str(&example_facts()).unwrap();
+            if let Some(m) = manufacturer {
+                facts["manufacturer"] = json!(m);
+            }
+            facts.to_string()
+        };
+        let rules = |config: &str, facts: &str, scan: bool, list: &str| -> Vec<String> {
+            let view: Value =
+                serde_json::from_str(&settings_view(config, Some(facts), scan).unwrap()).unwrap();
+            let row = view
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|v| v["path"] == "pipeline.tukey_window")
+                .unwrap();
+            row[list].as_array().map_or(vec![], |rs| {
+                rs.iter()
+                    .map(|r| r["rule"].as_str().unwrap().to_string())
+                    .collect()
+            })
+        };
+        let offered = |config: &str, facts: &str, scan: bool| -> Vec<String> {
+            let methods = chosen_methods(config, Some(facts), scan).unwrap();
+            let offers: Value = serde_json::from_str(
+                &reference_offers(config, Some(facts), scan, &methods).unwrap(),
+            )
+            .unwrap();
+            offers
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|o| o["differences"].as_array().unwrap())
+                .filter(|d| d["setting"] == "pipeline.tukey_window")
+                .map(|d| d["rule"].as_str().unwrap().to_string())
+                .collect()
+        };
+        const SIEMENS: &str = "chi-sepnet.tukey-siemens-ge";
+        const PHILIPS: &str = "chi-sepnet.tukey-philips";
+
+        let siemens = facts(Some("Siemens"));
+        let config = chi_sepnet(0.0);
+        assert_eq!(rules(&config, &siemens, true, "recommendations"), [SIEMENS]);
+        assert_eq!(offered(&config, &siemens, true), [SIEMENS]);
+
+        // Philips' value is the default: nothing to offer until the window departs from it.
+        let philips = facts(Some("Philips"));
+        assert_eq!(rules(&config, &philips, true, "reference"), [PHILIPS]);
+        assert!(rules(&config, &philips, true, "recommendations").is_empty());
+        assert!(offered(&config, &philips, true).is_empty());
+        let windowed = chi_sepnet(0.4);
+        assert_eq!(
+            rules(&windowed, &philips, true, "recommendations"),
+            [PHILIPS]
+        );
+        assert_eq!(offered(&windowed, &philips, true), [PHILIPS]);
+
+        // No manufacturer: no vendor rule at all.
+        let unknown = facts(None);
+        assert!(rules(&config, &unknown, true, "reference").is_empty());
+        assert!(offered(&config, &unknown, true).is_empty());
+
+        // The example preview is silent, whatever its facts name.
+        assert!(rules(&config, &siemens, false, "reference").is_empty());
+        assert!(offered(&config, &siemens, false).is_empty());
     }
 
     #[test]
