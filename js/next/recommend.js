@@ -20,11 +20,13 @@
  *   Keep mine is kept in the config's `dismissed_recommendations`, so it is not offered again for
  *   the same values. A required one, or two that disagree, get a pop-up of their own (Apply
  *   preselected, the other allowed values, Keep mine unless required), and the reference
- *   pipeline's follows it.
- * - **A loaded scan** can bring authors' settings of a method already chosen (a rule on the
- *   manufacturer, say). When it adds differences that were not there before, the same pop-up
- *   offers them, so what is offered does not depend on whether the scan or the method came first.
- *   Each is offered once while a scan is loaded: not again for a sidecar or a further file.
+ *   pipeline's follows it. With no authors' settings to offer, each recommendation gets its own
+ *   pop-up, one after another, as in the TUI.
+ * - **A loaded scan** can bring findings of a method already chosen (a rule on the manufacturer or
+ *   the field strength, say). What it adds that was not there before is offered as if the change
+ *   had created it, recommendations and authors' settings alike, so what is offered does not
+ *   depend on whether the scan or the method came first. Each is offered once while a scan is
+ *   loaded: not again for a sidecar or a further file.
  * - **Markers**: a setting that departs from a rule shows the engine's marker, ⚑ when a finding is
  *   offered as a change and not kept, ⓘ otherwise, with whose rule and what it uses ("MEDI:
  *   BET"). Either opens the setting's details: every rule it departs from, offered ones first.
@@ -63,7 +65,7 @@
  * @property {{ value: unknown, name: string }[]} alternatives - other values the rules allow
  *
  * @typedef {object} RefModal - a chosen method's reference pipeline, and any recommendations the
- *   same change created
+ *   same change (or scan) created
  * @property {'reference'} kind
  * @property {string} title
  * @property {RefRow[]} recommendations - the reasoned rows, offered first
@@ -328,10 +330,10 @@ export function createRecommendations({ session, engine }) {
   let seen = /** @type {Set<string> | null} */ (null);
   let seenEdits = 0;
   /**
-   * The rules whose authors' settings differ, or have differed, since the scan was loaded: those
+   * The rules the config departs from, or has departed from, since the scan was loaded: those
    * there before it, those offered, and those kept. A scan offers only what is not among them.
    */
-  let knownDifferences = /** @type {Set<string> | null} */ (null);
+  let knownFindings = /** @type {Set<string> | null} */ (null);
   /** The facts of the last view: only new facts can bring anything. */
   let lastFacts = /** @type {ScanFacts | null} */ (null);
   /** The methods with a reference pipeline the config had at the last view. */
@@ -347,8 +349,8 @@ export function createRecommendations({ session, engine }) {
 
   /**
    * After each view: what the change that asked for it created. A view that follows an undo or a
-   * redo opens nothing, and one that follows the scan offers only the authors' settings it brought;
-   * the other findings show as markers.
+   * redo opens nothing, and one that follows the scan offers only the findings it brought; the
+   * other findings show as markers.
    */
   async function check(view, edit) {
     pending.value = pending.peek() + 1;
@@ -369,6 +371,12 @@ export function createRecommendations({ session, engine }) {
     const now = all.filter(isOpen);
     const created = seen && edit ? now.filter((r) => !seen?.has(key(r))) : [];
     seen = new Set(now.map(key));
+    // As the TUI: a pop-up an earlier answer has resolved does not stay, or open after the next.
+    const live = (/** @type {RecModal | RefModal} */ m) => m.kind !== 'finding' || m.details
+      || m.findings.some((f) => now.some((r) => r.rule === f.rule));
+    queue = queue.filter(live);
+    const showing = modal.peek();
+    if (showing && !live(showing)) next();
     let chosen = /** @type {Trigger[]} */ ([]);
     try {
       chosen = await engine.chosenMethods(config, facts, loaded);
@@ -381,8 +389,10 @@ export function createRecommendations({ session, engine }) {
     const fresh = before && edit ? chosen.filter((m) => !before.has(methodKey(m))) : [];
     const differing = all.filter((r) => r.kind === 'reference' && r.departs);
     const viewFacts = session.viewFacts.peek();
-    const brought = loaded && knownDifferences && viewFacts !== lastFacts
-      ? differing.filter((r) => !r.dismissed && !knownDifferences?.has(r.rule)) : [];
+    const scanBrought = (/** @type {Recommendation} */ r) => loaded && knownFindings && viewFacts !== lastFacts
+      && !r.dismissed && !knownFindings.has(r.rule);
+    const brought = differing.filter(scanBrought);
+    const reasoned = [...created, ...now.filter((r) => scanBrought(r) && !created.some((c) => key(c) === key(r)))];
     const bringing = brought.map((r) => r.trigger)
       .filter((m, i, list) => !fresh.some((f) => methodKey(f) === methodKey(m)) && list.findIndex((x) => methodKey(x) === methodKey(m)) === i);
     let offers = /** @type {{ method: Trigger, title: string, differences: Recommendation[] }[]} */ ([]);
@@ -396,7 +406,7 @@ export function createRecommendations({ session, engine }) {
     }
     // Only now: a view that replaced this one while the engine answered still has it all to offer.
     lastFacts = viewFacts;
-    knownDifferences = new Set([...(loaded ? knownDifferences ?? [] : []), ...differing.map((r) => r.rule)]);
+    knownFindings = new Set([...(loaded ? knownFindings ?? [] : []), ...all.filter((r) => r.departs).map((r) => r.rule)]);
     const skip = edit ? decided : new Set();
     if (edit) decided = new Set();
     // A method the change chose offers all it differs by; one chosen before, what the scan brought.
@@ -405,13 +415,21 @@ export function createRecommendations({ session, engine }) {
       && (chosenNow.has(methodKey(m)) || brought.some((b) => b.rule === r.rule));
     const differences = offers.flatMap((o) => o.differences.filter((r) => offerable(o.method, r)));
     const offered = offers.filter((o) => o.differences.some((r) => offerable(o.method, r)));
-    const hard = created.some((r) => r.strength === 'required' || r.conflict);
-    if (created.length && (hard || !differences.length)) show(modalFor(group(all, created[0])));
+    const hard = reasoned.filter((r) => r.strength === 'required' || r.conflict);
+    // A required one or a disagreement comes first, in its own pop-up; so does every recommendation
+    // when there is no reference pipeline pop-up to list them in. One pop-up per setting.
+    const alone = differences.length ? hard : [...hard, ...reasoned.filter((r) => !hard.includes(r))];
+    const answered = new Set();
+    for (const r of alone) {
+      if (answered.has(r.setting)) continue;
+      answered.add(r.setting);
+      show(modalFor(group(all, r)));
+    }
     if (differences.length) {
       show({
         kind: 'reference',
         title: referencesTitle(offered.map((o) => o.title), offered.map((o) => o.method)),
-        recommendations: hard ? [] : rowsOf(created),
+        recommendations: rowsOf(reasoned.filter((r) => !answered.has(r.setting))),
         rows: rowsOf(differences),
       });
     }

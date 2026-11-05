@@ -76,6 +76,16 @@ describe("a reference pipeline's pop-up", () => {
 });
 
 describe('a finding\'s pop-up', () => {
+  test('the next one waiting takes the focus, even with the same title', async () => {
+    const { recs, button } = await show(modalFor([finding()]));
+    expect(document.activeElement).toBe(button('Apply: First'));
+    const next = modalFor([finding({ rule: 'x.other', setting: 'x.other', recommended: { value: 'b', name: 'Second' }, allowed: { test: 'any' } })]);
+    expect(next.title).toBe(recs.modal.peek().title);
+    button('Apply: First').blur();
+    await act(() => { recs.modal.value = next; });
+    expect(document.activeElement).toBe(button('Apply: Second'));
+  });
+
   test('a recommendation a change created is labelled by its strength, Apply preselected', async () => {
     const { root, primary } = await show(modalFor([finding()]));
     expect(root.querySelector('[data-testid="rec-kind"]').textContent).toBe('Recommended');

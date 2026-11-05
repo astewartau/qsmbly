@@ -273,12 +273,12 @@ test('a recommendation with authors\' settings: listed first and preselected; Ap
 // same way. The manufacturer comes from the sidecars.
 const TUKEY = 'pipeline.tukey_window';
 /** Load the scan, waiting until the workspace has asked the engine about it. */
-async function loadScan(page, manufacturer) {
+async function loadScan(page, manufacturer, options = {}) {
   const input = page.getByTestId('file-input');
   await page.waitForFunction(() => globalThis.qsmblyNext?.session.view.value);
   if (!await input.count()) await page.locator('[data-section="data"]').click();
   await page.evaluate(() => { globalThis.factsBeforeLoad = globalThis.qsmblyNext.session.facts.value; });
-  await input.setInputFiles(phantomFiles({ dims: [24, 24, 20], manufacturer }));
+  await input.setInputFiles(phantomFiles({ dims: [24, 24, 20], manufacturer, ...options }));
   await page.waitForFunction(() => {
     const { session, recommendations } = globalThis.qsmblyNext;
     return session.facts.value !== globalThis.factsBeforeLoad && session.viewFacts.value === session.facts.value && recommendations.pending.value === 0;
@@ -341,3 +341,142 @@ for (const manufacturer of ['Philips', null]) {
     expect(errors).toEqual([]);
   });
 }
+
+// Reasoned findings a scan brings, in either order: a pop-up each way, Apply preselected.
+/** Make a change as the page's controls do, and wait until the workspace has asked what it offers. */
+async function setAll(page, entries) {
+  await page.waitForFunction(() => globalThis.qsmblyNext?.session.view.value);
+  await page.evaluate((list) => globalThis.qsmblyNext.session.setAll(list), entries);
+  await page.waitForFunction(() => {
+    const { session, recommendations } = globalThis.qsmblyNext;
+    return session.view.value && session.viewEdits.value === session.edits.value && recommendations.pending.value === 0;
+  });
+}
+const DECOMPOSE = [['pipeline.do_chi_separation', true], ['separation.algorithm', 'decompose']];
+const SEVEN_T = { fieldStrength: 7 };
+/** Whether a setting's marker is ⚑, whatever step is open. */
+const actionable = (page, path) => page.evaluate((p) => globalThis.qsmblyNext.session.view.value.get(p)?.marker?.actionable, path);
+const pathOf = (c, path) => path.split('.').reduce((o, k) => o?.[k], c);
+const UNWRAP_7T = 'separation.decompose.unwrap_phase';
+const BOUND_7T = 'separation.decompose.chi_bound';
+
+test('a 7 T scan loaded after DECOMPOSE opens a pop-up for each recommendation it brings, in turn; a further load does not re-open them', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('next.html');
+  await setAll(page, DECOMPOSE);
+  await closeOffers(page);
+  const before = await config(page);
+  await loadScan(page, 'Philips', SEVEN_T);
+  const modal = page.getByTestId('rec-modal');
+  const seen = [];
+  for (let i = 0; i < 2; i++) {
+    await expect(modal.getByRole('heading', { level: 2 })).toHaveText('DECOMPOSE-QSM recommends a change');
+    await expect(modal.getByTestId('rec-kind')).toHaveText('Recommended');
+    const apply = modal.getByRole('button', { name: /^Apply:/ });
+    await expect(apply).toHaveClass(/primary/);
+    await expect(apply).toBeFocused();
+    seen.push(await modal.locator('.rec-finding').getAttribute('data-rule'));
+    // Nothing has changed: it is only offered.
+    expect(pathOf(await config(page), UNWRAP_7T)).toEqual(pathOf(before, UNWRAP_7T));
+    expect(pathOf(await config(page), BOUND_7T)).toEqual(pathOf(before, BOUND_7T));
+    await modal.getByRole('button', { name: 'Close' }).click();
+  }
+  expect(seen.sort()).toEqual(['decompose.chi-bound-7t', 'decompose.unwrap-7t']);
+  await expect(modal).toHaveCount(0);
+  expect(await actionable(page, UNWRAP_7T)).toBe(true);
+  await loadScan(page, 'Philips', SEVEN_T);
+  await expect(modal).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('a 7 T scan loaded before DECOMPOSE: choosing it lists the same recommendations first, Apply recommended preselected', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('next.html');
+  await loadScan(page, 'Philips', SEVEN_T);
+  await expect(page.getByTestId('rec-modal')).toHaveCount(0);
+  await setAll(page, DECOMPOSE);
+  const modal = page.getByTestId('rec-modal');
+  await expect(modal.getByRole('heading', { level: 2 })).toContainText('reference pipeline');
+  const settings = await rowSettings(modal);
+  expect(settings).toEqual(expect.arrayContaining([UNWRAP_7T, BOUND_7T]));
+  await expect(modal.getByRole('button', { name: 'Apply recommended' })).toHaveClass(/primary/);
+  expect(errors).toEqual([]);
+});
+
+/** χ-sepnet on a Siemens scan at 0.5 mm: a discouraged finding and the Tukey window. */
+const FINE_VOXELS = { voxel: [0.5, 0.5, 0.5] };
+
+test('a scan bringing both kinds: one pop-up, the recommendation first and preselected; Apply recommended keeps the authors\' setting', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('next.html');
+  await setAll(page, [['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sepnet']]);
+  await closeOffers(page);
+  await loadScan(page, 'Siemens', FINE_VOXELS);
+  const modal = page.getByTestId('rec-modal');
+  await expect(modal.getByRole('heading', { level: 2 })).toContainText('reference pipeline');
+  expect(await rowSettings(modal)).toEqual(['separation.algorithm', TUKEY]);
+  const apply = modal.getByRole('button', { name: 'Apply recommended' });
+  await expect(apply).toHaveClass(/primary/);
+  await expect(apply).toBeFocused();
+  await expect(modal.getByRole('button', { name: "Apply all, with the authors' settings" })).not.toHaveClass(/primary/);
+  await expect(tukeyRow(modal)).toContainText('0 → 0.4');
+  expect((await config(page)).separation.algorithm).toBe('chi-sepnet');
+  await modal.getByRole('button', { name: 'Choose per setting' }).click();
+  expect(await modal.getByTestId('ref-pick').evaluateAll((all) => all.map((s) => s.value))).toEqual(['reference', 'keep']);
+  await modal.getByRole('button', { name: 'Close' }).click();
+  await expect(modal).toHaveCount(0);
+  // Closed: nothing changed, and the discouraged method stays marked.
+  expect((await config(page)).separation.algorithm).toBe('chi-sepnet');
+  expect(await actionable(page, 'separation.algorithm')).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('a scan bringing both kinds, Apply recommended takes the recommendation and not the authors\' setting', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('next.html');
+  await setAll(page, [['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sepnet']]);
+  await closeOffers(page);
+  await loadScan(page, 'Siemens', FINE_VOXELS);
+  const modal = page.getByTestId('rec-modal');
+  await modal.getByRole('button', { name: 'Apply recommended' }).click();
+  await expect.poll(async () => (await config(page)).separation.algorithm).toBe('chi-sep-ilsqr');
+  expect((await config(page)).pipeline.tukey_window).toBe(0);
+  await closeOffers(page);
+  expect((await config(page)).pipeline.tukey_window).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+/** MEDI with mSMV: needs three echoes. */
+const MEDI_MSMV = [['inversion.algorithm', 'medi'], ['inversion.medi.msmv', true]];
+const TWO_ECHOES = { echoTimes: [0.004, 0.009] };
+
+test('a required finding has its own pop-up in either order, with no Keep mine', async ({ page }) => {
+  const errors = watchErrors(page);
+  const expectRequired = async () => {
+    const modal = page.getByTestId('rec-modal');
+    await expect(modal.getByRole('heading', { level: 2 })).toHaveText('MEDI requires a change');
+    await expect(modal.getByTestId('rec-kind')).toHaveText('Required');
+    const apply = modal.getByRole('button', { name: /^Apply:/ });
+    await expect(apply).toHaveClass(/primary/);
+    await expect(modal.getByRole('button', { name: 'Keep mine' })).toHaveCount(0);
+    expect((await config(page)).inversion.medi.msmv).toBe(true);
+    await modal.getByRole('button', { name: 'Close' }).click();
+  };
+  // The scan second.
+  await page.goto('next.html');
+  await setAll(page, MEDI_MSMV);
+  await closeOffers(page);
+  await loadScan(page, 'Siemens', TWO_ECHOES);
+  await expectRequired();
+  await closeOffers(page);
+  expect(await actionable(page, 'inversion.medi.msmv')).toBe(true);
+  // The method second, on a fresh page.
+  await page.evaluate(() => { localStorage.clear(); });
+  await page.reload();
+  await loadScan(page, 'Siemens', TWO_ECHOES);
+  await expect(page.getByTestId('rec-modal')).toHaveCount(0);
+  await setAll(page, MEDI_MSMV);
+  await expectRequired();
+  await closeOffers(page);
+  expect(errors).toEqual([]);
+});
