@@ -51,6 +51,17 @@ const scanFiles = () => [
 ];
 
 describe('loading a scan', () => {
+  test('the session\'s facts are the report\'s: its voxel size and manufacturer reach the rules', async () => {
+    const { session, engine, loader } = setup();
+    const report = engine.scanReport;
+    engine.scanReport = async (inputs) => {
+      const r = await report(inputs);
+      return { ...r, facts: { ...r.facts, voxel_size: [1, 1, 2], manufacturer: 'Siemens' } };
+    };
+    await loader.load(scanFiles());
+    expect(session.facts.peek()).toMatchObject({ voxel_size: [1, 1, 2], manufacturer: 'Siemens' });
+  });
+
   test('files go into the store under the engine\'s names, and the facts are the engine\'s', async () => {
     const { session, store, engine, loader, resets } = setup();
     store.put('Chi', new Float32Array([1])); // from an earlier scan
