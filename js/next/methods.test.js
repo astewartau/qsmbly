@@ -71,6 +71,31 @@ describe('methodsLinks', () => {
 });
 
 describe('the text for copying', () => {
+  const noted = {
+    sentences: [{ text: 'Opening.', steps: [], citations: [] }],
+    references: [{ key: 'a', text: 'A (2020). *J*. https://doi.org/x' }],
+    note: { departures: ['Went against it.'], differences: ['Tolerance differs.', 'So does this.'] },
+  };
+
+  test('Markdown carries the Note between the paragraph and the references, as the engine writes it', () => {
+    expect(methodsMarkdown(noted)).toBe('# Methods\n\nOpening.\n\n## Note\n\n'
+      + 'Departures from the methods\' recommendations:\n\n- Went against it.\n\n'
+      + 'Differences from the methods\' reference pipelines:\n\n- Tolerance differs.\n- So does this.\n\n'
+      + '## References\n\n- A (2020). *J*. https://doi.org/x\n');
+  });
+
+  test('the plain text carries the Note too, and a group with no lines has no heading', () => {
+    const text = methodsPlainText({ ...noted, note: { differences: ['Tolerance differs.'] } });
+    expect(text).toBe('Opening.\n\nNote\n\nDifferences from the methods\' reference pipelines:\nTolerance differs.\n\n'
+      + 'References\n\nA (2020). J. https://doi.org/x\n');
+  });
+
+  test('a settings file\'s earlier LBV tolerance is noted in the recorded methods', async () => {
+    const config = configOf([['bg_removal.algorithm', 'lbv'], ['bg_removal.lbv.tol', 1e-6]]);
+    const { methods } = await providers.methods(config, facts);
+    expect(methodsMarkdown(methods)).toMatch(/## Note\n[\s\S]*Tolerance \(LBV\)[\s\S]*0\.01/);
+  });
+
   test('Markdown is the engine\'s text: the sentences joined, the references listed', async () => {
     const { methods } = await providers.methods(browser, facts);
     const md = methodsMarkdown(methods);

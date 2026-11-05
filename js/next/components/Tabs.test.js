@@ -180,7 +180,7 @@ describe('GraphTab methods', () => {
     const root = await mount(html`<${GraphTab} session=${session} providers=${providers} />`);
     const { methods } = await providers.methods(browser, facts);
     expect(root.querySelector('[data-testid=methods-text]')?.textContent).toBe(methods.sentences.map((s) => s.text).join(' '));
-    expect([...root.querySelectorAll('.methods-refs li')].map((li) => li.getAttribute('data-key'))).toEqual(methods.references.map((r) => r.key));
+    expect([...root.querySelectorAll('.methods-refs li[data-key]')].map((li) => li.getAttribute('data-key'))).toEqual(methods.references.map((r) => r.key));
     expect(root.querySelector('.methods-refs em')).not.toBeNull(); // the journal, from the Markdown
     // Only sentences about a step are focusable; the opening line is about the whole run.
     expect(sentence(root, 'QSM processing').getAttribute('tabindex')).toBeNull();
