@@ -64,6 +64,18 @@ export const CASES = [
   { name: 'χ-sepnet by its native route with its own patch', edits: [['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sepnet'], ['separation.chi_sepnet.route', 'native'], ['separation.chi_sepnet.patch', [128, 128, 96]]] },
   { name: 'χ-sepnet on the whole frame', edits: [['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sepnet'], ['separation.chi_sepnet.frame_patch', null]] },
   { name: 'χ-sepnet with a sliding window of 128×128×96', edits: [['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sepnet'], ['separation.chi_sepnet.frame_patch', [128, 128, 96]]] },
+  // χ-sepnet's toolbox route has no R2 step unless R2′ can be measured or is asked for (QSMxT#497).
+  { name: 'χ-sepnet with an R2′ map asked for', edits: [['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sepnet'], ['pipeline.do_r2primemap', true]] },
+  { name: 'χ-sepnet with a MESE to measure R2′ from', edits: [['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sepnet']], scan: { mese_echo_times: [0.01, 0.02, 0.03, 0.04] } },
+  // A patch the network cannot take is refused at plan time on its route, and ignored on the other (QSMxT#500).
+  { name: 'χ-sepnet with a sliding window that is not a multiple of 16', edits: [['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sepnet'], ['separation.chi_sepnet.frame_patch', [100, 128, 64]]] },
+  { name: 'χ-sepnet with a bad patch left from the other route', edits: [['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sepnet'], ['separation.chi_sepnet.patch', [100, 128, 64]]] },
+  { name: 'χ-sepnet by its native route with a bad patch', edits: [['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sepnet'], ['separation.chi_sepnet.route', 'native'], ['separation.chi_sepnet.patch', [100, 128, 64]]] },
+  // Findings chosen together (QSMxT#498): two authors' settings that disagree, and a recommendation over an authors' setting.
+  { name: 'MEDI and χ-separation by iLSQR disagree over LBV', edits: [['inversion.algorithm', 'medi'], ['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sep-ilsqr'], ['bg_removal.algorithm', 'lbv']] },
+  { name: 'FANSI with the complex fit and Laplacian unwrapping', edits: [['inversion.algorithm', 'fansi'], ['field_mapping.b0_estimation', 'complex-fit'], ['field_mapping.unwrapping_algorithm', 'laplacian']] },
+  // The Note says whose rule it is (QSMxT#501).
+  { name: 'the complex fit with Laplacian unwrapping', edits: [['field_mapping.b0_estimation', 'complex-fit'], ['field_mapping.unwrapping_algorithm', 'laplacian']] },
   { name: 'SWI', edits: [['pipeline.do_swi', true]] },
   { name: 'SWI without magnitude', edits: [['pipeline.do_swi', true]], scan: { has_magnitude: false } },
   { name: 'SWI and SMWI', edits: [['pipeline.do_swi', true], ['pipeline.do_smwi', true]] },
@@ -106,4 +118,6 @@ export const IMPORTS = [
   '[inversion]\nalgorithm = "no-such-method"\n',
   '[pipeline]\nobliquity_threshold = -1\n',
   '[bg_removal]\nalgorithm = "lbv"\n\n[bg_removal.lbv]\ntol = 1e-6\n',
+  // A page holds one scan: its multi-orientation settings are cleared, with a warning (QSMxT#499).
+  '[multi_orientation]\ngroup_by = "acq"\n',
 ];

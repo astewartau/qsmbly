@@ -45,7 +45,17 @@ export function downloads(ids, registry) {
 export function runProblems(session, schema = null) {
   const named = (p) => {
     const s = p.setting ? schema?.settings.find((x) => x.path === p.setting) : null;
-    return s ? `${s.full_label ?? s.label}: ${p.reason}` : p.reason;
+    return s ? `${s.full_label ?? s.label}: ${p.reason}` : remedy(p);
+  };
+  // A step the heap may not hold: the engine names the settings that bring it down, by path.
+  const remedy = (p) => {
+    const over = session.plan.value?.over_budget;
+    if (!over || p.setting || !schema || p.settings?.join() !== over.settings.join()) return p.reason;
+    const labels = over.settings.map((path) => {
+      const s = schema.settings.find((x) => x.path === path);
+      return s?.full_label ?? s?.label ?? path;
+    });
+    return `${p.reason}. Settings that bring it down: ${labels.join(', ')}.`;
   };
   const scan = session.loaded.value ? session.scan.value : null;
   const plan = session.plan.value;
@@ -337,7 +347,7 @@ function PlanDrawer({ session, runner, expect, plan, dl, models, problems, onClo
           ${(plan.adjustments ?? []).length > 0 && html`<ul class="notes small" data-testid="drawer-adjustments">
             ${(plan.adjustments ?? []).map((a) => html`<li data-setting=${a.setting}>${a.message}</li>`)}</ul>`}
           ${plan.notes.length > 0 && html`<ul class="notes small">${plan.notes.map((n) => html`<li>${n}</li>`)}</ul>`}
-          ${missing.length > 0 && html`
+          ${missing.length > 0 && !problems.some((p) => p.severity === 'error') && html`
             <p class="small">Networks to download: ${missing.map((m) => `${m.name} ${formatBytes(m.missing ?? m.bytes)}${m.license ? ` (${m.license})` : ''}`).join(', ')}.
               <button type="button" class="btn small" disabled=${!!busy && busy.startsWith('Downloading')} onClick=${fetchNow}
                 data-testid="download-now">Download now</button>

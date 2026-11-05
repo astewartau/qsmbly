@@ -42,10 +42,10 @@ async function show(modal) {
 afterEach(() => { document.body.replaceChildren(); });
 
 describe("a reference pipeline's pop-up", () => {
-  test('with only authors\' settings, nothing is preselected: the dialog takes the focus', async () => {
+  test('with only authors\' settings, Keep mine is preselected and takes the focus', async () => {
     const { root, recs, button, primary } = await show(refModal([]));
-    expect(primary()).toEqual([]);
-    expect(document.activeElement).toBe(root.querySelector('[data-testid="rec-modal"]'));
+    expect(primary()).toEqual(['Keep mine']);
+    expect(document.activeElement).toBe(button('Keep mine'));
     expect(button('Apply recommended')).toBeUndefined();
     expect(root.textContent).toContain("Original authors' settings");
     expect(root.textContent).not.toContain('Recommended,');
@@ -67,9 +67,10 @@ describe("a reference pipeline's pop-up", () => {
   });
 
   test('Choose per setting starts a recommendation on its value, an authors\' setting on keep', async () => {
-    const { recs, button, picks } = await show(refModal([finding()]));
+    const { root, recs, button, picks } = await show(refModal([finding()]));
     await act(() => { button('Choose per setting').click(); });
     expect(picks()).toEqual(['reference', 'keep']);
+    expect(document.activeElement).toBe(root.querySelector('[data-testid="ref-pick"]'));
     await act(() => { button('Apply choices').click(); });
     expect(recs.answer).toHaveBeenCalledWith({ picks: ['reference', 'keep'] });
   });
@@ -92,14 +93,14 @@ describe('a finding\'s pop-up', () => {
     expect(primary()).toEqual(['Apply: First']);
   });
 
-  test('the details of an authors\' setting are labelled as theirs, nothing preselected', async () => {
+  test('the details of an authors\' setting are labelled as theirs, Keep mine preselected', async () => {
     const { root, button, primary } = await show(detailsFor([authors], ["Y's reference pipeline"]));
     expect(root.querySelector('[data-testid="rec-kind"]').textContent).toBe("Original authors' setting (not a recommendation)");
     expect(root.querySelector('[data-testid="rec-kind"]').classList.contains('reference')).toBe(true);
     expect(root.textContent).toContain("Y's reference pipeline uses Ref");
-    expect(primary()).toEqual([]);
+    expect(primary()).toEqual(['Keep mine']);
     expect(button("Use the authors' setting: Ref")).toBeDefined();
-    expect(document.activeElement).toBe(root.querySelector('[data-testid="rec-modal"]'));
+    expect(document.activeElement).toBe(button('Keep mine'));
   });
 });
 

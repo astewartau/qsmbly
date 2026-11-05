@@ -121,8 +121,8 @@ test('a departure from a reference pipeline is information only: a marker, never
   await expect(page.locator('.reference[data-for="field_mapping.unwrapping_algorithm"]')).toContainText("Differs from the authors' setting: Laplacian");
   await page.screenshot({ path: testInfo.outputPath('rec-reference.png') });
   await expect(page.getByTestId('rec-modal')).toHaveCount(0);
-  // The marker opens the details: the authors' setting, whose it is, why and the source; nothing
-  // is preselected or changes unless applied, and Keep mine records nothing (a reference
+  // The marker opens the details: the authors' setting, whose it is, why and the source; Keep mine
+  // is preselected and nothing changes unless applied, and Keep mine records nothing (a reference
   // difference is information only): the marker stays.
   await markerOf(page, 'field_mapping.unwrapping_algorithm').getByTestId('rec-info').click();
   const modal = page.getByTestId('rec-modal');
@@ -130,9 +130,11 @@ test('a departure from a reference pipeline is information only: a marker, never
   await expect(modal.getByTestId('rec-why').first()).toContainText('Source:');
   await expect(modal.getByTestId('rec-kind')).toHaveText("Original authors' setting (not a recommendation)");
   await expect(modal.getByRole('button', { name: "Use the authors' setting: Laplacian" })).not.toHaveClass(/primary/);
-  await expect(modal.locator('.btn.primary')).toHaveCount(0);
+  await expect(modal.locator('.btn.primary')).toHaveText('Keep mine');
+  await expect(modal.getByRole('button', { name: 'Keep mine' })).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath('rec-details.png') });
-  await modal.getByRole('button', { name: 'Keep mine' }).click();
+  // Enter takes the preselected choice, which changes nothing.
+  await page.keyboard.press('Enter');
   await expect(modal).toHaveCount(0);
   expect(await page.evaluate(() => globalThis.qsmblyNext.session.config.value.dismissed_recommendations ?? [])).toEqual([]);
   expect(await page.evaluate(() => globalThis.qsmblyNext.session.config.value.field_mapping.unwrapping_algorithm)).toBe('romeo');
@@ -155,16 +157,71 @@ const config = (page) => page.evaluate(() => globalThis.qsmblyNext.session.confi
 /** The settings the pop-up's rows name, by config path. */
 const rowSettings = (modal) => modal.getByTestId('ref-row').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-setting')));
 
+test('Apply all leaves a setting two authors disagree on, and says so', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('next.html');
+  await page.waitForFunction(() => globalThis.qsmblyNext?.session.view.value);
+  // MEDI's PDF and χ-separation's V-SHARP, with LBV chosen: one change chooses both methods.
+  await page.evaluate(() => globalThis.qsmblyNext.session.setAll([['bg_removal.algorithm', 'lbv']]));
+  await closeOffers(page);
+  await page.evaluate(() => globalThis.qsmblyNext.session.setAll([['inversion.algorithm', 'medi'], ['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sep-ilsqr']]));
+  const modal = page.getByTestId('rec-modal');
+  await expect(modal).toBeVisible();
+  await modal.getByRole('button', { name: /Apply (all|the authors' settings)/ }).click();
+  await expect(page.getByTestId('notices')).toContainText('the suggestions disagree');
+  expect(await page.evaluate(() => globalThis.qsmblyNext.session.config.value.bg_removal.algorithm)).toBe('lbv');
+  await closeOffers(page);
+  // It stays marked, for the user to choose.
+  expect(await page.evaluate(() => globalThis.qsmblyNext.session.view.value.get('bg_removal.algorithm').marker)).toBeTruthy();
+  expect(errors).toEqual([]);
+});
+
+test('Choose per setting: picks that disagree leave the setting, and one pick alone is honoured', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('next.html');
+  await page.waitForFunction(() => globalThis.qsmblyNext?.session.view.value);
+  const choose = async () => {
+    await page.evaluate(() => globalThis.qsmblyNext.session.setAll([['bg_removal.algorithm', 'lbv'], ['inversion.algorithm', 'ilsqr'], ['pipeline.do_chi_separation', false]]));
+    await closeOffers(page);
+    await page.evaluate(() => globalThis.qsmblyNext.session.setAll([['inversion.algorithm', 'medi'], ['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sep-ilsqr']]));
+    const modal = page.getByTestId('rec-modal');
+    await expect(modal).toBeVisible();
+    await modal.getByRole('button', { name: 'Choose per setting' }).click();
+    const rows = modal.locator('[data-testid="ref-row"][data-setting="bg_removal.algorithm"]');
+    await expect(rows).toHaveCount(2);
+    return { modal, rows };
+  };
+  const algorithm = () => page.evaluate(() => globalThis.qsmblyNext.session.config.value.bg_removal.algorithm);
+
+  const both = await choose();
+  await both.rows.nth(0).getByTestId('ref-pick').selectOption('reference');
+  await both.rows.nth(1).getByTestId('ref-pick').selectOption('reference');
+  await both.modal.getByRole('button', { name: 'Apply choices' }).click();
+  await expect(page.getByTestId('notices')).toContainText('the suggestions disagree');
+  expect(await algorithm()).toBe('lbv');
+  await closeOffers(page);
+
+  const one = await choose();
+  const wanted = await one.rows.nth(1).getByTestId('ref-pick').locator('option[value="reference"]').innerText();
+  await one.rows.nth(1).getByTestId('ref-pick').selectOption('reference');
+  await one.modal.getByRole('button', { name: 'Apply choices' }).click();
+  await expect.poll(algorithm).not.toBe('lbv');
+  await closeOffers(page);
+  await page.evaluate(() => { globalThis.qsmblyNext.session.ui.section.value = 'background'; });
+  await expect(page.locator('#setting-bg-removal-algorithm option:checked')).toHaveText(wanted.replace(/ \(authors' setting\)$/, ''));
+  expect(errors).toEqual([]);
+});
+
 test('choosing a method offers its reference pipeline; Close changes nothing', async ({ page }, testInfo) => {
   const errors = watchErrors(page);
   const modal = await chooseMedi(page);
   const settings = await rowSettings(modal);
   expect(settings.length).toBeGreaterThan(0);
-  // Only authors' settings: labelled as theirs, and nothing is preselected.
+  // Only authors' settings: labelled as theirs, and Keep mine is preselected.
   await expect(modal).toContainText("Original authors' settings");
-  await expect(modal.locator('.btn.primary')).toHaveCount(0);
+  await expect(modal.locator('.btn.primary')).toHaveText('Keep mine');
   await expect(modal.getByRole('button', { name: 'Apply recommended' })).toHaveCount(0);
-  await expect(modal).toBeFocused();
+  await expect(modal.getByRole('button', { name: 'Keep mine' })).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath('rec-method.png') });
   const before = await config(page);
   await page.keyboard.press('Escape');
@@ -307,7 +364,7 @@ test('a Siemens scan loaded after the method offers the Tukey window, nothing pr
   const modal = page.getByTestId('rec-modal');
   await expect(tukeyRow(modal)).toContainText('0 → 0.4');
   await expect(modal).toContainText("Original authors' settings");
-  await expect(modal.locator('.btn.primary')).toHaveCount(0);
+  await expect(modal.locator('.btn.primary')).toHaveText('Keep mine');
   expect(await page.evaluate(() => globalThis.qsmblyNext.session.config.value.pipeline.tukey_window)).toBe(0);
   // Keep mine, then the same files again: not offered twice, and nothing changed.
   await modal.getByRole('button', { name: 'Keep mine' }).click();
@@ -326,7 +383,7 @@ test('a Siemens scan loaded before the method: choosing it offers the same diffe
   await chooseChiSepnet(page);
   const modal = page.getByTestId('rec-modal');
   await expect(tukeyRow(modal)).toContainText('0 → 0.4');
-  await expect(modal.locator('.btn.primary')).toHaveCount(0);
+  await expect(modal.locator('.btn.primary')).toHaveText('Keep mine');
   expect(errors).toEqual([]);
 });
 

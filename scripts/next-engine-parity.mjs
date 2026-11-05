@@ -141,15 +141,21 @@ const cases = all.map((c) => {
   const f = { ...facts, ...c.scan };
   return { ...c, facts: f, ...scanOf(f), scan_file: SCAN_FILE };
 });
+// Rules that hold only on a WebAssembly heap (see below): a native build has none to settle.
+const WASM_RULE = /\.wasm-(heap|windows)$/;
+/** What every finding in a settings view comes to if all are chosen together. */
+const settledOf = (view) => engine.settle(view.flatMap((row) => row.recommendations ?? []).filter((r) => !WASM_RULE.test(r.rule)));
 const browserConfig = engine.browserConfig();
 const browserSide = cases.map(({ name, edits, facts: f, inputs, held }) => {
   try {
     const config = edits.reduce((c, [path, value]) => engine.set(c, path, value), browserConfig);
     const plan = engine.plan(config, f, 4);
+    const view = engine.settingsView(config, f);
     return {
       name,
       config,
-      view: engine.settingsView(config, f),
+      view,
+      settled: settledOf(view),
       pruned: engine.pruneHidden(config, f),
       plan,
       command: engine.command(config),
@@ -211,7 +217,6 @@ const check = (what, a, b) => {
 // `*.wasm-windows`: their findings, and the plan errors the required ones become), and AMP-PE's
 // decomposition levels, which a 32-bit build caps lower. They are taken out of both sides here;
 // the browser's cap is checked on its own.
-const WASM_RULE = /\.wasm-(heap|windows)$/;
 const WASM_RULE_ERROR = /\(rule [a-z0-9-]+\.wasm-(heap|windows);/;
 const TARGET_MAX = { 'inversion.amp_pe.nlevel': 31 };
 function withoutTarget(answer) {
@@ -246,7 +251,7 @@ function schemaWithoutTarget(schema, side) {
 }
 check('schema', schemaWithoutTarget(engine.schema(), 'browser'), schemaWithoutTarget(native.schema, 'native'));
 check('browser profile', browserConfig, native.browser);
-const answers = ['config', 'view', 'pruned', 'plan', 'keys', 'outputs', 'graph', 'methods', 'command', 'toml'];
+const answers = ['config', 'view', 'settled', 'pruned', 'plan', 'keys', 'outputs', 'graph', 'methods', 'command', 'toml'];
 for (const [i, ours] of browserSide.entries()) {
   const theirs = native.cases[i];
   if (ours.error || theirs.error) {

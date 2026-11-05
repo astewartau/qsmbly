@@ -146,6 +146,9 @@ describe('the run bar', () => {
     expect(button(root).title).toContain('Dipole inversion is estimated to need 5.0 GB');
     expect(root.querySelector('[data-testid="memory"]')?.textContent).toContain('Dipole inversion may not fit');
     expect(root.querySelector('[data-testid="problems"]')?.textContent?.trim()).toBe('1 warning');
+    // With the schema, the settings the engine says bring it down are named.
+    const schema = { settings: [{ path: 'inversion.algorithm', label: 'Method', full_label: 'QSM inversion method' }] };
+    expect(runProblems(session, schema)[0].message).toBe(`${message}. Settings that bring it down: QSM inversion method.`);
     expect(memoryClass(plan, invert)).toBe('memory-over');
     const row = { section: /** @type {any} */ ({ id: 'inversion' }), steps: [invert], state: /** @type {const} */ ('planned') };
     expect(rowMemory(plan, row)).toEqual({ bytes: invert.memory_bytes, cls: 'memory-over',

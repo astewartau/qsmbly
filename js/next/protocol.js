@@ -238,7 +238,7 @@
  * @typedef {object} Recommendation
  * @property {string} rule - QSM.rs's id (`medi.bg-pdf`)
  * @property {'reasoned' | 'reference'} kind - a recommendation with a reason, or the original
- *   authors' setting: only the first is preselected
+ *   authors' setting: Keep mine is preselected for it, not its value
  * @property {'required' | 'recommended' | 'discouraged' | 'reference'} strength
  * @property {'stated' | 'measured' | 'reference_choice' | 'implementation'} basis
  * @property {string} setting - its config path
@@ -253,6 +253,16 @@
  * @property {boolean} departs - the setting departs from it
  * @property {boolean} [dismissed] - dismissed for this value of the setting
  * @property {boolean} [conflict] - another as strong on the setting recommends something else
+ */
+
+/**
+ * What findings chosen together come to, setting by setting (qsmxt-engine
+ * `recommendations::Settled`).
+ * @typedef {object} Settled
+ * @property {Recommendation[]} apply - the findings whose value the setting takes
+ * @property {Recommendation[]} conflicting - as strong as each other and wanting different values:
+ *   the setting keeps its value for the user to choose
+ * @property {Recommendation[]} outranked - a stronger finding on the setting wants another value
  */
 
 /**

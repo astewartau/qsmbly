@@ -86,8 +86,10 @@ export function engineOps(wasm) {
     referenceTitles: (methods) => JSON.parse(call(wasm.reference_titles_wasm, json(methods))),
     /** "Keep mine": each finding kept at its current value (`keep`). @param {PipelineConfig} config @param {Recommendation[]} findings @returns {PipelineConfig} */
     keepFindings: (config, findings) => JSON.parse(call(wasm.keep_findings_wasm, json(config), json(findings))),
-    /** "Apply all": each finding's recommended value (`apply_all`). @param {PipelineConfig} config @param {Recommendation[]} findings @returns {PipelineConfig} */
+    /** "Apply all": what `settle` takes of the findings applied, and what it left (`apply_all`). @param {PipelineConfig} config @param {Recommendation[]} findings @returns {{ config: PipelineConfig, settled: import('../protocol.js').Settled }} */
     applyAll: (config, findings) => JSON.parse(call(wasm.apply_all_wasm, json(config), json(findings))),
+    /** What findings chosen together come to, with nothing changed (`settle`). @param {Recommendation[]} findings @returns {import('../protocol.js').Settled} */
+    settle: (findings) => JSON.parse(call(wasm.settle_wasm, json(findings))),
     /** @param {PipelineConfig} config @param {ScanFacts | null} f @returns {PipelineConfig} */
     pruneHidden: (config, f) => JSON.parse(call(wasm.prune_hidden_wasm, json(config), facts(f))),
     /** `config` with `path` set through the config's own serde; throws the engine's reason. */

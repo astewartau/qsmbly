@@ -335,7 +335,7 @@ export async function readSavedConfig(storage, read) {
   if (!text) return { config: null, notices: [] };
   try {
     const { config, warnings } = await read(text);
-    const notices = warnings.length ? [`Your saved settings were brought up to date: ${warnings.join(' ')}`] : [];
+    const notices = warnings.length ? [`Some of your saved settings changed when they were read: ${warnings.join(' ')}`] : [];
     return { config, notices };
   } catch (e) {
     return { config: null, notices: [`Your saved settings could not be read, so the defaults are used: ${e instanceof Error ? e.message : e}`] };
