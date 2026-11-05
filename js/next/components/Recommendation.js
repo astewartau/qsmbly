@@ -59,16 +59,17 @@ export function ReferenceLine({ view, style }) {
 
 /**
  * The pop-up's frame: a dialog that takes the focus (its `focus` button, else itself), closed by
- * Escape or the backdrop without changing anything.
- * @param {{ title: string, onClose: () => void, focus: { current: HTMLElement | null } | null, children: any }} props
+ * Escape or the backdrop without changing anything. Each pop-up (`opened`) takes the focus anew:
+ * the next one waiting may have the same title.
+ * @param {{ title: string, opened: RecModal | RefModal, onClose: () => void, focus: { current: HTMLElement | null } | null, children: any }} props
  */
-function Dialog({ title, onClose, children, focus }) {
+function Dialog({ title, opened, onClose, children, focus }) {
   const dialog = useRef(/** @type {HTMLDivElement | null} */ (null));
   const close = useRef(onClose);
   close.current = onClose;
   useEffect(() => {
     (focus?.current ?? dialog.current)?.focus();
-  }, [title]);
+  }, [opened]);
   // Escape on the window, not the dialog: the focus moves into the dialog only after it is
   // drawn, and an Escape before that (or with the focus elsewhere) must still close it.
   useEffect(() => {
@@ -114,7 +115,7 @@ function FindingModal({ recs, modal }) {
   useEffect(() => setWhy(false), [modal]);
   const showWhy = why || modal.details;
   return html`
-    <${Dialog} title=${modal.title} onClose=${() => recs.close()} focus=${modal.preselected !== null ? first : null}>
+    <${Dialog} title=${modal.title} opened=${modal} onClose=${() => recs.close()} focus=${modal.preselected !== null ? first : null}>
       ${modal.findings.map((r, i) => html`
         <div class="rec-finding" data-rule=${r.rule}>
           <p class=${`rec-kind ${r.kind}`} data-testid="rec-kind">${kindLabel(r)}</p>
@@ -176,7 +177,7 @@ function ReferencePipeline({ recs, modal }) {
   const first = useRef(/** @type {HTMLButtonElement | null} */ (null));
   const n = modal.recommendations.length;
   return html`
-    <${Dialog} title=${modal.title} onClose=${() => recs.close()} focus=${n > 0 ? first : null}>
+    <${Dialog} title=${modal.title} opened=${modal} onClose=${() => recs.close()} focus=${n > 0 ? first : null}>
       ${n > 0 && html`<h3 class="rec-section reasoned">Recommended, each for the reason given</h3>`}
       ${modal.recommendations.map((row, i) => html`<${RefRowView} row=${row} index=${i} choosing=${choosing} pick=${picks[i]} setPick=${setPick} />`)}
       <h3 class="rec-section reference">Original authors' settings</h3>

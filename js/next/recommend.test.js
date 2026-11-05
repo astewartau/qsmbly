@@ -9,12 +9,21 @@ import {
 // `x.method`: choosing `y` chooses Y, whose reference pipeline uses `ref` for `x.mode`. The
 // engine's answers are what qsmxt-engine gives for such rules; the rules themselves are QSM.rs's
 // to test. One of Y's authors' settings depends on the scan: `x.window` (0.4), on Siemens only.
-const defaults = { x: { te: 'first', method: 'x', mode: 'mine', window: 0 }, dismissed_recommendations: [] };
+// So do Y's reasoned findings on `z`: two recommendations at 7 T (`z.unwrap`, `z.bound`), a required
+// one with few echoes (`z.msmv`), a discouraged one on small voxels (`z.fine`) and, with `clash`,
+// two recommendations that disagree on `z.clash`.
+const defaults = {
+  x: { te: 'first', method: 'x', mode: 'mine', window: 0 },
+  z: { unwrap: false, bound: 0.5, msmv: true, fine: 'on', clash: 'mine' },
+  dismissed_recommendations: [],
+};
 const X = { setting: 'x.algorithm', value: 'x', name: 'X' };
 const Y = { setting: 'x.method', value: 'y', name: 'Y' };
 /** The strength of the mocked `x.te-first` rule. */
 let teStrength = 'recommended';
-afterEach(() => { teStrength = 'recommended'; windowDismissed = false; });
+/** Whether turning `z.unwrap` on also resolves the mocked `y.bound-7t`. */
+let unwrapResolvesBound = false;
+afterEach(() => { teStrength = 'recommended'; windowDismissed = false; unwrapResolvesBound = false; });
 
 const rule = (over = {}) => ({
   rule: 'x.te-first', kind: over.strength === 'reference' ? 'reference' : 'reasoned', strength: 'recommended', basis: 'measured', setting: 'x.te', label: 'Echo Time',
@@ -42,6 +51,34 @@ const windowRule = (config) => rule({
 let windowDismissed = false;
 const siemens = (facts) => facts?.manufacturer === 'Siemens';
 
+/** A reasoned finding of Y's that only a scan with the right facts brings. */
+const zRule = (config, id, setting, recommended, over = {}) => {
+  const value = config.z[setting];
+  return rule({
+    rule: id, setting: `z.${setting}`, label: setting, trigger: Y, needs_scan: true,
+    current: [{ value, name: String(value) }], recommended: { value: recommended, name: String(recommended) },
+    allowed: { test: 'one_of', values: [{ value: recommended, name: String(recommended) }] },
+    reason: `this scan calls for ${recommended}`, source: 'the Y paper',
+    departs: value !== recommended, dismissed: kept(config, id, value), ...over,
+  });
+};
+/** Y's reasoned findings that depend on the scan. */
+function scanFindings(config, facts) {
+  if (config.x.method !== 'y' || !facts) return [];
+  return [
+    ...(facts.field === 7 ? [
+      zRule(config, 'y.unwrap-7t', 'unwrap', true),
+      zRule(config, 'y.bound-7t', 'bound', 0.3, unwrapResolvesBound && config.z.unwrap ? { departs: false } : {}),
+    ] : []),
+    ...(facts.fewEchoes ? [zRule(config, 'y.msmv-echoes', 'msmv', false, { strength: 'required' })] : []),
+    ...(facts.smallVoxels ? [zRule(config, 'y.fine', 'fine', 'off', { strength: 'discouraged' })] : []),
+    ...(facts.clash ? [
+      zRule(config, 'y.clash-a', 'clash', 'a', { conflict: true }),
+      zRule(config, 'y.clash-b', 'clash', 'b', { conflict: true }),
+    ] : []),
+  ];
+}
+
 /** What the mocked engine says of `config` for a scan with `facts`. */
 function viewOf(config, facts = null) {
   const te = config.x.te;
@@ -57,6 +94,15 @@ function viewOf(config, facts = null) {
       rows.push({ path: 'x.window', visible: true, reference: [w], recommendations: w.departs ? [w] : [], ...(w.departs ? { marker: { actionable: false, text: 'Y: 0.4' } } : {}) });
     }
   }
+  for (const f of scanFindings(config, facts)) {
+    let row = rows.find((r) => r.path === f.setting);
+    if (!row) rows.push(row = { path: f.setting, visible: true, reference: [], recommendations: [] });
+    row.reference.push(f);
+    if (f.departs) {
+      row.recommendations.push(f);
+      row.marker = { actionable: !f.dismissed, text: `Y: ${f.recommended.name}` };
+    }
+  }
   return rows;
 }
 
@@ -68,7 +114,12 @@ const keepAll = (c, findings) => ({
     ...findings.filter((f) => f.strength === 'recommended' || f.strength === 'discouraged').map((f) => ({ rule: f.rule, chosen: f.current[0].value })),
   ],
 });
+const Z_RULES = {
+  'y.unwrap-7t': ['unwrap', true], 'y.bound-7t': ['bound', 0.3], 'y.msmv-echoes': ['msmv', false],
+  'y.fine': ['fine', 'off'], 'y.clash-a': ['clash', 'a'], 'y.clash-b': ['clash', 'b'],
+};
 const applyOne = (c, r, pick) => {
+  if (Z_RULES[r]) return { ...c, z: { ...c.z, [Z_RULES[r][0]]: pick ?? Z_RULES[r][1] } };
   if (r === 'y.window-ref') return { ...c, x: { ...c.x, window: pick ?? 0.4 } };
   return r === 'y.mode-ref'
     ? { ...c, x: { ...c.x, mode: pick ?? 'ref' } }
@@ -79,7 +130,7 @@ const engine = {
   dismissRecommendation: async (c, r) => keepAll(c, viewOf(c).flatMap((v) => v.recommendations).filter((f) => f.rule === r)),
   pruneDismissals: async (c) => ({
     ...c,
-    dismissed_recommendations: c.dismissed_recommendations.filter((d) => d.chosen === c.x.te),
+    dismissed_recommendations: c.dismissed_recommendations.filter((d) => d.rule !== 'x.te-first' || d.chosen === c.x.te),
   }),
   chosenMethods: async (c) => (c.x.method === 'y' ? [X, Y] : [X]),
   referenceOffers: async (c, f, _s, methods) => methods.map((m) => ({
@@ -410,6 +461,375 @@ describe('a scan that brings authors\' settings of a chosen method', () => {
     const h = harness();
     await h.flush();
     await load(h, 'Siemens');
+    h.session.set('x.method', 'y');
+    await h.flush();
+    h.recs.close();
+    h.session.undo();
+    await h.flush();
+    h.session.redo();
+    await h.flush();
+    expect(h.recs.modal.value).toBeNull();
+  });
+});
+
+describe('a scan that brings recommendations of a chosen method', () => {
+  const PHASE = [{ id: 1, name: 'phase.nii' }];
+  /** Load a scan with these facts. */
+  const load = async ({ session, flush }, facts, files = PHASE) => {
+    session.files.value = /** @type {any} */ (files);
+    session.facts.value = /** @type {any} */ ({ echoes: 3, manufacturer: null, ...facts });
+    await flush();
+  };
+  /** Clear the scan: back to the preview's facts. */
+  const clear = async ({ session, flush }) => {
+    session.files.value = [];
+    session.facts.value = /** @type {any} */ ({ echoes: 5, manufacturer: null });
+    await flush();
+  };
+  /** Choose Y, closing what that offers. */
+  const chooseY = async ({ session, recs, flush }) => {
+    session.set('x.method', 'y');
+    await flush();
+    recs.close();
+    await flush();
+  };
+  /** Choose Y with its authors' `x.mode` already set: it has nothing of its own to offer. */
+  const chooseYFollowingAuthors = async ({ session, flush }) => {
+    session.setAll([['x.method', 'y'], ['x.mode', 'ref']]);
+    await flush();
+  };
+  const rulesOf = (rows) => rows.flatMap((r) => r.findings.map((f) => f.rule));
+  const SIEMENS_7T = { manufacturer: 'Siemens', field: 7 };
+
+  describe('with authors\' settings it also brings', () => {
+    test('loaded after the method: one pop-up, the recommendations first and preselected, the authors\' settings on keep', async () => {
+      const h = harness();
+      await h.flush();
+      await chooseY(h);
+      await load(h, SIEMENS_7T);
+      const modal = h.recs.modal.value;
+      expect(modal?.kind).toBe('reference');
+      expect(modal.title).toBe("Y's reference pipeline");
+      expect(rulesOf(modal.recommendations)).toEqual(['y.unwrap-7t', 'y.bound-7t']);
+      expect(rulesOf(modal.rows)).toEqual(['y.window-ref']);
+      expect(startingPicks(modal)).toEqual(['reference', 'reference', 'keep']);
+      expect(applyChoices(modal).map((c) => [c.answer, c.preselected])).toEqual([['recommended', true], ['all', false]]);
+      expect(h.session.config.value.z).toEqual(defaults.z);
+      expect(h.session.config.value.x.window).toBe(0);
+    });
+
+    test('loaded before the method: choosing it offers the same recommendations, and the same way', async () => {
+      const h = harness();
+      await h.flush();
+      await load(h, SIEMENS_7T);
+      expect(h.recs.modal.value).toBeNull();
+      h.session.set('x.method', 'y');
+      await h.flush();
+      const modal = h.recs.modal.value;
+      expect(modal?.kind).toBe('reference');
+      expect(rulesOf(modal.recommendations)).toEqual(['y.unwrap-7t', 'y.bound-7t']);
+      expect(rulesOf(modal.rows)).toContain('y.window-ref');
+      expect(applyChoices(modal)[0]).toEqual({ answer: 'recommended', label: 'Apply recommended', preselected: true });
+    });
+
+    test('Apply recommended applies only the recommendations; Close changes nothing and leaves them marked', async () => {
+      const h = harness();
+      await h.flush();
+      await chooseY(h);
+      await load(h, SIEMENS_7T);
+      await h.recs.answer('recommended');
+      await h.flush();
+      expect(h.session.config.value.z).toMatchObject({ unwrap: true, bound: 0.3 });
+      expect(h.session.config.value.x.window).toBe(0);
+      expect(h.recs.modal.value).toBeNull();
+
+      const closed = harness();
+      await closed.flush();
+      await chooseY(closed);
+      await load(closed, SIEMENS_7T);
+      closed.recs.close();
+      await closed.flush();
+      expect(closed.session.config.value.z).toEqual(defaults.z);
+      expect(marker(closed.session.view.value.get('z.unwrap'))).toBe('open');
+    });
+
+    test('Keep mine keeps the recommendations for these values, and records nothing for the authors\' setting', async () => {
+      const h = harness();
+      await h.flush();
+      await chooseY(h);
+      await load(h, SIEMENS_7T);
+      await h.recs.answer('keep');
+      await h.flush();
+      expect(h.session.config.value.dismissed_recommendations).toEqual([
+        { rule: 'y.unwrap-7t', chosen: false }, { rule: 'y.bound-7t', chosen: 0.5 },
+      ]);
+      expect(marker(h.session.view.value.get('z.unwrap'))).toBe('info');
+    });
+
+    test('Choose per setting starts each recommendation on its value', async () => {
+      const h = harness();
+      await h.flush();
+      await chooseY(h);
+      await load(h, SIEMENS_7T);
+      await h.recs.answer({ picks: ['reference', 'keep', 'reference'] });
+      await h.flush();
+      expect(h.session.config.value.z).toMatchObject({ unwrap: true, bound: 0.5 });
+      expect(h.session.config.value.x.window).toBe(0.4);
+    });
+  });
+
+  describe('with no authors\' settings to offer', () => {
+    /** Answer each pop-up with its first choice, giving the rule each pop-up was for. */
+    const applyEach = async ({ recs, flush }) => {
+      const shown = [];
+      while (recs.modal.value) {
+        const open = recs.modal.value;
+        expect(open.kind).toBe('finding');
+        expect(open.preselected).toBe(0);
+        shown.push(open.findings[0].rule);
+        await recs.choose(open.choices[0]);
+        await flush();
+      }
+      return shown;
+    };
+
+    test('each recommendation gets its own pop-up in turn, in either order', async () => {
+      const after = harness();
+      await after.flush();
+      await chooseYFollowingAuthors(after);
+      await load(after, { field: 7 });
+      expect(await applyEach(after)).toEqual(['y.unwrap-7t', 'y.bound-7t']);
+      expect(after.session.config.value.z).toMatchObject({ unwrap: true, bound: 0.3 });
+
+      const before = harness();
+      await before.flush();
+      await load(before, { field: 7 });
+      await chooseYFollowingAuthors(before);
+      expect(await applyEach(before)).toEqual(['y.unwrap-7t', 'y.bound-7t']);
+    });
+
+    test('a discouraged finding gets its pop-up in either order, Apply preselected', async () => {
+      const after = harness();
+      await after.flush();
+      await chooseYFollowingAuthors(after);
+      await load(after, { smallVoxels: true });
+      expect(after.recs.modal.value?.title).toBe('Discouraged with Y');
+      expect(after.recs.modal.value?.preselected).toBe(0);
+      expect(after.session.config.value.z.fine).toBe('on');
+
+      const before = harness();
+      await before.flush();
+      await load(before, { smallVoxels: true });
+      await chooseYFollowingAuthors(before);
+      expect(before.recs.modal.value?.title).toBe('Discouraged with Y');
+    });
+
+    test('a pop-up an earlier answer has resolved does not stay', async () => {
+      unwrapResolvesBound = true;
+      const h = harness();
+      await h.flush();
+      await chooseYFollowingAuthors(h);
+      await load(h, { field: 7 });
+      expect(h.recs.modal.value?.findings[0].rule).toBe('y.unwrap-7t');
+      await h.recs.choose(h.recs.modal.value.choices[0]);
+      await h.flush();
+      expect(h.recs.modal.value).toBeNull();
+      expect(h.session.config.value.z.bound).toBe(0.5);
+    });
+  });
+
+  describe('a required one', () => {
+    /** Its own pop-up, with no Keep mine; Close opens what follows. */
+    const expectRequired = (recs) => {
+      const open = recs.modal.value;
+      expect(open?.kind).toBe('finding');
+      expect(open.title).toBe('Y requires a change');
+      expect(open.preselected).toBe(0);
+      expect(open.findings.map((f) => f.rule)).toEqual(['y.msmv-echoes']);
+      expect(open.choices.some((c) => c.kind === 'ignore')).toBe(false);
+    };
+
+    test('comes first in its own pop-up, whichever order; the reference pipeline follows with the other recommendations', async () => {
+      const facts = { ...SIEMENS_7T, fewEchoes: true };
+      const after = harness();
+      await after.flush();
+      await chooseY(after);
+      await load(after, facts);
+
+      const before = harness();
+      await before.flush();
+      await load(before, facts);
+      before.session.set('x.method', 'y');
+      await before.flush();
+
+      for (const { recs, session } of [after, before]) {
+        expectRequired(recs);
+        expect(session.config.value.z.msmv).toBe(true);
+        recs.close();
+        const next = recs.modal.value;
+        expect(next?.kind).toBe('reference');
+        expect(rulesOf(next.recommendations)).toEqual(['y.unwrap-7t', 'y.bound-7t']);
+        expect(rulesOf(next.rows)).toContain('y.window-ref');
+        recs.close();
+        expect(recs.modal.value).toBeNull();
+      }
+    });
+
+    test('alone, it gets just its own pop-up; Apply applies it', async () => {
+      const h = harness();
+      await h.flush();
+      await chooseY(h);
+      await load(h, { fewEchoes: true });
+      expectRequired(h.recs);
+      await h.recs.choose(h.recs.modal.value.choices[0]);
+      await h.flush();
+      expect(h.session.config.value.z.msmv).toBe(false);
+      expect(h.recs.modal.value).toBeNull();
+    });
+
+    test('closed, it stays marked and a further file does not re-open it', async () => {
+      const h = harness();
+      await h.flush();
+      await chooseY(h);
+      await load(h, { fewEchoes: true });
+      h.recs.close();
+      await load(h, { fewEchoes: true }, [...PHASE, { id: 2, name: 'phase.json' }]);
+      expect(h.recs.modal.value).toBeNull();
+      expect(marker(h.session.view.value.get('z.msmv'))).toBe('open');
+    });
+  });
+
+  test('two that disagree share a pop-up with nothing preselected, whichever order', async () => {
+    const after = harness();
+    await after.flush();
+    await chooseY(after);
+    await load(after, { clash: true });
+
+    const before = harness();
+    await before.flush();
+    await load(before, { clash: true });
+    before.session.set('x.method', 'y');
+    await before.flush();
+
+    for (const { recs } of [after, before]) {
+      const open = recs.modal.value;
+      expect(open?.title).toBe('Recommendations disagree');
+      expect(open.preselected).toBeNull();
+      expect(open.findings.map((f) => f.rule)).toEqual(['y.clash-a', 'y.clash-b']);
+      recs.close();
+      if (recs.modal.value) expect(recs.modal.value.kind).toBe('reference');
+    }
+  });
+
+  test('a scan that brings no new finding opens nothing', async () => {
+    const h = harness();
+    await h.flush();
+    await chooseY(h);
+    await load(h, { field: 3 });
+    expect(h.recs.modal.value).toBeNull();
+  });
+
+  test('facts with no scan loaded (the example preview) open nothing', async () => {
+    const h = harness();
+    await h.flush();
+    await chooseY(h);
+    h.session.facts.value = /** @type {any} */ (SIEMENS_7T);
+    await h.flush();
+    expect(h.recs.modal.value).toBeNull();
+  });
+
+  test('a recommendation there before the scan is not offered by it, and stays marked', async () => {
+    const h = harness();
+    await h.flush();
+    h.session.set('x.te', 'sum');
+    await h.flush();
+    h.recs.close();
+    await load(h, { field: 3 });
+    expect(h.recs.modal.value).toBeNull();
+    expect(marker(h.session.view.value.get('x.te'))).toBe('open');
+  });
+
+  test('a recommendation kept for these values is not offered', async () => {
+    const h = harness();
+    await h.flush();
+    await chooseYFollowingAuthors(h);
+    h.session.replaceConfig({
+      ...h.session.config.value,
+      dismissed_recommendations: [{ rule: 'y.unwrap-7t', chosen: false }, { rule: 'y.bound-7t', chosen: 0.5 }],
+    });
+    await h.flush();
+    await load(h, { field: 7 });
+    expect(h.recs.modal.value).toBeNull();
+    expect(h.session.view.value.get('z.unwrap').recommendations[0].dismissed).toBe(true);
+  });
+
+  test('a further file does not re-open what was offered, however it was answered', async () => {
+    const more = [...PHASE, { id: 2, name: 'phase.json' }];
+    const answers = [
+      (recs) => recs.close(),
+      (recs) => recs.answer('keep'),
+      (recs) => recs.answer('recommended'),
+      (recs) => recs.answer('all'),
+    ];
+    for (const answer of answers) {
+      const h = harness();
+      await h.flush();
+      await chooseY(h);
+      await load(h, SIEMENS_7T);
+      expect(h.recs.modal.value?.kind).toBe('reference');
+      await answer(h.recs);
+      await h.flush();
+      await load(h, SIEMENS_7T, more);
+      expect(h.recs.modal.value).toBeNull();
+    }
+  });
+
+  test('clearing the scan and loading one again offers it again', async () => {
+    const h = harness();
+    await h.flush();
+    await chooseY(h);
+    await load(h, { field: 7 });
+    expect(h.recs.modal.value?.findings[0].rule).toBe('y.unwrap-7t');
+    h.recs.close();
+    h.recs.close();
+    await clear(h);
+    expect(h.recs.modal.value).toBeNull();
+    await load(h, { field: 7 });
+    expect(h.recs.modal.value?.findings[0].rule).toBe('y.unwrap-7t');
+  });
+
+  test('replacing a scan without clearing does not re-offer what the earlier one brought, only what is new', async () => {
+    const h = harness();
+    await h.flush();
+    await chooseY(h);
+    await load(h, { field: 7 });
+    h.recs.close();
+    h.recs.close();
+    expect(h.recs.modal.value).toBeNull();
+    const other = [{ id: 3, name: 'other.nii' }];
+    await load(h, { field: 7 }, other);
+    expect(h.recs.modal.value).toBeNull();
+    await load(h, { field: 3 }, other);
+    await load(h, { field: 7 }, other);
+    expect(h.recs.modal.value).toBeNull();
+    await load(h, { field: 7, fewEchoes: true }, other);
+    expect(h.recs.modal.value?.findings.map((f) => f.rule)).toEqual(['y.msmv-echoes']);
+  });
+
+  test('a change and a scan answered by one view list a recommendation once', async () => {
+    const h = harness();
+    await h.flush();
+    h.session.files.value = /** @type {any} */ (PHASE);
+    h.session.facts.value = /** @type {any} */ ({ echoes: 3, field: 7 });
+    h.session.set('x.method', 'y');
+    await h.flush();
+    expect(rulesOf(h.recs.modal.value.recommendations)).toEqual(['y.unwrap-7t', 'y.bound-7t']);
+  });
+
+  test('an undo or redo after the scan offers nothing', async () => {
+    const h = harness();
+    await h.flush();
+    await load(h, { field: 7 });
     h.session.set('x.method', 'y');
     await h.flush();
     h.recs.close();
