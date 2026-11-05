@@ -1220,14 +1220,22 @@ mod tests {
             "{nodes:?}"
         );
         assert!(after["mermaid"].as_str().unwrap().contains("computed"));
-        // The same methods as planned; the run's Note may say more, since the run's own scan
-        // reaches the rules (its echo count, say) where the planned Note has only the config.
+        // The same methods as planned, and what the run found on the phantom, whose background
+        // has no phase; the run's Note may say more, since the run's own scan reaches the rules
+        // (its echo count, say) where the planned Note has only the config.
         let after: Value =
             serde_json::from_str(&methods_after(&config_json, &facts_json, &record).unwrap())
                 .unwrap();
         let planned: Value =
             serde_json::from_str(&super::methods(&config_json, &facts_json).unwrap()).unwrap();
-        assert_eq!(after["sentences"], planned["sentences"]);
+        let text = |s: &Value| s["text"].as_str().unwrap_or_default().to_owned();
+        let mut sentences = after["sentences"].as_array().unwrap().clone();
+        sentences.retain(|s| {
+            !text(s).starts_with("Voxels where the scanner recorded no phase")
+                && !text(s).starts_with("Voxels where the phase offset could not be estimated")
+        });
+        assert_eq!(after["sentences"].as_array().unwrap().len(), sentences.len() + 2);
+        assert_eq!(Value::Array(sentences), planned["sentences"]);
         assert_eq!(after["references"], planned["references"]);
         for line in planned["note"]["differences"]
             .as_array()
