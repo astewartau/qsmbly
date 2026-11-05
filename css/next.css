@@ -603,6 +603,10 @@ label.btn.disabled { opacity: 0.45; pointer-events: none; }
 .rec-line { margin: 0; }
 .rec-text { font-size: 11.5px; margin-left: 2px; }
 .rec-section { font-size: 12.5px; margin: 10px 0 2px; color: var(--muted); font-weight: 600; }
+/* The two kinds of finding, apart at a glance: a reasoned recommendation, the authors' setting. */
+.rec-kind { font-size: 12px; font-weight: 600; }
+.rec-kind.reasoned, .rec-section.reasoned { color: var(--warn); }
+.rec-kind.reference, .rec-section.reference { color: var(--accent); }
 .rec-row { border-top: 1px solid var(--border); padding-top: 6px; margin-top: 6px; }
 .rec-modal { max-height: calc(100vh - 32px); overflow: auto; }
 .rec-pick { display: flex; gap: 6px; align-items: center; }

@@ -7,12 +7,13 @@
  * @typedef {import('../recommend.js').RecModal} RecModal
  * @typedef {import('../recommend.js').RefModal} RefModal
  * @typedef {import('../recommend.js').RefRow} RefRow
+ * @typedef {import('../recommend.js').RefPick} RefPick
  * @typedef {import('../protocol.js').SettingView} SettingView
  */
 import { html } from '../html.js';
 import { createContext } from 'preact';
 import { useContext, useEffect, useRef, useState } from 'preact/hooks';
-import { referenceLine, currentText } from '../recommend.js';
+import { referenceLine, currentText, kindLabel, whoSays, applyChoices, startingPicks } from '../recommend.js';
 
 /** The workspace's recommendations (createRecommendations), for the rows that show them. */
 export const RecommendationsContext = createContext(/** @type {Recommendations | null} */ (null));
@@ -103,8 +104,8 @@ export function RecommendationModal({ recs }) {
 }
 
 /**
- * A recommendation a change created, or a setting's details: what each rule is, why and the
- * source, and the choices (Apply, the other allowed values, Keep mine).
+ * A recommendation a change created, or a setting's details: what kind each rule is, why and the
+ * source, and the choices (Apply or Use the authors' setting, the other allowed values, Keep mine).
  * @param {{ recs: Recommendations, modal: RecModal }} props
  */
 function FindingModal({ recs, modal }) {
@@ -116,6 +117,7 @@ function FindingModal({ recs, modal }) {
     <${Dialog} title=${modal.title} onClose=${() => recs.close()} focus=${modal.preselected !== null ? first : null}>
       ${modal.findings.map((r, i) => html`
         <div class="rec-finding" data-rule=${r.rule}>
+          <p class=${`rec-kind ${r.kind}`} data-testid="rec-kind">${kindLabel(r)}</p>
           <p><strong>${r.label}</strong> is ${currentText(r)}${modal.whose ? html`; ${modal.whose[i]}${r.dismissed ? ' (kept as yours)' : ''}` : ''}. ${r.reason}.</p>
           ${showWhy && html`<p class="sub rec-why" data-testid="rec-why">Source: ${r.source} (${BASIS[r.basis] ?? r.basis}).</p>`}
         </div>`)}
@@ -132,12 +134,13 @@ function FindingModal({ recs, modal }) {
 /**
  * One row of a reference pipeline pop-up: the setting, its value → the reference value (and the
  * methods using it when several), why and the source; with Choose per setting, its choice.
- * @param {{ row: RefRow, index: number, choosing: boolean, pick: 'reference' | 'keep' | number,
- *   setPick: (i: number, p: 'reference' | 'keep' | number) => void }} props
+ * @param {{ row: RefRow, index: number, choosing: boolean, pick: RefPick,
+ *   setPick: (i: number, p: RefPick) => void }} props
  */
 function RefRowView({ row, index, choosing, pick, setPick }) {
   const sources = [...new Set(row.findings.map((f) => f.source))];
-  const reasons = [...new Set(row.findings.map((f) => f.reason))];
+  const authors = row.kind === 'reference';
+  const reasons = [...new Set(row.findings.map((f) => (authors ? f.reason : `${whoSays(f, '')}: ${f.reason}`)))];
   return html`
     <div class="rec-finding rec-row" data-setting=${row.setting} data-testid="ref-row">
       <p><strong>${row.label}</strong>: ${row.current} → ${row.reference.name}${row.methods.length > 1 ? ` (${row.methods.join(', ')})` : ''}</p>
@@ -147,7 +150,7 @@ function RefRowView({ row, index, choosing, pick, setPick }) {
         <label class="sub rec-pick">Use${' '}
           <select class="sel" aria-label=${`Choice for ${row.label}`} data-testid="ref-pick"
             onChange=${(e) => { const v = e.currentTarget.value; setPick(index, v === 'reference' || v === 'keep' ? v : Number(v)); }}>
-            <option value="reference" selected=${pick === 'reference'}>${row.reference.name} (reference)</option>
+            <option value="reference" selected=${pick === 'reference'}>${row.reference.name} (${authors ? "authors' setting" : 'recommended'})</option>
             ${row.alternatives.map((a, i) => html`<option value=${String(i)} selected=${pick === i}>${a.name}</option>`)}
             <option value="keep" selected=${pick === 'keep'}>${row.current} (keep mine)</option>
           </select>
@@ -156,33 +159,36 @@ function RefRowView({ row, index, choosing, pick, setPick }) {
 }
 
 /**
- * A chosen method's reference pipeline: each setting where the config differs from it, and any
- * recommendations the same change created, first. Apply all, Choose per setting, or Keep mine;
- * Close changes nothing.
+ * A chosen method's reference pipeline: any recommendations the same change created, then each
+ * setting where the config differs from the authors'. Apply recommended (preselected, when there
+ * are any), Apply all or Apply the authors' settings, Choose per setting, or Keep mine; Close
+ * changes nothing. Only authors' settings: nothing is preselected, and the dialog takes the focus.
  * @param {{ recs: Recommendations, modal: RefModal }} props
  */
 function ReferencePipeline({ recs, modal }) {
-  const count = modal.recommendations.length + modal.rows.length;
   const [choosing, setChoosing] = useState(false);
-  const [picks, setPicks] = useState(/** @type {('reference' | 'keep' | number)[]} */ (Array(count).fill('reference')));
+  const [picks, setPicks] = useState(() => startingPicks(modal));
   useEffect(() => {
     setChoosing(false);
-    setPicks(Array(count).fill('reference'));
+    setPicks(startingPicks(modal));
   }, [modal]);
   const setPick = (i, p) => setPicks(picks.map((x, j) => (j === i ? p : x)));
   const first = useRef(/** @type {HTMLButtonElement | null} */ (null));
   const n = modal.recommendations.length;
   return html`
-    <${Dialog} title=${modal.title} onClose=${() => recs.close()} focus=${first}>
-      ${n > 0 && html`<h3 class="rec-section">Recommendations</h3>`}
+    <${Dialog} title=${modal.title} onClose=${() => recs.close()} focus=${n > 0 ? first : null}>
+      ${n > 0 && html`<h3 class="rec-section reasoned">Recommended, each for the reason given</h3>`}
       ${modal.recommendations.map((row, i) => html`<${RefRowView} row=${row} index=${i} choosing=${choosing} pick=${picks[i]} setPick=${setPick} />`)}
-      ${n > 0 && html`<h3 class="rec-section">Reference pipeline</h3>`}
+      <h3 class="rec-section reference">Original authors' settings</h3>
+      <p class="sub rec-why">Where yours differ from what the method's authors did. These are not recommendations, so none is preselected.</p>
       ${modal.rows.map((row, i) => html`<${RefRowView} row=${row} index=${n + i} choosing=${choosing} pick=${picks[n + i]} setPick=${setPick} />`)}
       <div class="rec-choices">
         ${choosing
           ? html`<button type="button" class="btn primary" ref=${first} onClick=${() => recs.answer({ picks })}>Apply choices</button>`
           : html`
-            <button type="button" class="btn primary" ref=${first} onClick=${() => recs.answer('all')}>Apply all</button>
+            ${applyChoices(modal).map((c) => html`
+              <button type="button" class=${`btn${c.preselected ? ' primary' : ''}`} ref=${c.preselected ? first : undefined}
+                onClick=${() => recs.answer(c.answer)}>${c.label}</button>`)}
             <button type="button" class="btn" onClick=${() => setChoosing(true)}>Choose per setting</button>
             <button type="button" class="btn" onClick=${() => recs.answer('keep')}>Keep mine</button>`}
         <button type="button" class="btn" onClick=${() => recs.close()} title="Change nothing (Esc)">Close</button>
