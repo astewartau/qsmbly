@@ -19,7 +19,8 @@
     "fft_padding": false,
     "crop_margin_mm": 32,
     "output_space": "acquired",
-    "ignore_slice_gap": false
+    "ignore_slice_gap": false,
+    "tukey_window": 0
   },
   "field_mapping": {
     "phase_offset_removal": true,
@@ -61,6 +62,10 @@
       "merge_regions": false,
       "correct_regions": false,
       "wrap_addition": 0
+    },
+    "prelude": {
+      "num_phase_partitions": 8,
+      "labelling": "auto"
     },
     "complex_fit": {
       "reltol": 0.0001,
@@ -132,7 +137,13 @@
       "n_pad": 40
     },
     "lbv": {
-      "tol": 0.000001
+      "tol": 0.01,
+      "depth": null,
+      "peel": 0,
+      "n1": 30,
+      "n2": 100,
+      "n3": 100,
+      "precision": "double"
     },
     "ismv": {
       "variant": "wen2014",
@@ -489,7 +500,13 @@
       "ignore_field_mismatch": false
     },
     "chi_sepnet": {
+      "route": "toolbox",
       "patch": [
+        128,
+        128,
+        64
+      ],
+      "frame_patch": [
         128,
         128,
         64
@@ -568,6 +585,7 @@
     "algorithm": "cosmos",
     "lambda": 0,
     "force": false,
+    "reference": "",
     "register": true,
     "magnitude_weighting": false,
     "cosmos_tol": 0.000001,

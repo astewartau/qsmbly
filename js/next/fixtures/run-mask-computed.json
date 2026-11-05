@@ -20,7 +20,8 @@
       "fft_padding": false,
       "crop_margin_mm": 32.0,
       "output_space": "acquired",
-      "ignore_slice_gap": false
+      "ignore_slice_gap": false,
+      "tukey_window": 0.0
     },
     "field_mapping": {
       "phase_offset_removal": true,
@@ -62,6 +63,10 @@
         "merge_regions": false,
         "correct_regions": false,
         "wrap_addition": 0.0
+      },
+      "prelude": {
+        "num_phase_partitions": 8,
+        "labelling": "auto"
       },
       "complex_fit": {
         "reltol": 0.0001,
@@ -133,7 +138,13 @@
         "n_pad": 40
       },
       "lbv": {
-        "tol": 1e-6
+        "tol": 0.01,
+        "depth": null,
+        "peel": 0,
+        "n1": 30,
+        "n2": 100,
+        "n3": 100,
+        "precision": "double"
       },
       "ismv": {
         "variant": "wen2014",
@@ -490,7 +501,13 @@
         "ignore_field_mismatch": false
       },
       "chi_sepnet": {
+        "route": "toolbox",
         "patch": [
+          128,
+          128,
+          64
+        ],
+        "frame_patch": [
           128,
           128,
           64
@@ -569,6 +586,7 @@
       "algorithm": "cosmos",
       "lambda": 0.0,
       "force": false,
+      "reference": "",
       "register": true,
       "magnitude_weighting": false,
       "cosmos_tol": 1e-6,
@@ -649,6 +667,12 @@
             "choice": "computed",
             "reason": "The supplied mask could not be brought onto the working grid, so the mask was computed.",
             "detail": "drawn mask"
+          },
+          {
+            "topic": "scanner_masked_phase",
+            "choice": "partial",
+            "reason": "Voxels where the scanner recorded no phase were left out of the mask.",
+            "detail": "1832 voxels (66.8 % of the recipe's mask; 77.7 % of the field of view has no phase)"
           }
         ]
       },
@@ -660,7 +684,15 @@
       {
         "id": "unwrap",
         "label": "Field map",
-        "state": "computed"
+        "state": "computed",
+        "decisions": [
+          {
+            "topic": "field_mask",
+            "choice": "partial",
+            "reason": "Voxels where the phase offset could not be estimated were excluded from the field map and every step after it.",
+            "detail": "144 voxels (15.79 % of the mask)"
+          }
+        ]
       },
       {
         "id": "bgremove",
@@ -687,6 +719,7 @@
     "recommendations": [
       {
         "rule": "sti.unwrap-laplacian",
+        "kind": "reference",
         "strength": "reference",
         "basis": "reference_choice",
         "setting": "field_mapping.unwrapping_algorithm",
@@ -722,6 +755,7 @@
       },
       {
         "rule": "sti.echo-weights",
+        "kind": "reference",
         "strength": "reference",
         "basis": "reference_choice",
         "setting": "field_mapping.b0_weight_type",
@@ -886,6 +920,12 @@
               "choice": "computed",
               "reason": "The supplied mask could not be brought onto the working grid, so the mask was computed.",
               "detail": "drawn mask"
+            },
+            {
+              "topic": "scanner_masked_phase",
+              "choice": "partial",
+              "reason": "Voxels where the scanner recorded no phase were left out of the mask.",
+              "detail": "1832 voxels (66.8 % of the recipe's mask; 77.7 % of the field of view has no phase)"
             }
           ]
         }
@@ -919,10 +959,19 @@
         "writes": [
           "FieldPpm",
           "TotalFieldHz",
+          "FieldMask",
           "TotalFieldMagnitude"
         ],
         "run": {
-          "state": "computed"
+          "state": "computed",
+          "decisions": [
+            {
+              "topic": "field_mask",
+              "choice": "partial",
+              "reason": "Voxels where the phase offset could not be estimated were excluded from the field map and every step after it.",
+              "detail": "144 voxels (15.79 % of the mask)"
+            }
+          ]
         }
       },
       {
@@ -939,7 +988,7 @@
         "models": [],
         "reads": [
           "FieldPpm",
-          "BrainMask"
+          "FieldMask"
         ],
         "writes": [
           "LocalField(Main)",
@@ -1064,14 +1113,8 @@
         "from": "unwrap",
         "to": "bgremove",
         "items": [
-          "FieldPpm"
-        ]
-      },
-      {
-        "from": "mask",
-        "to": "bgremove",
-        "items": [
-          "BrainMask"
+          "FieldPpm",
+          "FieldMask"
         ]
       },
       {
@@ -1403,6 +1446,17 @@
         "coil": null
       },
       {
+        "key": "FieldMask",
+        "item": "FieldMask",
+        "label": "Field mask",
+        "units": null,
+        "kind": "mask",
+        "bids_name": "desc-field_mask",
+        "published": false,
+        "echo": null,
+        "coil": null
+      },
+      {
         "key": "TotalFieldMagnitude",
         "item": "TotalFieldMagnitude",
         "label": "Field map magnitude",
@@ -1476,7 +1530,7 @@
       }
     ],
     "two_pass": false,
-    "mermaid": "flowchart TD\n    load[\"Load<br/><small><b>computed</b></small>\"]\n    scale_phase[\"Phase scaling<br/><small><b>computed</b></small>\"]\n    magnitude[\"Combined magnitude<br/><i>root sum of squares</i><br/><small>inhomogeneity correction</small><br/><small><b>computed</b></small>\"]\n    mask[\"Brain mask<br/><small>phase quality: Otsu threshold, dilation, hole-filling, erosion</small><br/><small><b>computed</b></small><br/><small>The supplied mask could not be brought onto the working grid, so the mask was computed. (drawn mask)</small>\"]\n    unwrap[\"Field map<br/><i>ROMEO</i><br/><small>phase offsets removed</small><br/><small>B0 by weighted average</small><br/><small><b>computed</b></small>\"]\n    bgremove[\"Background-field removal<br/><i>V-SHARP</i><br/><small>SMV kernel radii from 12 to 2 mm in 1 mm steps</small><br/><small><b>computed</b></small>\"]\n    invert[\"Dipole inversion<br/><i>iLSQR</i><br/><small><b>computed</b></small>\"]\n    reference[\"Referencing<br/><i>mean</i><br/><small><b>computed</b></small>\"]\n    load -->|\"Phase (as acquired), Magnitude (as acquired)\"| scale_phase\n    scale_phase -->|\"Magnitude\"| magnitude\n    scale_phase -->|\"Phase, Magnitude\"| mask\n    scale_phase -->|\"Phase, Magnitude\"| unwrap\n    mask -->|\"Brain mask\"| unwrap\n    unwrap -->|\"Total field\"| bgremove\n    mask -->|\"Brain mask\"| bgremove\n    bgremove -->|\"Local field, Local field mask\"| invert\n    invert -->|\"Unreferenced susceptibility\"| reference\n    bgremove -->|\"Local field mask\"| reference\n",
+    "mermaid": "flowchart TD\n    load[\"Load<br/><small><b>computed</b></small>\"]\n    scale_phase[\"Phase scaling<br/><small><b>computed</b></small>\"]\n    magnitude[\"Combined magnitude<br/><i>root sum of squares</i><br/><small>inhomogeneity correction</small><br/><small><b>computed</b></small>\"]\n    mask[\"Brain mask<br/><small>phase quality: Otsu threshold, dilation, hole-filling, erosion</small><br/><small><b>computed</b></small><br/><small>The supplied mask could not be brought onto the working grid, so the mask was computed. (drawn mask)</small><br/><small>Voxels where the scanner recorded no phase were left out of the mask. (1832 voxels (66.8 % of the recipe's mask; 77.7 % of the field of view has no phase))</small>\"]\n    unwrap[\"Field map<br/><i>ROMEO</i><br/><small>phase offsets removed</small><br/><small>B0 by weighted average</small><br/><small><b>computed</b></small><br/><small>Voxels where the phase offset could not be estimated were excluded from the field map and every step after it. (144 voxels (15.79 % of the mask))</small>\"]\n    bgremove[\"Background-field removal<br/><i>V-SHARP</i><br/><small>SMV kernel radii from 12 to 2 mm in 1 mm steps</small><br/><small><b>computed</b></small>\"]\n    invert[\"Dipole inversion<br/><i>iLSQR</i><br/><small><b>computed</b></small>\"]\n    reference[\"Referencing<br/><i>mean</i><br/><small><b>computed</b></small>\"]\n    load -->|\"Phase (as acquired), Magnitude (as acquired)\"| scale_phase\n    scale_phase -->|\"Magnitude\"| magnitude\n    scale_phase -->|\"Phase, Magnitude\"| mask\n    scale_phase -->|\"Phase, Magnitude\"| unwrap\n    mask -->|\"Brain mask\"| unwrap\n    unwrap -->|\"Total field, Field mask\"| bgremove\n    bgremove -->|\"Local field, Local field mask\"| invert\n    invert -->|\"Unreferenced susceptibility\"| reference\n    bgremove -->|\"Local field mask\"| reference\n",
     "differs": true
   },
   "methods": {
@@ -1508,6 +1562,13 @@
         ]
       },
       {
+        "text": "Voxels where the scanner recorded no phase (a constant value in every echo) were left out of the mask.",
+        "steps": [
+          "mask"
+        ],
+        "citations": []
+      },
+      {
         "text": "Phase offset removal was performed using the HIP method (Eckstein et al., 2018).",
         "steps": [
           "unwrap"
@@ -1515,6 +1576,13 @@
         "citations": [
           "eckstein2018"
         ]
+      },
+      {
+        "text": "Voxels where the phase offset could not be estimated were excluded from the field map and all later steps.",
+        "steps": [
+          "unwrap"
+        ],
+        "citations": []
       },
       {
         "text": "Phase unwrapping was performed using ROMEO (Dymerska et al., 2021).",

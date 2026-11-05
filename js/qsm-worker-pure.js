@@ -693,6 +693,7 @@ async function runQsmartCore({
       sdf_sigma1_stage1, sdf_sigma2_stage1,
       sdf_lower_lim, sdf_curv_constant,
       useCurvature,
+      false,
       sdfProgress1
     ));
 
@@ -741,6 +742,7 @@ async function runQsmartCore({
       sdf_sigma1_stage2, sdf_sigma2_stage2,
       sdf_lower_lim, sdf_curv_constant,
       useCurvature,
+      true,
       sdfProgress2
     ));
 

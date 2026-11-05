@@ -931,6 +931,7 @@ pub fn vasculature_mask_wasm_with_progress(
 /// * `lower_lim` - Proximity clamping value (default 0.6)
 /// * `curv_constant` - Curvature scaling (default 500)
 /// * `use_curvature` - Enable curvature-based weighting
+/// * `vessel_proximity` - Use the vasculature proximity term (false for stage 1, true for stage 2)
 ///
 /// # Returns
 /// Local field shift (background removed)
@@ -947,6 +948,7 @@ pub fn sdf_wasm_with_progress(
     lower_lim: f64,
     curv_constant: f64,
     use_curvature: bool,
+    vessel_proximity: bool,
     progress_callback: &js_sys::Function,
 ) -> Result<Vec<f64>, JsValue> {
     let n = n_elements(&[nx, ny, nz])?;
@@ -962,6 +964,7 @@ pub fn sdf_wasm_with_progress(
         lower_lim,
         curv_constant,
         use_curvature,
+        vessel_proximity,
     };
 
     let grid = qsm_core::Grid::new(nx, ny, nz, 1.0, 1.0, 1.0);
