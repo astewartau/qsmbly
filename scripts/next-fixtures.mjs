@@ -133,6 +133,8 @@ for (const c of exportCases) {
   }
   if (c.methods.ok) {
     for (const r of c.methods.ok.references) references[r.key] = r.text;
+    // The Note, where the config has one, beside the sentences' indices.
+    if (c.methods.ok.note) c.methods.note = c.methods.ok.note;
     c.methods.ok = c.methods.ok.sentences.map((s) => {
       const k = JSON.stringify(s);
       if (!sentenceIndex.has(k)) sentenceIndex.set(k, sentences.push(s) - 1);

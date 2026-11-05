@@ -7,7 +7,7 @@
  * @typedef {import('../exports.js').MethodsResult} MethodsResult
  */
 import { html } from '../html.js';
-import { methodsMarkdown, methodsPlainText, referenceRuns } from '../methods.js';
+import { methodsMarkdown, methodsNote, methodsPlainText, referenceRuns } from '../methods.js';
 import { useCopy } from './provided.js';
 
 /**
@@ -21,6 +21,7 @@ export function MethodsPanel({ result, error, stepsOf, lit, cited, onHover, onOp
     return html`<section class="methods" aria-label="Methods"><p class="tab-empty">${error ? `No methods text: ${error}` : 'Writing the methods…'}</p></section>`;
   }
   const { methods } = result;
+  const note = methodsNote(methods);
   return html`
     <section class="methods" aria-label="Methods" data-testid="methods">
       <div class="methods-head">
@@ -45,6 +46,13 @@ export function MethodsPanel({ result, error, stepsOf, lit, cited, onHover, onOp
             onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(steps[0]); } }}>${s.text}</span>`;
         })}
       </p>
+      ${note.length > 0 && html`
+        <div class="methods-note" data-testid="methods-note">
+          <h4 class="methods-refs-title">Note</h4>
+          ${note.map(({ heading, lines }) => html`
+            <p class="methods-note-heading" key=${heading}>${heading}</p>
+            <ul class="methods-refs methods-note-lines">${lines.map((line) => html`<li key=${line}>${line}</li>`)}</ul>`)}
+        </div>`}
       ${methods.references.length > 0 && html`
         <h4 class="methods-refs-title">References</h4>
         <ul class="methods-refs" data-testid="methods-refs">

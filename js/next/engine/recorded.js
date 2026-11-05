@@ -95,7 +95,7 @@ export function recordedEngine(recorded) {
  * @property {import('../protocol.js').Methods['sentences']} sentences - every methods sentence
  *   once; a case's methods name their sentences by index
  * @property {Record<string, string>} references - each cited work's text, by key
- * @property {{ changes: [string, unknown][], facts: ScanFacts, graph: Answer, methods: Answer, command: Answer, toml: { span: any[] } | { error: string } }[]} cases
+ * @property {{ changes: [string, unknown][], facts: ScanFacts, graph: Answer, methods: Answer & { note?: object }, command: Answer, toml: { span: any[] } | { error: string } }[]} cases
  *   - a case's settings file is the lines it changes in `toml`: `[start, deleted, ...added]`
  * @property {({ case?: number, text?: string } & ({ changes: [string, unknown][], warnings: string[] } | { error: string }))[]} imports
  *   - each case's settings file read back (`case`), and other files (`text`)
@@ -164,12 +164,14 @@ export function recordedProviders(recorded, exports, runs = []) {
     },
     async methods(config, facts, record) {
       if (record) return { methods: ran(config, facts, record).methods };
+      const answer = find(config, facts).methods;
       /** @type {number[]} */
-      const indices = unwrap(find(config, facts).methods);
+      const indices = unwrap(answer);
       const sentences = indices.map((i) => exports.sentences[i]);
       // The references are the works the sentences cite, in the order they first cite them.
       const keys = [...new Set(sentences.flatMap((s) => s.citations))];
-      return { methods: { sentences, references: keys.map((key) => ({ key, text: exports.references[key] })) } };
+      const note = answer.note ? { note: answer.note } : {};
+      return { methods: { sentences, references: keys.map((key) => ({ key, text: exports.references[key] })), ...note } };
     },
     async command(config) {
       return { command: unwrap(find(config, null).command) };

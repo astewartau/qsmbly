@@ -58,6 +58,15 @@ export const CASES = {
   'tkd-oblique-resampled': { settings: { 'inversion.algorithm': 'tkd', 'pipeline.axial_resampling': true }, tilt: 20 },
   // A session and further entities: `qsmxt run` nests the run's folders by them.
   'tkd-session': { settings: { 'inversion.algorithm': 'tkd' }, entities: 'sub-phantom_ses-1_acq-bridge_run-1' },
+  'tkd-prelude': { settings: { 'inversion.algorithm': 'tkd', 'field_mapping.unwrapping_algorithm': 'prelude', 'field_mapping.prelude.labelling': 'volume', 'field_mapping.prelude.num_phase_partitions': 6 } },
+  'tkd-medi-region-growing': { settings: { 'inversion.algorithm': 'tkd', 'field_mapping.unwrapping_algorithm': 'medi-region-growing' } },
+  'tkd-lbv': { settings: { 'inversion.algorithm': 'tkd', 'bg_removal.algorithm': 'lbv', 'bg_removal.lbv.peel': 1, 'bg_removal.lbv.n1': 20, 'bg_removal.lbv.precision': 'single' } },
+  // A settings file's earlier tolerance is kept, and the methods' Note says so.
+  'tkd-lbv-earlier-tolerance': { settings: { 'inversion.algorithm': 'tkd', 'bg_removal.algorithm': 'lbv', 'bg_removal.lbv.tol': 1e-6 } },
+  'tkd-tukey': { settings: { 'inversion.algorithm': 'tkd', 'pipeline.tukey_window': 0.4 } },
+  // The phantom's noisy background in the mask, with a small smoothing kernel: phase offset removal
+  // leaves voxels without an offset, so the field mask leaves them out and the methods text says so.
+  'tkd-field-mask': { settings: { 'inversion.algorithm': 'tkd', 'field_mapping.phase_offset_sigma_mm': [1, 1, 1], 'masking.sections': [{ input: 'magnitude', generator: { op: 'threshold', method: 'fixed', value: 0 }, refinements: [] }] } },
 };
 const DIMS = [24, 24, 20];
 

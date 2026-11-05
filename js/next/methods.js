@@ -5,6 +5,8 @@
  *
  * @typedef {import('./exports.js').Methods} Methods
  * @typedef {import('./exports.js').PipelineGraph} PipelineGraph
+ * @typedef {{ departures?: string[], differences?: string[] }} MethodsNote - what the run departed
+ *   from in its methods' reference pipelines (`Methods.note`, absent when nothing did)
  */
 
 /**
@@ -47,25 +49,45 @@ export function methodsParagraph(methods) {
 }
 
 /**
- * The text as the engine writes it (`Methods::to_markdown`): the paragraph under "# Methods" and
- * the references under "## References".
+ * The Note's groups that have lines, under the headings `Methods::to_markdown` gives them.
+ * @param {Methods & { note?: MethodsNote }} methods
+ * @returns {{ heading: string, lines: string[] }[]}
+ */
+export function methodsNote(methods) {
+  const { departures = [], differences = [] } = methods.note ?? {};
+  return [
+    { heading: 'Departures from the methods\' recommendations:', lines: departures },
+    { heading: 'Differences from the methods\' reference pipelines:', lines: differences },
+  ].filter((group) => group.lines.length);
+}
+
+/**
+ * The text as the engine writes it (`Methods::to_markdown`): the paragraph under "# Methods", the
+ * Note under "## Note" when there is one, and the references under "## References".
  * @param {Methods} methods
  */
 export function methodsMarkdown(methods) {
   let out = `# Methods\n\n${methodsParagraph(methods)}\n\n`;
+  const note = methodsNote(methods);
+  if (note.length) {
+    out += '## Note\n\n';
+    for (const { heading, lines } of note) out += `${heading}\n\n${lines.map((l) => `- ${l}\n`).join('')}\n`;
+  }
   if (methods.references.length) out += `## References\n\n${methods.references.map((r) => `- ${r.text}\n`).join('')}`;
   return out;
 }
 
 /**
- * The text to paste into a document: the paragraph, then the references one a line, without
- * Markdown.
+ * The text to paste into a document: the paragraph, the Note when there is one, then the references
+ * one a line, without Markdown.
  * @param {Methods} methods
  */
 export function methodsPlainText(methods) {
-  const paragraph = methodsParagraph(methods);
-  if (!methods.references.length) return `${paragraph}\n`;
-  return `${paragraph}\n\nReferences\n\n${methods.references.map((r) => `${plain(r.text)}\n`).join('')}`;
+  const note = methodsNote(methods).map(({ heading, lines }) => `${heading}\n${lines.join('\n')}\n`).join('\n');
+  const parts = [`${methodsParagraph(methods)}\n`];
+  if (note) parts.push(`Note\n\n${note}`);
+  if (methods.references.length) parts.push(`References\n\n${methods.references.map((r) => `${plain(r.text)}\n`).join('')}`);
+  return parts.join('\n');
 }
 
 /**
