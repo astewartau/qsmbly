@@ -128,7 +128,7 @@ test('an earlier settings file\'s LBV tolerance is kept, and the row and the met
   await closeOffers(page);
   expect(await value(page, 'bg_removal.lbv.tol')).toBe(1e-6);
   await open(page, 'background');
-  await expect(page.locator('.row[data-path="bg_removal.lbv.tol"] ~ .reference').first()).toContainText('Differs from the reference: 0.01');
+  await expect(page.locator('.row[data-path="bg_removal.lbv.tol"] ~ .reference').first()).toContainText("Differs from the authors' setting: 0.01");
   await page.locator('#tab-pipeline').click();
   await expect(page.getByTestId('methods-note')).toContainText('Tolerance (LBV)');
   await expect(page.getByTestId('methods-text')).toContainText('tolerance = 0.000001');
