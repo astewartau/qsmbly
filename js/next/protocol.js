@@ -47,6 +47,8 @@
  * @property {boolean} custom_qsm
  * @property {boolean} custom_r2
  * @property {boolean} custom_r2prime
+ * @property {string} [manufacturer] - the sidecar's or typed value, when there is one: the rules
+ *   that depend on the vendor read it
  */
 
 /**

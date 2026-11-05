@@ -283,7 +283,7 @@ describe('χ-separation', () => {
 
   test('a supplied R2′ stands in for the relaxometry', () => {
     const plan = planOf('χ-separation by χ-sepnet with a supplied R2′');
-    expect(plan.models).toEqual(['chi-sepnet', 'qsmnetme', 'r2primenet']);
+    expect(plan.models).toEqual(['chi-sepnet', 'qsmnetme']);
     expect(stepOf(plan, 'chi_separation').reads).toContain('SuppliedR2prime');
     expect(stepOf(plan, 'r2_r2prime')).toBeUndefined();
   });
