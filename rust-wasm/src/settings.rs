@@ -57,6 +57,7 @@ fn view_facts(facts_json: Option<&str>, scan: bool) -> Result<ViewFacts, String>
         field_strength: scan.then_some(facts.field_strength),
         voxel_size: facts.voxel_size.filter(|_| scan).map(|(a, b, c)| [a, b, c]),
         dims: scan.then_some([x, y, z]),
+        manufacturer: facts.manufacturer.clone().filter(|_| scan),
     })
 }
 

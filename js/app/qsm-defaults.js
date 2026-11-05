@@ -77,7 +77,13 @@ export const PDF_DEFAULTS = {
 };
 
 export const LBV_DEFAULTS = {
-  "tol": 0.000001
+  "tol": 0.01,
+  "depth": null,
+  "peel": 0,
+  "n1": 30,
+  "n2": 100,
+  "n3": 100,
+  "precision": "double"
 };
 
 export const ISMV_DEFAULTS = {

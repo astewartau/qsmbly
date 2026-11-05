@@ -100,6 +100,31 @@
     ]
   },
   {
+    "id": "qsmnetme",
+    "name": "QSMnetME",
+    "stage": "DipoleInversion",
+    "description": "The SNU-LIST χ-separation toolbox's QSM network (already ONNX): a QSMnet-style 3D U-Net trained on multi-echo data, run by the toolbox's route (field rotated to B0 along z and resampled to 1 mm, z-scored with the χ-sepnet field statistics, whole volume, mapped back). Spatial axes re-declared dynamic (the toolbox ships a fixed 192×192×128 input). Normalization constants are baked into the Rust glue (QsmnetmeNorm).",
+    "paper": "Kim et al., Hum Brain Mapp 2025 (doi:10.1002/hbm.70136)",
+    "source": "https://github.com/SNU-LIST/chi-separation",
+    "license": "",
+    "size_divisor": 16,
+    "available": true,
+    "inputs": [
+      "field"
+    ],
+    "outputs": [
+      "chi"
+    ],
+    "files": [
+      {
+        "name": "qsmnetme.onnx",
+        "url": "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/main/qsmnetme.onnx",
+        "sha256": "c2f030b625b2fc83f3ae45b38c996e006a069444d2da32d2b6022045c92c01e5",
+        "bytes": 90307128
+      }
+    ]
+  },
+  {
     "id": "qsmgan",
     "name": "QSMGAN",
     "stage": "DipoleInversion",
@@ -407,7 +432,7 @@
     "id": "chi-sepnet",
     "name": "χ-sepnet",
     "stage": "ChiSeparation",
-    "description": "SNU-LIST χ-separation network (already ONNX): a fully-convolutional 3D U-Net mapping [QSM, local field, R2′/Dr] (z-scored) → [χ+, χ−], run as an overlapping sliding window. Spatial axes re-declared dynamic (the authors ship a fixed 192×192×128 input) so 32-bit hosts can use a smaller patch. Normalization constants (Dr=114) are baked into the Rust glue (ChiSepNetNorm).",
+    "description": "SNU-LIST χ-separation network (already ONNX): a fully-convolutional 3D U-Net mapping [QSM, local field, R2′/Dr] (z-scored) → [χ+, χ−], run by the toolbox's route (training frame, QSMnetME QSM channel, whole volume) or alone as an overlapping sliding window. Spatial axes re-declared dynamic (the authors ship a fixed 192×192×128 input) so 32-bit hosts can use a smaller patch. Normalization constants (Dr=114) are baked into the Rust glue (ChiSepNetNorm).",
     "paper": "Kim et al. / SNU-LIST chi-separation toolbox",
     "source": "https://github.com/SNU-LIST/chi-separation",
     "license": "",

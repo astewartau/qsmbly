@@ -254,32 +254,36 @@ describe('χ-separation', () => {
     expect(!!stepOf(plan, 'r2_r2prime')).toBe(r2prime);
     expect(reads.includes('R2star')).toBe(a !== 'decompose');
     // The nets need their weights; R2′ comes from R2PRIMEnet without a MESE.
-    const nets = { 'susep-net': ['susep-net'], 'chi-sepnet': ['chi-sepnet'] }[a] ?? [];
+    // χ-sepnet's toolbox route also makes its QSM channel with QSMnetME.
+    const nets = { 'susep-net': ['susep-net'], 'chi-sepnet': ['chi-sepnet', 'qsmnetme'] }[a] ?? [];
     expect(plan.models).toEqual(r2prime ? ['r2primenet', ...nets] : []);
   });
 
   test('the networks run in the browser profile\'s patches, each patch shown only for its method, and carried in the command', () => {
+    expect(engine.browser.separation.chi_sepnet.route).toBe('toolbox');
+    expect(engine.browser.separation.chi_sepnet.frame_patch).toEqual([128, 128, 64]);
     expect(engine.browser.separation.chi_sepnet.patch).toEqual([128, 128, 64]);
     expect(engine.browser.separation.susep_net.patch).toEqual([96, 96, 64]);
-    expectSettingsIn('chisep', ['separation.chi_sepnet.patch', 'separation.susep_net.patch']);
+    expectSettingsIn('chisep', ['separation.chi_sepnet.route', 'separation.chi_sepnet.frame_patch', 'separation.chi_sepnet.patch', 'separation.susep_net.patch']);
     const hidden = (name) => engine.cases.find((c) => c.name === name).view.hidden;
-    expect(hidden('χ-separation by chi-sepnet')).not.toContain('separation.chi_sepnet.patch');
+    expect(hidden('χ-separation by chi-sepnet')).not.toContain('separation.chi_sepnet.frame_patch');
+    expect(hidden('χ-separation by chi-sepnet')).toContain('separation.chi_sepnet.patch');
     expect(hidden('χ-separation by chi-sepnet')).toContain('separation.susep_net.patch');
     expect(hidden('χ-separation by susep-net')).not.toContain('separation.susep_net.patch');
-    expect(hidden('χ-separation')).toEqual(expect.arrayContaining(['separation.chi_sepnet.patch', 'separation.susep_net.patch']));
+    expect(hidden('χ-separation')).toEqual(expect.arrayContaining(['separation.chi_sepnet.frame_patch', 'separation.chi_sepnet.patch', 'separation.susep_net.patch']));
     const command = (a) => {
       const changes = engine.cases.find((c) => c.name === `χ-separation by ${a}`).changes;
       const found = exportsOf.cases.find((c) => JSON.stringify(c.changes) === JSON.stringify(changes));
       return found.command.ok;
     };
-    expect(command('chi-sepnet')).toContain('--chi-sepnet-patch 128 128 64');
+    expect(command('chi-sepnet')).toContain('--chi-sepnet-frame-patch 128 128 64');
     expect(command('chi-sepnet')).not.toContain('--susep-net-patch');
     expect(command('susep-net')).toContain('--susep-net-patch 96 96 64');
   });
 
-  test('a supplied R2′ stands in for the relaxometry: χ-sepnet needs only its own weights', () => {
+  test('a supplied R2′ stands in for the relaxometry', () => {
     const plan = planOf('χ-separation by χ-sepnet with a supplied R2′');
-    expect(plan.models).toEqual(['chi-sepnet']);
+    expect(plan.models).toEqual(['chi-sepnet', 'qsmnetme', 'r2primenet']);
     expect(stepOf(plan, 'chi_separation').reads).toContain('SuppliedR2prime');
     expect(stepOf(plan, 'r2_r2prime')).toBeUndefined();
   });
