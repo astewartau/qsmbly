@@ -1234,7 +1234,10 @@ mod tests {
             !text(s).starts_with("Voxels where the scanner recorded no phase")
                 && !text(s).starts_with("Voxels where the phase offset could not be estimated")
         });
-        assert_eq!(after["sentences"].as_array().unwrap().len(), sentences.len() + 2);
+        assert_eq!(
+            after["sentences"].as_array().unwrap().len(),
+            sentences.len() + 2
+        );
         assert_eq!(Value::Array(sentences), planned["sentences"]);
         assert_eq!(after["references"], planned["references"]);
         for line in planned["note"]["differences"]
