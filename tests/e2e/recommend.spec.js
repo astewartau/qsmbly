@@ -6,6 +6,7 @@
 // QSM.rs's to test.
 import { test, expect } from '@playwright/test';
 import { closeOffers } from './rec-helpers.js';
+import { phantomFiles } from './phantom.js';
 
 function watchErrors(page) {
   const errors = [];
@@ -267,3 +268,76 @@ test('a recommendation with authors\' settings: listed first and preselected; Ap
   expect(after.dismissed_recommendations ?? []).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+// The scan and the method in either order: χ-sepnet's Tukey window on a Siemens scan is offered the
+// same way. The manufacturer comes from the sidecars.
+const TUKEY = 'pipeline.tukey_window';
+/** Load the scan, waiting until the workspace has asked the engine about it. */
+async function loadScan(page, manufacturer) {
+  const input = page.getByTestId('file-input');
+  await page.waitForFunction(() => globalThis.qsmblyNext?.session.view.value);
+  if (!await input.count()) await page.locator('[data-section="data"]').click();
+  await page.evaluate(() => { globalThis.factsBeforeLoad = globalThis.qsmblyNext.session.facts.value; });
+  await input.setInputFiles(phantomFiles({ dims: [24, 24, 20], manufacturer }));
+  await page.waitForFunction(() => {
+    const { session, recommendations } = globalThis.qsmblyNext;
+    return session.facts.value !== globalThis.factsBeforeLoad && session.viewFacts.value === session.facts.value && recommendations.pending.value === 0;
+  }, undefined, { timeout: 30_000 });
+}
+async function chooseChiSepnet(page) {
+  await page.waitForFunction(() => globalThis.qsmblyNext?.session.view.value);
+  await page.evaluate(() => {
+    const { session } = globalThis.qsmblyNext;
+    session.setAll([['pipeline.do_chi_separation', true], ['separation.algorithm', 'chi-sepnet']]);
+  });
+  await page.waitForFunction(() => {
+    const { session, recommendations } = globalThis.qsmblyNext;
+    return session.view.value && session.viewEdits.value === session.edits.value && recommendations.pending.value === 0;
+  });
+}
+const tukeyRow = (modal) => modal.locator(`[data-testid="ref-row"][data-setting="${TUKEY}"]`);
+
+test('a Siemens scan loaded after the method offers the Tukey window, nothing preselected; a further load does not re-open it', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('next.html');
+  await chooseChiSepnet(page);
+  await closeOffers(page);
+  await expect.poll(() => page.evaluate(() => globalThis.qsmblyNext.session.config.value.pipeline.tukey_window)).toBe(0);
+  await loadScan(page, 'Siemens');
+  const modal = page.getByTestId('rec-modal');
+  await expect(tukeyRow(modal)).toContainText('0 → 0.4');
+  await expect(modal).toContainText("Original authors' settings");
+  await expect(modal.locator('.btn.primary')).toHaveCount(0);
+  expect(await page.evaluate(() => globalThis.qsmblyNext.session.config.value.pipeline.tukey_window)).toBe(0);
+  // Keep mine, then the same files again: not offered twice, and nothing changed.
+  await modal.getByRole('button', { name: 'Keep mine' }).click();
+  await expect(modal).toHaveCount(0);
+  await loadScan(page, 'Siemens');
+  await expect(modal).toHaveCount(0);
+  expect(await page.evaluate(() => globalThis.qsmblyNext.session.config.value.pipeline.tukey_window)).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+test('a Siemens scan loaded before the method: choosing it offers the same difference', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('next.html');
+  await loadScan(page, 'Siemens');
+  await expect(page.getByTestId('rec-modal')).toHaveCount(0);
+  await chooseChiSepnet(page);
+  const modal = page.getByTestId('rec-modal');
+  await expect(tukeyRow(modal)).toContainText('0 → 0.4');
+  await expect(modal.locator('.btn.primary')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+for (const manufacturer of ['Philips', null]) {
+  test(`a scan ${manufacturer ? `from ${manufacturer}` : 'with no manufacturer'} loaded after the method opens nothing`, async ({ page }) => {
+    const errors = watchErrors(page);
+    await page.goto('next.html');
+    await chooseChiSepnet(page);
+    await closeOffers(page);
+    await loadScan(page, manufacturer);
+    await expect(page.getByTestId('rec-modal')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+}

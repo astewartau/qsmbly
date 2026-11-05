@@ -21,6 +21,10 @@
  *   the same values. A required one, or two that disagree, get a pop-up of their own (Apply
  *   preselected, the other allowed values, Keep mine unless required), and the reference
  *   pipeline's follows it.
+ * - **A loaded scan** can bring authors' settings of a method already chosen (a rule on the
+ *   manufacturer, say). When it adds differences that were not there before, the same pop-up
+ *   offers them, so what is offered does not depend on whether the scan or the method came first.
+ *   Each is offered once while a scan is loaded: not again for a sidecar or a further file.
  * - **Markers**: a setting that departs from a rule shows the engine's marker, ⚑ when a finding is
  *   offered as a change and not kept, ⓘ otherwise, with whose rule and what it uses ("MEDI:
  *   BET"). Either opens the setting's details: every rule it departs from, offered ones first.
@@ -31,6 +35,7 @@
  * @typedef {import('./protocol.js').Recommendation} Recommendation
  * @typedef {import('./protocol.js').SettingView} SettingView
  * @typedef {import('./protocol.js').Trigger} Trigger
+ * @typedef {import('./protocol.js').ScanFacts} ScanFacts
  * @typedef {import('./store/session.js').Session} Session
  *
  * @typedef {{ kind: 'apply', rule: string, value?: unknown, label: string } | { kind: 'ignore', label: string }} Choice
@@ -322,6 +327,13 @@ export function createRecommendations({ session, engine }) {
   /** The open findings the last view had, and the edits it was asked at. */
   let seen = /** @type {Set<string> | null} */ (null);
   let seenEdits = 0;
+  /**
+   * The rules whose authors' settings differ, or have differed, since the scan was loaded: those
+   * there before it, those offered, and those kept. A scan offers only what is not among them.
+   */
+  let knownDifferences = /** @type {Set<string> | null} */ (null);
+  /** The facts of the last view: only new facts can bring anything. */
+  let lastFacts = /** @type {ScanFacts | null} */ (null);
   /** The methods with a reference pipeline the config had at the last view. */
   let methods = /** @type {Set<string> | null} */ (null);
   /** Settings a pop-up's own Apply just decided: not offered again by the methods it chose. */
@@ -334,8 +346,9 @@ export function createRecommendations({ session, engine }) {
   };
 
   /**
-   * After each view: what the change that asked for it created. A view that follows the scan
-   * (loaded, or changed), an undo or a redo opens nothing; its findings show as markers.
+   * After each view: what the change that asked for it created. A view that follows an undo or a
+   * redo opens nothing, and one that follows the scan offers only the authors' settings it brought;
+   * the other findings show as markers.
    */
   async function check(view, edit) {
     pending.value = pending.peek() + 1;
@@ -366,19 +379,32 @@ export function createRecommendations({ session, engine }) {
     const before = methods;
     methods = new Set(chosen.map(methodKey));
     const fresh = before && edit ? chosen.filter((m) => !before.has(methodKey(m))) : [];
+    const differing = all.filter((r) => r.kind === 'reference' && r.departs);
+    const viewFacts = session.viewFacts.peek();
+    const brought = loaded && knownDifferences && viewFacts !== lastFacts
+      ? differing.filter((r) => !r.dismissed && !knownDifferences?.has(r.rule)) : [];
+    const bringing = brought.map((r) => r.trigger)
+      .filter((m, i, list) => !fresh.some((f) => methodKey(f) === methodKey(m)) && list.findIndex((x) => methodKey(x) === methodKey(m)) === i);
     let offers = /** @type {{ method: Trigger, title: string, differences: Recommendation[] }[]} */ ([]);
-    if (fresh.length) {
+    if (fresh.length || bringing.length) {
       try {
-        offers = await engine.referenceOffers(config, facts, loaded, fresh);
+        offers = await engine.referenceOffers(config, facts, loaded, [...fresh, ...bringing]);
       } catch {
         offers = [];
       }
       if (id !== checking) return;
     }
+    // Only now: a view that replaced this one while the engine answered still has it all to offer.
+    lastFacts = viewFacts;
+    knownDifferences = new Set([...(loaded ? knownDifferences ?? [] : []), ...differing.map((r) => r.rule)]);
     const skip = edit ? decided : new Set();
     if (edit) decided = new Set();
-    const differences = offers.flatMap((o) => o.differences).filter((r) => !skip.has(r.setting));
-    const offered = offers.filter((o) => o.differences.some((r) => !skip.has(r.setting)));
+    // A method the change chose offers all it differs by; one chosen before, what the scan brought.
+    const chosenNow = new Set(fresh.map(methodKey));
+    const offerable = (/** @type {Trigger} */ m, /** @type {Recommendation} */ r) => !skip.has(r.setting)
+      && (chosenNow.has(methodKey(m)) || brought.some((b) => b.rule === r.rule));
+    const differences = offers.flatMap((o) => o.differences.filter((r) => offerable(o.method, r)));
+    const offered = offers.filter((o) => o.differences.some((r) => offerable(o.method, r)));
     const hard = created.some((r) => r.strength === 'required' || r.conflict);
     if (created.length && (hard || !differences.length)) show(modalFor(group(all, created[0])));
     if (differences.length) {

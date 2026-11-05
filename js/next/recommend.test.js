@@ -8,13 +8,13 @@ import {
 // (recommended `first`, `last` allowed besides), scoped to method X. And a method choice,
 // `x.method`: choosing `y` chooses Y, whose reference pipeline uses `ref` for `x.mode`. The
 // engine's answers are what qsmxt-engine gives for such rules; the rules themselves are QSM.rs's
-// to test.
-const defaults = { x: { te: 'first', method: 'x', mode: 'mine' }, dismissed_recommendations: [] };
+// to test. One of Y's authors' settings depends on the scan: `x.window` (0.4), on Siemens only.
+const defaults = { x: { te: 'first', method: 'x', mode: 'mine', window: 0 }, dismissed_recommendations: [] };
 const X = { setting: 'x.algorithm', value: 'x', name: 'X' };
 const Y = { setting: 'x.method', value: 'y', name: 'Y' };
 /** The strength of the mocked `x.te-first` rule. */
 let teStrength = 'recommended';
-afterEach(() => { teStrength = 'recommended'; });
+afterEach(() => { teStrength = 'recommended'; windowDismissed = false; });
 
 const rule = (over = {}) => ({
   rule: 'x.te-first', kind: over.strength === 'reference' ? 'reference' : 'reasoned', strength: 'recommended', basis: 'measured', setting: 'x.te', label: 'Echo Time',
@@ -31,8 +31,19 @@ const yRule = (config) => rule({
   reason: "Y's authors use it", source: 'the Y paper', departs: config.x.mode !== 'ref',
 });
 
-/** What the mocked engine says of `config`. */
-function viewOf(config) {
+const windowRule = (config) => rule({
+  rule: 'y.window-ref', strength: 'reference', setting: 'x.window', label: 'Window', trigger: Y, needs_scan: true,
+  current: [{ value: config.x.window, name: String(config.x.window) }], recommended: { value: 0.4, name: '0.4' },
+  allowed: { test: 'one_of', values: [{ value: 0.4, name: '0.4' }] },
+  reason: "Y's authors window Siemens scans", source: 'the Y code', departs: config.x.window !== 0.4,
+  dismissed: windowDismissed,
+});
+/** A saved dismissal of the mocked window rule. */
+let windowDismissed = false;
+const siemens = (facts) => facts?.manufacturer === 'Siemens';
+
+/** What the mocked engine says of `config` for a scan with `facts`. */
+function viewOf(config, facts = null) {
   const te = config.x.te;
   const r = rule({ strength: teStrength, current: [{ value: te, name: te }], departs: te === 'sum', dismissed: kept(config, 'x.te-first', te) });
   const rows = [{ path: 'x.te', visible: true, reference: [r], recommendations: r.departs ? [r] : [] }];
@@ -41,6 +52,10 @@ function viewOf(config) {
     const y = yRule(config);
     rows.push({ path: 'x.mode', visible: true, reference: [y], recommendations: y.departs ? [y] : [] });
     if (y.departs) rows[1].marker = { actionable: false, text: 'Y: Ref' };
+    if (siemens(facts)) {
+      const w = windowRule(config);
+      rows.push({ path: 'x.window', visible: true, reference: [w], recommendations: w.departs ? [w] : [], ...(w.departs ? { marker: { actionable: false, text: 'Y: 0.4' } } : {}) });
+    }
   }
   return rows;
 }
@@ -53,9 +68,12 @@ const keepAll = (c, findings) => ({
     ...findings.filter((f) => f.strength === 'recommended' || f.strength === 'discouraged').map((f) => ({ rule: f.rule, chosen: f.current[0].value })),
   ],
 });
-const applyOne = (c, r, pick) => (r === 'y.mode-ref'
-  ? { ...c, x: { ...c.x, mode: pick ?? 'ref' } }
-  : { ...c, x: { ...c.x, te: pick ?? 'first' } });
+const applyOne = (c, r, pick) => {
+  if (r === 'y.window-ref') return { ...c, x: { ...c.x, window: pick ?? 0.4 } };
+  return r === 'y.mode-ref'
+    ? { ...c, x: { ...c.x, mode: pick ?? 'ref' } }
+    : { ...c, x: { ...c.x, te: pick ?? 'first' } };
+};
 const engine = {
   applyRecommendation: async (c, r, pick) => applyOne(c, r, pick),
   dismissRecommendation: async (c, r) => keepAll(c, viewOf(c).flatMap((v) => v.recommendations).filter((f) => f.rule === r)),
@@ -64,9 +82,9 @@ const engine = {
     dismissed_recommendations: c.dismissed_recommendations.filter((d) => d.chosen === c.x.te),
   }),
   chosenMethods: async (c) => (c.x.method === 'y' ? [X, Y] : [X]),
-  referenceOffers: async (c, _f, _s, methods) => methods.map((m) => ({
+  referenceOffers: async (c, f, _s, methods) => methods.map((m) => ({
     method: m, title: `${m.name}'s reference pipeline`,
-    differences: m.name === 'Y' ? [yRule(c)].filter((r) => r.departs && !r.dismissed) : [],
+    differences: m.name === 'Y' ? [yRule(c), ...(siemens(f) ? [windowRule(c)] : [])].filter((r) => r.departs && !r.dismissed) : [],
   })),
   referenceTitles: async (methods) => methods.map((m) => `${m.name}'s reference pipeline`),
   keepFindings: async (c, findings) => keepAll(c, findings),
@@ -75,7 +93,7 @@ const engine = {
 
 function harness() {
   const pending = [];
-  const session = createSession({ defaults, planner: () => ({}), settingsView: (c) => viewOf(c), schedule: (run) => pending.push(run) });
+  const session = createSession({ defaults, planner: () => ({}), settingsView: (c, f) => viewOf(c, f), schedule: (run) => pending.push(run) });
   const recs = createRecommendations({ session, engine });
   const flush = async () => {
     for (let i = 0; i < 6; i++) {
@@ -240,7 +258,7 @@ describe('a method chosen with a reference pipeline', () => {
     const { session, recs, flush } = await both();
     await recs.answer('recommended');
     await flush();
-    expect(session.config.value.x).toEqual({ te: 'first', method: 'y', mode: 'mine' });
+    expect(session.config.value.x).toEqual({ te: 'first', method: 'y', mode: 'mine', window: 0 });
     expect(session.config.value.dismissed_recommendations).toEqual([]);
     expect(recs.modal.value).toBeNull();
   });
@@ -249,7 +267,7 @@ describe('a method chosen with a reference pipeline', () => {
     const { session, recs, flush } = await both();
     await recs.answer('all');
     await flush();
-    expect(session.config.value.x).toEqual({ te: 'first', method: 'y', mode: 'ref' });
+    expect(session.config.value.x).toEqual({ te: 'first', method: 'y', mode: 'ref', window: 0 });
   });
 
   test('a required recommendation gets its own pop-up first; the reference pipeline follows', async () => {
@@ -265,6 +283,141 @@ describe('a method chosen with a reference pipeline', () => {
     expect(recs.modal.value?.kind).toBe('reference');
     recs.close();
     expect(recs.modal.value).toBeNull();
+  });
+});
+
+describe('a scan that brings authors\' settings of a chosen method', () => {
+  /** Load a scan: files, then the facts the engine reads from them. Each file or sidecar is a load. */
+  const load = async ({ session, flush }, manufacturer, files = [{ id: 1, name: 'phase.nii' }]) => {
+    session.files.value = /** @type {any} */ (files);
+    session.facts.value = /** @type {any} */ ({ echoes: 1, manufacturer });
+    await flush();
+  };
+  /** Choose Y, closing what that offers: the method is chosen before the scan. */
+  const chooseY = async ({ session, recs, flush }) => {
+    session.set('x.method', 'y');
+    await flush();
+    recs.close();
+    await flush();
+  };
+  const rules = (modal) => modal?.rows.map((r) => r.findings[0].rule);
+
+  test('loaded after the method: the same pop-up, offering what it brought, starting on keep', async () => {
+    const h = harness();
+    await h.flush();
+    await chooseY(h);
+    await load(h, 'Siemens');
+    const modal = h.recs.modal.value;
+    expect(modal?.kind).toBe('reference');
+    expect(modal.title).toBe("Y's reference pipeline");
+    expect(rules(modal)).toEqual(['y.window-ref']);
+    expect(applyChoices(modal).map((c) => c.preselected)).toEqual([false]);
+    expect(startingPicks(modal)).toEqual(['keep']);
+    expect(h.session.config.value.x.window).toBe(0);
+  });
+
+  test('loaded before the method: choosing it offers the same difference', async () => {
+    const h = harness();
+    await h.flush();
+    await load(h, 'Siemens');
+    expect(h.recs.modal.value).toBeNull();
+    h.session.set('x.method', 'y');
+    await h.flush();
+    expect(rules(h.recs.modal.value)).toContain('y.window-ref');
+  });
+
+  test('nothing changes unless chosen; Apply takes it, and it is not offered again', async () => {
+    const h = harness();
+    await h.flush();
+    await chooseY(h);
+    await load(h, 'Siemens');
+    await h.recs.answer('all');
+    await h.flush();
+    expect(h.session.config.value.x).toMatchObject({ window: 0.4, mode: 'mine' });
+    expect(h.recs.modal.value).toBeNull();
+  });
+
+  test('a scan that adds no difference opens nothing', async () => {
+    for (const manufacturer of ['Philips', null]) {
+      const h = harness();
+      await h.flush();
+      await chooseY(h);
+      await load(h, manufacturer);
+      expect(h.recs.modal.value).toBeNull();
+    }
+  });
+
+  test('facts with no scan loaded (the example preview) open nothing', async () => {
+    const h = harness();
+    await h.flush();
+    await chooseY(h);
+    h.session.facts.value = /** @type {any} */ ({ echoes: 5, manufacturer: 'Siemens' });
+    await h.flush();
+    expect(h.recs.modal.value).toBeNull();
+  });
+
+  test('differences there before the scan are not offered by it', async () => {
+    const h = harness();
+    await h.flush();
+    await chooseY(h); // x.mode already differs, and stays a marker
+    await load(h, 'Philips');
+    expect(h.recs.modal.value).toBeNull();
+    expect(marker(h.session.view.value.get('x.mode'))).toBe('info');
+  });
+
+  test('a further file or sidecar does not re-open what was offered, however it was answered', async () => {
+    const more = [{ id: 1, name: 'phase.nii' }, { id: 2, name: 'phase.json' }];
+    for (const answer of [(recs) => recs.close(), (recs) => recs.answer('keep')]) {
+      const h = harness();
+      await h.flush();
+      await chooseY(h);
+      await load(h, 'Siemens');
+      await answer(h.recs);
+      await h.flush();
+      await load(h, 'Siemens', more);
+      expect(h.recs.modal.value).toBeNull();
+      expect(marker(h.session.view.value.get('x.window'))).toBe('info');
+    }
+  });
+
+  test('offered once even if the manufacturer goes and comes back; a scan loaded afresh offers it again', async () => {
+    const h = harness();
+    await h.flush();
+    await chooseY(h);
+    await load(h, 'Siemens');
+    h.recs.close();
+    await load(h, null);
+    await load(h, 'Siemens');
+    expect(h.recs.modal.value).toBeNull();
+    // Cleared: back to the preview, then another scan.
+    h.session.files.value = [];
+    h.session.facts.value = /** @type {any} */ ({ echoes: 5, manufacturer: null });
+    await h.flush();
+    await load(h, 'Siemens');
+    expect(rules(h.recs.modal.value)).toEqual(['y.window-ref']);
+  });
+
+  test('what is dismissed for this value is not offered', async () => {
+    windowDismissed = true;
+    const h = harness();
+    await h.flush();
+    await chooseY(h);
+    await load(h, 'Siemens');
+    expect(h.recs.modal.value).toBeNull();
+  });
+
+  test('an undo after the scan offers nothing', async () => {
+    const h = harness();
+    await h.flush();
+    await load(h, 'Siemens');
+    h.session.set('x.method', 'y');
+    await h.flush();
+    h.recs.close();
+    h.session.undo();
+    await h.flush();
+    h.session.redo();
+    await h.flush();
+    expect(h.recs.modal.value).toBeNull();
   });
 });
 

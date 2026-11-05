@@ -122,6 +122,8 @@ export function createSession({ defaults, planner, settingsView = null, storage 
   const view = signal(/** @type {Map<string, SettingView> | null} */ (null));
   /** How many edits the user had made when `view` was asked for (see `edits`). */
   const viewEdits = signal(0);
+  /** The facts `view` was asked for: a new one is what a scan brought, whatever else moved. */
+  const viewFacts = signal(/** @type {ScanFacts | null} */ (null));
   /**
    * The user's edits so far: each `setConfig` (a setting set, a recommendation applied or
    * dismissed, a file imported, a reset) counts one; undo, redo and `replaceConfig` do not.
@@ -169,9 +171,10 @@ export function createSession({ defaults, planner, settingsView = null, storage 
     if (!settingsView) return;
     const id = ++viewRequested;
     const asked = edits.peek();
+    const askedFacts = facts.peek();
     try {
-      const rows = await settingsView(config.peek(), facts.peek(), loaded.peek());
-      if (id === viewRequested) batch(() => { viewEdits.value = asked; view.value = new Map(rows.map((r) => [r.path, r])); });
+      const rows = await settingsView(config.peek(), askedFacts, loaded.peek());
+      if (id === viewRequested) batch(() => { viewEdits.value = asked; viewFacts.value = askedFacts; view.value = new Map(rows.map((r) => [r.path, r])); });
     } catch (e) {
       if (id === viewRequested) view.value = null;
     }
@@ -239,6 +242,7 @@ export function createSession({ defaults, planner, settingsView = null, storage 
     planning,
     view,
     viewEdits,
+    viewFacts,
     edits,
     changes,
     canUndo,
