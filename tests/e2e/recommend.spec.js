@@ -54,7 +54,7 @@ test('an edit that creates a recommendation opens the pop-up; Apply resolves it'
   await departFromNdiEchoTime(page);
   const modal = page.getByTestId('rec-modal');
   await expect(modal).toBeVisible();
-  await expect(modal.getByRole('heading')).toHaveText('NDI recommends a change');
+  await expect(modal.getByRole('heading', { level: 2 })).toHaveText('NDI recommends a change');
   const apply = modal.getByRole('button', { name: 'Apply: First echo time' });
   await expect(apply).toHaveClass(/primary/);
   await expect(apply).toBeFocused();
@@ -117,17 +117,19 @@ test('a departure from a reference pipeline is information only: a marker, never
   // The defaults (iLSQR) unwrap with ROMEO; iLSQR's reference pipeline unwraps with the Laplacian.
   await openStep(page, 'fieldmap');
   await expect(markerOf(page, 'field_mapping.unwrapping_algorithm').getByTestId('rec-info')).toBeVisible();
-  await expect(page.locator('.reference[data-for="field_mapping.unwrapping_algorithm"]')).toContainText('Differs from the reference: Laplacian');
+  await expect(page.locator('.reference[data-for="field_mapping.unwrapping_algorithm"]')).toContainText("Differs from the authors' setting: Laplacian");
   await page.screenshot({ path: testInfo.outputPath('rec-reference.png') });
   await expect(page.getByTestId('rec-modal')).toHaveCount(0);
-  // The marker opens the details: whose reference it is, why and the source; nothing changes
-  // unless applied, and Keep mine records nothing (a reference difference is information only):
-  // the marker stays.
+  // The marker opens the details: the authors' setting, whose it is, why and the source; nothing
+  // is preselected or changes unless applied, and Keep mine records nothing (a reference
+  // difference is information only): the marker stays.
   await markerOf(page, 'field_mapping.unwrapping_algorithm').getByTestId('rec-info').click();
   const modal = page.getByTestId('rec-modal');
   await expect(modal).toContainText("iLSQR's reference pipeline uses Laplacian");
   await expect(modal.getByTestId('rec-why').first()).toContainText('Source:');
-  await expect(modal.getByRole('button', { name: 'Apply: Laplacian' })).not.toHaveClass(/primary/);
+  await expect(modal.getByTestId('rec-kind')).toHaveText("Original authors' setting (not a recommendation)");
+  await expect(modal.getByRole('button', { name: "Use the authors' setting: Laplacian" })).not.toHaveClass(/primary/);
+  await expect(modal.locator('.btn.primary')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('rec-details.png') });
   await modal.getByRole('button', { name: 'Keep mine' }).click();
   await expect(modal).toHaveCount(0);
@@ -144,8 +146,8 @@ async function chooseMedi(page) {
   await row(page, 'inversion.algorithm').locator('select').selectOption({ label: 'MEDI' });
   const modal = page.getByTestId('rec-modal');
   await expect(modal).toBeVisible();
-  await expect(modal.getByRole('heading')).toContainText("MEDI's");
-  await expect(modal.getByRole('heading')).toContainText('reference pipeline');
+  await expect(modal.getByRole('heading', { level: 2 })).toContainText("MEDI's");
+  await expect(modal.getByRole('heading', { level: 2 })).toContainText('reference pipeline');
   return modal;
 }
 const config = (page) => page.evaluate(() => globalThis.qsmblyNext.session.config.value);
@@ -157,7 +159,11 @@ test('choosing a method offers its reference pipeline; Close changes nothing', a
   const modal = await chooseMedi(page);
   const settings = await rowSettings(modal);
   expect(settings.length).toBeGreaterThan(0);
-  await expect(modal.getByRole('button', { name: 'Apply all' })).toBeFocused();
+  // Only authors' settings: labelled as theirs, and nothing is preselected.
+  await expect(modal).toContainText("Original authors' settings");
+  await expect(modal.locator('.btn.primary')).toHaveCount(0);
+  await expect(modal.getByRole('button', { name: 'Apply recommended' })).toHaveCount(0);
+  await expect(modal).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath('rec-method.png') });
   const before = await config(page);
   await page.keyboard.press('Escape');
@@ -169,11 +175,11 @@ test('choosing a method offers its reference pipeline; Close changes nothing', a
   expect(errors).toEqual([]);
 });
 
-test('Apply all takes the reference pipeline\'s values', async ({ page }) => {
+test('Apply the authors\' settings takes the reference pipeline\'s values', async ({ page }) => {
   const errors = watchErrors(page);
   const modal = await chooseMedi(page);
   const settings = await rowSettings(modal);
-  await modal.getByRole('button', { name: 'Apply all' }).click();
+  await modal.getByRole('button', { name: "Apply the authors' settings" }).click();
   await expect(modal).toHaveCount(0);
   // Nothing the pop-up offered differs any more.
   await expect.poll(() => page.evaluate((paths) => {
@@ -195,21 +201,69 @@ test('Keep mine changes and records nothing; Choose per setting picks each row',
   await closeOffers(page);
   await row(page, 'inversion.algorithm').locator('select').selectOption({ label: 'MEDI' });
   modal = page.getByTestId('rec-modal');
-  await expect(modal.getByRole('heading')).toContainText("MEDI's");
+  await expect(modal.getByRole('heading', { level: 2 })).toContainText("MEDI's");
   await modal.getByRole('button', { name: 'Choose per setting' }).click();
   const picks = modal.getByTestId('ref-pick');
   await expect(picks.first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('rec-per-setting.png') });
-  // Keep the first row's value, take the reference for the rest.
-  const first = (await rowSettings(modal))[0];
-  const value = (c) => first.split('.').reduce((o, k) => o?.[k], c);
+  // Every authors' setting starts on keep.
+  expect(await picks.evaluateAll((all) => all.map((s) => s.value))).toEqual((await rowSettings(modal)).map(() => 'keep'));
+  // Take the authors' setting for the first row, keep the rest.
+  const [first, second] = await rowSettings(modal);
+  const value = (c, path) => path.split('.').reduce((o, k) => o?.[k], c);
   const beforeChoices = await config(page);
-  const mine = value(beforeChoices);
-  await picks.first().selectOption('keep');
+  await picks.first().selectOption('reference');
   await modal.getByRole('button', { name: 'Apply choices' }).click();
   await expect(modal).toHaveCount(0);
-  // The first row kept its own value once the choices are in (the others took the reference's).
-  await expect.poll(async () => JSON.stringify(await config(page))).not.toBe(JSON.stringify(beforeChoices));
-  expect(value(await config(page))).toEqual(mine);
+  await expect.poll(async () => JSON.stringify(value(await config(page), first))).not.toBe(JSON.stringify(value(beforeChoices, first)));
+  expect(value(await config(page), second)).toEqual(value(beforeChoices, second));
+  expect(errors).toEqual([]);
+});
+
+/** Choose MEDI when its mSMV is on with the prefilter off: a recommendation and MEDI's reference pipeline in one pop-up. */
+async function chooseMediWithRecommendation(page) {
+  let modal = await chooseMedi(page);
+  await page.keyboard.press('Escape');
+  await expect(modal).toHaveCount(0);
+  await row(page, 'inversion.medi.msmv').locator('input').check();
+  await closeOffers(page);
+  await row(page, 'inversion.medi.msmv_prefilter').locator('input').uncheck();
+  await closeOffers(page);
+  await row(page, 'inversion.algorithm').locator('select').selectOption({ label: 'TKD' });
+  await closeOffers(page);
+  await row(page, 'inversion.algorithm').locator('select').selectOption({ label: 'MEDI' });
+  modal = page.getByTestId('rec-modal');
+  await expect(modal.getByRole('heading', { level: 2 })).toContainText("MEDI's");
+  return modal;
+}
+
+test('a recommendation with authors\' settings: listed first and preselected; Apply recommended keeps the authors\' settings', async ({ page }, testInfo) => {
+  const errors = watchErrors(page);
+  const modal = await chooseMediWithRecommendation(page);
+  const [first, ...authors] = await rowSettings(modal);
+  expect(first).toBe('inversion.medi.msmv_prefilter');
+  expect(authors.length).toBeGreaterThan(0);
+  const apply = modal.getByRole('button', { name: 'Apply recommended' });
+  await expect(apply).toHaveClass(/primary/);
+  await expect(apply).toBeFocused();
+  await expect(modal.getByRole('button', { name: "Apply all, with the authors' settings" })).not.toHaveClass(/primary/);
+  await page.screenshot({ path: testInfo.outputPath('rec-both-kinds.png') });
+  // Choose per setting starts the recommendation on its value, the authors' settings on keep.
+  await modal.getByRole('button', { name: 'Choose per setting' }).click();
+  expect(await modal.getByTestId('ref-pick').evaluateAll((all) => all.map((s) => s.value))).toEqual(['reference', ...authors.map(() => 'keep')]);
+  await page.keyboard.press('Escape');
+  await expect(modal).toHaveCount(0);
+  // Another method and back offers both again: Apply recommended takes only the recommendation.
+  const value = (c, path) => path.split('.').reduce((o, k) => o?.[k], c);
+  await row(page, 'inversion.algorithm').locator('select').selectOption({ label: 'TKD' });
+  await closeOffers(page);
+  await row(page, 'inversion.algorithm').locator('select').selectOption({ label: 'MEDI' });
+  const before = await config(page);
+  await modal.getByRole('button', { name: 'Apply recommended' }).click();
+  await expect(modal).toHaveCount(0);
+  await expect.poll(async () => value(await config(page), first)).toBe(true);
+  const after = await config(page);
+  expect(authors.map((p) => value(after, p))).toEqual(authors.map((p) => value(before, p)));
+  expect(after.dismissed_recommendations ?? []).toEqual([]);
   expect(errors).toEqual([]);
 });

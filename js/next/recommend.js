@@ -4,16 +4,23 @@
  * (`settings_view`, and qsmxt-engine's `recommendations` functions, from QSM.rs's rules); nothing
  * here knows a rule or a method.
  *
+ * - **Two kinds, labelled apart** (the engine's `kind`, QSMxT#486): a `reasoned` finding (required,
+ *   recommended, discouraged) gives a reason why its value is better, and only it is preselected;
+ *   a `reference` one is the original authors' setting, with no such reason, and is never
+ *   preselected.
  * - **A method's reference pipeline** is offered when a change chooses a method that has one (the
  *   engine's `chosen_methods`, before and after the change) and the config differs from it
  *   (`reference_differences`): one pop-up, "MEDI's reference pipeline", with a row per setting
- *   (current → reference, why, source) and Apply all / Choose per setting / Keep mine. Nothing
- *   changes unless applied; Close (or Escape) changes nothing. Keep mine is kept in the config's
- *   `dismissed_recommendations`, so it is not offered again for the same values.
- * - **A recommendation** (a `required`, `recommended` or `discouraged` finding a change creates,
- *   not dismissed) is offered in the same pop-up, under "Recommendations", first. A required one,
- *   or two that disagree, get a pop-up of their own (Apply preselected, the other allowed values,
- *   Keep mine unless required), and the reference pipeline's follows it.
+ *   (current → reference, why, source) and Apply the authors' settings / Choose per setting / Keep
+ *   mine, nothing preselected. Nothing changes unless applied; Close (or Escape) changes nothing.
+ *   Keep mine records nothing for an authors' setting, so it is offered again when the method is
+ *   chosen again.
+ * - **A recommendation** (a reasoned finding a change creates, not dismissed) is offered in the
+ *   same pop-up, first; Apply recommended is then preselected, and keeps every authors' setting.
+ *   Keep mine is kept in the config's `dismissed_recommendations`, so it is not offered again for
+ *   the same values. A required one, or two that disagree, get a pop-up of their own (Apply
+ *   preselected, the other allowed values, Keep mine unless required), and the reference
+ *   pipeline's follows it.
  * - **Markers**: a setting that departs from a rule shows the engine's marker, ⚑ when a finding is
  *   offered as a change and not kept, ⓘ otherwise, with whose rule and what it uses ("MEDI:
  *   BET"). Either opens the setting's details: every rule it departs from, offered ones first.
@@ -33,7 +40,8 @@
  * @property {Recommendation[]} findings - one, or equally strong ones on one setting that disagree;
  *   for the details, every rule the setting departs from
  * @property {Choice[]} choices
- * @property {number | null} preselected - the choice offered first; none when the findings disagree
+ * @property {number | null} preselected - the choice offered first; none when the findings disagree,
+ *   or in the details unless the first finding is one on offer: never for an authors' setting
  * @property {string} title
  * @property {boolean} details - a marked setting's details, not a pop-up a change opened
  * @property {string[]} [whose] - for the details, whose rule each finding is ("MEDI's reference
@@ -42,6 +50,7 @@
  * @typedef {object} RefRow - one setting of a reference pipeline pop-up
  * @property {string} setting
  * @property {string} label
+ * @property {'reasoned' | 'reference'} kind - a recommendation, or the original authors' setting
  * @property {string} current - its value now
  * @property {{ value: unknown, name: string }} reference - what the methods' rules use
  * @property {Recommendation[]} findings - each method's rule with that value (merged)
@@ -52,8 +61,12 @@
  *   same change created
  * @property {'reference'} kind
  * @property {string} title
- * @property {RefRow[]} recommendations - offered first, under "Recommendations"
- * @property {RefRow[]} rows
+ * @property {RefRow[]} recommendations - the reasoned rows, offered first
+ * @property {RefRow[]} rows - the differences from the authors' settings
+ *
+ * @typedef {'recommended' | 'all' | 'keep' | { picks: RefPick[] }} RefAnswer
+ * @typedef {'reference' | 'keep' | number} RefPick - a row's value, its current value, or the index
+ *   of one of its alternatives
  */
 import { signal, effect } from '@preact/signals-core';
 
@@ -63,7 +76,18 @@ const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
  * A finding offered as a change and not dismissed: what opens the pop-up or shows the ⚑ badge.
  * @param {Recommendation} r
  */
-export const isOpen = (r) => r.departs && r.strength !== 'reference' && !r.dismissed;
+export const isOpen = (r) => r.departs && r.kind !== 'reference' && !r.dismissed;
+
+/**
+ * What kind of finding it is, as its pop-up labels it: the original authors' setting, or a reasoned
+ * one by its strength.
+ * @param {Recommendation} r
+ * @returns {string}
+ */
+export function kindLabel(r) {
+  if (r.kind === 'reference') return "Original authors' setting (not a recommendation)";
+  return r.strength === 'required' ? 'Required' : r.strength === 'discouraged' ? 'Discouraged' : 'Recommended';
+}
 
 /**
  * Every finding in a settings view.
@@ -92,8 +116,9 @@ export function marker(v) {
  * @returns {{ what: string, value: string, trigger: string, source: string }}
  */
 export function referenceLine(r) {
-  const what = !r.departs ? 'Reference'
-    : r.strength === 'reference' ? 'Differs from the reference'
+  const authors = r.kind === 'reference';
+  const what = !r.departs ? (authors ? "Authors' setting" : 'Recommended')
+    : authors ? "Differs from the authors' setting"
       : r.dismissed ? 'Kept'
         : r.strength === 'required' ? 'Required'
           : r.strength === 'discouraged' ? 'Discouraged' : 'Recommended';
@@ -125,7 +150,7 @@ function alternatives(r) {
   return r.allowed.test === 'one_of' ? r.allowed.values.filter((v) => !same(v.value, r.recommended.value)) : [];
 }
 
-/** Offered findings first, then kept ones, then reference ones. */
+/** Offered findings first, then kept ones, then the authors' settings. */
 const STRENGTH_ORDER = { required: 0, recommended: 1, discouraged: 2, reference: 3 };
 const offeredFirst = (a, b) => (Number(!isOpen(a)) - Number(!isOpen(b)))
   || (STRENGTH_ORDER[a.strength] - STRENGTH_ORDER[b.strength]);
@@ -154,22 +179,23 @@ export function modalFor(findings) {
 }
 
 /**
- * Whose rule a finding is, as the details list it: "MEDI's reference pipeline uses PDF" (with the
- * engine's title for the method's reference), "NDI recommends First echo time", "MEDI requires
- * ...", "MEDI discourages Off".
+ * Whose rule a finding is, as the details list it after its label (`kindLabel`): "MEDI's reference
+ * pipeline uses PDF" for an authors' setting (with the engine's title for the method's reference),
+ * "NDI recommends First echo time", "MEDI requires ...", "MEDI discourages Off".
  * @param {Recommendation} r
  * @param {string} referenceTitle - the engine's `reference_title` of its trigger
  */
 export function whoSays(r, referenceTitle) {
-  if (r.strength === 'reference') return `${referenceTitle} uses ${r.recommended.name}`;
+  if (r.kind === 'reference') return `${referenceTitle} uses ${r.recommended.name}`;
   if (r.strength === 'discouraged') return `${r.trigger.name} discourages ${currentText(r)}`;
   return `${r.trigger.name} ${r.strength === 'required' ? 'requires' : 'recommends'} ${r.recommended.name}`;
 }
 
 /**
  * A marked setting's details: every rule it departs from (`findings`, offered ones first), whose
- * each is, and Apply (one per value, naming the methods when several use it), the other allowed
- * values and Keep mine (not when a finding is required).
+ * each is, and Apply, or Use the authors' setting for a value only the authors' settings have (one
+ * per value, naming the methods when several use it), the other allowed values and Keep mine (not
+ * when a finding is required). Apply is preselected only for a reasoned finding on offer.
  * @param {Recommendation[]} findings
  * @param {string[]} titles - the engine's reference title of each finding's trigger
  * @returns {RecModal}
@@ -177,16 +203,19 @@ export function whoSays(r, referenceTitle) {
 export function detailsFor(findings, titles) {
   /** @type {Choice[]} */
   const choices = [];
-  /** @type {{ value: unknown, name: string, rule: string, methods: string[] }[]} */
+  /** @type {{ value: unknown, name: string, rule: string, methods: string[], authors: boolean }[]} */
   const values = [];
-  for (const r of findings.filter((f) => f.strength !== 'discouraged')) {
+  for (const r of findings) {
     const v = values.find((x) => same(x.value, r.recommended.value));
-    if (v) v.methods.push(r.trigger.name);
-    else values.push({ ...r.recommended, rule: r.rule, methods: [r.trigger.name] });
+    if (v) {
+      v.methods.push(r.trigger.name);
+      v.authors &&= r.kind === 'reference';
+    } else values.push({ ...r.recommended, rule: r.rule, methods: [r.trigger.name], authors: r.kind === 'reference' });
   }
   const severalMethods = new Set(findings.map((f) => f.trigger.name)).size > 1;
   for (const v of values) {
-    choices.push({ kind: 'apply', rule: v.rule, label: `Apply: ${v.name}${severalMethods ? ` (${v.methods.join(', ')})` : ''}` });
+    const lead = v.authors ? "Use the authors' setting" : 'Apply';
+    choices.push({ kind: 'apply', rule: v.rule, label: `${lead}: ${v.name}${severalMethods ? ` (${v.methods.join(', ')})` : ''}` });
   }
   for (const r of findings) {
     for (const alt of alternatives(r)) {
@@ -196,9 +225,13 @@ export function detailsFor(findings, titles) {
   }
   if (findings.every((r) => r.strength !== 'required')) choices.push({ kind: 'ignore', label: 'Keep mine' });
   const r = findings[0];
-  const title = findings.length > 1 ? `${r.label}: ${findings.length} differences`
-    : r.strength === 'reference' ? `Differs from ${titles[0]}` : modalFor([r]).title;
-  return { kind: 'finding', findings, choices, preselected: null, title, details: true, whose: findings.map((f, i) => whoSays(f, titles[i])) };
+  const methods = [...new Set(findings.map((f) => f.trigger.name))];
+  const title = r.kind === 'reference'
+    ? (methods.length === 1 ? `Original authors' setting: ${titles[0]}` : `Original authors' settings: ${r.label} of ${methods.join(', ')}`)
+    : findings.length > 1 ? `${r.label}: ${findings.length} differences` : modalFor([r]).title;
+  // The first choice is the first finding's value, and offered findings come first.
+  const preselected = isOpen(r) && !findings.some((f) => f.conflict && isOpen(f)) ? 0 : null;
+  return { kind: 'finding', findings, choices, preselected, title, details: true, whose: findings.map((f, i) => whoSays(f, titles[i])) };
 }
 
 /**
@@ -218,7 +251,7 @@ export function rowsOf(findings) {
       continue;
     }
     rows.push({
-      setting: r.setting, label: r.label, current: currentText(r), reference: r.recommended,
+      setting: r.setting, label: r.label, kind: r.kind, current: currentText(r), reference: r.recommended,
       findings: [r], methods: [r.trigger.name], alternatives: alternatives(r),
     });
   }
@@ -238,6 +271,31 @@ export function referencesTitle(titles, methods) {
     return `${methods.map((m) => `${m.name}'s`).join(' and ')} reference pipelines`;
   }
   return titles.join(' · ');
+}
+
+/**
+ * The buttons that apply a reference pipeline pop-up's rows, the first preselected only when it
+ * holds recommendations: an authors' setting is applied only when asked for.
+ * @param {RefModal} modal
+ * @returns {{ answer: 'recommended' | 'all', label: string, preselected: boolean }[]}
+ */
+export function applyChoices(modal) {
+  return modal.recommendations.length
+    ? [
+      { answer: 'recommended', label: 'Apply recommended', preselected: true },
+      { answer: 'all', label: "Apply all, with the authors' settings", preselected: false },
+    ]
+    : [{ answer: 'all', label: "Apply the authors' settings", preselected: false }];
+}
+
+/**
+ * What Choose per setting starts on, one per row in the order shown: a recommendation on its value,
+ * an authors' setting on keeping the current value.
+ * @param {RefModal} modal
+ * @returns {RefPick[]}
+ */
+export function startingPicks(modal) {
+  return [...modal.recommendations, ...modal.rows].map((row) => (row.kind === 'reference' ? 'keep' : 'reference'));
 }
 
 /**
@@ -409,10 +467,11 @@ export function createRecommendations({ session, engine }) {
       });
     },
     /**
-     * Answer a reference pipeline pop-up: `all` applies every row, `keep` keeps every row as it is,
-     * and `picks` (Choose per setting) gives each row's choice: `reference`, `keep`, or the index
-     * of one of its alternatives.
-     * @param {'all' | 'keep' | { picks: ('reference' | 'keep' | number)[] }} answer
+     * Answer a reference pipeline pop-up: `recommended` applies the recommendations and keeps every
+     * authors' setting as it is, `all` applies every row, `keep` keeps every row as it is, and
+     * `picks` (Choose per setting) gives each row's choice: `reference`, `keep`, or the index of
+     * one of its alternatives.
+     * @param {RefAnswer} answer
      */
     answer(answer) {
       const open = modal.peek();
@@ -423,10 +482,13 @@ export function createRecommendations({ session, engine }) {
         let config = session.config.peek();
         const findings = rows.flatMap((r) => r.findings);
         if (answer === 'all') config = await engine.applyAll(config, findings);
-        else if (answer === 'keep') config = await engine.keepFindings(config, findings);
+        else if (answer === 'recommended') {
+          config = await engine.applyAll(config, open.recommendations.flatMap((r) => r.findings));
+          config = await engine.keepFindings(config, open.rows.flatMap((r) => r.findings));
+        } else if (answer === 'keep') config = await engine.keepFindings(config, findings);
         else {
           for (const [i, row] of rows.entries()) {
-            const pick = answer.picks[i] ?? 'reference';
+            const pick = answer.picks[i] ?? 'keep';
             if (pick === 'keep') config = await engine.keepFindings(config, row.findings);
             else if (pick === 'reference') config = await engine.applyRecommendation(config, row.findings[0].rule);
             else config = await engine.applyRecommendation(config, row.findings[0].rule, row.alternatives[pick].value);

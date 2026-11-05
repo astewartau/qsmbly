@@ -235,6 +235,8 @@
  * `recommendations::Recommendation`). With `departs`, a finding.
  * @typedef {object} Recommendation
  * @property {string} rule - QSM.rs's id (`medi.bg-pdf`)
+ * @property {'reasoned' | 'reference'} kind - a recommendation with a reason, or the original
+ *   authors' setting: only the first is preselected
  * @property {'required' | 'recommended' | 'discouraged' | 'reference'} strength
  * @property {'stated' | 'measured' | 'reference_choice' | 'implementation'} basis
  * @property {string} setting - its config path
