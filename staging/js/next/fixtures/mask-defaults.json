@@ -1,0 +1,236 @@
+{
+  "presets": {
+    "robust-threshold": {
+      "sections": [
+        {
+          "input": "phase-quality",
+          "generator": {
+            "op": "threshold",
+            "method": "otsu",
+            "value": null
+          },
+          "refinements": [
+            {
+              "op": "dilate",
+              "iterations": 1
+            },
+            {
+              "op": "fill-holes",
+              "max_size": 0
+            },
+            {
+              "op": "erode",
+              "iterations": 1
+            }
+          ]
+        }
+      ],
+      "combine": "or",
+      "refinements": []
+    },
+    "bet": {
+      "sections": [
+        {
+          "input": "magnitude",
+          "generator": {
+            "op": "bet",
+            "fractional_intensity": 0.5,
+            "voxel_scale": 1
+          },
+          "refinements": [
+            {
+              "op": "erode",
+              "iterations": 2
+            }
+          ]
+        }
+      ],
+      "combine": "or",
+      "refinements": []
+    },
+    "hd-bet": {
+      "sections": [
+        {
+          "input": "magnitude",
+          "generator": {
+            "op": "hd-bet",
+            "patch": [
+              128,
+              128,
+              64
+            ],
+            "tta": false,
+            "tile_step": 0.5
+          },
+          "refinements": [
+            {
+              "op": "signal-erode",
+              "threshold": 0.8,
+              "depth_cap": 5,
+              "global_erosions": 1,
+              "bias_sigma": 12,
+              "min_component": 1000
+            }
+          ]
+        }
+      ],
+      "combine": "or",
+      "refinements": []
+    },
+    "bet-and-phase": {
+      "sections": [
+        {
+          "input": "magnitude-first",
+          "generator": {
+            "op": "bet",
+            "fractional_intensity": 0.5,
+            "voxel_scale": 1
+          },
+          "refinements": []
+        },
+        {
+          "input": "phase-quality",
+          "generator": {
+            "op": "threshold",
+            "method": "otsu",
+            "value": null
+          },
+          "refinements": [
+            {
+              "op": "dilate",
+              "iterations": 1
+            },
+            {
+              "op": "fill-holes",
+              "max_size": 0
+            },
+            {
+              "op": "erode",
+              "iterations": 1
+            }
+          ]
+        }
+      ],
+      "combine": "and",
+      "refinements": [
+        {
+          "op": "fill-holes",
+          "max_size": 0
+        },
+        {
+          "op": "erode",
+          "iterations": 1
+        }
+      ]
+    },
+    "rs2-net": {
+      "sections": [
+        {
+          "input": "magnitude",
+          "generator": {
+            "op": "rs2-net",
+            "tta": false,
+            "tile_step": 0.5
+          },
+          "refinements": []
+        }
+      ],
+      "combine": "or",
+      "refinements": []
+    },
+    "mindgrab": {
+      "sections": [
+        {
+          "input": "magnitude",
+          "generator": {
+            "op": "mindgrab",
+            "tta": false
+          },
+          "refinements": []
+        }
+      ],
+      "combine": "or",
+      "refinements": []
+    }
+  },
+  "steps": {
+    "threshold-otsu": {
+      "op": "threshold",
+      "method": "otsu",
+      "value": null
+    },
+    "threshold-fixed": {
+      "op": "threshold",
+      "method": "fixed",
+      "value": 0.5
+    },
+    "threshold-percentile": {
+      "op": "threshold",
+      "method": "percentile",
+      "value": 75
+    },
+    "bet": {
+      "op": "bet",
+      "fractional_intensity": 0.5,
+      "voxel_scale": 1
+    },
+    "hd-bet": {
+      "op": "hd-bet",
+      "patch": [
+        128,
+        128,
+        64
+      ],
+      "tta": false,
+      "tile_step": 0.5
+    },
+    "mindgrab": {
+      "op": "mindgrab",
+      "tta": false
+    },
+    "rs2-net": {
+      "op": "rs2-net",
+      "tta": false,
+      "tile_step": 0.5
+    },
+    "erode": {
+      "op": "erode",
+      "iterations": 1
+    },
+    "dilate": {
+      "op": "dilate",
+      "iterations": 1
+    },
+    "close": {
+      "op": "close",
+      "radius": 1
+    },
+    "fill-holes": {
+      "op": "fill-holes",
+      "max_size": 0
+    },
+    "gaussian-smooth": {
+      "op": "gaussian-smooth",
+      "sigma_mm": 4
+    },
+    "signal-erode": {
+      "op": "signal-erode",
+      "threshold": 0.8,
+      "depth_cap": 5,
+      "global_erosions": 1,
+      "bias_sigma": 12,
+      "min_component": 1000
+    }
+  },
+  "two_pass_sections": [
+    {
+      "input": "phase-quality",
+      "generator": {
+        "op": "threshold",
+        "method": "otsu",
+        "value": null
+      },
+      "refinements": []
+    }
+  ]
+}

@@ -1,0 +1,1177 @@
+{
+ "about": "Recorded on next.html (main 1fd8cae, qsmxt-engine e426923): the run worker's stage, progress and done messages of TKD runs on the e2e phantom (tests/e2e/phantom.js, 24x24x20, 3 echoes), the engine's dry run (planState) before the first run, after it, and after setting inversion.tkd.threshold to 0.2, and the planned graph. 'failed' is the first run cut short in background removal, ended by a failure message as engine-call.js words a heap that ran out (made up, not recorded).",
+ "graph": {
+  "nodes": [
+   {
+    "id": "load",
+    "label": "Load",
+    "algorithm": null,
+    "algorithm_label": null,
+    "settings": [],
+    "branch": null,
+    "enabled_by": null,
+    "only_when": null,
+    "models": [],
+    "reads": [],
+    "writes": [
+     "AcquiredPhase(1)",
+     "AcquiredPhase(2)",
+     "AcquiredPhase(3)",
+     "AcquiredMagnitude(1)",
+     "AcquiredMagnitude(2)",
+     "AcquiredMagnitude(3)"
+    ]
+   },
+   {
+    "id": "scale_phase",
+    "label": "Phase scaling",
+    "algorithm": null,
+    "algorithm_label": null,
+    "settings": [],
+    "branch": null,
+    "enabled_by": null,
+    "only_when": null,
+    "models": [],
+    "reads": [
+     "AcquiredPhase(1)",
+     "AcquiredPhase(2)",
+     "AcquiredPhase(3)",
+     "AcquiredMagnitude(1)",
+     "AcquiredMagnitude(2)",
+     "AcquiredMagnitude(3)"
+    ],
+    "writes": [
+     "Phase(1)",
+     "Phase(2)",
+     "Phase(3)",
+     "Magnitude(1)",
+     "Magnitude(2)",
+     "Magnitude(3)"
+    ]
+   },
+   {
+    "id": "magnitude",
+    "label": "Combined magnitude",
+    "algorithm": "rss",
+    "algorithm_label": "root sum of squares",
+    "settings": [
+     "inhomogeneity correction"
+    ],
+    "branch": null,
+    "enabled_by": null,
+    "only_when": null,
+    "models": [],
+    "reads": [
+     "Magnitude(1)",
+     "Magnitude(2)",
+     "Magnitude(3)"
+    ],
+    "writes": [
+     "CombinedMagnitude"
+    ]
+   },
+   {
+    "id": "mask",
+    "label": "Brain mask",
+    "algorithm": null,
+    "algorithm_label": null,
+    "settings": [
+     "phase quality: Otsu threshold, dilation, hole-filling, erosion"
+    ],
+    "branch": null,
+    "enabled_by": null,
+    "only_when": null,
+    "models": [],
+    "reads": [
+     "Phase(1)",
+     "Phase(2)",
+     "Phase(3)",
+     "Magnitude(1)",
+     "Magnitude(2)",
+     "Magnitude(3)"
+    ],
+    "writes": [
+     "BrainMask"
+    ]
+   },
+   {
+    "id": "unwrap",
+    "label": "Field map",
+    "algorithm": "phase_offset_removal",
+    "algorithm_label": "ROMEO",
+    "settings": [
+     "phase offsets removed",
+     "B0 by weighted average"
+    ],
+    "branch": null,
+    "enabled_by": null,
+    "only_when": null,
+    "models": [],
+    "reads": [
+     "Phase(1)",
+     "Phase(2)",
+     "Phase(3)",
+     "Magnitude(1)",
+     "Magnitude(2)",
+     "Magnitude(3)",
+     "BrainMask"
+    ],
+    "writes": [
+     "FieldPpm",
+     "TotalFieldHz",
+     "TotalFieldMagnitude"
+    ]
+   },
+   {
+    "id": "bgremove",
+    "label": "Background-field removal",
+    "algorithm": "vsharp",
+    "algorithm_label": "V-SHARP",
+    "settings": [
+     "SMV kernel radii from 12 to 1 mm"
+    ],
+    "branch": null,
+    "enabled_by": null,
+    "only_when": null,
+    "models": [],
+    "reads": [
+     "FieldPpm",
+     "BrainMask"
+    ],
+    "writes": [
+     "LocalField(Main)",
+     "LocalFieldMask(Main)"
+    ]
+   },
+   {
+    "id": "invert",
+    "label": "Dipole inversion",
+    "algorithm": "tkd",
+    "algorithm_label": "TKD",
+    "settings": [
+     "threshold = 0.2"
+    ],
+    "branch": null,
+    "enabled_by": null,
+    "only_when": null,
+    "models": [],
+    "reads": [
+     "LocalField(Main)",
+     "LocalFieldMask(Main)"
+    ],
+    "writes": [
+     "RawChi(Main)"
+    ]
+   },
+   {
+    "id": "reference",
+    "label": "Referencing",
+    "algorithm": "mean",
+    "algorithm_label": "mean",
+    "settings": [],
+    "branch": null,
+    "enabled_by": null,
+    "only_when": null,
+    "models": [],
+    "reads": [
+     "RawChi(Main)",
+     "LocalFieldMask(Main)"
+    ],
+    "writes": [
+     "Chi",
+     "ChiSupport"
+    ]
+   },
+   {
+    "id": "output_space",
+    "label": "Return to the acquired grid",
+    "algorithm": null,
+    "algorithm_label": null,
+    "settings": [],
+    "branch": null,
+    "enabled_by": null,
+    "only_when": "the run is resampled",
+    "models": [],
+    "reads": [
+     "Chi",
+     "ChiSupport",
+     "BrainMask",
+     "CombinedMagnitude",
+     "TotalFieldHz",
+     "TotalFieldMagnitude"
+    ],
+    "writes": [
+     "Chi",
+     "ChiSupport",
+     "BrainMask",
+     "CombinedMagnitude",
+     "TotalFieldHz",
+     "TotalFieldMagnitude"
+    ]
+   }
+  ],
+  "edges": [
+   {
+    "from": "load",
+    "to": "scale_phase",
+    "items": [
+     "AcquiredPhase(1)",
+     "AcquiredPhase(2)",
+     "AcquiredPhase(3)",
+     "AcquiredMagnitude(1)",
+     "AcquiredMagnitude(2)",
+     "AcquiredMagnitude(3)"
+    ]
+   },
+   {
+    "from": "scale_phase",
+    "to": "magnitude",
+    "items": [
+     "Magnitude(1)",
+     "Magnitude(2)",
+     "Magnitude(3)"
+    ]
+   },
+   {
+    "from": "scale_phase",
+    "to": "mask",
+    "items": [
+     "Phase(1)",
+     "Phase(2)",
+     "Phase(3)",
+     "Magnitude(1)",
+     "Magnitude(2)",
+     "Magnitude(3)"
+    ]
+   },
+   {
+    "from": "scale_phase",
+    "to": "unwrap",
+    "items": [
+     "Phase(1)",
+     "Phase(2)",
+     "Phase(3)",
+     "Magnitude(1)",
+     "Magnitude(2)",
+     "Magnitude(3)"
+    ]
+   },
+   {
+    "from": "mask",
+    "to": "unwrap",
+    "items": [
+     "BrainMask"
+    ]
+   },
+   {
+    "from": "unwrap",
+    "to": "bgremove",
+    "items": [
+     "FieldPpm"
+    ]
+   },
+   {
+    "from": "mask",
+    "to": "bgremove",
+    "items": [
+     "BrainMask"
+    ]
+   },
+   {
+    "from": "bgremove",
+    "to": "invert",
+    "items": [
+     "LocalField(Main)",
+     "LocalFieldMask(Main)"
+    ]
+   },
+   {
+    "from": "invert",
+    "to": "reference",
+    "items": [
+     "RawChi(Main)"
+    ]
+   },
+   {
+    "from": "bgremove",
+    "to": "reference",
+    "items": [
+     "LocalFieldMask(Main)"
+    ]
+   },
+   {
+    "from": "reference",
+    "to": "output_space",
+    "items": [
+     "Chi",
+     "ChiSupport"
+    ]
+   },
+   {
+    "from": "mask",
+    "to": "output_space",
+    "items": [
+     "BrainMask"
+    ]
+   },
+   {
+    "from": "magnitude",
+    "to": "output_space",
+    "items": [
+     "CombinedMagnitude"
+    ]
+   },
+   {
+    "from": "unwrap",
+    "to": "output_space",
+    "items": [
+     "TotalFieldHz",
+     "TotalFieldMagnitude"
+    ]
+   }
+  ],
+  "items": [
+   {
+    "key": "AcquiredPhase(1)",
+    "item": {
+     "AcquiredPhase": 1
+    },
+    "label": "Phase (as acquired)",
+    "units": null,
+    "kind": "phase",
+    "bids_name": null,
+    "published": false,
+    "echo": 1,
+    "coil": null
+   },
+   {
+    "key": "AcquiredPhase(2)",
+    "item": {
+     "AcquiredPhase": 2
+    },
+    "label": "Phase (as acquired)",
+    "units": null,
+    "kind": "phase",
+    "bids_name": null,
+    "published": false,
+    "echo": 2,
+    "coil": null
+   },
+   {
+    "key": "AcquiredPhase(3)",
+    "item": {
+     "AcquiredPhase": 3
+    },
+    "label": "Phase (as acquired)",
+    "units": null,
+    "kind": "phase",
+    "bids_name": null,
+    "published": false,
+    "echo": 3,
+    "coil": null
+   },
+   {
+    "key": "AcquiredMagnitude(1)",
+    "item": {
+     "AcquiredMagnitude": 1
+    },
+    "label": "Magnitude (as acquired)",
+    "units": null,
+    "kind": "magnitude",
+    "bids_name": null,
+    "published": false,
+    "echo": 1,
+    "coil": null
+   },
+   {
+    "key": "AcquiredMagnitude(2)",
+    "item": {
+     "AcquiredMagnitude": 2
+    },
+    "label": "Magnitude (as acquired)",
+    "units": null,
+    "kind": "magnitude",
+    "bids_name": null,
+    "published": false,
+    "echo": 2,
+    "coil": null
+   },
+   {
+    "key": "AcquiredMagnitude(3)",
+    "item": {
+     "AcquiredMagnitude": 3
+    },
+    "label": "Magnitude (as acquired)",
+    "units": null,
+    "kind": "magnitude",
+    "bids_name": null,
+    "published": false,
+    "echo": 3,
+    "coil": null
+   },
+   {
+    "key": "Phase(1)",
+    "item": {
+     "Phase": 1
+    },
+    "label": "Phase",
+    "units": "rad",
+    "kind": "phase",
+    "bids_name": null,
+    "published": false,
+    "echo": 1,
+    "coil": null
+   },
+   {
+    "key": "Phase(2)",
+    "item": {
+     "Phase": 2
+    },
+    "label": "Phase",
+    "units": "rad",
+    "kind": "phase",
+    "bids_name": null,
+    "published": false,
+    "echo": 2,
+    "coil": null
+   },
+   {
+    "key": "Phase(3)",
+    "item": {
+     "Phase": 3
+    },
+    "label": "Phase",
+    "units": "rad",
+    "kind": "phase",
+    "bids_name": null,
+    "published": false,
+    "echo": 3,
+    "coil": null
+   },
+   {
+    "key": "Magnitude(1)",
+    "item": {
+     "Magnitude": 1
+    },
+    "label": "Magnitude",
+    "units": null,
+    "kind": "magnitude",
+    "bids_name": null,
+    "published": false,
+    "echo": 1,
+    "coil": null
+   },
+   {
+    "key": "Magnitude(2)",
+    "item": {
+     "Magnitude": 2
+    },
+    "label": "Magnitude",
+    "units": null,
+    "kind": "magnitude",
+    "bids_name": null,
+    "published": false,
+    "echo": 2,
+    "coil": null
+   },
+   {
+    "key": "Magnitude(3)",
+    "item": {
+     "Magnitude": 3
+    },
+    "label": "Magnitude",
+    "units": null,
+    "kind": "magnitude",
+    "bids_name": null,
+    "published": false,
+    "echo": 3,
+    "coil": null
+   },
+   {
+    "key": "CombinedMagnitude",
+    "item": "CombinedMagnitude",
+    "label": "Combined magnitude",
+    "units": null,
+    "kind": "magnitude",
+    "bids_name": "part-mag_T2starw",
+    "published": true,
+    "echo": null,
+    "coil": null
+   },
+   {
+    "key": "BrainMask",
+    "item": "BrainMask",
+    "label": "Brain mask",
+    "units": null,
+    "kind": "mask",
+    "bids_name": "mask",
+    "published": true,
+    "echo": null,
+    "coil": null
+   },
+   {
+    "key": "FieldPpm",
+    "item": "FieldPpm",
+    "label": "Total field",
+    "units": "ppm",
+    "kind": "field",
+    "bids_name": "desc-totalppm_fieldmap",
+    "published": false,
+    "echo": null,
+    "coil": null
+   },
+   {
+    "key": "TotalFieldHz",
+    "item": "TotalFieldHz",
+    "label": "Total field",
+    "units": "Hz",
+    "kind": "field",
+    "bids_name": "desc-total_fieldmap",
+    "published": true,
+    "echo": null,
+    "coil": null
+   },
+   {
+    "key": "TotalFieldMagnitude",
+    "item": "TotalFieldMagnitude",
+    "label": "Field map magnitude",
+    "units": null,
+    "kind": "magnitude",
+    "bids_name": "desc-total_magnitude",
+    "published": true,
+    "echo": null,
+    "coil": null
+   },
+   {
+    "key": "LocalField(Main)",
+    "item": {
+     "LocalField": "Main"
+    },
+    "label": "Local field",
+    "units": "ppm",
+    "kind": "field",
+    "bids_name": "localfield",
+    "published": false,
+    "echo": null,
+    "coil": null
+   },
+   {
+    "key": "LocalFieldMask(Main)",
+    "item": {
+     "LocalFieldMask": "Main"
+    },
+    "label": "Local field mask",
+    "units": null,
+    "kind": "mask",
+    "bids_name": "bgmask",
+    "published": false,
+    "echo": null,
+    "coil": null
+   },
+   {
+    "key": "RawChi(Main)",
+    "item": {
+     "RawChi": "Main"
+    },
+    "label": "Unreferenced susceptibility",
+    "units": "ppm",
+    "kind": "chi",
+    "bids_name": "desc-unreferenced_Chimap",
+    "published": false,
+    "echo": null,
+    "coil": null
+   },
+   {
+    "key": "Chi",
+    "item": "Chi",
+    "label": "Susceptibility",
+    "units": "ppm",
+    "kind": "chi",
+    "bids_name": "Chimap",
+    "published": true,
+    "echo": null,
+    "coil": null
+   },
+   {
+    "key": "ChiSupport",
+    "item": "ChiSupport",
+    "label": "Susceptibility support",
+    "units": null,
+    "kind": "mask",
+    "bids_name": "desc-qsm_mask",
+    "published": true,
+    "echo": null,
+    "coil": null
+   }
+  ],
+  "two_pass": false
+ },
+ "expected": {
+  "before": [
+   {
+    "id": "load",
+    "state": "will_run",
+    "key": "bf2097d9016526e"
+   },
+   {
+    "id": "scale_phase",
+    "state": "will_run",
+    "key": "c0d3464509b3f6d4"
+   },
+   {
+    "id": "magnitude",
+    "state": "will_run",
+    "key": "3f9bb1ad65b279d9"
+   },
+   {
+    "id": "mask",
+    "state": "will_run",
+    "key": "23fb4f339b1938cd"
+   },
+   {
+    "id": "motion",
+    "state": "skipped"
+   },
+   {
+    "id": "unwrap",
+    "state": "will_run",
+    "key": "9a0c58dc81289b6c"
+   },
+   {
+    "id": "bgremove",
+    "state": "will_run",
+    "key": "887f5c69bff4cf29"
+   },
+   {
+    "id": "invert",
+    "state": "will_run",
+    "key": "1e3563731c483612"
+   },
+   {
+    "id": "reference",
+    "state": "will_run",
+    "key": "aada6e10b2ada662"
+   },
+   {
+    "id": "output_space",
+    "state": "skipped"
+   }
+  ],
+  "after": [
+   {
+    "id": "load",
+    "state": "cached",
+    "key": "bf2097d9016526e"
+   },
+   {
+    "id": "scale_phase",
+    "state": "cached",
+    "key": "c0d3464509b3f6d4"
+   },
+   {
+    "id": "magnitude",
+    "state": "cached",
+    "key": "3f9bb1ad65b279d9"
+   },
+   {
+    "id": "mask",
+    "state": "cached",
+    "key": "23fb4f339b1938cd"
+   },
+   {
+    "id": "motion",
+    "state": "skipped"
+   },
+   {
+    "id": "unwrap",
+    "state": "cached",
+    "key": "9a0c58dc81289b6c"
+   },
+   {
+    "id": "bgremove",
+    "state": "cached",
+    "key": "887f5c69bff4cf29"
+   },
+   {
+    "id": "invert",
+    "state": "cached",
+    "key": "1e3563731c483612"
+   },
+   {
+    "id": "reference",
+    "state": "cached",
+    "key": "aada6e10b2ada662"
+   },
+   {
+    "id": "output_space",
+    "state": "skipped"
+   }
+  ],
+  "edited": [
+   {
+    "id": "load",
+    "state": "cached",
+    "key": "bf2097d9016526e"
+   },
+   {
+    "id": "scale_phase",
+    "state": "cached",
+    "key": "c0d3464509b3f6d4"
+   },
+   {
+    "id": "magnitude",
+    "state": "cached",
+    "key": "3f9bb1ad65b279d9"
+   },
+   {
+    "id": "mask",
+    "state": "cached",
+    "key": "23fb4f339b1938cd"
+   },
+   {
+    "id": "motion",
+    "state": "skipped"
+   },
+   {
+    "id": "unwrap",
+    "state": "cached",
+    "key": "9a0c58dc81289b6c"
+   },
+   {
+    "id": "bgremove",
+    "state": "cached",
+    "key": "887f5c69bff4cf29"
+   },
+   {
+    "id": "invert",
+    "state": "changed",
+    "key": "3a72102f78703358"
+   },
+   {
+    "id": "reference",
+    "state": "stale",
+    "key": "aada6e10b2ada662"
+   },
+   {
+    "id": "output_space",
+    "state": "skipped"
+   }
+  ]
+ },
+ "runs": {
+  "first": [
+   {
+    "type": "stage",
+    "step": "load",
+    "algorithm": null,
+    "event": "started",
+    "text": "Loading NIfTI metadata",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "load",
+    "algorithm": null,
+    "event": "finished",
+    "text": "Load",
+    "heap": 36241408
+   },
+   {
+    "type": "begin"
+   },
+   {
+    "type": "stage",
+    "step": "scale_phase",
+    "algorithm": null,
+    "event": "started",
+    "text": "Rescaling phase to radians",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "scale_phase",
+    "algorithm": null,
+    "event": "finished",
+    "text": "Rescale phase",
+    "heap": 36241408
+   },
+   {
+    "type": "stage",
+    "step": "magnitude",
+    "algorithm": "rss",
+    "event": "started",
+    "text": "Computing RSS-combined magnitude with inhomogeneity correction",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "magnitude",
+    "algorithm": "rss",
+    "event": "finished",
+    "text": "RSS magnitude",
+    "heap": 36372480
+   },
+   {
+    "type": "stage",
+    "step": "mask",
+    "algorithm": null,
+    "event": "started",
+    "text": "Creating mask",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "mask",
+    "algorithm": null,
+    "event": "finished",
+    "text": "Mask creation",
+    "heap": 36831232
+   },
+   {
+    "type": "stage",
+    "step": "unwrap",
+    "algorithm": "phase_offset_removal",
+    "event": "started",
+    "text": "Phase unwrapping / echo combination",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "unwrap",
+    "algorithm": "phase_offset_removal",
+    "event": "finished",
+    "text": "Phase unwrapping",
+    "heap": 37224448
+   },
+   {
+    "type": "stage",
+    "step": "bgremove",
+    "algorithm": "vsharp",
+    "event": "started",
+    "text": "Background field removal",
+    "heap": null
+   },
+   {
+    "type": "progress",
+    "done": 1,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 2,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 3,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 4,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 5,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 6,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 7,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 8,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 9,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 10,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 11,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 12,
+    "total": 12
+   },
+   {
+    "type": "stage",
+    "step": "bgremove",
+    "algorithm": "vsharp",
+    "event": "finished",
+    "text": "Background removal (vsharp)",
+    "heap": 37224448
+   },
+   {
+    "type": "stage",
+    "step": "invert",
+    "algorithm": "tkd",
+    "event": "started",
+    "text": "Dipole inversion",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "invert",
+    "algorithm": "tkd",
+    "event": "finished",
+    "text": "Dipole inversion (tkd)",
+    "heap": 37224448
+   },
+   {
+    "type": "stage",
+    "step": "reference",
+    "algorithm": "mean",
+    "event": "started",
+    "text": "Referencing QSM",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "reference",
+    "algorithm": "mean",
+    "event": "finished",
+    "text": "QSM referencing",
+    "heap": 37224448
+   },
+   {
+    "type": "done"
+   }
+  ],
+  "rerun": [
+   {
+    "type": "stage",
+    "step": "load",
+    "algorithm": null,
+    "event": "cached",
+    "text": null,
+    "heap": null
+   },
+   {
+    "type": "begin"
+   },
+   {
+    "type": "stage",
+    "step": "scale_phase",
+    "algorithm": null,
+    "event": "cached",
+    "text": null,
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "magnitude",
+    "algorithm": "rss",
+    "event": "cached",
+    "text": null,
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "mask",
+    "algorithm": null,
+    "event": "cached",
+    "text": null,
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "unwrap",
+    "algorithm": "phase_offset_removal",
+    "event": "cached",
+    "text": null,
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "bgremove",
+    "algorithm": "vsharp",
+    "event": "cached",
+    "text": null,
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "invert",
+    "algorithm": "tkd",
+    "event": "started",
+    "text": "Dipole inversion",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "invert",
+    "algorithm": "tkd",
+    "event": "finished",
+    "text": "Dipole inversion (tkd)",
+    "heap": 37224448
+   },
+   {
+    "type": "stage",
+    "step": "reference",
+    "algorithm": "mean",
+    "event": "started",
+    "text": "Referencing QSM",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "reference",
+    "algorithm": "mean",
+    "event": "finished",
+    "text": "QSM referencing",
+    "heap": 37224448
+   },
+   {
+    "type": "done"
+   }
+  ],
+  "failed": [
+   {
+    "type": "stage",
+    "step": "load",
+    "algorithm": null,
+    "event": "started",
+    "text": "Loading NIfTI metadata",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "load",
+    "algorithm": null,
+    "event": "finished",
+    "text": "Load",
+    "heap": 36241408
+   },
+   {
+    "type": "begin"
+   },
+   {
+    "type": "stage",
+    "step": "scale_phase",
+    "algorithm": null,
+    "event": "started",
+    "text": "Rescaling phase to radians",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "scale_phase",
+    "algorithm": null,
+    "event": "finished",
+    "text": "Rescale phase",
+    "heap": 36241408
+   },
+   {
+    "type": "stage",
+    "step": "magnitude",
+    "algorithm": "rss",
+    "event": "started",
+    "text": "Computing RSS-combined magnitude with inhomogeneity correction",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "magnitude",
+    "algorithm": "rss",
+    "event": "finished",
+    "text": "RSS magnitude",
+    "heap": 36372480
+   },
+   {
+    "type": "stage",
+    "step": "mask",
+    "algorithm": null,
+    "event": "started",
+    "text": "Creating mask",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "mask",
+    "algorithm": null,
+    "event": "finished",
+    "text": "Mask creation",
+    "heap": 36831232
+   },
+   {
+    "type": "stage",
+    "step": "unwrap",
+    "algorithm": "phase_offset_removal",
+    "event": "started",
+    "text": "Phase unwrapping / echo combination",
+    "heap": null
+   },
+   {
+    "type": "stage",
+    "step": "unwrap",
+    "algorithm": "phase_offset_removal",
+    "event": "finished",
+    "text": "Phase unwrapping",
+    "heap": 37224448
+   },
+   {
+    "type": "stage",
+    "step": "bgremove",
+    "algorithm": "vsharp",
+    "event": "started",
+    "text": "Background field removal",
+    "heap": null
+   },
+   {
+    "type": "progress",
+    "done": 1,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 2,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 3,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 4,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 5,
+    "total": 12
+   },
+   {
+    "type": "progress",
+    "done": 6,
+    "total": 12
+   },
+   {
+    "type": "failed",
+    "message": "The engine ran out of memory: its heap had grown to 3.98 GB of the 4.00 GB a browser allows (unreachable)",
+    "kind": "abort",
+    "step": "bgremove",
+    "fatal": true
+   }
+  ]
+ }
+}
