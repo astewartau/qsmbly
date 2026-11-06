@@ -71,6 +71,9 @@ export const CASES = {
   // A settings file's multi-orientation settings are cleared on import, so neither the command nor
   // the methods claim them (QSMxT#499).
   'tkd-multi-orientation-import': { settings: { 'inversion.algorithm': 'tkd' }, imported: '[multi_orientation]\ngroup_by = "acq"\n' },
+  // A settings file's DICOM export is turned off on import: the browser writes no series, so neither
+  // the command nor the methods claim one (QSMxT#505).
+  'tkd-export-dicom-import': { settings: { 'inversion.algorithm': 'tkd' }, imported: '[pipeline]\nexport_dicom = true\n' },
   'tkd-field-mask': { settings: { 'inversion.algorithm': 'tkd', 'field_mapping.phase_offset_sigma_mm': [1, 1, 1], 'masking.sections': [{ input: 'magnitude', generator: { op: 'threshold', method: 'fixed', value: 0 }, refinements: [] }] } },
 };
 const DIMS = [24, 24, 20];
