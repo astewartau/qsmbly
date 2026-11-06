@@ -155,6 +155,27 @@ test('a settings file\'s multi-orientation settings are cleared with a warning, 
   expect(JSON.stringify(answers.methods)).not.toMatch(/COSMOS|orientations/);
 });
 
+test('a settings file\'s DICOM export is turned off with a warning, and neither the command nor the methods claim it, before or after a run', async ({ page }) => {
+  test.setTimeout(3 * 60_000);
+  await load(page);
+  await page.locator('#tab-command').click();
+  await page.getByTestId('import-toml').setInputFiles({
+    name: 'dicom.toml', mimeType: 'text/plain', buffer: Buffer.from('[pipeline]\nexport_dicom = true\n'),
+  });
+  await expect(page.getByTestId('import-status').locator('.problem-warning')).toContainText('pipeline.export_dicom');
+  await closeOffers(page);
+  expect(await value(page, 'pipeline.export_dicom')).toBe(false);
+  await expect(page.getByTestId('command')).not.toContainText('--export-dicom');
+  await set(page, 'inversion.algorithm', 'tkd');
+  await page.locator('#tab-pipeline').click();
+  await expect(page.getByTestId('methods-text')).toContainText('TKD');
+  await expect(page.getByTestId('methods-text')).not.toContainText('DICOM');
+  await page.getByTestId('run-button').click();
+  await expect.poll(() => page.evaluate(() => globalThis.qsmblyNext.runner.status.value), { timeout: 2 * 60_000 }).toBe('done');
+  await expect(page.getByTestId('methods-text')).toContainText('TKD');
+  await expect(page.getByTestId('methods-text')).not.toContainText('DICOM');
+});
+
 test('saved multi-orientation settings are cleared on reload, with a notice that says what changed', async ({ page }) => {
   await page.goto('next.html');
   await page.waitForFunction(() => globalThis.qsmblyNext?.session.view.value);

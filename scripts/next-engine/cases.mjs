@@ -120,4 +120,6 @@ export const IMPORTS = [
   '[bg_removal]\nalgorithm = "lbv"\n\n[bg_removal.lbv]\ntol = 1e-6\n',
   // A page holds one scan: its multi-orientation settings are cleared, with a warning (QSMxT#499).
   '[multi_orientation]\ngroup_by = "acq"\n',
+  // A page writes no DICOM: export is turned off, with a warning (QSMxT#505).
+  '[pipeline]\nexport_dicom = true\n',
 ];
