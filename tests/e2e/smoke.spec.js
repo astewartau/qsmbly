@@ -264,7 +264,8 @@ test.describe('next.html', () => {
     await page.goto('next.html');
 
     // "Plan: N steps" opens the Pipeline tab; the viewer is hidden behind it, not unmounted.
-    await page.getByTestId('plan-status').click();
+    // It is a plain label until the engine's plan arrives, and a click before then does nothing.
+    await page.getByRole('button', { name: /^Plan: \d+ steps/ }).click();
     await expect(page.getByRole('tab', { name: 'Pipeline' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('region', { name: 'Viewer' })).toBeHidden();
     const graph = page.getByTestId('graph');
