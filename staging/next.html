@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Cross-origin isolation for SharedArrayBuffer (the volume store and wasm threads); see
+       index.html. No-op when the server already sets the headers (serve.py). -->
+  <script>window.coi = { coepCredentialless: () => true };</script>
+  <script src="coi-serviceworker.js"></script>
+
+  <title>QSMbly (preview)</title>
+  <meta name="description" content="A preview of QSMbly's new workspace.">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="favicon.ico" type="image/x-icon" sizes="16x16 32x32 48x48">
+  <link rel="stylesheet" href="css/next.css">
+
+  <!-- Vendored Preact, htm and signals (vendor/README.md); NiiVue from unpkg, pinned, with its
+       SRI hash. This page uses a newer NiiVue than index.html, which stays on its own. -->
+  <script type="importmap">
+    {
+      "imports": {
+        "preact": "./vendor/preact/preact.module.js",
+        "preact/hooks": "./vendor/preact/hooks.module.js",
+        "htm": "./vendor/htm/htm.module.js",
+        "@preact/signals-core": "./vendor/signals/signals-core.module.js",
+        "@preact/signals": "./vendor/signals/signals.module.js",
+        "@niivue/niivue": "https://unpkg.com/@niivue/niivue@0.69.0/dist/index.js"
+      },
+      "integrity": {
+        "https://unpkg.com/@niivue/niivue@0.69.0/dist/index.js": "sha384-Oj9fatD3crA3oSZsrg5fWCsmlLudA9ZjyaMKlMVl88hfAihHne1RpyZ9l5EQrozR"
+      }
+    }
+  </script>
+  <script type="module" src="js/next/main.js"></script>
+</head>
+<body>
+  <div id="app"><p class="booting">Loading…</p></div>
+</body>
+</html>
