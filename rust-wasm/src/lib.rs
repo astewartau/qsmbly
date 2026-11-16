@@ -778,6 +778,8 @@ pub fn bet_wasm_with_progress(
         iterations,
         subdivisions,
         voxel_scale: 1.0,
+        // As FSL reads the file; `order` above already carries the header's left-right order.
+        orientation: qsm_core::bet::BetOrientation::Fsl,
     };
     let mask = qsm_core::bet::run_bet(data, &grid, &params, order, js_progress(progress_callback));
 

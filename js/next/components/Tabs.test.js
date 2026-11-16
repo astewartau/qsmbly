@@ -63,10 +63,15 @@ describe('GraphTab', () => {
   test('one box per step, an arrow per drawn edge, and a key', async () => {
     const { session, providers } = setup();
     const root = await mount(html`<${GraphTab} session=${session} providers=${providers} />`);
-    expect(steps(root)).toEqual(['load', 'scale_phase', 'magnitude', 'mask', 'unwrap', 'bgremove', 'invert', 'reference', 'output_space']);
+    expect(steps(root)).toEqual(['load', 'scale_phase', 'inhomog', 'magnitude', 'mask', 'unwrap', 'bgremove', 'invert', 'reference']);
+    // The browser profile's run is never resampled, so it has no return to the acquired grid.
+    expect(root.querySelectorAll('.g-edge.collapsed')).toHaveLength(0);
+    expect(root.querySelector('.legend')?.textContent).toContain('optional');
+    // xQSM needs axial data: its run can be resampled, and the arrows back are drawn as one.
+    await act(() => session.set('inversion.algorithm', 'xqsm'));
+    await settle();
     expect(root.querySelectorAll('.g-edge.collapsed')).toHaveLength(1);
     expect(root.querySelector('.g-node[data-step="output_space"]')?.classList.contains('conditional')).toBe(true);
-    expect(root.querySelector('.legend')?.textContent).toContain('optional');
   });
 
   test('clicking a box opens its step in the pipeline', async () => {

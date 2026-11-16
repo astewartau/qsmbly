@@ -4,6 +4,7 @@
   "pipeline": {
     "do_qsm": true,
     "do_swi": false,
+    "do_magnitude": true,
     "do_smwi": false,
     "do_segmentation": false,
     "do_analysis": false,
@@ -46,9 +47,10 @@
       64
     ],
     "laplacian_unmasked": false,
+    "laplacian_keep_outside": false,
     "romeo": {
-      "individual": true,
-      "correct_global": true,
+      "individual": false,
+      "correct_global": false,
       "template": 0,
       "phase_coherence": true,
       "phase_gradient_coherence": true,
@@ -57,7 +59,7 @@
       "mag_weight": false,
       "mag_weight2": false,
       "bestpath": false,
-      "temporal_uncertain_unwrapping": 0.5,
+      "temporal_uncertain_unwrapping": 0,
       "max_seeds": 1,
       "merge_regions": false,
       "correct_regions": false,
@@ -81,13 +83,14 @@
       "downweight_level": 0.75,
       "flag_ratio": 3
     },
-    "qsmart_fit_threshold_mode": "percentile",
+    "qsmart_fit_threshold_mode": "absolute",
     "qsmart_fit_percentile": 99,
     "qsmart_fit_threshold": 40
   },
   "masking": {
     "inhomogeneity_correction": true,
     "inhomogeneity_method": "makehomogeneous",
+    "n4_geometry": "scanner",
     "sections": [
       {
         "input": "phase-quality",
@@ -169,7 +172,8 @@
         0,
         0,
         0
-      ]
+      ],
+      "rim": "whole"
     },
     "iharperella": {
       "max_iter": 40,
@@ -178,8 +182,12 @@
         0,
         0,
         0
-      ]
-    }
+      ],
+      "rim": "sti"
+    },
+    "erode_voxels": 0,
+    "polish_mask": false,
+    "ukb_mask_trim": false
   },
   "inversion": {
     "algorithm": "ilsqr",
@@ -199,7 +207,7 @@
       ]
     },
     "tv": {
-      "lambda": 0.001,
+      "lambda": 0.0003,
       "rho": null,
       "tol": 0.001,
       "max_iter": 250,
@@ -210,7 +218,7 @@
       ]
     },
     "tkd": {
-      "threshold": 0.15,
+      "threshold": 0.25,
       "pad": [
         0,
         0,
@@ -327,6 +335,7 @@
       "frangi_scale_ratio": 0.5,
       "frangi_c": 500,
       "vessel_magnitude": "mean-n4",
+      "offset_grid": "fft",
       "vessel_size_units": "voxels"
     },
     "ndi": {
@@ -334,7 +343,8 @@
       "alpha": 0.00001,
       "max_iter": 100,
       "auto_stop": false,
-      "te": "first"
+      "te": "first",
+      "weight_norm": "global-max"
     },
     "fansi": {
       "alpha1": 0.0002,
@@ -455,7 +465,14 @@
       "tol": 0.03,
       "max_iter": 30,
       "cg_tol": 0.05,
-      "cg_max_iter": 100
+      "cg_max_iter": 100,
+      "qsm_ilsqr": {
+        "tol": 0.001,
+        "max_iter": 100,
+        "pad_mm": 12,
+        "precision": "double"
+      },
+      "csf_r2star": "arlo"
     },
     "r2star_qsm": {
       "r_const_3t": 274
@@ -481,7 +498,8 @@
         "optimality_tolerance": 0.000001,
         "finite_difference_step": 1.4901161193847656e-8,
         "typical_x": 1
-      }
+      },
+      "fit": "reference-code"
     },
     "hc_chisep": {
       "dr_pos_3t": 137,
@@ -533,7 +551,8 @@
     ],
     "scaling": "tanh",
     "strength": 4,
-    "mip_window": 7
+    "mip_window": 7,
+    "filtered_phase": false
   },
   "smwi": {
     "threshold_ppm": 1,
@@ -555,7 +574,8 @@
     "gradient_threshold": 0,
     "iterations": 1000,
     "subdivisions": 4,
-    "voxel_scale": 1
+    "voxel_scale": 1,
+    "orientation": "fsl"
   },
   "homogeneity": {
     "sigma_mm": 7,

@@ -48,7 +48,8 @@ import { phantomFiles } from '../../tests/e2e/phantom.js';
 /**
  * The cases: the browser profile with `settings` (after the settings file `imported`, if any), on
  * the browser tests' phantom (tests/e2e/phantom.js) at `dims`, tilted about x by `tilt` degrees,
- * its files named with the BIDS `entities` (`sub-phantom` by default). Fast algorithms only: what is compared is the wiring
+ * its files named with the BIDS `entities` (`sub-phantom` by default), its sidecars giving the centre
+ * frequency `imagingFrequency` (MHz) if set. Fast algorithms only: what is compared is the wiring
  * around them.
  */
 export const CASES = {
@@ -74,6 +75,11 @@ export const CASES = {
   // A settings file's DICOM export is turned off on import: the browser writes no series, so neither
   // the command nor the methods claim one (QSMxT#505).
   'tkd-export-dicom-import': { settings: { 'inversion.algorithm': 'tkd' }, imported: '[pipeline]\nexport_dicom = true\n' },
+  // Sidecars with the scanner's centre frequency (a Siemens "3 T" at 2.89 T): phase is converted to
+  // ppm with it, and the sidecars and methods report the nominal field.
+  'tkd-centre-frequency': { settings: { 'inversion.algorithm': 'tkd' }, imagingFrequency: 123.2 },
+  // The combined magnitude not published.
+  'tkd-no-combined-magnitude': { settings: { 'inversion.algorithm': 'tkd', 'pipeline.do_magnitude': false } },
   'tkd-field-mask': { settings: { 'inversion.algorithm': 'tkd', 'field_mapping.phase_offset_sigma_mm': [1, 1, 1], 'masking.sections': [{ input: 'magnitude', generator: { op: 'threshold', method: 'fixed', value: 0 }, refinements: [] }] } },
 };
 const DIMS = [24, 24, 20];
@@ -92,13 +98,13 @@ const ops = engineOps(wasm);
 const providers = engineProviders(ops);
 
 /** The phantom as a BIDS dataset under `work`, for both sides: `sub-X/[ses-Y/]anat/`. */
-function writePhantom(name, tilt = 0, entities = 'sub-phantom') {
+function writePhantom(name, tilt = 0, entities = 'sub-phantom', imagingFrequency = null) {
   const dir = resolve(work, name, 'phantom');
   rmSync(dir, { recursive: true, force: true });
   const anat = join(dir, ...entities.split('_').filter((e) => /^(sub|ses)-/.test(e)), 'anat');
   mkdirSync(anat, { recursive: true });
   writeFileSync(join(dir, 'dataset_description.json'), `${JSON.stringify({ Name: 'qsmbly parity phantom', BIDSVersion: '1.10.0' })}\n`);
-  for (const f of phantomFiles({ dims: DIMS, tilt, entities })) writeFileSync(join(anat, f.name), f.buffer);
+  for (const f of phantomFiles({ dims: DIMS, tilt, entities, imagingFrequency })) writeFileSync(join(anat, f.name), f.buffer);
   return dir;
 }
 
@@ -340,11 +346,11 @@ function compare(name, browserDir, nativeDir, browser, toml) {
 }
 
 let failed = 0;
-for (const [name, { settings, tilt, entities, imported }] of Object.entries(CASES)) {
+for (const [name, { settings, tilt, entities, imported, imagingFrequency }] of Object.entries(CASES)) {
   if (only.length && !only.includes(name)) continue;
   const dir = resolve(work, name);
   rmSync(dir, { recursive: true, force: true });
-  const phantom = writePhantom(name, tilt, entities);
+  const phantom = writePhantom(name, tilt, entities, imagingFrequency);
   const problems = [];
   try {
     const t0 = Date.now();

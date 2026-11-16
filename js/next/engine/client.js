@@ -101,6 +101,7 @@ export function createEngineClient(worker) {
     referenceOffers: op('referenceOffers'),
     referenceTitles: op('referenceTitles'),
     keepFindings: op('keepFindings'),
+    restoreKept: op('restoreKept'),
     applyAll: op('applyAll'),
     settle: op('settle'),
     pruneHidden: op('pruneHidden'),

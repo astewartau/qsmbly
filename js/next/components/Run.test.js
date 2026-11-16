@@ -82,7 +82,7 @@ describe('the run bar', () => {
     const root = await mount(html`<${RunBar} session=${session} store=${store} models=${models} runner=${runner} />`);
     expect(button(root).textContent).toBe('Run');
     expect(button(root).disabled).toBe(true);
-    expect(root.querySelector('[data-testid="plan-status"]')?.textContent).toBe('Plan: 10 steps');
+    expect(root.querySelector('[data-testid="plan-status"]')?.textContent).toBe('Plan: 11 steps');
   });
 
   test('an input error reads "Fix 1 problem" and opens the plan drawer with it', async () => {
@@ -94,7 +94,7 @@ describe('the run bar', () => {
     await act(() => button(root).click());
     const drawer = root.querySelector('[data-testid="plan-drawer"]');
     expect(drawer?.textContent).toContain('Echo 2 has no echo time');
-    expect(drawer?.querySelectorAll('tbody tr')).toHaveLength(10);
+    expect(drawer?.querySelectorAll('tbody tr')).toHaveLength(11);
     await act(() => /** @type {HTMLButtonElement} */ (/** @type {Element} */ (drawer).querySelector('.link')).click());
     expect(session.ui.section.value).toBe('data');
   });
@@ -178,7 +178,7 @@ describe('the run bar', () => {
     ]);
     const root = await mount(html`<${RunBar} session=${session} store=${store} models=${models} runner=${runner} />`);
     expect(button(root).textContent).toBe('Cancel');
-    expect(root.querySelector('[data-testid="run-progress"]')?.textContent).toContain('Step 2 of 10: Dipole inversion 34/100');
+    expect(root.querySelector('[data-testid="run-progress"]')?.textContent).toContain('Step 2 of 11: Dipole inversion 34/100');
     await act(() => button(root).click());
     expect(cancel).toHaveBeenCalled();
     await act(() => {

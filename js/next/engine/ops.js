@@ -86,6 +86,13 @@ export function engineOps(wasm) {
     referenceTitles: (methods) => JSON.parse(call(wasm.reference_titles_wasm, json(methods))),
     /** "Keep mine": each finding kept at its current value (`keep`). @param {PipelineConfig} config @param {Recommendation[]} findings @returns {PipelineConfig} */
     keepFindings: (config, findings) => JSON.parse(call(wasm.keep_findings_wasm, json(config), json(findings))),
+    /**
+     * The mask recipe's parts kept by a pop-up's answer, set back where a value applied to another
+     * part changed them (`restore_kept`, as the TUI).
+     * @param {PipelineConfig} config @param {ScanFacts | null} f @param {boolean} scan @param {Recommendation[]} kept
+     * @returns {PipelineConfig}
+     */
+    restoreKept: (config, f, scan, kept) => JSON.parse(call(wasm.restore_kept_wasm, json(config), facts(f), scan, json(kept))),
     /** "Apply all": what `settle` takes of the findings applied, and what it left (`apply_all`). @param {PipelineConfig} config @param {Recommendation[]} findings @returns {{ config: PipelineConfig, settled: import('../protocol.js').Settled }} */
     applyAll: (config, findings) => JSON.parse(call(wasm.apply_all_wasm, json(config), json(findings))),
     /** What findings chosen together come to, with nothing changed (`settle`). @param {Recommendation[]} findings @returns {import('../protocol.js').Settled} */

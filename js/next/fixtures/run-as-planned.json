@@ -5,6 +5,7 @@
     "pipeline": {
       "do_qsm": true,
       "do_swi": false,
+      "do_magnitude": true,
       "do_smwi": false,
       "do_segmentation": false,
       "do_analysis": false,
@@ -47,9 +48,10 @@
         64
       ],
       "laplacian_unmasked": false,
+      "laplacian_keep_outside": false,
       "romeo": {
-        "individual": true,
-        "correct_global": true,
+        "individual": false,
+        "correct_global": false,
         "template": 0,
         "phase_coherence": true,
         "phase_gradient_coherence": true,
@@ -58,7 +60,7 @@
         "mag_weight": false,
         "mag_weight2": false,
         "bestpath": false,
-        "temporal_uncertain_unwrapping": 0.5,
+        "temporal_uncertain_unwrapping": 0.0,
         "max_seeds": 1,
         "merge_regions": false,
         "correct_regions": false,
@@ -82,13 +84,14 @@
         "downweight_level": 0.75,
         "flag_ratio": 3.0
       },
-      "qsmart_fit_threshold_mode": "percentile",
+      "qsmart_fit_threshold_mode": "absolute",
       "qsmart_fit_percentile": 99.0,
       "qsmart_fit_threshold": 40.0
     },
     "masking": {
       "inhomogeneity_correction": true,
       "inhomogeneity_method": "makehomogeneous",
+      "n4_geometry": "scanner",
       "sections": [
         {
           "input": "phase-quality",
@@ -170,7 +173,8 @@
           0,
           0,
           0
-        ]
+        ],
+        "rim": "whole"
       },
       "iharperella": {
         "max_iter": 40,
@@ -179,8 +183,12 @@
           0,
           0,
           0
-        ]
-      }
+        ],
+        "rim": "sti"
+      },
+      "erode_voxels": 0,
+      "polish_mask": false,
+      "ukb_mask_trim": false
     },
     "inversion": {
       "algorithm": "ilsqr",
@@ -200,7 +208,7 @@
         ]
       },
       "tv": {
-        "lambda": 0.001,
+        "lambda": 0.0003,
         "rho": null,
         "tol": 0.001,
         "max_iter": 250,
@@ -211,7 +219,7 @@
         ]
       },
       "tkd": {
-        "threshold": 0.15,
+        "threshold": 0.25,
         "pad": [
           0,
           0,
@@ -328,6 +336,7 @@
         "frangi_scale_ratio": 0.5,
         "frangi_c": 500.0,
         "vessel_magnitude": "mean-n4",
+        "offset_grid": "fft",
         "vessel_size_units": "voxels"
       },
       "ndi": {
@@ -335,7 +344,8 @@
         "alpha": 0.00001,
         "max_iter": 100,
         "auto_stop": false,
-        "te": "first"
+        "te": "first",
+        "weight_norm": "global-max"
       },
       "fansi": {
         "alpha1": 0.0002,
@@ -456,7 +466,14 @@
         "tol": 0.03,
         "max_iter": 30,
         "cg_tol": 0.05,
-        "cg_max_iter": 100
+        "cg_max_iter": 100,
+        "qsm_ilsqr": {
+          "tol": 0.001,
+          "max_iter": 100,
+          "pad_mm": 12.0,
+          "precision": "double"
+        },
+        "csf_r2star": "arlo"
       },
       "r2star_qsm": {
         "r_const_3t": 274.0
@@ -482,7 +499,8 @@
           "optimality_tolerance": 1e-6,
           "finite_difference_step": 1.4901161193847656e-8,
           "typical_x": 1.0
-        }
+        },
+        "fit": "reference-code"
       },
       "hc_chisep": {
         "dr_pos_3t": 137.0,
@@ -534,7 +552,8 @@
       ],
       "scaling": "tanh",
       "strength": 4.0,
-      "mip_window": 7
+      "mip_window": 7,
+      "filtered_phase": false
     },
     "smwi": {
       "threshold_ppm": 1.0,
@@ -556,7 +575,8 @@
       "gradient_threshold": 0.0,
       "iterations": 1000,
       "subdivisions": 4,
-      "voxel_scale": 1.0
+      "voxel_scale": 1.0,
+      "orientation": "fsl"
     },
     "homogeneity": {
       "sigma_mm": 7.0,
@@ -653,6 +673,11 @@
         "state": "computed"
       },
       {
+        "id": "inhomog",
+        "label": "Inhomogeneity correction",
+        "state": "computed"
+      },
+      {
         "id": "magnitude",
         "label": "Combined magnitude",
         "state": "computed"
@@ -711,6 +736,222 @@
     ],
     "resampled": false,
     "recommendations": [
+      {
+        "rule": "sti.mask-threshold-gui",
+        "kind": "reference",
+        "strength": "reference",
+        "basis": "reference_choice",
+        "setting": "masking.sections",
+        "label": "Mask",
+        "trigger": {
+          "setting": "inversion.algorithm",
+          "value": "ilsqr",
+          "name": "iLSQR"
+        },
+        "current": [
+          {
+            "value": "otsu",
+            "name": "Otsu's threshold"
+          }
+        ],
+        "recommended": {
+          "value": "sti-gui",
+          "name": "thresh_tool's starting level"
+        },
+        "allowed": {
+          "test": "one_of",
+          "values": [
+            {
+              "value": "sti-gui",
+              "name": "thresh_tool's starting level"
+            }
+          ]
+        },
+        "reason": "STI Suite's QSM_GUI masks the magnitude above the level its threshold tool starts at",
+        "source": "STI Suite 3.0 QSM_GUI driven headless with every call logged, licensed MATLAB R2023b, 2026-11-11 (QSM-CI#421 STI probe; thresh_tool.m l. 15-36, 84-89, 143; mythresh and PolishMask are P-code, read off from their logged inputs and outputs); QSM.rs utils::sti_gui_threshold, pipeline::bg_removal::polish_mask",
+        "departs": true,
+        "outcome": "kept"
+      },
+      {
+        "rule": "sti.mask-input",
+        "kind": "reference",
+        "strength": "reference",
+        "basis": "reference_choice",
+        "setting": "masking.sections",
+        "label": "Mask",
+        "trigger": {
+          "setting": "inversion.algorithm",
+          "value": "ilsqr",
+          "name": "iLSQR"
+        },
+        "current": [
+          {
+            "value": "phase-quality",
+            "name": "phase quality"
+          }
+        ],
+        "recommended": {
+          "value": "magnitude-last",
+          "name": "last echo"
+        },
+        "allowed": {
+          "test": "one_of",
+          "values": [
+            {
+              "value": "magnitude-last",
+              "name": "last echo"
+            }
+          ]
+        },
+        "reason": "QSM_GUI thresholds the last echo's magnitude (the last volume loaded)",
+        "source": "STI Suite 3.0 QSM_GUI driven headless with every call logged, licensed MATLAB R2023b, 2026-11-11 (QSM-CI#421 STI probe; thresh_tool.m l. 15-36, 84-89, 143; mythresh and PolishMask are P-code, read off from their logged inputs and outputs); QSM.rs utils::sti_gui_threshold, pipeline::bg_removal::polish_mask",
+        "departs": true,
+        "outcome": "kept"
+      },
+      {
+        "rule": "sti.mask-no-correction",
+        "kind": "reference",
+        "strength": "reference",
+        "basis": "reference_choice",
+        "setting": "masking.inhomogeneity_correction",
+        "label": "Inhomogeneity correction",
+        "trigger": {
+          "setting": "inversion.algorithm",
+          "value": "ilsqr",
+          "name": "iLSQR"
+        },
+        "current": [
+          {
+            "value": "makehomogeneous",
+            "name": "makehomogeneous"
+          }
+        ],
+        "recommended": {
+          "value": "none",
+          "name": "none"
+        },
+        "allowed": {
+          "test": "one_of",
+          "values": [
+            {
+              "value": "none",
+              "name": "none"
+            }
+          ]
+        },
+        "reason": "QSM_GUI thresholds the magnitude as loaded, with no bias-field correction",
+        "source": "STI Suite 3.0 QSM_GUI driven headless with every call logged, licensed MATLAB R2023b, 2026-11-11 (QSM-CI#421 STI probe; thresh_tool.m l. 15-36, 84-89, 143; mythresh and PolishMask are P-code, read off from their logged inputs and outputs); QSM.rs utils::sti_gui_threshold, pipeline::bg_removal::polish_mask",
+        "departs": true,
+        "outcome": "kept"
+      },
+      {
+        "rule": "sti.mask-largest-component",
+        "kind": "reference",
+        "strength": "reference",
+        "basis": "reference_choice",
+        "setting": "masking.sections",
+        "label": "Mask",
+        "trigger": {
+          "setting": "inversion.algorithm",
+          "value": "ilsqr",
+          "name": "iLSQR"
+        },
+        "current": [
+          {
+            "value": false,
+            "name": "every component"
+          }
+        ],
+        "recommended": {
+          "value": true,
+          "name": "largest component only"
+        },
+        "allowed": {
+          "test": "one_of",
+          "values": [
+            {
+              "value": true,
+              "name": "largest component only"
+            }
+          ]
+        },
+        "reason": "QSM_GUI keeps the thresholded mask's largest connected component (bwlabeln, regionprops)",
+        "source": "STI Suite 3.0 QSM_GUI driven headless with every call logged, licensed MATLAB R2023b, 2026-11-11 (QSM-CI#421 STI probe; thresh_tool.m l. 15-36, 84-89, 143; mythresh and PolishMask are P-code, read off from their logged inputs and outputs); QSM.rs utils::sti_gui_threshold, pipeline::bg_removal::polish_mask",
+        "departs": true,
+        "outcome": "kept"
+      },
+      {
+        "rule": "sti.mask-imfill",
+        "kind": "reference",
+        "strength": "reference",
+        "basis": "reference_choice",
+        "setting": "masking.sections",
+        "label": "Mask",
+        "trigger": {
+          "setting": "inversion.algorithm",
+          "value": "ilsqr",
+          "name": "iLSQR"
+        },
+        "current": [
+          {
+            "value": false,
+            "name": "holes not filled"
+          }
+        ],
+        "recommended": {
+          "value": true,
+          "name": "every hole filled"
+        },
+        "allowed": {
+          "test": "one_of",
+          "values": [
+            {
+              "value": true,
+              "name": "every hole filled"
+            }
+          ]
+        },
+        "reason": "QSM_GUI fills every hole of that component (regionprops' FilledImage)",
+        "source": "STI Suite 3.0 QSM_GUI driven headless with every call logged, licensed MATLAB R2023b, 2026-11-11 (QSM-CI#421 STI probe; thresh_tool.m l. 15-36, 84-89, 143; mythresh and PolishMask are P-code, read off from their logged inputs and outputs); QSM.rs utils::sti_gui_threshold, pipeline::bg_removal::polish_mask",
+        "departs": true,
+        "outcome": "kept"
+      },
+      {
+        "rule": "sti.mask-no-erosion",
+        "kind": "reference",
+        "strength": "reference",
+        "basis": "reference_choice",
+        "setting": "masking.sections",
+        "label": "Mask",
+        "trigger": {
+          "setting": "inversion.algorithm",
+          "value": "ilsqr",
+          "name": "iLSQR"
+        },
+        "current": [
+          {
+            "value": 1,
+            "name": "1 voxel"
+          }
+        ],
+        "recommended": {
+          "value": 0,
+          "name": "no erosion"
+        },
+        "allowed": {
+          "test": "one_of",
+          "values": [
+            {
+              "value": 0,
+              "name": "no erosion"
+            }
+          ]
+        },
+        "reason": "QSM_GUI does not erode its mask (V-SHARP erodes it)",
+        "source": "STI Suite 3.0 QSM_GUI driven headless with every call logged, licensed MATLAB R2023b, 2026-11-11 (QSM-CI#421 STI probe; thresh_tool.m l. 15-36, 84-89, 143; mythresh and PolishMask are P-code, read off from their logged inputs and outputs); QSM.rs utils::sti_gui_threshold, pipeline::bg_removal::polish_mask",
+        "departs": true,
+        "outcome": "kept"
+      },
       {
         "rule": "sti.unwrap-laplacian",
         "kind": "reference",
@@ -783,6 +1024,150 @@
         "needs_scan": true,
         "departs": true,
         "outcome": "kept"
+      },
+      {
+        "rule": "sti.vsharp-polish-mask",
+        "kind": "reference",
+        "strength": "reference",
+        "basis": "reference_choice",
+        "setting": "bg_removal.polish_mask",
+        "label": "Polish mask",
+        "trigger": {
+          "setting": "inversion.algorithm",
+          "value": "ilsqr",
+          "name": "iLSQR"
+        },
+        "current": [
+          {
+            "value": false,
+            "name": "off"
+          }
+        ],
+        "recommended": {
+          "value": true,
+          "name": "on"
+        },
+        "allowed": {
+          "test": "one_of",
+          "values": [
+            {
+              "value": true,
+              "name": "on"
+            }
+          ]
+        },
+        "reason": "STI Suite's QSM_GUI polishes V-SHARP's mask (largest connected component, holes filled) and inverts the field inside it",
+        "source": "STI Suite 3.0 QSM_GUI driven headless with every call logged, licensed MATLAB R2023b, 2026-11-11 (QSM-CI#421 STI probe; thresh_tool.m l. 15-36, 84-89, 143; mythresh and PolishMask are P-code, read off from their logged inputs and outputs); QSM.rs utils::sti_gui_threshold, pipeline::bg_removal::polish_mask",
+        "departs": true,
+        "outcome": "kept"
+      },
+      {
+        "rule": "sti.ilsqr-iterations",
+        "kind": "reference",
+        "strength": "reference",
+        "basis": "reference_choice",
+        "setting": "inversion.ilsqr.max_iter",
+        "label": "Maximum iterations (iLSQR)",
+        "trigger": {
+          "setting": "inversion.algorithm",
+          "value": "ilsqr",
+          "name": "iLSQR"
+        },
+        "current": [
+          {
+            "value": 100,
+            "name": "100"
+          }
+        ],
+        "recommended": {
+          "value": 40,
+          "name": "40"
+        },
+        "allowed": {
+          "test": "one_of",
+          "values": [
+            {
+              "value": 40,
+              "name": "40"
+            }
+          ]
+        },
+        "reason": "STI Suite's QSM_GUI calls QSM_iLSQR with niter 40",
+        "source": "STI Suite 3.0 QSM_GUI, probed headless (QSM.rs ilsqr.rs docs, Reference pipeline; STI_GUI_NITER)",
+        "departs": true,
+        "outcome": "kept"
+      },
+      {
+        "rule": "sti.ilsqr-single",
+        "kind": "reference",
+        "strength": "reference",
+        "basis": "reference_choice",
+        "setting": "inversion.ilsqr.precision",
+        "label": "Precision (iLSQR)",
+        "trigger": {
+          "setting": "inversion.algorithm",
+          "value": "ilsqr",
+          "name": "iLSQR"
+        },
+        "current": [
+          {
+            "value": "double",
+            "name": "Double"
+          }
+        ],
+        "recommended": {
+          "value": "single",
+          "name": "Single"
+        },
+        "allowed": {
+          "test": "one_of",
+          "values": [
+            {
+              "value": "single",
+              "name": "Single"
+            }
+          ]
+        },
+        "reason": "STI Suite's QSM_iLSQR runs both LSQR solves in single precision",
+        "source": "STI Suite 3.0 QSM_iLSQR, probed (QSM.rs ilsqr.rs docs, Performance and precision)",
+        "departs": true,
+        "outcome": "kept"
+      },
+      {
+        "rule": "sti.reference-none",
+        "kind": "reference",
+        "strength": "reference",
+        "basis": "reference_choice",
+        "setting": "qsm.reference",
+        "label": "QSM reference",
+        "trigger": {
+          "setting": "inversion.algorithm",
+          "value": "ilsqr",
+          "name": "iLSQR"
+        },
+        "current": [
+          {
+            "value": "mean",
+            "name": "Mean"
+          }
+        ],
+        "recommended": {
+          "value": "none",
+          "name": "None"
+        },
+        "allowed": {
+          "test": "one_of",
+          "values": [
+            {
+              "value": "none",
+              "name": "None"
+            }
+          ]
+        },
+        "reason": "STI Suite's QSM_GUI keeps the inversion's χ as it is, without referencing it",
+        "source": "STI Suite 3.0 QSM_GUI driven headless with every call logged, licensed MATLAB R2023b, 2026-11-11 (QSM-CI#421 STI probe; thresh_tool.m l. 15-36, 84-89, 143; mythresh and PolishMask are P-code, read off from their logged inputs and outputs); QSM.rs utils::sti_gui_threshold, pipeline::bg_removal::polish_mask",
+        "departs": true,
+        "outcome": "kept"
       }
     ]
   },
@@ -830,36 +1215,26 @@
           "AcquiredPhase(2)",
           "AcquiredPhase(3)",
           "AcquiredPhase(4)",
-          "AcquiredPhase(5)",
-          "AcquiredMagnitude(1)",
-          "AcquiredMagnitude(2)",
-          "AcquiredMagnitude(3)",
-          "AcquiredMagnitude(4)",
-          "AcquiredMagnitude(5)"
+          "AcquiredPhase(5)"
         ],
         "writes": [
           "Phase(1)",
           "Phase(2)",
           "Phase(3)",
           "Phase(4)",
-          "Phase(5)",
-          "Magnitude(1)",
-          "Magnitude(2)",
-          "Magnitude(3)",
-          "Magnitude(4)",
-          "Magnitude(5)"
+          "Phase(5)"
         ],
         "run": {
           "state": "computed"
         }
       },
       {
-        "id": "magnitude",
-        "label": "Combined magnitude",
-        "algorithm": "rss",
-        "algorithm_label": "root sum of squares",
+        "id": "inhomog",
+        "label": "Inhomogeneity correction",
+        "algorithm": "makehomogeneous",
+        "algorithm_label": "makehomogeneous",
         "settings": [
-          "inhomogeneity correction"
+          "each echo"
         ],
         "branch": null,
         "enabled_by": null,
@@ -873,6 +1248,39 @@
           "Magnitude(5)"
         ],
         "writes": [
+          "HomogeneousMagnitude(1)",
+          "HomogeneousMagnitude(2)",
+          "HomogeneousMagnitude(3)",
+          "HomogeneousMagnitude(4)",
+          "HomogeneousMagnitude(5)"
+        ],
+        "run": {
+          "state": "computed"
+        }
+      },
+      {
+        "id": "magnitude",
+        "label": "Combined magnitude",
+        "algorithm": "rss",
+        "algorithm_label": "root sum of squares",
+        "settings": [
+          "of the corrected echoes"
+        ],
+        "branch": null,
+        "enabled_by": null,
+        "only_when": null,
+        "models": [],
+        "reads": [
+          "HomogeneousMagnitude(1)",
+          "HomogeneousMagnitude(2)",
+          "HomogeneousMagnitude(3)",
+          "HomogeneousMagnitude(4)",
+          "HomogeneousMagnitude(5)"
+        ],
+        "writes": [
+          "CombinedMagnitude"
+        ],
+        "publishes": [
           "CombinedMagnitude"
         ],
         "run": {
@@ -897,13 +1305,16 @@
           "Phase(3)",
           "Phase(4)",
           "Phase(5)",
-          "Magnitude(1)",
-          "Magnitude(2)",
-          "Magnitude(3)",
-          "Magnitude(4)",
-          "Magnitude(5)"
+          "HomogeneousMagnitude(1)",
+          "HomogeneousMagnitude(2)",
+          "HomogeneousMagnitude(3)",
+          "HomogeneousMagnitude(4)",
+          "HomogeneousMagnitude(5)"
         ],
         "writes": [
+          "BrainMask"
+        ],
+        "publishes": [
           "BrainMask"
         ],
         "run": {
@@ -948,6 +1359,10 @@
           "FieldPpm",
           "TotalFieldHz",
           "FieldMask",
+          "TotalFieldMagnitude"
+        ],
+        "publishes": [
+          "TotalFieldHz",
           "TotalFieldMagnitude"
         ],
         "run": {
@@ -1025,6 +1440,10 @@
           "Chi",
           "ChiSupport"
         ],
+        "publishes": [
+          "Chi",
+          "ChiSupport"
+        ],
         "run": {
           "state": "computed"
         }
@@ -1039,23 +1458,29 @@
           "AcquiredPhase(2)",
           "AcquiredPhase(3)",
           "AcquiredPhase(4)",
-          "AcquiredPhase(5)",
-          "AcquiredMagnitude(1)",
-          "AcquiredMagnitude(2)",
-          "AcquiredMagnitude(3)",
-          "AcquiredMagnitude(4)",
-          "AcquiredMagnitude(5)"
+          "AcquiredPhase(5)"
         ]
       },
       {
-        "from": "scale_phase",
-        "to": "magnitude",
+        "from": "load",
+        "to": "inhomog",
         "items": [
           "Magnitude(1)",
           "Magnitude(2)",
           "Magnitude(3)",
           "Magnitude(4)",
           "Magnitude(5)"
+        ]
+      },
+      {
+        "from": "inhomog",
+        "to": "magnitude",
+        "items": [
+          "HomogeneousMagnitude(1)",
+          "HomogeneousMagnitude(2)",
+          "HomogeneousMagnitude(3)",
+          "HomogeneousMagnitude(4)",
+          "HomogeneousMagnitude(5)"
         ]
       },
       {
@@ -1066,12 +1491,18 @@
           "Phase(2)",
           "Phase(3)",
           "Phase(4)",
-          "Phase(5)",
-          "Magnitude(1)",
-          "Magnitude(2)",
-          "Magnitude(3)",
-          "Magnitude(4)",
-          "Magnitude(5)"
+          "Phase(5)"
+        ]
+      },
+      {
+        "from": "inhomog",
+        "to": "mask",
+        "items": [
+          "HomogeneousMagnitude(1)",
+          "HomogeneousMagnitude(2)",
+          "HomogeneousMagnitude(3)",
+          "HomogeneousMagnitude(4)",
+          "HomogeneousMagnitude(5)"
         ]
       },
       {
@@ -1082,7 +1513,13 @@
           "Phase(2)",
           "Phase(3)",
           "Phase(4)",
-          "Phase(5)",
+          "Phase(5)"
+        ]
+      },
+      {
+        "from": "load",
+        "to": "unwrap",
+        "items": [
           "Magnitude(1)",
           "Magnitude(2)",
           "Magnitude(3)",
@@ -1390,6 +1827,71 @@
         "coil": null
       },
       {
+        "key": "HomogeneousMagnitude(1)",
+        "item": {
+          "HomogeneousMagnitude": 1
+        },
+        "label": "Inhomogeneity-corrected magnitude",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 1,
+        "coil": null
+      },
+      {
+        "key": "HomogeneousMagnitude(2)",
+        "item": {
+          "HomogeneousMagnitude": 2
+        },
+        "label": "Inhomogeneity-corrected magnitude",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 2,
+        "coil": null
+      },
+      {
+        "key": "HomogeneousMagnitude(3)",
+        "item": {
+          "HomogeneousMagnitude": 3
+        },
+        "label": "Inhomogeneity-corrected magnitude",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 3,
+        "coil": null
+      },
+      {
+        "key": "HomogeneousMagnitude(4)",
+        "item": {
+          "HomogeneousMagnitude": 4
+        },
+        "label": "Inhomogeneity-corrected magnitude",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 4,
+        "coil": null
+      },
+      {
+        "key": "HomogeneousMagnitude(5)",
+        "item": {
+          "HomogeneousMagnitude": 5
+        },
+        "label": "Inhomogeneity-corrected magnitude",
+        "units": null,
+        "kind": "magnitude",
+        "bids_name": null,
+        "published": false,
+        "echo": 5,
+        "coil": null
+      },
+      {
         "key": "CombinedMagnitude",
         "item": "CombinedMagnitude",
         "label": "Combined magnitude",
@@ -1518,7 +2020,7 @@
       }
     ],
     "two_pass": false,
-    "mermaid": "flowchart TD\n    load[\"Load<br/><small><b>computed</b></small>\"]\n    scale_phase[\"Phase scaling<br/><small><b>computed</b></small>\"]\n    magnitude[\"Combined magnitude<br/><i>root sum of squares</i><br/><small>inhomogeneity correction</small><br/><small><b>computed</b></small>\"]\n    mask[\"Brain mask<br/><small>phase quality: Otsu threshold, dilation, hole-filling, erosion</small><br/><small><b>computed</b></small><br/><small>Voxels where the scanner recorded no phase were left out of the mask. (1832 voxels (66.8 % of the recipe's mask; 77.7 % of the field of view has no phase))</small>\"]\n    unwrap[\"Field map<br/><i>ROMEO</i><br/><small>phase offsets removed</small><br/><small>B0 by weighted average</small><br/><small><b>computed</b></small><br/><small>Voxels where the phase offset could not be estimated were excluded from the field map and every step after it. (144 voxels (15.79 % of the mask))</small>\"]\n    bgremove[\"Background-field removal<br/><i>V-SHARP</i><br/><small>SMV kernel radii from 12 to 2 mm in 1 mm steps</small><br/><small><b>computed</b></small>\"]\n    invert[\"Dipole inversion<br/><i>iLSQR</i><br/><small><b>computed</b></small>\"]\n    reference[\"Referencing<br/><i>mean</i><br/><small><b>computed</b></small>\"]\n    load -->|\"Phase (as acquired), Magnitude (as acquired)\"| scale_phase\n    scale_phase -->|\"Magnitude\"| magnitude\n    scale_phase -->|\"Phase, Magnitude\"| mask\n    scale_phase -->|\"Phase, Magnitude\"| unwrap\n    mask -->|\"Brain mask\"| unwrap\n    unwrap -->|\"Total field, Field mask\"| bgremove\n    bgremove -->|\"Local field, Local field mask\"| invert\n    invert -->|\"Unreferenced susceptibility\"| reference\n    bgremove -->|\"Local field mask\"| reference\n",
+    "mermaid": "flowchart TD\n    load[\"Load<br/><small><b>computed</b></small>\"]\n    scale_phase[\"Phase scaling<br/><small><b>computed</b></small>\"]\n    inhomog[\"Inhomogeneity correction<br/><i>makehomogeneous</i><br/><small>each echo</small><br/><small><b>computed</b></small>\"]\n    magnitude[\"Combined magnitude<br/><i>root sum of squares</i><br/><small>of the corrected echoes</small><br/><small><b>computed</b></small>\"]\n    mask[\"Brain mask<br/><small>phase quality: Otsu threshold, dilation, hole-filling, erosion</small><br/><small><b>computed</b></small><br/><small>Voxels where the scanner recorded no phase were left out of the mask. (1832 voxels (66.8 % of the recipe's mask; 77.7 % of the field of view has no phase))</small>\"]\n    unwrap[\"Field map<br/><i>ROMEO</i><br/><small>phase offsets removed</small><br/><small>B0 by weighted average</small><br/><small><b>computed</b></small><br/><small>Voxels where the phase offset could not be estimated were excluded from the field map and every step after it. (144 voxels (15.79 % of the mask))</small>\"]\n    bgremove[\"Background-field removal<br/><i>V-SHARP</i><br/><small>SMV kernel radii from 12 to 2 mm in 1 mm steps</small><br/><small><b>computed</b></small>\"]\n    invert[\"Dipole inversion<br/><i>iLSQR</i><br/><small><b>computed</b></small>\"]\n    reference[\"Referencing<br/><i>mean</i><br/><small><b>computed</b></small>\"]\n    load -->|\"Phase (as acquired)\"| scale_phase\n    load -->|\"Magnitude\"| inhomog\n    inhomog -->|\"Inhomogeneity-corrected magnitude\"| magnitude\n    scale_phase -->|\"Phase\"| mask\n    inhomog -->|\"Inhomogeneity-corrected magnitude\"| mask\n    scale_phase -->|\"Phase\"| unwrap\n    load -->|\"Magnitude\"| unwrap\n    mask -->|\"Brain mask\"| unwrap\n    unwrap -->|\"Total field, Field mask\"| bgremove\n    bgremove -->|\"Local field, Local field mask\"| invert\n    invert -->|\"Unreferenced susceptibility\"| reference\n    bgremove -->|\"Local field mask\"| reference\n    magnitude_out1([\"Combined magnitude (part-mag_T2starw)\"])\n    magnitude --> magnitude_out1\n    mask_out1([\"Brain mask (mask)\"])\n    mask --> mask_out1\n    unwrap_out1([\"Total field (desc-total_fieldmap)\"])\n    unwrap --> unwrap_out1\n    unwrap_out2([\"Field map magnitude (desc-total_magnitude)\"])\n    unwrap --> unwrap_out2\n    reference_out1([\"Susceptibility (Chimap)\"])\n    reference --> reference_out1\n    reference_out2([\"Susceptibility support (desc-qsm_mask)\"])\n    reference --> reference_out2\n",
     "differs": false
   },
   "methods": {
@@ -1531,9 +2033,9 @@
         ]
       },
       {
-        "text": "Inhomogeneity correction (Eckstein et al., 2019) was applied to the RSS-combined magnitude image.",
+        "text": "Inhomogeneity correction (Eckstein et al., 2019) was applied to each echo's magnitude.",
         "steps": [
-          "magnitude"
+          "inhomog"
         ],
         "citations": [
           "eckstein2019"
@@ -1557,7 +2059,14 @@
         "citations": []
       },
       {
-        "text": "Phase offset removal was performed using the HIP method (Eckstein et al., 2018).",
+        "text": "Phase was converted to ppm with the scanner's centre frequency (ImagingFrequency).",
+        "steps": [
+          "unwrap"
+        ],
+        "citations": []
+      },
+      {
+        "text": "Phase offset removal was performed using MCPC-3D-S (Eckstein et al., 2018).",
         "steps": [
           "unwrap"
         ],
@@ -1653,8 +2162,18 @@
     ],
     "note": {
       "differences": [
+        "Mask used Otsu's threshold; this differs from the iLSQR reference pipeline, which uses thresh_tool's starting level.",
+        "Mask used phase quality; this differs from the iLSQR reference pipeline, which uses last echo.",
+        "Inhomogeneity correction used makehomogeneous; this differs from the iLSQR reference pipeline, which uses none.",
+        "Mask used every component; this differs from the iLSQR reference pipeline, which uses largest component only.",
+        "Mask used holes not filled; this differs from the iLSQR reference pipeline, which uses every hole filled.",
+        "Mask used 1 voxel; this differs from the iLSQR reference pipeline, which uses no erosion.",
         "Phase unwrapping used ROMEO; this differs from the iLSQR reference pipeline, which uses Laplacian.",
-        "Echo weighting used Phase SNR; this differs from the iLSQR reference pipeline, which uses Echo time."
+        "Echo weighting used Phase SNR; this differs from the iLSQR reference pipeline, which uses Echo time.",
+        "Polish mask was off; this differs from the iLSQR reference pipeline, which has it on.",
+        "Maximum iterations (iLSQR) was 100; this differs from the iLSQR reference pipeline, which uses 40.",
+        "Precision (iLSQR) used Double; this differs from the iLSQR reference pipeline, which uses Single.",
+        "QSM reference used Mean; this differs from the iLSQR reference pipeline, which uses None."
       ]
     }
   }

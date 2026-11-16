@@ -239,7 +239,7 @@
  * @property {string} rule - QSM.rs's id (`medi.bg-pdf`)
  * @property {'reasoned' | 'reference'} kind - a recommendation with a reason, or the original
  *   authors' setting: Keep mine is preselected for it, not its value
- * @property {'required' | 'recommended' | 'discouraged' | 'reference'} strength
+ * @property {'required' | 'recommended' | 'discouraged' | 'suggested' | 'reference'} strength
  * @property {'stated' | 'measured' | 'reference_choice' | 'implementation'} basis
  * @property {string} setting - its config path
  * @property {string} label - the setting's display name

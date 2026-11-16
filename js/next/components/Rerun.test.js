@@ -92,14 +92,14 @@ describe('the Run button and the plan, from the engine\'s dry run', () => {
     answer({}, 'will_run');
     await settle();
     expect(button(root).textContent).toBe('Run');
-    expect(root.querySelector('[data-testid="plan-status"]')?.textContent).toBe('Plan: 10 steps');
+    expect(root.querySelector('[data-testid="plan-status"]')?.textContent).toBe('Plan: 11 steps');
 
     answer({ invert: 'changed', reference: 'stale', motion: 'skipped', output_space: 'skipped' });
     await settle();
     expect(button(root).textContent).toBe('Re-run 2 steps');
     expect(button(root).disabled).toBe(false);
-    expect(button(root).title).toBe('Compute 2 steps and reuse the other 6');
-    expect(root.querySelector('[data-testid="plan-status"]')?.textContent).toBe('Plan: 10 steps · 2 to run');
+    expect(button(root).title).toBe('Compute 2 steps and reuse the other 7');
+    expect(root.querySelector('[data-testid="plan-status"]')?.textContent).toBe('Plan: 11 steps · 2 to run');
 
     // The drawer says the same, step by step.
     await act(() => /** @type {HTMLButtonElement} */ (root.querySelector('[data-testid="plan-drawer-toggle"]')).click());

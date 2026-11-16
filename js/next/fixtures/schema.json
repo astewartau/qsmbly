@@ -73,6 +73,11 @@
       "tab": "separation"
     },
     {
+      "id": "magnitude",
+      "label": "Magnitude",
+      "tab": "outputs"
+    },
+    {
       "id": "swi-smwi",
       "label": "SWI/SMWI",
       "tab": "outputs"
@@ -98,7 +103,7 @@
       "path": "multi_orientation.group_by",
       "label": "Orientations",
       "full_label": "Orientation grouping",
-      "help": "Runs that are the same object at a different angle, matched by an entity (acq, run, rec, inv), a glob (*acq-dir*) or re:<regex>; empty turns grouping off. How the orientations are combined is set under Multi-orientation",
+      "help": "Runs that are the same object at a different angle, matched by an entity (acq, run, rec, inv), a glob (*acq-dir*), re:<regex> or runs:<groups>; empty turns grouping off. How the orientations are combined is set under COSMOS/STI",
       "type": "text",
       "optional": false,
       "off": "",
@@ -169,273 +174,12 @@
       "optional": false,
       "default": "acquired",
       "browser_default": "acquired",
-      "level": "advanced",
+      "level": "basic",
       "tab": "preprocessing",
       "section": "geometry",
       "order": 3,
       "parent": "pipeline.axial_resampling",
       "cli_flag": "--output-space",
-      "browser": "available"
-    },
-    {
-      "path": "masking.inhomogeneity_correction",
-      "label": "Inhomog. correction",
-      "full_label": "Inhomogeneity correction",
-      "help": "Apply B1 field correction to magnitude (improves masking, ROMEO weights, SWI)",
-      "type": "bool",
-      "optional": false,
-      "default": true,
-      "browser_default": true,
-      "level": "basic",
-      "tab": "preprocessing",
-      "section": "geometry",
-      "order": 4,
-      "cli_flag": "--no-inhomogeneity-correction",
-      "browser": "available"
-    },
-    {
-      "path": "masking.inhomogeneity_method",
-      "label": "Method",
-      "full_label": "Inhomogeneity correction method",
-      "help": "How the magnitude is corrected for inhomogeneity",
-      "type": "enum",
-      "options": [
-        {
-          "value": "makehomogeneous",
-          "label": "makehomogeneous",
-          "name": "makehomogeneous",
-          "help": "Divide by a smoothed estimate of the receive sensitivity (MriResearchTools' makehomogeneous)"
-        },
-        {
-          "value": "n4",
-          "label": "n4",
-          "name": "N4",
-          "help": "N4 bias field correction, as ANTs' N4BiasFieldCorrection: a B-spline bias field fitted to sharpen the intensity histogram",
-          "url": "https://doi.org/10.1109/TMI.2010.2046908"
-        }
-      ],
-      "optional": false,
-      "default": "makehomogeneous",
-      "browser_default": "makehomogeneous",
-      "level": "advanced",
-      "tab": "preprocessing",
-      "section": "geometry",
-      "order": 5,
-      "parent": "masking.inhomogeneity_correction",
-      "cli_flag": "--inhomogeneity-method",
-      "browser": "available"
-    },
-    {
-      "path": "homogeneity.sigma_mm",
-      "label": "Sigma (mm)",
-      "full_label": "Bias field sigma",
-      "help": "Smoothing sigma of the bias-field estimate",
-      "type": "float",
-      "optional": false,
-      "units": "mm",
-      "default": 7,
-      "browser_default": 7,
-      "level": "advanced",
-      "tab": "preprocessing",
-      "section": "geometry",
-      "order": 6,
-      "parent": "masking.inhomogeneity_method",
-      "cli_flag": "--homogeneity-sigma-mm",
-      "browser": "available"
-    },
-    {
-      "path": "homogeneity.nbox",
-      "label": "Segmentation boxes",
-      "full_label": "Box filter passes",
-      "help": "Boxes per dimension for the tissue segmentation the receive sensitivity is estimated from",
-      "type": "int",
-      "optional": false,
-      "min": 1,
-      "step": 1,
-      "default": 15,
-      "browser_default": 15,
-      "level": "advanced",
-      "tab": "preprocessing",
-      "section": "geometry",
-      "order": 7,
-      "parent": "masking.inhomogeneity_method",
-      "cli_flag": "--homogeneity-nbox",
-      "browser": "available"
-    },
-    {
-      "path": "n4.shrink_factor",
-      "label": "Shrink factor",
-      "full_label": "Shrink factor",
-      "context": "N4",
-      "help": "Subsample the image by this factor before fitting the bias field",
-      "type": "int",
-      "optional": false,
-      "min": 1,
-      "step": 1,
-      "default": 4,
-      "browser_default": 4,
-      "level": "advanced",
-      "tab": "preprocessing",
-      "section": "geometry",
-      "order": 8,
-      "parent": "masking.inhomogeneity_method",
-      "cli_flag": "--n4-shrink-factor",
-      "browser": "available"
-    },
-    {
-      "path": "n4.max_iterations",
-      "label": "Iterations",
-      "full_label": "Iterations per level",
-      "context": "N4",
-      "help": "Maximum iterations at each fitting level, one number a level (e.g. 50 50 50 50); the B-spline mesh doubles from one level to the next",
-      "type": "int-list",
-      "optional": false,
-      "step": 1,
-      "default": [
-        50,
-        50,
-        50,
-        50
-      ],
-      "browser_default": [
-        50,
-        50,
-        50,
-        50
-      ],
-      "level": "advanced",
-      "tab": "preprocessing",
-      "section": "geometry",
-      "order": 9,
-      "parent": "masking.inhomogeneity_method",
-      "cli_flag": "--n4-max-iterations",
-      "browser": "available"
-    },
-    {
-      "path": "n4.convergence_threshold",
-      "label": "Convergence",
-      "full_label": "Convergence threshold",
-      "context": "N4",
-      "help": "Stop a level once the change in the bias field (its coefficient of variation) falls to this; 0 runs every iteration",
-      "type": "float",
-      "optional": false,
-      "min": 0,
-      "default": 0,
-      "browser_default": 0,
-      "level": "advanced",
-      "tab": "preprocessing",
-      "section": "geometry",
-      "order": 10,
-      "parent": "masking.inhomogeneity_method",
-      "cli_flag": "--n4-convergence-threshold",
-      "browser": "available"
-    },
-    {
-      "path": "n4.mesh",
-      "label": "Mesh",
-      "full_label": "B-spline mesh",
-      "context": "N4",
-      "help": "B-spline mesh elements per axis at the first level (x y z)",
-      "type": "int-vec3",
-      "optional": false,
-      "min": 1,
-      "step": 1,
-      "default": [
-        1,
-        1,
-        1
-      ],
-      "browser_default": [
-        1,
-        1,
-        1
-      ],
-      "level": "advanced",
-      "tab": "preprocessing",
-      "section": "geometry",
-      "order": 11,
-      "parent": "masking.inhomogeneity_method",
-      "cli_flag": "--n4-mesh",
-      "browser": "available"
-    },
-    {
-      "path": "n4.spline_order",
-      "label": "Spline order",
-      "full_label": "B-spline order",
-      "context": "N4",
-      "help": "Order of the B-spline bias field: 1, 2 or 3",
-      "type": "int",
-      "optional": false,
-      "min": 1,
-      "max": 3,
-      "step": 1,
-      "default": 3,
-      "browser_default": 3,
-      "level": "advanced",
-      "tab": "preprocessing",
-      "section": "geometry",
-      "order": 12,
-      "parent": "masking.inhomogeneity_method",
-      "cli_flag": "--n4-spline-order",
-      "browser": "available"
-    },
-    {
-      "path": "n4.bias_field_fwhm",
-      "label": "Bias FWHM",
-      "full_label": "Bias field FWHM",
-      "context": "N4",
-      "help": "FWHM of the Gaussian modelling the bias field's blurring of the log-intensity histogram",
-      "type": "float",
-      "optional": false,
-      "min": 0,
-      "exclusive_min": true,
-      "default": 0.15,
-      "browser_default": 0.15,
-      "level": "advanced",
-      "tab": "preprocessing",
-      "section": "geometry",
-      "order": 13,
-      "parent": "masking.inhomogeneity_method",
-      "cli_flag": "--n4-bias-field-fwhm",
-      "browser": "available"
-    },
-    {
-      "path": "n4.wiener_noise",
-      "label": "Wiener noise",
-      "full_label": "Wiener noise",
-      "context": "N4",
-      "help": "Noise term of the Wiener deconvolution of the histogram",
-      "type": "float",
-      "optional": false,
-      "min": 0,
-      "default": 0.01,
-      "browser_default": 0.01,
-      "level": "advanced",
-      "tab": "preprocessing",
-      "section": "geometry",
-      "order": 14,
-      "parent": "masking.inhomogeneity_method",
-      "cli_flag": "--n4-wiener-noise",
-      "browser": "available"
-    },
-    {
-      "path": "n4.histogram_bins",
-      "label": "Histogram bins",
-      "full_label": "Histogram bins",
-      "context": "N4",
-      "help": "Bins of the log-intensity histogram",
-      "type": "int",
-      "optional": false,
-      "min": 2,
-      "step": 1,
-      "default": 200,
-      "browser_default": 200,
-      "level": "advanced",
-      "tab": "preprocessing",
-      "section": "geometry",
-      "order": 15,
-      "parent": "masking.inhomogeneity_method",
-      "cli_flag": "--n4-histogram-bins",
       "browser": "available"
     },
     {
@@ -450,7 +194,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "geometry",
-      "order": 16,
+      "order": 4,
       "cli_flag": "--ignore-slice-gap",
       "browser": "available"
     },
@@ -458,7 +202,7 @@
       "path": "pipeline.tukey_window",
       "label": "Tukey window",
       "full_label": "Tukey window in k-space",
-      "help": "Taper ratio of a k-space Tukey window applied to each echo's complex image before every other step: 0 applies none; the χ-separation toolbox uses 0.4 for Siemens and GE data and 0 for Philips. Needs magnitude",
+      "help": "Taper ratio of a k-space Tukey window applied to each echo's complex image before every other step: 0 applies none; the χ-separation toolbox uses 0.4, and 0 for Philips data. Needs magnitude",
       "type": "float",
       "optional": false,
       "min": 0,
@@ -468,7 +212,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "geometry",
-      "order": 17,
+      "order": 5,
       "cli_flag": "--tukey-window",
       "browser": "available"
     },
@@ -484,7 +228,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "geometry",
-      "order": 18,
+      "order": 6,
       "cli_flag": "--crop-to-mask",
       "browser": "available"
     },
@@ -501,7 +245,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "geometry",
-      "order": 19,
+      "order": 7,
       "parent": "pipeline.crop_to_mask",
       "cli_flag": "--crop-margin-mm",
       "browser": "available"
@@ -518,7 +262,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "geometry",
-      "order": 20,
+      "order": 8,
       "cli_flag": "--fft-padding",
       "browser": "available"
     },
@@ -543,7 +287,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "geometry",
-      "order": 21,
+      "order": 9,
       "cli_flag": "--coil-combination-sigma",
       "browser": "available"
     },
@@ -605,7 +349,7 @@
       "level": "basic",
       "tab": "preprocessing",
       "section": "masking",
-      "order": 22,
+      "order": 10,
       "browser": "available"
     },
     {
@@ -634,7 +378,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "masking",
-      "order": 23,
+      "order": 11,
       "parent": "masking.sections",
       "browser": "available"
     },
@@ -650,7 +394,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "masking",
-      "order": 24,
+      "order": 12,
       "parent": "masking.sections",
       "browser": "available"
     },
@@ -663,10 +407,10 @@
       "optional": true,
       "default": null,
       "browser_default": null,
-      "level": "advanced",
+      "level": "basic",
       "tab": "preprocessing",
       "section": "masking",
-      "order": 25,
+      "order": 13,
       "cli_flag": "--use-custom-masks",
       "browser": "supplied-file",
       "item": "SuppliedMask",
@@ -684,7 +428,7 @@
       "level": "basic",
       "tab": "preprocessing",
       "section": "masking",
-      "order": 26,
+      "order": 14,
       "cli_flag": "--two-pass",
       "browser": "available"
     },
@@ -703,7 +447,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "masking",
-      "order": 27,
+      "order": 15,
       "parent": "masking.sections",
       "cli_flag": "--bet-smoothness",
       "browser": "available"
@@ -721,7 +465,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "masking",
-      "order": 28,
+      "order": 16,
       "parent": "masking.sections",
       "cli_flag": "--bet-gradient-threshold",
       "browser": "available"
@@ -740,7 +484,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "masking",
-      "order": 29,
+      "order": 17,
       "parent": "masking.sections",
       "cli_flag": "--bet-iterations",
       "browser": "available"
@@ -759,9 +503,41 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "masking",
-      "order": 30,
+      "order": 18,
       "parent": "masking.sections",
       "cli_flag": "--bet-subdivisions",
+      "browser": "available"
+    },
+    {
+      "path": "bet.orientation",
+      "label": "Orientation",
+      "full_label": "Orientation",
+      "context": "BET",
+      "help": "Which way round BET sees the left-right axis (shared by every BET step)",
+      "type": "enum",
+      "options": [
+        {
+          "value": "fsl",
+          "label": "fsl",
+          "name": "As FSL reads it",
+          "help": "Left-right reversed for a neurologically stored image, as FSL's bet reads a NIfTI file"
+        },
+        {
+          "value": "as-stored",
+          "label": "as-stored",
+          "name": "As stored",
+          "help": "The voxels in the order they are stored, as MEDI's BET.m runs bet2"
+        }
+      ],
+      "optional": false,
+      "default": "fsl",
+      "browser_default": "fsl",
+      "level": "advanced",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 19,
+      "parent": "masking.sections",
+      "cli_flag": "--bet-orientation",
       "browser": "available"
     },
     {
@@ -776,7 +552,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "masking",
-      "order": 31,
+      "order": 20,
       "parent": "masking.two_pass",
       "browser": "available"
     },
@@ -807,9 +583,302 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "masking",
-      "order": 32,
+      "order": 21,
       "parent": "masking.two_pass_sections",
       "cli_flag": "--two-pass-mask-combine",
+      "browser": "available"
+    },
+    {
+      "path": "masking.inhomogeneity_correction",
+      "label": "Magnitude correction",
+      "full_label": "Inhomogeneity correction",
+      "help": "Correct the magnitude for receive-coil inhomogeneity: the echoes masking reads, and the combined magnitude",
+      "type": "bool",
+      "optional": false,
+      "default": true,
+      "browser_default": true,
+      "level": "basic",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 22,
+      "cli_flag": "--no-inhomogeneity-correction",
+      "browser": "available"
+    },
+    {
+      "path": "masking.inhomogeneity_method",
+      "label": "Method",
+      "full_label": "Inhomogeneity correction method",
+      "help": "How the magnitude is corrected for inhomogeneity",
+      "type": "enum",
+      "options": [
+        {
+          "value": "makehomogeneous",
+          "label": "makehomogeneous",
+          "name": "makehomogeneous",
+          "help": "Divide by a smoothed estimate of the receive sensitivity (MriResearchTools' makehomogeneous)"
+        },
+        {
+          "value": "n4",
+          "label": "n4",
+          "name": "N4",
+          "help": "N4 bias field correction, as ANTs' N4BiasFieldCorrection: a B-spline bias field fitted to sharpen the intensity histogram",
+          "url": "https://doi.org/10.1109/TMI.2010.2046908"
+        }
+      ],
+      "optional": false,
+      "default": "makehomogeneous",
+      "browser_default": "makehomogeneous",
+      "level": "basic",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 23,
+      "parent": "masking.inhomogeneity_correction",
+      "cli_flag": "--inhomogeneity-method",
+      "browser": "available"
+    },
+    {
+      "path": "homogeneity.sigma_mm",
+      "label": "Sigma (mm)",
+      "full_label": "Bias field sigma",
+      "help": "Smoothing sigma of the bias-field estimate",
+      "type": "float",
+      "optional": false,
+      "units": "mm",
+      "default": 7,
+      "browser_default": 7,
+      "level": "advanced",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 24,
+      "parent": "masking.inhomogeneity_method",
+      "cli_flag": "--homogeneity-sigma-mm",
+      "browser": "available"
+    },
+    {
+      "path": "homogeneity.nbox",
+      "label": "Segmentation boxes",
+      "full_label": "Box filter passes",
+      "help": "Boxes per dimension for the tissue segmentation the receive sensitivity is estimated from",
+      "type": "int",
+      "optional": false,
+      "min": 1,
+      "step": 1,
+      "default": 15,
+      "browser_default": 15,
+      "level": "advanced",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 25,
+      "parent": "masking.inhomogeneity_method",
+      "cli_flag": "--homogeneity-nbox",
+      "browser": "available"
+    },
+    {
+      "path": "n4.shrink_factor",
+      "label": "Shrink factor",
+      "full_label": "Shrink factor",
+      "context": "N4",
+      "help": "Subsample the image by this factor before fitting the bias field",
+      "type": "int",
+      "optional": false,
+      "min": 1,
+      "step": 1,
+      "default": 4,
+      "browser_default": 4,
+      "level": "advanced",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 26,
+      "parent": "masking.inhomogeneity_method",
+      "cli_flag": "--n4-shrink-factor",
+      "browser": "available"
+    },
+    {
+      "path": "n4.max_iterations",
+      "label": "Iterations",
+      "full_label": "Iterations per level",
+      "context": "N4",
+      "help": "Maximum iterations at each fitting level, one number a level (e.g. 50 50 50 50); the B-spline mesh doubles from one level to the next",
+      "type": "int-list",
+      "optional": false,
+      "step": 1,
+      "default": [
+        50,
+        50,
+        50,
+        50
+      ],
+      "browser_default": [
+        50,
+        50,
+        50,
+        50
+      ],
+      "level": "advanced",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 27,
+      "parent": "masking.inhomogeneity_method",
+      "cli_flag": "--n4-max-iterations",
+      "browser": "available"
+    },
+    {
+      "path": "n4.convergence_threshold",
+      "label": "Convergence",
+      "full_label": "Convergence threshold",
+      "context": "N4",
+      "help": "Stop a level once the change in the bias field (its coefficient of variation) falls to this; 0 runs every iteration",
+      "type": "float",
+      "optional": false,
+      "min": 0,
+      "default": 0,
+      "browser_default": 0,
+      "level": "advanced",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 28,
+      "parent": "masking.inhomogeneity_method",
+      "cli_flag": "--n4-convergence-threshold",
+      "browser": "available"
+    },
+    {
+      "path": "n4.mesh",
+      "label": "Mesh",
+      "full_label": "B-spline mesh",
+      "context": "N4",
+      "help": "B-spline mesh elements per axis at the first level (x y z)",
+      "type": "int-vec3",
+      "optional": false,
+      "min": 1,
+      "step": 1,
+      "default": [
+        1,
+        1,
+        1
+      ],
+      "browser_default": [
+        1,
+        1,
+        1
+      ],
+      "level": "advanced",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 29,
+      "parent": "masking.inhomogeneity_method",
+      "cli_flag": "--n4-mesh",
+      "browser": "available"
+    },
+    {
+      "path": "n4.spline_order",
+      "label": "Spline order",
+      "full_label": "B-spline order",
+      "context": "N4",
+      "help": "Order of the B-spline bias field: 1, 2 or 3",
+      "type": "int",
+      "optional": false,
+      "min": 1,
+      "max": 3,
+      "step": 1,
+      "default": 3,
+      "browser_default": 3,
+      "level": "advanced",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 30,
+      "parent": "masking.inhomogeneity_method",
+      "cli_flag": "--n4-spline-order",
+      "browser": "available"
+    },
+    {
+      "path": "n4.bias_field_fwhm",
+      "label": "Bias FWHM",
+      "full_label": "Bias field FWHM",
+      "context": "N4",
+      "help": "FWHM of the Gaussian modelling the bias field's blurring of the log-intensity histogram",
+      "type": "float",
+      "optional": false,
+      "min": 0,
+      "exclusive_min": true,
+      "default": 0.15,
+      "browser_default": 0.15,
+      "level": "advanced",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 31,
+      "parent": "masking.inhomogeneity_method",
+      "cli_flag": "--n4-bias-field-fwhm",
+      "browser": "available"
+    },
+    {
+      "path": "n4.wiener_noise",
+      "label": "Wiener noise",
+      "full_label": "Wiener noise",
+      "context": "N4",
+      "help": "Noise term of the Wiener deconvolution of the histogram",
+      "type": "float",
+      "optional": false,
+      "min": 0,
+      "default": 0.01,
+      "browser_default": 0.01,
+      "level": "advanced",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 32,
+      "parent": "masking.inhomogeneity_method",
+      "cli_flag": "--n4-wiener-noise",
+      "browser": "available"
+    },
+    {
+      "path": "n4.histogram_bins",
+      "label": "Histogram bins",
+      "full_label": "Histogram bins",
+      "context": "N4",
+      "help": "Bins of the log-intensity histogram",
+      "type": "int",
+      "optional": false,
+      "min": 2,
+      "step": 1,
+      "default": 200,
+      "browser_default": 200,
+      "level": "advanced",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 33,
+      "parent": "masking.inhomogeneity_method",
+      "cli_flag": "--n4-histogram-bins",
+      "browser": "available"
+    },
+    {
+      "path": "masking.n4_geometry",
+      "label": "Geometry",
+      "full_label": "Image geometry",
+      "context": "N4",
+      "help": "The image geometry N4 is given, which decides where its shrunk grid falls",
+      "type": "enum",
+      "options": [
+        {
+          "value": "scanner",
+          "label": "scanner",
+          "name": "Scanner",
+          "help": "The scan's header, as ANTs reads the acquired NIfTI"
+        },
+        {
+          "value": "make-nii",
+          "label": "make-nii",
+          "name": "make_nii",
+          "help": "The axis-aligned header MATLAB's make_nii writes, as QSMART runs N4"
+        }
+      ],
+      "optional": false,
+      "default": "scanner",
+      "browser_default": "scanner",
+      "level": "advanced",
+      "tab": "preprocessing",
+      "section": "masking",
+      "order": 34,
+      "parent": "masking.inhomogeneity_method",
+      "cli_flag": "--n4-geometry",
       "browser": "available"
     },
     {
@@ -824,7 +893,7 @@
       "level": "basic",
       "tab": "preprocessing",
       "section": "motion",
-      "order": 33,
+      "order": 35,
       "cli_flag": "--motion-correction",
       "browser": "available"
     },
@@ -866,7 +935,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "motion",
-      "order": 34,
+      "order": 36,
       "parent": "motion_correction.enabled",
       "cli_flag": "--motion-reference",
       "browser": "available"
@@ -883,7 +952,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "motion",
-      "order": 35,
+      "order": 37,
       "parent": "motion_correction.enabled",
       "cli_flag": "--no-motion-chain",
       "browser": "available"
@@ -901,7 +970,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "motion",
-      "order": 36,
+      "order": 38,
       "parent": "motion_correction.chain",
       "cli_flag": "--motion-chain-levels",
       "browser": "available"
@@ -918,7 +987,7 @@
       "level": "advanced",
       "tab": "preprocessing",
       "section": "motion",
-      "order": 37,
+      "order": 39,
       "parent": "motion_correction.enabled",
       "cli_flag": "--motion-min-ncc",
       "browser": "available"
@@ -940,7 +1009,7 @@
       "also_in": [
         "multi-orientation"
       ],
-      "order": 38,
+      "order": 40,
       "cli_flag": "--registration-levels",
       "browser": "available"
     },
@@ -961,7 +1030,7 @@
       "also_in": [
         "multi-orientation"
       ],
-      "order": 39,
+      "order": 41,
       "cli_flag": "--registration-max-samples",
       "browser": "available"
     },
@@ -982,7 +1051,7 @@
       "also_in": [
         "multi-orientation"
       ],
-      "order": 40,
+      "order": 42,
       "cli_flag": "--registration-max-iterations",
       "browser": "available"
     },
@@ -1003,7 +1072,7 @@
       "also_in": [
         "multi-orientation"
       ],
-      "order": 41,
+      "order": 43,
       "cli_flag": "--registration-max-evaluations",
       "browser": "available"
     },
@@ -1023,7 +1092,7 @@
       "also_in": [
         "multi-orientation"
       ],
-      "order": 42,
+      "order": 44,
       "cli_flag": "--registration-tolerance",
       "browser": "available"
     },
@@ -1044,7 +1113,7 @@
       "also_in": [
         "multi-orientation"
       ],
-      "order": 43,
+      "order": 45,
       "cli_flag": "--registration-rotation-step-deg",
       "browser": "available"
     },
@@ -1065,7 +1134,7 @@
       "also_in": [
         "multi-orientation"
       ],
-      "order": 44,
+      "order": 46,
       "cli_flag": "--registration-translation-step-mm",
       "browser": "available"
     },
@@ -1085,7 +1154,7 @@
       "also_in": [
         "multi-orientation"
       ],
-      "order": 45,
+      "order": 47,
       "cli_flag": "--registration-min-overlap",
       "browser": "available"
     },
@@ -1131,7 +1200,7 @@
       "level": "basic",
       "tab": "qsm",
       "section": "field-map",
-      "order": 46,
+      "order": 48,
       "cli_flag": "--unwrapping-algorithm",
       "browser": "available"
     },
@@ -1168,7 +1237,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 47,
+      "order": 49,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--prelude-labelling",
       "browser": "available"
@@ -1188,7 +1257,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 48,
+      "order": 50,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--prelude-partitions",
       "browser": "available"
@@ -1217,6 +1286,12 @@
           "label": "mirror",
           "name": "Mirror",
           "help": "Schofield & Zhu sin/cos Laplacian, FFT solve on the volume mirrored along each axis (QSMART's reference)"
+        },
+        {
+          "value": "mgpcg",
+          "label": "mgpcg",
+          "name": "MGPCG",
+          "help": "MGPCG (QSM.jl): Laplacian unwrapping with LBV background removal in one step; QSM.jl follows it with V-SHARP to remove remaining background"
         }
       ],
       "optional": false,
@@ -1225,7 +1300,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 49,
+      "order": 51,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--laplacian-solver",
       "browser": "available"
@@ -1252,7 +1327,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 50,
+      "order": 52,
       "parent": "field_mapping.laplacian_solver",
       "cli_flag": "--laplacian-fft-pad",
       "browser": "available"
@@ -1269,9 +1344,26 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 51,
+      "order": 53,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--laplacian-unmasked",
+      "browser": "available"
+    },
+    {
+      "path": "field_mapping.laplacian_keep_outside",
+      "label": "Keep field outside",
+      "full_label": "Laplacian field kept outside the mask",
+      "help": "Keep the field over the whole volume, not only inside the brain mask, as UK Biobank's pipeline hands it to V-SHARP (weighted-average combination)",
+      "type": "bool",
+      "optional": false,
+      "default": false,
+      "browser_default": false,
+      "level": "advanced",
+      "tab": "qsm",
+      "section": "field-map",
+      "order": 54,
+      "parent": "field_mapping.unwrapping_algorithm",
+      "cli_flag": "--laplacian-keep-outside",
       "browser": "available"
     },
     {
@@ -1283,10 +1375,10 @@
       "optional": false,
       "default": true,
       "browser_default": true,
-      "level": "advanced",
+      "level": "basic",
       "tab": "qsm",
       "section": "field-map",
-      "order": 52,
+      "order": 55,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--phase-offset-removal",
       "browser": "available"
@@ -1312,7 +1404,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 53,
+      "order": 56,
       "parent": "field_mapping.phase_offset_removal",
       "cli_flag": "--phase-offset-sigma-mm",
       "browser": "available"
@@ -1326,10 +1418,10 @@
       "optional": false,
       "default": false,
       "browser_default": false,
-      "level": "advanced",
+      "level": "basic",
       "tab": "qsm",
       "section": "field-map",
-      "order": 54,
+      "order": 57,
       "parent": "field_mapping.phase_offset_removal",
       "cli_flag": "--bipolar-correction",
       "browser": "available"
@@ -1339,17 +1431,17 @@
       "label": "Individual mode",
       "full_label": "Unwrap echoes individually",
       "context": "ROMEO",
-      "help": "Unwrap each echo independently (recommended). Off = template-based temporal unwrapping.",
+      "help": "Unwrap each echo on its own (for motion or time series). Off = the template echo is unwrapped spatially and the others temporally from it.",
       "type": "bool",
       "optional": false,
-      "default": true,
-      "browser_default": true,
+      "default": false,
+      "browser_default": false,
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 55,
+      "order": 58,
       "parent": "field_mapping.unwrapping_algorithm",
-      "cli_flag": "--no-romeo-individual",
+      "cli_flag": "--romeo-individual",
       "browser": "available"
     },
     {
@@ -1366,7 +1458,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 56,
+      "order": 59,
       "parent": "field_mapping.romeo.individual",
       "cli_flag": "--romeo-template",
       "browser": "available"
@@ -1379,14 +1471,14 @@
       "help": "Correct inter-echo 2π offsets after unwrapping",
       "type": "bool",
       "optional": false,
-      "default": true,
-      "browser_default": true,
+      "default": false,
+      "browser_default": false,
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 57,
+      "order": 60,
       "parent": "field_mapping.unwrapping_algorithm",
-      "cli_flag": "--no-romeo-correct-global",
+      "cli_flag": "--romeo-correct-global",
       "browser": "available"
     },
     {
@@ -1402,7 +1494,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 58,
+      "order": 61,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--no-romeo-phase-coherence",
       "browser": "available"
@@ -1420,7 +1512,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 59,
+      "order": 62,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--no-romeo-phase-gradient-coherence",
       "browser": "available"
@@ -1438,7 +1530,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 60,
+      "order": 63,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--no-romeo-phase-linearity",
       "browser": "available"
@@ -1456,7 +1548,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 61,
+      "order": 64,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--no-romeo-mag-coherence",
       "browser": "available"
@@ -1474,7 +1566,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 62,
+      "order": 65,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--romeo-mag-weight",
       "browser": "available"
@@ -1492,7 +1584,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 63,
+      "order": 66,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--romeo-mag-weight2",
       "browser": "available"
@@ -1510,7 +1602,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 64,
+      "order": 67,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--romeo-bestpath",
       "browser": "available"
@@ -1526,12 +1618,12 @@
       "type": "float",
       "optional": false,
       "off": 0,
-      "default": 0.5,
-      "browser_default": 0.5,
+      "default": 0,
+      "browser_default": 0,
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 65,
+      "order": 68,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--romeo-temporal-uncertain-unwrapping",
       "browser": "available"
@@ -1550,7 +1642,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 66,
+      "order": 69,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--romeo-max-seeds",
       "browser": "available"
@@ -1568,7 +1660,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 67,
+      "order": 70,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--romeo-merge-regions",
       "browser": "available"
@@ -1586,7 +1678,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 68,
+      "order": 71,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--romeo-correct-regions",
       "browser": "available"
@@ -1604,7 +1696,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 69,
+      "order": 72,
       "parent": "field_mapping.unwrapping_algorithm",
       "cli_flag": "--romeo-wrap-addition",
       "browser": "available"
@@ -1621,7 +1713,7 @@
       "level": "basic",
       "tab": "qsm",
       "section": "field-map",
-      "order": 70,
+      "order": 73,
       "cli_flag": "--qsm-per-echo",
       "browser": "available"
     },
@@ -1669,7 +1761,7 @@
       "level": "basic",
       "tab": "qsm",
       "section": "field-map",
-      "order": 71,
+      "order": 74,
       "cli_flag": "--b0-estimation",
       "browser": "available"
     },
@@ -1684,22 +1776,22 @@
           "value": "percentile",
           "label": "percentile",
           "name": "Percentile",
-          "help": "A percentile of the blurred fit residual over the volume, as QSMART's authors run it"
+          "help": "A percentile of the blurred fit residual over the volume, as the authors' October 2020 demo runs it"
         },
         {
           "value": "absolute",
           "label": "absolute",
           "name": "Fixed",
-          "help": "A fixed fit residual"
+          "help": "A fixed fit residual, as QSMART v1.0 runs it"
         }
       ],
       "optional": false,
-      "default": "percentile",
-      "browser_default": "percentile",
+      "default": "absolute",
+      "browser_default": "absolute",
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 72,
+      "order": 75,
       "parent": "field_mapping.b0_estimation",
       "cli_flag": "--qsmart-fit-threshold-mode",
       "browser": "available"
@@ -1719,7 +1811,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 73,
+      "order": 76,
       "parent": "field_mapping.qsmart_fit_threshold_mode",
       "cli_flag": "--qsmart-fit-percentile",
       "browser": "available"
@@ -1738,7 +1830,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 74,
+      "order": 77,
       "parent": "field_mapping.qsmart_fit_threshold_mode",
       "cli_flag": "--qsmart-fit-threshold",
       "browser": "available"
@@ -1793,7 +1885,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 75,
+      "order": 78,
       "parent": "field_mapping.b0_estimation",
       "cli_flag": "--b0-weight-type",
       "browser": "available"
@@ -1813,7 +1905,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 76,
+      "order": 79,
       "parent": "field_mapping.b0_weight_type",
       "cli_flag": "--b0-weight-assumed-t2star",
       "browser": "available"
@@ -1831,7 +1923,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 77,
+      "order": 80,
       "parent": "field_mapping.b0_estimation",
       "cli_flag": "--linear-fit-estimate-offset",
       "browser": "available"
@@ -1863,7 +1955,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 78,
+      "order": 81,
       "parent": "field_mapping.b0_estimation",
       "cli_flag": "--robust-fit-loss",
       "browser": "available"
@@ -1883,7 +1975,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 79,
+      "order": 82,
       "parent": "field_mapping.b0_estimation",
       "cli_flag": "--robust-fit-tuning",
       "browser": "available"
@@ -1902,7 +1994,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 80,
+      "order": 83,
       "parent": "field_mapping.b0_estimation",
       "cli_flag": "--robust-fit-iterations",
       "browser": "available"
@@ -1923,7 +2015,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 81,
+      "order": 84,
       "parent": "field_mapping.b0_estimation",
       "cli_flag": "--robust-fit-downweight-level",
       "browser": "available"
@@ -1942,7 +2034,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 82,
+      "order": 85,
       "parent": "field_mapping.b0_estimation",
       "cli_flag": "--robust-fit-flag-ratio",
       "browser": "available"
@@ -1961,7 +2053,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 83,
+      "order": 86,
       "parent": "field_mapping.b0_estimation",
       "cli_flag": "--complex-fit-reltol",
       "browser": "available"
@@ -1980,7 +2072,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "field-map",
-      "order": 84,
+      "order": 87,
       "parent": "field_mapping.b0_estimation",
       "cli_flag": "--complex-fit-max-iter",
       "browser": "available"
@@ -2068,8 +2160,59 @@
       "level": "basic",
       "tab": "qsm",
       "section": "background",
-      "order": 85,
+      "order": 88,
       "cli_flag": "--bf-algorithm",
+      "browser": "available"
+    },
+    {
+      "path": "bg_removal.erode_voxels",
+      "label": "Erode mask",
+      "full_label": "Erode mask",
+      "help": "Erode the brain mask before background removal; the field map itself is not masked again",
+      "type": "int",
+      "optional": false,
+      "units": "voxels",
+      "min": 0,
+      "step": 1,
+      "default": 0,
+      "browser_default": 0,
+      "level": "advanced",
+      "tab": "qsm",
+      "section": "background",
+      "order": 89,
+      "cli_flag": "--bf-erode-voxels",
+      "browser": "available"
+    },
+    {
+      "path": "bg_removal.polish_mask",
+      "label": "Polish mask",
+      "full_label": "Polish mask",
+      "help": "Keep the background-removal mask's largest connected component, holes filled, as STI Suite's PolishMask",
+      "type": "bool",
+      "optional": false,
+      "default": false,
+      "browser_default": false,
+      "level": "advanced",
+      "tab": "qsm",
+      "section": "background",
+      "order": 90,
+      "cli_flag": "--bf-polish-mask",
+      "browser": "available"
+    },
+    {
+      "path": "bg_removal.ukb_mask_trim",
+      "label": "UKB mask trim",
+      "full_label": "UKB mask trim",
+      "help": "Trim the mask by the phase reliability of the first and last echo before and after background removal, as UK Biobank's pipeline does",
+      "type": "bool",
+      "optional": false,
+      "default": false,
+      "browser_default": false,
+      "level": "advanced",
+      "tab": "qsm",
+      "section": "background",
+      "order": 91,
+      "cli_flag": "--bf-ukb-mask-trim",
       "browser": "available"
     },
     {
@@ -2085,7 +2228,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 86,
+      "order": 92,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--vsharp-deconvolve",
       "browser": "available"
@@ -2105,7 +2248,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 87,
+      "order": 93,
       "parent": "bg_removal.vsharp.deconvolve",
       "cli_flag": "--vsharp-threshold",
       "browser": "available"
@@ -2124,7 +2267,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 88,
+      "order": 94,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--vsharp-max-radius",
       "browser": "available"
@@ -2145,7 +2288,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 89,
+      "order": 95,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--vsharp-min-radius",
       "browser": "available"
@@ -2166,7 +2309,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 90,
+      "order": 96,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--vsharp-radius-step",
       "browser": "available"
@@ -2204,7 +2347,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 91,
+      "order": 97,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--vsharp-grid",
       "browser": "available"
@@ -2225,7 +2368,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 92,
+      "order": 98,
       "parent": "bg_removal.vsharp.grid",
       "cli_flag": "--vsharp-grid-spacing",
       "browser": "available"
@@ -2243,7 +2386,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 93,
+      "order": 99,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--pdf-tol",
       "browser": "available"
@@ -2263,7 +2406,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 94,
+      "order": 100,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--pdf-n-cg",
       "browser": "available"
@@ -2295,7 +2438,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 95,
+      "order": 101,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--pdf-space",
       "browser": "available"
@@ -2316,7 +2459,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 96,
+      "order": 102,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--pdf-n-pad",
       "browser": "available"
@@ -2335,7 +2478,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 97,
+      "order": 103,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--lbv-tol",
       "browser": "available"
@@ -2356,7 +2499,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 98,
+      "order": 104,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--lbv-depth",
       "browser": "available"
@@ -2377,7 +2520,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 99,
+      "order": 105,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--lbv-peel",
       "browser": "available"
@@ -2397,7 +2540,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 100,
+      "order": 106,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--lbv-n1",
       "browser": "available"
@@ -2417,7 +2560,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 101,
+      "order": 107,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--lbv-n2",
       "browser": "available"
@@ -2437,7 +2580,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 102,
+      "order": 108,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--lbv-n3",
       "browser": "available"
@@ -2469,7 +2612,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 103,
+      "order": 109,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--lbv-precision",
       "browser": "available"
@@ -2501,7 +2644,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 104,
+      "order": 110,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--ismv-variant",
       "browser": "available"
@@ -2521,7 +2664,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 105,
+      "order": 111,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--ismv-tol",
       "browser": "available"
@@ -2541,7 +2684,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 106,
+      "order": 112,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--ismv-max-iter",
       "browser": "available"
@@ -2562,7 +2705,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 107,
+      "order": 113,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--ismv-radius",
       "browser": "available"
@@ -2582,7 +2725,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 108,
+      "order": 114,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--sharp-threshold",
       "browser": "available"
@@ -2601,7 +2744,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 109,
+      "order": 115,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--sharp-radius",
       "browser": "available"
@@ -2620,7 +2763,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 110,
+      "order": 116,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--resharp-radius",
       "browser": "available"
@@ -2638,7 +2781,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 111,
+      "order": 117,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--resharp-tik-reg",
       "browser": "available"
@@ -2656,7 +2799,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 112,
+      "order": 118,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--resharp-tol",
       "browser": "available"
@@ -2676,7 +2819,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 113,
+      "order": 119,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--resharp-max-iter",
       "browser": "available"
@@ -2695,7 +2838,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 114,
+      "order": 120,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--harperella-radius",
       "browser": "available"
@@ -2714,7 +2857,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 115,
+      "order": 121,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--harperella-max-iter",
       "browser": "available"
@@ -2732,7 +2875,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 116,
+      "order": 122,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--harperella-tol",
       "browser": "available"
@@ -2760,9 +2903,41 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 117,
+      "order": 123,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--harperella-pad",
+      "browser": "available"
+    },
+    {
+      "path": "bg_removal.harperella.rim",
+      "label": "Boundary rim",
+      "full_label": "Boundary rim",
+      "context": "HARPERELLA",
+      "help": "Which Laplacian values in the brain's boundary rim are set to zero",
+      "type": "enum",
+      "options": [
+        {
+          "value": "whole",
+          "label": "whole",
+          "name": "Whole",
+          "help": "Zero every Laplacian value in the brain's boundary rim"
+        },
+        {
+          "value": "sti",
+          "label": "sti",
+          "name": "Largest 20 % (STI)",
+          "help": "Zero the 20 % largest Laplacian values in the rim, as STI Suite does"
+        }
+      ],
+      "optional": false,
+      "default": "whole",
+      "browser_default": "whole",
+      "level": "advanced",
+      "tab": "qsm",
+      "section": "background",
+      "order": 124,
+      "parent": "bg_removal.algorithm",
+      "cli_flag": "--harperella-rim",
       "browser": "available"
     },
     {
@@ -2779,7 +2954,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 118,
+      "order": 125,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--iharperella-max-iter",
       "browser": "available"
@@ -2797,7 +2972,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 119,
+      "order": 126,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--iharperella-tol",
       "browser": "available"
@@ -2825,9 +3000,41 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "background",
-      "order": 120,
+      "order": 127,
       "parent": "bg_removal.algorithm",
       "cli_flag": "--iharperella-pad",
+      "browser": "available"
+    },
+    {
+      "path": "bg_removal.iharperella.rim",
+      "label": "Boundary rim",
+      "full_label": "Boundary rim",
+      "context": "iHARPERELLA",
+      "help": "Which Laplacian values in the brain's boundary rim are set to zero",
+      "type": "enum",
+      "options": [
+        {
+          "value": "whole",
+          "label": "whole",
+          "name": "Whole",
+          "help": "Zero every Laplacian value in the brain's boundary rim"
+        },
+        {
+          "value": "sti",
+          "label": "sti",
+          "name": "Largest 20 % (STI)",
+          "help": "Zero the 20 % largest Laplacian values in the rim, as STI Suite does"
+        }
+      ],
+      "optional": false,
+      "default": "sti",
+      "browser_default": "sti",
+      "level": "advanced",
+      "tab": "qsm",
+      "section": "background",
+      "order": 128,
+      "parent": "bg_removal.algorithm",
+      "cli_flag": "--iharperella-rim",
       "browser": "available"
     },
     {
@@ -2848,7 +3055,7 @@
         "multi-orientation",
         "reference"
       ],
-      "order": 121,
+      "order": 129,
       "cli_flag": "--no-qsm",
       "browser": "available"
     },
@@ -3090,7 +3297,7 @@
       "level": "basic",
       "tab": "qsm",
       "section": "inversion",
-      "order": 122,
+      "order": 130,
       "cli_flag": "--qsm-algorithm",
       "browser": "available"
     },
@@ -3109,7 +3316,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 123,
+      "order": 131,
       "parent": "inversion.algorithm",
       "cli_flag": "--rts-delta",
       "browser": "available"
@@ -3127,7 +3334,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 124,
+      "order": 132,
       "parent": "inversion.algorithm",
       "cli_flag": "--rts-mu",
       "browser": "available"
@@ -3145,7 +3352,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 125,
+      "order": 133,
       "parent": "inversion.algorithm",
       "cli_flag": "--rts-rho",
       "browser": "available"
@@ -3163,7 +3370,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 126,
+      "order": 134,
       "parent": "inversion.algorithm",
       "cli_flag": "--rts-tol",
       "browser": "available"
@@ -3182,7 +3389,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 127,
+      "order": 135,
       "parent": "inversion.algorithm",
       "cli_flag": "--rts-max-iter",
       "browser": "available"
@@ -3201,7 +3408,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 128,
+      "order": 136,
       "parent": "inversion.algorithm",
       "cli_flag": "--rts-lsmr-iter",
       "browser": "available"
@@ -3219,7 +3426,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 129,
+      "order": 137,
       "parent": "inversion.algorithm",
       "cli_flag": "--rts-tau",
       "browser": "available"
@@ -3237,7 +3444,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 130,
+      "order": 138,
       "parent": "inversion.algorithm",
       "cli_flag": "--rts-gamma",
       "browser": "available"
@@ -3266,7 +3473,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 131,
+      "order": 139,
       "parent": "inversion.algorithm",
       "cli_flag": "--rts-pad",
       "browser": "available"
@@ -3279,12 +3486,12 @@
       "help": "L1 regularisation weight (larger = smoother)",
       "type": "float",
       "optional": false,
-      "default": 0.001,
-      "browser_default": 0.001,
+      "default": 0.0003,
+      "browser_default": 0.0003,
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 132,
+      "order": 140,
       "parent": "inversion.algorithm",
       "cli_flag": "--tv-lambda",
       "browser": "available"
@@ -3304,7 +3511,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 133,
+      "order": 141,
       "parent": "inversion.algorithm",
       "cli_flag": "--tv-rho",
       "browser": "available"
@@ -3322,7 +3529,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 134,
+      "order": 142,
       "parent": "inversion.algorithm",
       "cli_flag": "--tv-tol",
       "browser": "available"
@@ -3342,7 +3549,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 135,
+      "order": 143,
       "parent": "inversion.algorithm",
       "cli_flag": "--tv-max-iter",
       "browser": "available"
@@ -3371,7 +3578,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 136,
+      "order": 144,
       "parent": "inversion.algorithm",
       "cli_flag": "--tv-pad",
       "browser": "available"
@@ -3381,19 +3588,19 @@
       "label": "Threshold",
       "full_label": "Threshold",
       "context": "TKD",
-      "help": "Truncation threshold for k-space division (0.1-0.2)",
+      "help": "Truncation threshold for k-space division (0.1-0.3); larger is smoother and underestimates χ more",
       "type": "float",
       "optional": false,
       "min": 0,
       "max": 0.6666666666666666,
       "exclusive_min": true,
       "exclusive_max": true,
-      "default": 0.15,
-      "browser_default": 0.15,
+      "default": 0.25,
+      "browser_default": 0.25,
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 137,
+      "order": 145,
       "parent": "inversion.algorithm",
       "cli_flag": "--tkd-threshold",
       "browser": "available"
@@ -3422,7 +3629,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 138,
+      "order": 146,
       "parent": "inversion.algorithm",
       "cli_flag": "--tkd-pad",
       "browser": "available"
@@ -3443,7 +3650,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 139,
+      "order": 147,
       "parent": "inversion.algorithm",
       "cli_flag": "--tsvd-threshold",
       "browser": "available"
@@ -3472,7 +3679,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 140,
+      "order": 148,
       "parent": "inversion.algorithm",
       "cli_flag": "--tsvd-pad",
       "browser": "available"
@@ -3492,7 +3699,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 141,
+      "order": 149,
       "parent": "inversion.algorithm",
       "cli_flag": "--tgv-iterations",
       "browser": "available"
@@ -3511,7 +3718,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 142,
+      "order": 150,
       "parent": "inversion.algorithm",
       "cli_flag": "--tgv-erosions",
       "browser": "available"
@@ -3531,7 +3738,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 143,
+      "order": 151,
       "parent": "inversion.algorithm",
       "cli_flag": "--tgv-alpha1",
       "browser": "available"
@@ -3551,7 +3758,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 144,
+      "order": 152,
       "parent": "inversion.algorithm",
       "cli_flag": "--tgv-alpha0",
       "browser": "available"
@@ -3569,7 +3776,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 145,
+      "order": 153,
       "parent": "inversion.algorithm",
       "cli_flag": "--tgv-step-size",
       "browser": "available"
@@ -3628,7 +3835,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 146,
+      "order": 154,
       "parent": "inversion.algorithm",
       "cli_flag": "--tgv-te",
       "browser": "available"
@@ -3646,7 +3853,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 147,
+      "order": 155,
       "parent": "inversion.algorithm",
       "cli_flag": "--tikhonov-lambda",
       "browser": "available"
@@ -3675,7 +3882,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 148,
+      "order": 156,
       "parent": "inversion.algorithm",
       "cli_flag": "--tikhonov-pad",
       "browser": "available"
@@ -3693,7 +3900,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 149,
+      "order": 157,
       "parent": "inversion.algorithm",
       "cli_flag": "--nltv-lambda",
       "browser": "available"
@@ -3713,7 +3920,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 150,
+      "order": 158,
       "parent": "inversion.algorithm",
       "cli_flag": "--nltv-rho",
       "browser": "available"
@@ -3731,7 +3938,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 151,
+      "order": 159,
       "parent": "inversion.algorithm",
       "cli_flag": "--nltv-mu",
       "browser": "available"
@@ -3749,7 +3956,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 152,
+      "order": 160,
       "parent": "inversion.algorithm",
       "cli_flag": "--nltv-tol",
       "browser": "available"
@@ -3769,7 +3976,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 153,
+      "order": 161,
       "parent": "inversion.algorithm",
       "cli_flag": "--nltv-max-iter",
       "browser": "available"
@@ -3787,7 +3994,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 154,
+      "order": 162,
       "parent": "inversion.algorithm",
       "cli_flag": "--nltv-tol-newton",
       "browser": "available"
@@ -3807,7 +4014,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 155,
+      "order": 163,
       "parent": "inversion.algorithm",
       "cli_flag": "--nltv-newton-iter",
       "browser": "available"
@@ -3866,7 +4073,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 156,
+      "order": 164,
       "parent": "inversion.algorithm",
       "cli_flag": "--nltv-te",
       "browser": "available"
@@ -3895,7 +4102,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 157,
+      "order": 165,
       "parent": "inversion.algorithm",
       "cli_flag": "--nltv-pad",
       "browser": "available"
@@ -3910,10 +4117,10 @@
       "optional": false,
       "default": true,
       "browser_default": true,
-      "level": "advanced",
+      "level": "basic",
       "tab": "qsm",
       "section": "inversion",
-      "order": 158,
+      "order": 166,
       "parent": "inversion.algorithm",
       "cli_flag": "--no-medi-smv",
       "browser": "available"
@@ -3932,7 +4139,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 159,
+      "order": 167,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-smv-radius",
       "browser": "available"
@@ -3950,7 +4157,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 160,
+      "order": 168,
       "parent": "inversion.medi.smv",
       "cli_flag": "--no-medi-smv-shrink-mask",
       "browser": "available"
@@ -3965,10 +4172,10 @@
       "optional": false,
       "default": false,
       "browser_default": false,
-      "level": "advanced",
+      "level": "basic",
       "tab": "qsm",
       "section": "inversion",
-      "order": 161,
+      "order": 169,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-msmv",
       "browser": "available"
@@ -3988,7 +4195,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 162,
+      "order": 170,
       "parent": "inversion.medi.msmv",
       "cli_flag": "--medi-msmv-maxk",
       "browser": "available"
@@ -4009,7 +4216,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 163,
+      "order": 171,
       "parent": "inversion.medi.msmv",
       "cli_flag": "--medi-msmv-vessel-radius",
       "browser": "available"
@@ -4027,7 +4234,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 164,
+      "order": 172,
       "parent": "inversion.medi.msmv",
       "cli_flag": "--no-medi-msmv-prefilter",
       "browser": "available"
@@ -4045,7 +4252,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 165,
+      "order": 173,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-lambda",
       "browser": "available"
@@ -4063,7 +4270,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 166,
+      "order": 174,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-percentage",
       "browser": "available"
@@ -4083,7 +4290,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 167,
+      "order": 175,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-max-iter",
       "browser": "available"
@@ -4103,7 +4310,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 168,
+      "order": 176,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-cg-max-iter",
       "browser": "available"
@@ -4121,7 +4328,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 169,
+      "order": 177,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-cg-tol",
       "browser": "available"
@@ -4139,7 +4346,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 170,
+      "order": 178,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-tol",
       "browser": "available"
@@ -4157,7 +4364,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 171,
+      "order": 179,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-merit",
       "browser": "available"
@@ -4172,10 +4379,10 @@
       "optional": false,
       "default": true,
       "browser_default": true,
-      "level": "advanced",
+      "level": "basic",
       "tab": "qsm",
       "section": "inversion",
-      "order": 172,
+      "order": 180,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-csf",
       "browser": "available"
@@ -4194,7 +4401,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 173,
+      "order": 181,
       "parent": "inversion.medi.csf",
       "cli_flag": "--medi-lambda-csf",
       "browser": "available"
@@ -4215,7 +4422,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 174,
+      "order": 182,
       "parent": "inversion.medi.csf",
       "cli_flag": "--medi-csf-r2s-threshold",
       "browser": "available"
@@ -4233,7 +4440,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 175,
+      "order": 183,
       "parent": "inversion.medi.csf",
       "cli_flag": "--medi-csf-erode",
       "browser": "available"
@@ -4261,7 +4468,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 176,
+      "order": 184,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-zeropad",
       "browser": "available"
@@ -4293,7 +4500,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 177,
+      "order": 185,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-data-weighting",
       "browser": "available"
@@ -4352,7 +4559,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 178,
+      "order": 186,
       "parent": "inversion.algorithm",
       "cli_flag": "--medi-te",
       "browser": "available"
@@ -4370,7 +4577,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 179,
+      "order": 187,
       "parent": "inversion.algorithm",
       "cli_flag": "--tfi-lambda",
       "browser": "available"
@@ -4388,7 +4595,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 180,
+      "order": 188,
       "parent": "inversion.algorithm",
       "cli_flag": "--tfi-precond",
       "browser": "available"
@@ -4406,7 +4613,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 181,
+      "order": 189,
       "parent": "inversion.algorithm",
       "cli_flag": "--tfi-percentage",
       "browser": "available"
@@ -4426,7 +4633,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 182,
+      "order": 190,
       "parent": "inversion.algorithm",
       "cli_flag": "--tfi-max-iter",
       "browser": "available"
@@ -4446,7 +4653,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 183,
+      "order": 191,
       "parent": "inversion.algorithm",
       "cli_flag": "--tfi-cg-max-iter",
       "browser": "available"
@@ -4464,7 +4671,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 184,
+      "order": 192,
       "parent": "inversion.algorithm",
       "cli_flag": "--tfi-cg-tol",
       "browser": "available"
@@ -4482,7 +4689,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 185,
+      "order": 193,
       "parent": "inversion.algorithm",
       "cli_flag": "--tfi-tol",
       "browser": "available"
@@ -4500,7 +4707,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 186,
+      "order": 194,
       "parent": "inversion.algorithm",
       "cli_flag": "--tfi-merit",
       "browser": "available"
@@ -4515,10 +4722,10 @@
       "optional": false,
       "default": true,
       "browser_default": true,
-      "level": "advanced",
+      "level": "basic",
       "tab": "qsm",
       "section": "inversion",
-      "order": 187,
+      "order": 195,
       "parent": "inversion.algorithm",
       "cli_flag": "--tfi-linear",
       "browser": "available"
@@ -4550,7 +4757,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 188,
+      "order": 196,
       "parent": "inversion.algorithm",
       "cli_flag": "--tfi-data-weighting",
       "browser": "available"
@@ -4609,7 +4816,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 189,
+      "order": 197,
       "parent": "inversion.algorithm",
       "cli_flag": "--tfi-te",
       "browser": "available"
@@ -4627,7 +4834,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 190,
+      "order": 198,
       "parent": "inversion.algorithm",
       "cli_flag": "--ilsqr-tol",
       "browser": "available"
@@ -4646,7 +4853,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 191,
+      "order": 199,
       "parent": "inversion.algorithm",
       "cli_flag": "--ilsqr-max-iter",
       "browser": "available"
@@ -4666,7 +4873,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 192,
+      "order": 200,
       "parent": "inversion.algorithm",
       "cli_flag": "--ilsqr-pad-mm",
       "browser": "available"
@@ -4698,7 +4905,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 193,
+      "order": 201,
       "parent": "inversion.algorithm",
       "cli_flag": "--ilsqr-precision",
       "browser": "available"
@@ -4726,7 +4933,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 194,
+      "order": 202,
       "parent": "inversion.algorithm",
       "cli_flag": "--star-pad",
       "browser": "available"
@@ -4785,7 +4992,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 195,
+      "order": 203,
       "parent": "inversion.algorithm",
       "cli_flag": "--star-te",
       "browser": "available"
@@ -4803,7 +5010,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 196,
+      "order": 204,
       "parent": "inversion.algorithm",
       "cli_flag": "--lsqr-residual-weighting",
       "browser": "available"
@@ -4821,7 +5028,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 197,
+      "order": 205,
       "parent": "inversion.algorithm",
       "cli_flag": "--no-lsqr-global-offset",
       "browser": "available"
@@ -4839,7 +5046,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 198,
+      "order": 206,
       "parent": "inversion.algorithm",
       "cli_flag": "--lsqr-tol",
       "browser": "available"
@@ -4859,7 +5066,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 199,
+      "order": 207,
       "parent": "inversion.algorithm",
       "cli_flag": "--lsqr-max-iter",
       "browser": "available"
@@ -4873,10 +5080,10 @@
       "optional": false,
       "default": false,
       "browser_default": false,
-      "level": "advanced",
+      "level": "basic",
       "tab": "qsm",
       "section": "inversion",
-      "order": 200,
+      "order": 208,
       "parent": "inversion.algorithm",
       "cli_flag": "--heidi",
       "browser": "available"
@@ -4896,7 +5103,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 201,
+      "order": 209,
       "parent": "inversion.heidi.enabled",
       "cli_flag": "--heidi-cone-threshold",
       "browser": "available"
@@ -4915,7 +5122,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 202,
+      "order": 210,
       "parent": "inversion.heidi.enabled",
       "cli_flag": "--heidi-gradient-threshold",
       "browser": "available"
@@ -4933,7 +5140,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 203,
+      "order": 211,
       "parent": "inversion.heidi.enabled",
       "cli_flag": "--no-heidi-laplacian-correction",
       "browser": "available"
@@ -4951,7 +5158,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 204,
+      "order": 212,
       "parent": "inversion.heidi.apply_laplacian_correction",
       "cli_flag": "--heidi-laplacian-threshold",
       "browser": "available"
@@ -4969,7 +5176,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 205,
+      "order": 213,
       "parent": "inversion.heidi.enabled",
       "cli_flag": "--heidi-gradient-mask-floor",
       "browser": "available"
@@ -4988,7 +5195,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 206,
+      "order": 214,
       "parent": "inversion.heidi.enabled",
       "cli_flag": "--heidi-continuation-steps",
       "browser": "available"
@@ -5007,7 +5214,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 207,
+      "order": 215,
       "parent": "inversion.heidi.enabled",
       "cli_flag": "--heidi-inner-iterations",
       "browser": "available"
@@ -5027,7 +5234,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 208,
+      "order": 216,
       "parent": "inversion.heidi.enabled",
       "cli_flag": "--heidi-mu-min",
       "browser": "available"
@@ -5045,7 +5252,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 209,
+      "order": 217,
       "parent": "inversion.heidi.enabled",
       "cli_flag": "--heidi-tol",
       "browser": "available"
@@ -5104,7 +5311,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 210,
+      "order": 218,
       "parent": "inversion.heidi.enabled",
       "cli_flag": "--heidi-te",
       "browser": "available"
@@ -5122,7 +5329,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 211,
+      "order": 219,
       "parent": "inversion.heidi.enabled",
       "cli_flag": "--no-heidi-denoise",
       "browser": "available"
@@ -5141,7 +5348,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 212,
+      "order": 220,
       "parent": "inversion.heidi.denoise",
       "cli_flag": "--heidi-denoise-iterations",
       "browser": "available"
@@ -5159,7 +5366,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 213,
+      "order": 221,
       "parent": "inversion.heidi.denoise",
       "cli_flag": "--heidi-denoise-time-step",
       "browser": "available"
@@ -5177,7 +5384,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 214,
+      "order": 222,
       "parent": "inversion.heidi.denoise",
       "cli_flag": "--heidi-denoise-conductance",
       "browser": "available"
@@ -5195,7 +5402,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 215,
+      "order": 223,
       "parent": "inversion.heidi.denoise",
       "cli_flag": "--heidi-denoise-reference-itk",
       "browser": "available"
@@ -5260,10 +5467,10 @@
       "optional": false,
       "default": "ilsqr",
       "browser_default": "ilsqr",
-      "level": "advanced",
+      "level": "basic",
       "tab": "qsm",
       "section": "inversion",
-      "order": 216,
+      "order": 224,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-inversion",
       "browser": "available"
@@ -5283,7 +5490,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 217,
+      "order": 225,
       "parent": "inversion.qsmart.inversion",
       "cli_flag": "--qsmart-ilsqr-max-iter",
       "browser": "available"
@@ -5303,7 +5510,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 218,
+      "order": 226,
       "parent": "inversion.qsmart.inversion",
       "cli_flag": "--qsmart-ilsqr-pad-mm",
       "browser": "available"
@@ -5322,7 +5529,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 219,
+      "order": 227,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-sdf-sigma1-stage1",
       "browser": "available"
@@ -5341,7 +5548,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 220,
+      "order": 228,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-sdf-sigma2-stage1",
       "browser": "available"
@@ -5360,7 +5567,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 221,
+      "order": 229,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-sdf-sigma1-stage2",
       "browser": "available"
@@ -5379,7 +5586,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 222,
+      "order": 230,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-sdf-sigma2-stage2",
       "browser": "available"
@@ -5397,7 +5604,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 223,
+      "order": 231,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-sdf-lower-lim",
       "browser": "available"
@@ -5415,7 +5622,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 224,
+      "order": 232,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-sdf-curv-constant",
       "browser": "available"
@@ -5447,9 +5654,41 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 225,
+      "order": 233,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-vessel-magnitude",
+      "browser": "available"
+    },
+    {
+      "path": "inversion.qsmart.offset_grid",
+      "label": "Offset grid",
+      "full_label": "Offset adjustment grid",
+      "context": "QSMART",
+      "help": "The dipole grid QSMART's offset adjustment uses",
+      "type": "enum",
+      "options": [
+        {
+          "value": "fft",
+          "label": "fft",
+          "name": "FFT",
+          "help": "The FFT frequency grid"
+        },
+        {
+          "value": "qsmart-reference",
+          "label": "qsmart-reference",
+          "name": "QSMART's",
+          "help": "The grid QSMART's adjust_offset.m builds, half a step off the FFT grid on odd matrix sizes, as the QSMART pipeline runs it"
+        }
+      ],
+      "optional": false,
+      "default": "fft",
+      "browser_default": "fft",
+      "level": "advanced",
+      "tab": "qsm",
+      "section": "inversion",
+      "order": 234,
+      "parent": "inversion.algorithm",
+      "cli_flag": "--qsmart-offset-grid",
       "browser": "available"
     },
     {
@@ -5479,7 +5718,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 226,
+      "order": 235,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-vessel-units",
       "browser": "available"
@@ -5498,7 +5737,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 227,
+      "order": 236,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-vasc-sphere-radius",
       "browser": "available"
@@ -5516,7 +5755,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 228,
+      "order": 237,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-frangi-scale-min",
       "browser": "available"
@@ -5534,7 +5773,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 229,
+      "order": 238,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-frangi-scale-max",
       "browser": "available"
@@ -5554,7 +5793,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 230,
+      "order": 239,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-frangi-scale-ratio",
       "browser": "available"
@@ -5572,7 +5811,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 231,
+      "order": 240,
       "parent": "inversion.algorithm",
       "cli_flag": "--qsmart-frangi-c",
       "browser": "available"
@@ -5590,7 +5829,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 232,
+      "order": 241,
       "parent": "inversion.algorithm",
       "cli_flag": "--ndi-tau",
       "browser": "available"
@@ -5608,7 +5847,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 233,
+      "order": 242,
       "parent": "inversion.algorithm",
       "cli_flag": "--ndi-alpha",
       "browser": "available"
@@ -5628,7 +5867,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 234,
+      "order": 243,
       "parent": "inversion.algorithm",
       "cli_flag": "--ndi-max-iter",
       "browser": "available"
@@ -5646,7 +5885,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 235,
+      "order": 244,
       "parent": "inversion.algorithm",
       "cli_flag": "--ndi-auto-stop",
       "browser": "available"
@@ -5705,9 +5944,41 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 236,
+      "order": 245,
       "parent": "inversion.algorithm",
       "cli_flag": "--ndi-te",
+      "browser": "available"
+    },
+    {
+      "path": "inversion.ndi.weight_norm",
+      "label": "Weight normaliser",
+      "full_label": "Weight normaliser",
+      "context": "NDI",
+      "help": "What the magnitude is divided by to make the data weight",
+      "type": "enum",
+      "options": [
+        {
+          "value": "global-max",
+          "label": "global-max",
+          "name": "Global maximum",
+          "help": "The magnitude's maximum over the whole image, as FANSI"
+        },
+        {
+          "value": "mask-p999",
+          "label": "mask-p999",
+          "name": "Brain 99.9th percentile",
+          "help": "The magnitude's 99.9th percentile inside the mask; more consistent in vivo"
+        }
+      ],
+      "optional": false,
+      "default": "global-max",
+      "browser_default": "global-max",
+      "level": "advanced",
+      "tab": "qsm",
+      "section": "inversion",
+      "order": 246,
+      "parent": "inversion.algorithm",
+      "cli_flag": "--ndi-weight-norm",
       "browser": "available"
     },
     {
@@ -5723,7 +5994,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 237,
+      "order": 247,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-alpha1",
       "browser": "available"
@@ -5743,7 +6014,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 238,
+      "order": 248,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-mu1",
       "browser": "available"
@@ -5761,7 +6032,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 239,
+      "order": 249,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-mu2",
       "browser": "available"
@@ -5780,7 +6051,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 240,
+      "order": 250,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-alpha0",
       "browser": "available"
@@ -5800,7 +6071,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 241,
+      "order": 251,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-mu0",
       "browser": "available"
@@ -5820,7 +6091,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 242,
+      "order": 252,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-max-iter",
       "browser": "available"
@@ -5838,7 +6109,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 243,
+      "order": 253,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-tol-update",
       "browser": "available"
@@ -5856,7 +6127,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 244,
+      "order": 254,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-tol-delta",
       "browser": "available"
@@ -5915,7 +6186,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 245,
+      "order": 255,
       "parent": "inversion.algorithm",
       "cli_flag": "--fansi-te",
       "browser": "available"
@@ -5933,7 +6204,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 246,
+      "order": 256,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-alpha1",
       "browser": "available"
@@ -5953,7 +6224,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 247,
+      "order": 257,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-mu1",
       "browser": "available"
@@ -5971,7 +6242,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 248,
+      "order": 258,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-mu2",
       "browser": "available"
@@ -5989,7 +6260,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 249,
+      "order": 259,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-mu3",
       "browser": "available"
@@ -6007,7 +6278,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 250,
+      "order": 260,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-lambda",
       "browser": "available"
@@ -6027,7 +6298,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 251,
+      "order": 261,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-max-iter",
       "browser": "available"
@@ -6045,7 +6316,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 252,
+      "order": 262,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-tol-update",
       "browser": "available"
@@ -6063,7 +6334,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 253,
+      "order": 263,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-tol-delta",
       "browser": "available"
@@ -6122,7 +6393,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 254,
+      "order": 264,
       "parent": "inversion.algorithm",
       "cli_flag": "--l1qsm-te",
       "browser": "available"
@@ -6140,7 +6411,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 255,
+      "order": 265,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-alpha1",
       "browser": "available"
@@ -6158,7 +6429,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 256,
+      "order": 266,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-mu1",
       "browser": "available"
@@ -6176,7 +6447,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 257,
+      "order": 267,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-mu2",
       "browser": "available"
@@ -6194,7 +6465,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 258,
+      "order": 268,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-beta",
       "browser": "available"
@@ -6212,7 +6483,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 259,
+      "order": 269,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-muh",
       "browser": "available"
@@ -6231,7 +6502,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 260,
+      "order": 270,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-max-iter",
       "browser": "available"
@@ -6249,7 +6520,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 261,
+      "order": 271,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-tol-update",
       "browser": "available"
@@ -6267,7 +6538,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 262,
+      "order": 272,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-tol-delta",
       "browser": "available"
@@ -6284,7 +6555,13 @@
           "value": "flat",
           "label": "flat",
           "name": "Flat",
-          "help": "1 in the mask, no magnitude"
+          "help": "1 over the whole volume, no magnitude, as WH_nlTV.m"
+        },
+        {
+          "value": "flat-in-mask",
+          "label": "flat-in-mask",
+          "name": "Flat in mask",
+          "help": "1 inside the mask only, no magnitude"
         },
         {
           "value": "max-normalised",
@@ -6305,7 +6582,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 263,
+      "order": 273,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-weight",
       "browser": "available"
@@ -6364,7 +6641,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 264,
+      "order": 274,
       "parent": "inversion.algorithm",
       "cli_flag": "--whqsm-te",
       "browser": "available"
@@ -6383,7 +6660,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 265,
+      "order": 275,
       "parent": "inversion.algorithm",
       "cli_flag": "--hdqsm-alpha-l2",
       "browser": "available"
@@ -6403,7 +6680,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 266,
+      "order": 276,
       "parent": "inversion.algorithm",
       "cli_flag": "--hdqsm-mu1-l2",
       "browser": "available"
@@ -6421,7 +6698,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 267,
+      "order": 277,
       "parent": "inversion.algorithm",
       "cli_flag": "--hdqsm-mu2",
       "browser": "available"
@@ -6440,7 +6717,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 268,
+      "order": 278,
       "parent": "inversion.algorithm",
       "cli_flag": "--hdqsm-max-iter-l1",
       "browser": "available"
@@ -6459,7 +6736,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 269,
+      "order": 279,
       "parent": "inversion.algorithm",
       "cli_flag": "--hdqsm-max-iter-l2",
       "browser": "available"
@@ -6477,7 +6754,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 270,
+      "order": 280,
       "parent": "inversion.algorithm",
       "cli_flag": "--hdqsm-tol-update",
       "browser": "available"
@@ -6498,7 +6775,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 271,
+      "order": 281,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-wave-order",
       "browser": "available"
@@ -6518,7 +6795,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 272,
+      "order": 282,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-nlevel",
       "browser": "available"
@@ -6536,7 +6813,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 273,
+      "order": 283,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-wave-pec",
       "browser": "available"
@@ -6555,7 +6832,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 274,
+      "order": 284,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-simulated-te",
       "browser": "available"
@@ -6575,7 +6852,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 275,
+      "order": 285,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-max-linearization-ite",
       "browser": "available"
@@ -6593,7 +6870,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 276,
+      "order": 286,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-tikhonov-beta",
       "browser": "available"
@@ -6611,7 +6888,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 277,
+      "order": 287,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-damp-rate-sig",
       "browser": "available"
@@ -6629,7 +6906,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 278,
+      "order": 288,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-damp-rate-par",
       "browser": "available"
@@ -6648,7 +6925,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 279,
+      "order": 289,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-max-pe-spar-ite",
       "browser": "available"
@@ -6667,7 +6944,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 280,
+      "order": 290,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-max-pe-est-ite",
       "browser": "available"
@@ -6685,7 +6962,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 281,
+      "order": 291,
       "parent": "inversion.algorithm",
       "cli_flag": "--amp-pe-cvg-thd",
       "browser": "available"
@@ -6707,7 +6984,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 282,
+      "order": 292,
       "parent": "inversion.algorithm",
       "cli_flag": "--tile-size",
       "browser": "available"
@@ -6726,7 +7003,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "inversion",
-      "order": 283,
+      "order": 293,
       "parent": "inversion.tile_size",
       "cli_flag": "--tile-halo",
       "browser": "available"
@@ -6757,7 +7034,7 @@
       "level": "basic",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 284,
+      "order": 294,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--multi-orientation-algorithm",
       "browser": "unavailable"
@@ -6774,7 +7051,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 285,
+      "order": 295,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--multi-orientation-lambda",
       "browser": "unavailable"
@@ -6788,10 +7065,10 @@
       "optional": false,
       "default": "",
       "browser_default": "",
-      "level": "advanced",
+      "level": "basic",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 286,
+      "order": 296,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--orientation-reference",
       "browser": "unavailable"
@@ -6808,7 +7085,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 287,
+      "order": 297,
       "parent": "multi_orientation.algorithm",
       "cli_flag": "--cosmos-magnitude-weighting",
       "browser": "unavailable"
@@ -6827,7 +7104,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 288,
+      "order": 298,
       "parent": "multi_orientation.magnitude_weighting",
       "cli_flag": "--cosmos-tol",
       "browser": "unavailable"
@@ -6846,7 +7123,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 289,
+      "order": 299,
       "parent": "multi_orientation.magnitude_weighting",
       "cli_flag": "--cosmos-max-iter",
       "browser": "unavailable"
@@ -6860,10 +7137,10 @@
       "optional": false,
       "default": true,
       "browser_default": true,
-      "level": "advanced",
+      "level": "basic",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 290,
+      "order": 300,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--no-orientation-registration",
       "browser": "unavailable"
@@ -6880,7 +7157,7 @@
       "level": "advanced",
       "tab": "qsm",
       "section": "multi-orientation",
-      "order": 291,
+      "order": 301,
       "parent": "multi_orientation.group_by",
       "cli_flag": "--multi-orientation-force",
       "browser": "unavailable"
@@ -6917,7 +7194,7 @@
       "level": "basic",
       "tab": "qsm",
       "section": "reference",
-      "order": 292,
+      "order": 302,
       "cli_flag": "--qsm-reference",
       "browser": "available"
     },
@@ -7217,7 +7494,7 @@
       "level": "basic",
       "tab": "qsm",
       "section": "reference",
-      "order": 293,
+      "order": 303,
       "parent": "qsm.reference",
       "cli_flag": "--qsm-reference",
       "browser": "available"
@@ -7234,7 +7511,7 @@
       "level": "basic",
       "tab": "separation",
       "section": "separation",
-      "order": 294,
+      "order": 304,
       "cli_flag": "--do-chisep",
       "browser": "available"
     },
@@ -7300,7 +7577,7 @@
       "level": "basic",
       "tab": "separation",
       "section": "separation",
-      "order": 295,
+      "order": 305,
       "parent": "pipeline.do_chi_separation",
       "cli_flag": "--chisep",
       "browser": "available"
@@ -7319,7 +7596,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 296,
+      "order": 306,
       "parent": "separation.algorithm",
       "cli_flag": "--r2star-qsm-r-const-3t",
       "browser": "available"
@@ -7338,7 +7615,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 297,
+      "order": 307,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-n-inner",
       "browser": "available"
@@ -7368,7 +7645,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 298,
+      "order": 308,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-chi-bound",
       "browser": "available"
@@ -7386,9 +7663,41 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 299,
+      "order": 309,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-unwrap-phase",
+      "browser": "available"
+    },
+    {
+      "path": "separation.decompose.fit",
+      "label": "Fit",
+      "full_label": "DECOMPOSE fit",
+      "context": "DECOMPOSE-QSM",
+      "help": "The fit DECOMPOSE runs: its reference code's or its paper's",
+      "type": "enum",
+      "options": [
+        {
+          "value": "reference-code",
+          "label": "reference-code",
+          "name": "Reference code",
+          "help": "Tim Ho's script: lsqcurvefit for every stage, magnitudes scaled by their global maximum"
+        },
+        {
+          "value": "paper",
+          "label": "paper",
+          "name": "Paper",
+          "help": "Chen et al. 2021: amplitudes summing to one and R2*0 by linear least squares, χ± by lsqnonlin, each voxel scaled to S(0) = 1"
+        }
+      ],
+      "optional": false,
+      "default": "reference-code",
+      "browser_default": "reference-code",
+      "level": "advanced",
+      "tab": "separation",
+      "section": "separation",
+      "order": 310,
+      "parent": "separation.algorithm",
+      "cli_flag": "--decompose-fit",
       "browser": "available"
     },
     {
@@ -7405,7 +7714,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 300,
+      "order": 311,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-max-iterations",
       "browser": "available"
@@ -7424,7 +7733,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 301,
+      "order": 312,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-max-function-evaluations",
       "browser": "available"
@@ -7442,7 +7751,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 302,
+      "order": 313,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-function-tolerance",
       "browser": "available"
@@ -7460,7 +7769,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 303,
+      "order": 314,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-step-tolerance",
       "browser": "available"
@@ -7478,7 +7787,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 304,
+      "order": 315,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-optimality-tolerance",
       "browser": "available"
@@ -7497,7 +7806,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 305,
+      "order": 316,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-finite-difference-step",
       "browser": "available"
@@ -7516,7 +7825,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 306,
+      "order": 317,
       "parent": "separation.algorithm",
       "cli_flag": "--decompose-typical-x",
       "browser": "available"
@@ -7537,7 +7846,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 307,
+      "order": 318,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-dr-pos",
       "browser": "available"
@@ -7558,7 +7867,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 308,
+      "order": 319,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-dr-neg",
       "browser": "available"
@@ -7586,7 +7895,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 309,
+      "order": 320,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-pad",
       "browser": "available"
@@ -7605,7 +7914,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 310,
+      "order": 321,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-cg-max-iter-lsqr",
       "browser": "available"
@@ -7627,7 +7936,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 311,
+      "order": 322,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-cg-tol-lsqr",
       "browser": "available"
@@ -7646,7 +7955,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 312,
+      "order": 323,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-cg-max-iter-sa",
       "browser": "available"
@@ -7668,7 +7977,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 313,
+      "order": 324,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-cg-tol-sa",
       "browser": "available"
@@ -7688,7 +7997,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 314,
+      "order": 325,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-d2-thr",
       "browser": "available"
@@ -7708,7 +8017,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 315,
+      "order": 326,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-prc-w-i-min",
       "browser": "available"
@@ -7728,7 +8037,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 316,
+      "order": 327,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-prc-w-i-max",
       "browser": "available"
@@ -7748,7 +8057,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 317,
+      "order": 328,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-prc-w-g-min",
       "browser": "available"
@@ -7768,7 +8077,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 318,
+      "order": 329,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-prc-w-g-max",
       "browser": "available"
@@ -7777,6 +8086,7 @@
       "path": "separation.chi_sep_ilsqr.qsm_ilsqr.max_iter",
       "label": "QSM max iter",
       "full_label": "QSM maximum iterations",
+      "context": "χ-separation (iLSQR)",
       "help": "Maximum iterations of the iLSQR that reconstructs the QSM separated",
       "type": "int",
       "optional": false,
@@ -7787,7 +8097,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 319,
+      "order": 330,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-qsm-max-iter",
       "browser": "available"
@@ -7796,6 +8106,7 @@
       "path": "separation.chi_sep_ilsqr.qsm_ilsqr.tol",
       "label": "QSM tolerance",
       "full_label": "QSM tolerance",
+      "context": "χ-separation (iLSQR)",
       "help": "Tolerance of the iLSQR that reconstructs the QSM separated",
       "type": "float",
       "optional": false,
@@ -7804,7 +8115,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 320,
+      "order": 331,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-qsm-tol",
       "browser": "available"
@@ -7813,6 +8124,7 @@
       "path": "separation.chi_sep_ilsqr.qsm_ilsqr.pad_mm",
       "label": "QSM pad (mm)",
       "full_label": "QSM padding",
+      "context": "χ-separation (iLSQR)",
       "help": "Zero-padding per side of the iLSQR that reconstructs the QSM separated",
       "type": "float",
       "optional": false,
@@ -7823,7 +8135,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 321,
+      "order": 332,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-qsm-pad-mm",
       "browser": "available"
@@ -7832,6 +8144,7 @@
       "path": "separation.chi_sep_ilsqr.qsm_ilsqr.precision",
       "label": "QSM precision",
       "full_label": "QSM precision",
+      "context": "χ-separation (iLSQR)",
       "help": "Arithmetic of the two least-squares solves of the iLSQR that reconstructs the QSM separated",
       "type": "enum",
       "options": [
@@ -7854,7 +8167,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 322,
+      "order": 333,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-ilsqr-qsm-precision",
       "browser": "available"
@@ -7873,7 +8186,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 323,
+      "order": 334,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-lambda",
       "browser": "available"
@@ -7892,7 +8205,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 324,
+      "order": 335,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-lambda-csf",
       "browser": "available"
@@ -7913,7 +8226,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 325,
+      "order": 336,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-dr-pos",
       "browser": "available"
@@ -7934,7 +8247,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 326,
+      "order": 337,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-dr-neg",
       "browser": "available"
@@ -7954,7 +8267,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 327,
+      "order": 338,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-pad",
       "browser": "available"
@@ -7973,7 +8286,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 328,
+      "order": 339,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-tol",
       "browser": "available"
@@ -7993,7 +8306,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 329,
+      "order": 340,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-max-iter",
       "browser": "available"
@@ -8012,7 +8325,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 330,
+      "order": 341,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-cg-tol",
       "browser": "available"
@@ -8031,9 +8344,131 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 331,
+      "order": 342,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sep-medi-cg-max-iter",
+      "browser": "available"
+    },
+    {
+      "path": "separation.chi_sep_medi.qsm_ilsqr.max_iter",
+      "label": "QSM max iter",
+      "full_label": "QSM maximum iterations",
+      "context": "χ-separation (MEDI)",
+      "help": "Maximum iterations of the iLSQR that reconstructs the QSM χ-separation starts from",
+      "type": "int",
+      "optional": false,
+      "min": 1,
+      "step": 1,
+      "default": 100,
+      "browser_default": 100,
+      "level": "advanced",
+      "tab": "separation",
+      "section": "separation",
+      "order": 343,
+      "parent": "separation.algorithm",
+      "cli_flag": "--chi-sep-medi-qsm-max-iter",
+      "browser": "available"
+    },
+    {
+      "path": "separation.chi_sep_medi.qsm_ilsqr.tol",
+      "label": "QSM tolerance",
+      "full_label": "QSM tolerance",
+      "context": "χ-separation (MEDI)",
+      "help": "Tolerance of the iLSQR that reconstructs the QSM χ-separation starts from",
+      "type": "float",
+      "optional": false,
+      "default": 0.001,
+      "browser_default": 0.001,
+      "level": "advanced",
+      "tab": "separation",
+      "section": "separation",
+      "order": 344,
+      "parent": "separation.algorithm",
+      "cli_flag": "--chi-sep-medi-qsm-tol",
+      "browser": "available"
+    },
+    {
+      "path": "separation.chi_sep_medi.qsm_ilsqr.pad_mm",
+      "label": "QSM pad (mm)",
+      "full_label": "QSM padding",
+      "context": "χ-separation (MEDI)",
+      "help": "Zero-padding per side of the iLSQR that reconstructs the QSM χ-separation starts from",
+      "type": "float",
+      "optional": false,
+      "units": "mm",
+      "min": 0,
+      "default": 12,
+      "browser_default": 12,
+      "level": "advanced",
+      "tab": "separation",
+      "section": "separation",
+      "order": 345,
+      "parent": "separation.algorithm",
+      "cli_flag": "--chi-sep-medi-qsm-pad-mm",
+      "browser": "available"
+    },
+    {
+      "path": "separation.chi_sep_medi.qsm_ilsqr.precision",
+      "label": "QSM precision",
+      "full_label": "QSM precision",
+      "context": "χ-separation (MEDI)",
+      "help": "Arithmetic of the two least-squares solves of the iLSQR that reconstructs the QSM χ-separation starts from",
+      "type": "enum",
+      "options": [
+        {
+          "value": "double",
+          "label": "double",
+          "name": "Double",
+          "help": "Double precision"
+        },
+        {
+          "value": "single",
+          "label": "single",
+          "name": "Single",
+          "help": "Single precision, as the original implementation computes the solves; slower and uses more memory"
+        }
+      ],
+      "optional": false,
+      "default": "double",
+      "browser_default": "double",
+      "level": "advanced",
+      "tab": "separation",
+      "section": "separation",
+      "order": 346,
+      "parent": "separation.algorithm",
+      "cli_flag": "--chi-sep-medi-qsm-precision",
+      "browser": "available"
+    },
+    {
+      "path": "separation.chi_sep_medi.csf_r2star",
+      "label": "CSF R2*",
+      "full_label": "CSF mask's R2*",
+      "context": "χ-separation (MEDI)",
+      "help": "The R2* fit the CSF mask is extracted from",
+      "type": "enum",
+      "options": [
+        {
+          "value": "arlo",
+          "label": "arlo",
+          "name": "ARLO",
+          "help": "MEDI's ARLO"
+        },
+        {
+          "value": "nnls",
+          "label": "nnls",
+          "name": "NNLS",
+          "help": "The χ-separation toolbox's NNLS fit (r2star_nnls), which its script runs"
+        }
+      ],
+      "optional": false,
+      "default": "arlo",
+      "browser_default": "arlo",
+      "level": "advanced",
+      "tab": "separation",
+      "section": "separation",
+      "order": 347,
+      "parent": "separation.algorithm",
+      "cli_flag": "--chi-sep-medi-csf-r2star",
       "browser": "available"
     },
     {
@@ -8050,7 +8485,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 332,
+      "order": 348,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-dr-pos",
       "browser": "available"
@@ -8069,7 +8504,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 333,
+      "order": 349,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-dr-neg",
       "browser": "available"
@@ -8087,7 +8522,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 334,
+      "order": 350,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-alpha",
       "browser": "available"
@@ -8105,7 +8540,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 335,
+      "order": 351,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-lambda",
       "browser": "available"
@@ -8126,7 +8561,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 336,
+      "order": 352,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-wavelet-order",
       "browser": "available"
@@ -8145,7 +8580,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 337,
+      "order": 353,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-max-iter",
       "browser": "available"
@@ -8163,7 +8598,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 338,
+      "order": 354,
       "parent": "separation.algorithm",
       "cli_flag": "--wavesep-tol",
       "browser": "available"
@@ -8184,7 +8619,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 339,
+      "order": 355,
       "parent": "separation.algorithm",
       "cli_flag": "--hc-chisep-dr-pos-3t",
       "browser": "available"
@@ -8203,7 +8638,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 340,
+      "order": 356,
       "parent": "separation.algorithm",
       "cli_flag": "--hc-chisep-bin-hz",
       "browser": "available"
@@ -8232,10 +8667,10 @@
       "optional": false,
       "default": "toolbox",
       "browser_default": "toolbox",
-      "level": "advanced",
+      "level": "basic",
       "tab": "separation",
       "section": "separation",
-      "order": 341,
+      "order": 357,
       "parent": "separation.algorithm",
       "cli_flag": "--chi-sepnet-route",
       "browser": "available"
@@ -8264,7 +8699,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 342,
+      "order": 358,
       "parent": "separation.chi_sepnet.route",
       "cli_flag": "--chi-sepnet-patch",
       "browser": "available"
@@ -8289,7 +8724,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 343,
+      "order": 359,
       "parent": "separation.chi_sepnet.route",
       "cli_flag": "--chi-sepnet-frame-patch",
       "browser": "available"
@@ -8314,7 +8749,7 @@
       "level": "advanced",
       "tab": "separation",
       "section": "separation",
-      "order": 344,
+      "order": 360,
       "parent": "separation.algorithm",
       "cli_flag": "--susep-net-patch",
       "browser": "available"
@@ -8328,18 +8763,34 @@
       "optional": true,
       "default": null,
       "browser_default": null,
-      "level": "advanced",
+      "level": "basic",
       "tab": "separation",
       "section": "separation",
       "also_in": [
         "swi-smwi",
         "segmentation"
       ],
-      "order": 345,
+      "order": 361,
       "cli_flag": "--use-custom-qsm",
       "browser": "supplied-file",
       "item": "SuppliedChi",
       "browser_help": "A susceptibility (χ) map to use instead of computing QSM, for χ-separation, the statistics and SMWI"
+    },
+    {
+      "path": "pipeline.do_magnitude",
+      "label": "Combined magnitude",
+      "full_label": "Combined magnitude",
+      "help": "Publish the combined magnitude (part-mag_T2starw): the root sum of squares of the echoes, corrected for inhomogeneity when that is on. Off, it is still made for SMWI, segmentation or a magnitude-weighted inversion, and kept with the run's intermediates",
+      "type": "bool",
+      "optional": false,
+      "default": true,
+      "browser_default": true,
+      "level": "basic",
+      "tab": "outputs",
+      "section": "magnitude",
+      "order": 362,
+      "cli_flag": "--no-magnitude",
+      "browser": "available"
     },
     {
       "path": "pipeline.do_swi",
@@ -8353,7 +8804,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 346,
+      "order": 363,
       "cli_flag": "--do-swi",
       "browser": "available"
     },
@@ -8390,7 +8841,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 347,
+      "order": 364,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-unwrapping",
       "browser": "available"
@@ -8440,7 +8891,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 348,
+      "order": 365,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-scaling",
       "browser": "available"
@@ -8458,7 +8909,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 349,
+      "order": 366,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-strength",
       "browser": "available"
@@ -8485,7 +8936,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 350,
+      "order": 367,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-hp-sigma",
       "browser": "available"
@@ -8506,9 +8957,27 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 351,
+      "order": 368,
       "parent": "pipeline.do_swi",
       "cli_flag": "--swi-mip-window",
+      "browser": "available"
+    },
+    {
+      "path": "swi.filtered_phase",
+      "label": "Filtered phase",
+      "full_label": "SWI filtered phase",
+      "context": "SWI",
+      "help": "Also write the high-pass filtered phase the SWI is weighted by (desc-swi_phase): Hz for several echoes, radians for one",
+      "type": "bool",
+      "optional": false,
+      "default": false,
+      "browser_default": false,
+      "level": "basic",
+      "tab": "outputs",
+      "section": "swi-smwi",
+      "order": 369,
+      "parent": "pipeline.do_swi",
+      "cli_flag": "--swi-filtered-phase",
       "browser": "available"
     },
     {
@@ -8523,7 +8992,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 352,
+      "order": 370,
       "cli_flag": "--do-smwi",
       "browser": "available"
     },
@@ -8541,7 +9010,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 353,
+      "order": 371,
       "parent": "pipeline.do_smwi",
       "cli_flag": "--smwi-threshold",
       "browser": "available"
@@ -8560,7 +9029,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 354,
+      "order": 372,
       "parent": "pipeline.do_smwi",
       "cli_flag": "--smwi-power",
       "browser": "available"
@@ -8581,7 +9050,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "swi-smwi",
-      "order": 355,
+      "order": 373,
       "parent": "pipeline.do_smwi",
       "cli_flag": "--smwi-mip-window",
       "browser": "available"
@@ -8598,7 +9067,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 356,
+      "order": 374,
       "cli_flag": "--do-t2starmap",
       "browser": "available"
     },
@@ -8614,7 +9083,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 357,
+      "order": 375,
       "cli_flag": "--do-r2starmap",
       "browser": "available"
     },
@@ -8630,7 +9099,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 358,
+      "order": 376,
       "cli_flag": "--do-r2map",
       "browser": "available"
     },
@@ -8643,10 +9112,10 @@
       "optional": true,
       "default": null,
       "browser_default": null,
-      "level": "advanced",
+      "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 359,
+      "order": 377,
       "parent": "pipeline.do_r2map",
       "cli_flag": "--use-custom-r2",
       "browser": "supplied-file",
@@ -8665,7 +9134,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 360,
+      "order": 378,
       "cli_flag": "--do-r2primemap",
       "browser": "available"
     },
@@ -8678,10 +9147,10 @@
       "optional": true,
       "default": null,
       "browser_default": null,
-      "level": "advanced",
+      "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 361,
+      "order": 379,
       "parent": "pipeline.do_r2primemap",
       "cli_flag": "--use-custom-r2prime",
       "browser": "supplied-file",
@@ -8717,10 +9186,10 @@
       "optional": false,
       "default": "auto",
       "browser_default": "auto",
-      "level": "advanced",
+      "level": "basic",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 362,
+      "order": 380,
       "parent": "pipeline.do_r2primemap",
       "cli_flag": "--r2prime-strategy",
       "browser": "available"
@@ -8738,7 +9207,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 363,
+      "order": 381,
       "parent": "separation.r2prime_strategy",
       "cli_flag": "--r2primenet-ignore-field-mismatch",
       "browser": "available"
@@ -8767,7 +9236,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "relaxometry",
-      "order": 364,
+      "order": 382,
       "parent": "separation.r2prime_strategy",
       "cli_flag": "--r2primenet-patch",
       "browser": "available"
@@ -8784,7 +9253,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 365,
+      "order": 383,
       "cli_flag": "--do-segmentation",
       "browser": "available"
     },
@@ -8797,10 +9266,10 @@
       "optional": true,
       "default": null,
       "browser_default": null,
-      "level": "advanced",
+      "level": "basic",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 366,
+      "order": 384,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--use-custom-dseg",
       "browser": "supplied-file",
@@ -8830,10 +9299,10 @@
       "optional": false,
       "default": "v1",
       "browser_default": "v1",
-      "level": "advanced",
+      "level": "basic",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 367,
+      "order": 385,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-version",
       "browser": "available"
@@ -8853,7 +9322,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 368,
+      "order": 386,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-crop",
       "browser": "available"
@@ -8873,7 +9342,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 369,
+      "order": 387,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-patch",
       "browser": "available"
@@ -8890,7 +9359,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 370,
+      "order": 388,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--no-synthseg-flip-averaging",
       "browser": "available"
@@ -8907,7 +9376,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 371,
+      "order": 389,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--no-synthseg-topology-cleanup",
       "browser": "available"
@@ -8929,7 +9398,7 @@
       "level": "advanced",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 372,
+      "order": 390,
       "parent": "pipeline.do_segmentation",
       "cli_flag": "--synthseg-sigma",
       "browser": "available"
@@ -8946,7 +9415,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "segmentation",
-      "order": 373,
+      "order": 391,
       "cli_flag": "--do-analysis",
       "browser": "available"
     },
@@ -8962,7 +9431,7 @@
       "level": "basic",
       "tab": "outputs",
       "section": "export",
-      "order": 374,
+      "order": 392,
       "cli_flag": "--export-dicom",
       "browser": "unavailable"
     }
@@ -9060,6 +9529,22 @@
         ]
       },
       {
+        "kind": "threshold-sti-gui",
+        "op": "threshold",
+        "label": "threshold",
+        "name": "STI Suite threshold",
+        "help": "Keep the voxels of the section's image above the level STI Suite's QSM_GUI starts at: Otsu's threshold of the middle slice, scaled to that slice's maximum",
+        "starts_section": true,
+        "needs_magnitude": false,
+        "deep_learning": false,
+        "default": {
+          "op": "threshold",
+          "method": "sti-gui",
+          "value": null
+        },
+        "params": []
+      },
+      {
         "kind": "bet",
         "op": "bet",
         "label": "bet",
@@ -9099,7 +9584,8 @@
           "bet.smoothness",
           "bet.gradient_threshold",
           "bet.iterations",
-          "bet.subdivisions"
+          "bet.subdivisions",
+          "bet.orientation"
         ]
       },
       {
@@ -9311,6 +9797,74 @@
             "default": 1
           }
         ]
+      },
+      {
+        "kind": "min-intensity",
+        "op": "min-intensity",
+        "label": "min-intensity",
+        "name": "Minimum intensity",
+        "help": "Remove the mask's voxels whose intensity in the section's image is below a value",
+        "starts_section": false,
+        "needs_magnitude": false,
+        "deep_learning": false,
+        "default": {
+          "op": "min-intensity",
+          "value": 100
+        },
+        "params": [
+          {
+            "key": "value",
+            "label": "Lowest intensity",
+            "help": "Voxels below this value, in the section's image's units, are removed",
+            "type": "float",
+            "optional": false,
+            "min": 0,
+            "exclusive_min": true,
+            "default": 100
+          }
+        ]
+      },
+      {
+        "kind": "majority",
+        "op": "majority",
+        "label": "majority",
+        "name": "Majority",
+        "help": "Majority filter: a voxel is in the mask when at least 14 of the 27 voxels of its 3×3×3 neighbourhood are              (MATLAB's bwmorph3 'majority')",
+        "starts_section": false,
+        "needs_magnitude": false,
+        "deep_learning": false,
+        "default": {
+          "op": "majority"
+        },
+        "params": []
+      },
+      {
+        "kind": "largest-component",
+        "op": "largest-component",
+        "label": "largest-component",
+        "name": "Largest component",
+        "help": "Keep only the mask's largest connected component (26-connected, as MATLAB's bwlabeln)",
+        "starts_section": false,
+        "needs_magnitude": false,
+        "deep_learning": false,
+        "default": {
+          "op": "largest-component"
+        },
+        "params": []
+      },
+      {
+        "kind": "imfill",
+        "op": "imfill",
+        "label": "imfill",
+        "name": "Fill all holes",
+        "help": "Fill every hole enclosed by the mask, whatever its size (MATLAB's imfill 'holes')",
+        "starts_section": false,
+        "needs_magnitude": false,
+        "deep_learning": false,
+        "default": {
+          "op": "imfill"
+        },
+        "params": []
       },
       {
         "kind": "fill-holes",

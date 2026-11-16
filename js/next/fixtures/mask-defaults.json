@@ -169,6 +169,11 @@
       "method": "percentile",
       "value": 75
     },
+    "threshold-sti-gui": {
+      "op": "threshold",
+      "method": "sti-gui",
+      "value": null
+    },
     "bet": {
       "op": "bet",
       "fractional_intensity": 0.5,
@@ -204,6 +209,19 @@
     "close": {
       "op": "close",
       "radius": 1
+    },
+    "min-intensity": {
+      "op": "min-intensity",
+      "value": 100
+    },
+    "majority": {
+      "op": "majority"
+    },
+    "largest-component": {
+      "op": "largest-component"
+    },
+    "imfill": {
+      "op": "imfill"
     },
     "fill-holes": {
       "op": "fill-holes",
