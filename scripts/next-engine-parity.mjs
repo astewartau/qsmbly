@@ -222,13 +222,15 @@ const TARGET_MAX = { 'inversion.amp_pe.nlevel': 31 };
 function withoutTarget(answer) {
   const out = structuredClone(answer);
   for (const row of Array.isArray(out.view) ? out.view : []) {
+    const wasmFinding = (row.recommendations ?? []).some((r) => WASM_RULE.test(r.rule) && r.departs);
     for (const k of ['reference', 'recommendations']) {
       if (!row[k]) continue;
       row[k] = row[k].filter((r) => !WASM_RULE.test(r.rule));
       if (!row[k].length) delete row[k];
     }
-    // A marker only those rules made goes with them.
-    if (row.marker && !(row.recommendations ?? []).some((r) => r.departs)) delete row.marker;
+    // A marker those rules made, or had a hand in (MindGrab's heap rule beside iLSQR's authors'
+    // settings on the mask recipe: offered, and naming MindGrab), goes with them.
+    if (row.marker && (wasmFinding || !(row.recommendations ?? []).some((r) => r.departs))) delete row.marker;
   }
   const check = out.plan?.check;
   if (check?.errors) {
