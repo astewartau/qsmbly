@@ -151,7 +151,7 @@ function RefRowView({ row, index, choosing, pick, setPick }) {
         <label class="sub rec-pick">Use${' '}
           <select class="sel" aria-label=${`Choice for ${row.label}`} data-testid="ref-pick"
             onChange=${(e) => { const v = e.currentTarget.value; setPick(index, v === 'reference' || v === 'keep' ? v : Number(v)); }}>
-            <option value="reference" selected=${pick === 'reference'}>${row.reference.name} (${authors ? "authors' setting" : 'recommended'})</option>
+            <option value="reference" selected=${pick === 'reference'}>${row.reference.name} (${authors ? "authors' setting" : row.findings.every((f) => f.strength === 'suggested') ? 'suggested' : 'recommended'})</option>
             ${row.alternatives.map((a, i) => html`<option value=${String(i)} selected=${pick === i}>${a.name}</option>`)}
             <option value="keep" selected=${pick === 'keep'}>${row.current} (keep mine)</option>
           </select>

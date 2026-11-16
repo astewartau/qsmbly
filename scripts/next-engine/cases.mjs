@@ -99,6 +99,12 @@ export const CASES = [
   { name: 'two-pass', edits: [['masking.two_pass', true]] },
   { name: 'N4 inhomogeneity correction', edits: [['masking.inhomogeneity_method', 'n4']] },
   { name: 'N4 with two levels', edits: [['masking.inhomogeneity_method', 'n4'], ['n4.max_iterations', [50, 40]]] },
+  // QSMxT v12: phase converted with the scanner's centre frequency, the combined magnitude as an
+  // output of its own, and resampling to an axial grid only where a run can be resampled.
+  { name: 'a scan with its centre frequency', edits: [], scan: { field_strength: 2.8936, nominal_field_strength: 3, imaging_frequency: 123.2 } },
+  { name: 'combined magnitude not published', edits: [['pipeline.do_magnitude', false]] },
+  { name: 'axial resampling', edits: [['pipeline.axial_resampling', true]] },
+  { name: 'BET as stored', edits: [['masking.sections', [{ input: 'magnitude', generator: { op: 'bet', fractional_intensity: 0.5, voxel_scale: 1 }, refinements: [] }]], ['bet.orientation', 'as-stored']] },
   // Other scans
   { name: 'no magnitude', edits: [], scan: { has_magnitude: false } },
   { name: 'one echo', edits: [], scan: { n_echoes: 1, echo_times: [0.005] } },
@@ -122,4 +128,6 @@ export const IMPORTS = [
   '[multi_orientation]\ngroup_by = "acq"\n',
   // A page writes no DICOM: export is turned off, with a warning (QSMxT#505).
   '[pipeline]\nexport_dicom = true\n',
+  // A settings file from a toolbox pipeline (QSMxT's Pipeline tab, `--pipeline`): its label is kept.
+  'reference_pipeline = "medi-toolbox"\n\n[inversion]\nalgorithm = "medi"\n',
 ];

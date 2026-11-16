@@ -94,7 +94,7 @@ test.describe('re-run from here in next.html', () => {
     const states = await runStates(page);
     expect(Object.entries(states).filter(([, s]) => s === 'done').map(([k]) => k).sort()).toEqual(['invert', 'reference']);
     for (const step of ['load', 'scale_phase', 'magnitude', 'mask', 'unwrap', 'bgremove']) expect(states[step], step).toBe('cached');
-    await expect(page.getByTestId('run-progress')).toContainText('Done: 2 computed, 6 reused');
+    await expect(page.getByTestId('run-progress')).toContainText('Done: 2 computed, 7 reused');
 
     // A deep-learning inversion on this axial scan changes the inversion alone (QSMxT #355).
     await set(page, 'inversion.algorithm', 'xqsm');

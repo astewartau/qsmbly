@@ -119,8 +119,9 @@ describe('drawnEdges', () => {
     }
   });
 
-  test('the browser profile\'s collapsed arrow is labelled with its count and lists every output', () => {
-    const graph = named('the browser profile');
+  // xQSM needs axial data, so its run can be resampled and its graph returns to the acquired grid.
+  test('a resampled run\'s collapsed arrow is labelled with its count and lists every output', () => {
+    const graph = named('xQSM');
     const e = /** @type {any} */ (layoutGraph(graph).edges.find((x) => x.to === RETURN_STEP));
     expect(e.collapsed).toBeGreaterThan(1);
     expect(e.label).toMatch(/^\d+ outputs$/);
@@ -128,7 +129,7 @@ describe('drawnEdges', () => {
   });
 
   test('other arrows are kept as they are', () => {
-    const graph = named('the browser profile');
+    const graph = named('xQSM');
     const other = graph.edges.filter((e) => e.to !== RETURN_STEP);
     expect(drawnEdges(graph).filter((e) => e.to !== RETURN_STEP).map(({ from, to, items }) => ({ from, to, items }))).toEqual(other);
   });
@@ -136,7 +137,7 @@ describe('drawnEdges', () => {
 
 describe('boxes', () => {
   test('a step says its algorithm and settings, and when it only sometimes applies', () => {
-    const graph = named('the browser profile');
+    const graph = named('xQSM');
     const field = nodeLines(/** @type {any} */ (graph.nodes.find((n) => n.id === 'unwrap')));
     expect(field[0]).toEqual({ text: 'Field map', cls: 'title' });
     expect(field.some((l) => l.cls === 'algorithm')).toBe(true);
@@ -148,7 +149,7 @@ describe('boxes', () => {
   test('optional and conditional steps are marked', () => {
     const { nodes } = layoutGraph(named('SWI'));
     expect(nodes.find((n) => n.id === 'swi')?.optional).toBe(true);
-    expect(nodes.find((n) => n.id === RETURN_STEP)?.conditional).toBe(true);
+    expect(layoutGraph(named('xQSM')).nodes.find((n) => n.id === RETURN_STEP)?.conditional).toBe(true);
     expect(nodes.find((n) => n.id === 'invert')?.optional).toBe(false);
   });
 

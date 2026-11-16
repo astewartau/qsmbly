@@ -326,9 +326,9 @@ describe('editing', () => {
   test('a list of whole numbers: N4\'s iterations at each level', async () => {
     const { session, store, flush } = setup();
     session.set('masking.inhomogeneity_method', 'n4');
-    session.ui.advanced.value = { geometry: true };
+    session.ui.advanced.value = { masking: true };
     await flush();
-    const root = await step(session, store, 'geometry');
+    const root = await step(session, store, 'masking');
     const input = row(root, 'n4.max_iterations').querySelector('input');
     expect(input.value).toBe('50 50 50 50');
     await change(input, '50 4.5');
@@ -360,7 +360,7 @@ describe('the pipeline column', () => {
     const { session, store, flush } = setup();
     await flush();
     const root = await show(session, store);
-    expect(stepIds(root)).toEqual(['data', 'geometry', 'masking', 'motion', 'fieldmap', 'background', 'inversion', 'reference', 'chisep', 'swi', 'relaxometry', 'segmentation']);
+    expect(stepIds(root)).toEqual(['data', 'geometry', 'masking', 'motion', 'fieldmap', 'background', 'inversion', 'reference', 'chisep', 'swi', 'relaxometry', 'magnitude', 'segmentation']);
     await act(() => session.set('inversion.algorithm', 'tgv'));
     await flush();
     expect(stepIds(root)).not.toContain('background');

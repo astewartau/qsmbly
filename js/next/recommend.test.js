@@ -13,7 +13,7 @@ import {
 // one with few echoes (`z.msmv`), a discouraged one on small voxels (`z.fine`) and, with `clash`,
 // two recommendations that disagree on `z.clash`.
 const defaults = {
-  x: { te: 'first', method: 'x', mode: 'mine', window: 0 },
+  x: { te: 'first', method: 'x', mode: 'mine', window: 0, follow: 'off' },
   z: { unwrap: false, bound: 0.5, msmv: true, fine: 'on', clash: 'mine' },
   dismissed_recommendations: [],
 };
@@ -23,7 +23,9 @@ const Y = { setting: 'x.method', value: 'y', name: 'Y' };
 let teStrength = 'recommended';
 /** Whether turning `z.unwrap` on also resolves the mocked `y.bound-7t`. */
 let unwrapResolvesBound = false;
-afterEach(() => { teStrength = 'recommended'; windowDismissed = false; unwrapResolvesBound = false; });
+/** Whether Y's `x.follow` rule is mocked: it only comes into play once `x.mode` is `ref`. */
+let followRule = false;
+afterEach(() => { teStrength = 'recommended'; windowDismissed = false; unwrapResolvesBound = false; followRule = false; });
 
 const rule = (over = {}) => ({
   rule: 'x.te-first', kind: over.strength === 'reference' ? 'reference' : 'reasoned', strength: 'recommended', basis: 'measured', setting: 'x.te', label: 'Echo Time',
@@ -47,6 +49,14 @@ const windowRule = (config) => rule({
   reason: "Y's authors window Siemens scans", source: 'the Y code', departs: config.x.window !== 0.4,
   dismissed: windowDismissed,
 });
+/** Y's authors' setting that only a value applied by its pop-up brings into play (BET's orientation, once the mask is BET). */
+const followOf = (config) => rule({
+  rule: 'y.follow-ref', strength: 'reference', setting: 'x.follow', label: 'Follow', trigger: Y,
+  current: [{ value: config.x.follow, name: config.x.follow }], recommended: { value: 'on', name: 'On' },
+  allowed: { test: 'one_of', values: [{ value: 'on', name: 'On' }] },
+  reason: "Y's authors use it with Ref", source: 'the Y code', departs: config.x.follow !== 'on',
+});
+const follows = (config) => followRule && config.x.method === 'y' && config.x.mode === 'ref';
 /** A saved dismissal of the mocked window rule. */
 let windowDismissed = false;
 const siemens = (facts) => facts?.manufacturer === 'Siemens';
@@ -89,6 +99,10 @@ function viewOf(config, facts = null) {
     const y = yRule(config);
     rows.push({ path: 'x.mode', visible: true, reference: [y], recommendations: y.departs ? [y] : [] });
     if (y.departs) rows[1].marker = { actionable: false, text: 'Y: Ref' };
+    if (follows(config)) {
+      const f = followOf(config);
+      rows.push({ path: 'x.follow', visible: true, reference: [f], recommendations: f.departs ? [f] : [], ...(f.departs ? { marker: { actionable: false, text: 'Y: On' } } : {}) });
+    }
     if (siemens(facts)) {
       const w = windowRule(config);
       rows.push({ path: 'x.window', visible: true, reference: [w], recommendations: w.departs ? [w] : [], ...(w.departs ? { marker: { actionable: false, text: 'Y: 0.4' } } : {}) });
@@ -120,13 +134,15 @@ const Z_RULES = {
 };
 const applyOne = (c, r, pick) => {
   if (Z_RULES[r]) return { ...c, z: { ...c.z, [Z_RULES[r][0]]: pick ?? Z_RULES[r][1] } };
+  if (r === 'y.follow-ref') return { ...c, x: { ...c.x, follow: pick ?? 'on' } };
   if (r === 'y.window-ref') return { ...c, x: { ...c.x, window: pick ?? 0.4 } };
   return r === 'y.mode-ref'
     ? { ...c, x: { ...c.x, mode: pick ?? 'ref' } }
     : { ...c, x: { ...c.x, te: pick ?? 'first' } };
 };
 // As the engine's `settle`: on each setting the strongest open finding takes it, unless two as
-// strong want different values.
+// strong want different values, or an authors' setting another chosen method's authors disagree
+// with (its `conflict`).
 const RANK = { reference: 0, discouraged: 1, recommended: 2, required: 3 };
 const settle = (findings) => {
   const settled = { apply: [], conflicting: [], outranked: [] };
@@ -136,7 +152,7 @@ const settle = (findings) => {
     const top = Math.max(...open.map((f) => RANK[f.strength]));
     const strongest = open.filter((f) => RANK[f.strength] === top);
     const value = JSON.stringify(strongest[0].recommended.value);
-    if (strongest.some((f) => JSON.stringify(f.recommended.value) !== value)) {
+    if (strongest.some((f) => (f.conflict && f.strength === 'reference') || JSON.stringify(f.recommended.value) !== value)) {
       settled.conflicting.push(...strongest);
       settled.outranked.push(...open.filter((f) => RANK[f.strength] !== top));
     } else {
@@ -156,10 +172,12 @@ const engine = {
   chosenMethods: async (c) => (c.x.method === 'y' ? [X, Y] : [X]),
   referenceOffers: async (c, f, _s, methods) => methods.map((m) => ({
     method: m, title: `${m.name}'s reference pipeline`,
-    differences: m.name === 'Y' ? [yRule(c), ...(siemens(f) ? [windowRule(c)] : [])].filter((r) => r.departs && !r.dismissed) : [],
+    differences: m.name === 'Y'
+      ? [yRule(c), ...(follows(c) ? [followOf(c)] : []), ...(siemens(f) ? [windowRule(c)] : [])].filter((r) => r.departs && !r.dismissed) : [],
   })),
   referenceTitles: async (methods) => methods.map((m) => `${m.name}'s reference pipeline`),
   keepFindings: async (c, findings) => keepAll(c, findings),
+  restoreKept: async (c) => c,
   applyAll: async (c, findings) => {
     const settled = settle(findings);
     return { config: settled.apply.reduce((acc, f) => applyOne(acc, f.rule), c), settled };
@@ -292,6 +310,42 @@ describe('a method chosen with a reference pipeline', () => {
     expect(recs.modal.value).toBeNull();
   });
 
+  test('what the applied values bring into play is offered next, once; then nothing is left', async () => {
+    followRule = true;
+    const { session, recs, flush } = harness();
+    await flush();
+    session.set('x.method', 'y');
+    await flush();
+    expect(recs.modal.value.rows.map((r) => r.label)).toEqual(['Mode']);
+    await recs.answer('all');
+    await flush();
+    const modal = recs.modal.value;
+    expect(modal?.kind).toBe('reference');
+    expect(modal?.title).toBe("Y's reference pipeline");
+    expect(modal.rows.map((r) => [r.label, r.current, r.reference.name])).toEqual([['Follow', 'off', 'On']]);
+    await recs.answer('all');
+    await flush();
+    expect(session.config.value.x).toMatchObject({ mode: 'ref', follow: 'on' });
+    expect(recs.modal.value).toBeNull();
+  });
+
+  test('a follow-up kept is not offered again; Keep mine applies nothing, so has no follow-up', async () => {
+    followRule = true;
+    const { session, recs, flush } = harness();
+    await flush();
+    session.set('x.method', 'y');
+    await flush();
+    await recs.answer('keep');
+    await flush();
+    expect(recs.modal.value).toBeNull();
+    await recs.answer('keep');
+    session.set('x.mode', 'ref');
+    await flush();
+    // A change by hand is no pop-up's Apply: what it brings shows as a marker.
+    expect(recs.modal.value).toBeNull();
+    expect(marker(session.view.value.get('x.follow'))).toBe('info');
+  });
+
   test('Keep mine on an authors\' setting records nothing; it is offered again when the method is chosen again', async () => {
     const { session, recs, flush } = harness();
     await flush();
@@ -348,7 +402,7 @@ describe('a method chosen with a reference pipeline', () => {
     const { session, recs, flush } = await both();
     await recs.answer('recommended');
     await flush();
-    expect(session.config.value.x).toEqual({ te: 'first', method: 'y', mode: 'mine', window: 0 });
+    expect(session.config.value.x).toEqual({ te: 'first', method: 'y', mode: 'mine', window: 0, follow: 'off' });
     expect(session.config.value.dismissed_recommendations).toEqual([]);
     expect(recs.modal.value).toBeNull();
   });
@@ -357,7 +411,7 @@ describe('a method chosen with a reference pipeline', () => {
     const { session, recs, flush } = await both();
     await recs.answer('all');
     await flush();
-    expect(session.config.value.x).toEqual({ te: 'first', method: 'y', mode: 'ref', window: 0 });
+    expect(session.config.value.x).toEqual({ te: 'first', method: 'y', mode: 'ref', window: 0, follow: 'off' });
   });
 
   test('a required recommendation gets its own pop-up first; the reference pipeline follows', async () => {
@@ -424,6 +478,39 @@ describe('findings chosen together', () => {
     await both.recs.answer({ picks: [0, 0] });
     expect(clash(both.session)).toBe('alt');
     expect(both.session.ui.notices.value).toEqual([]);
+  });
+
+  test('an authors\' setting another chosen method\'s authors disagree with: Apply all leaves it, picking it applies it', async () => {
+    const theirs = authors('y.clash-a', 'a', { conflict: true });
+    const all = await open([], [theirs]);
+    await all.recs.answer('all');
+    expect(clash(all.session)).toBe('mine');
+    expect(all.session.ui.notices.value).toEqual(['Left Clash as set: the suggestions disagree. Its marker has the choices.']);
+    // Picked, it is the user's choice between the authors: its conflict is cleared (QSMxT#562).
+    for (const [pick, value] of [['reference', 'a'], [0, 'alt']]) {
+      const picked = await open([], [theirs]);
+      await picked.recs.answer({ picks: [pick] });
+      expect(clash(picked.session)).toBe(value);
+      expect(picked.session.ui.notices.value).toEqual([]);
+    }
+  });
+
+  test('rows kept beside a pick are handed to the engine to set back what the pick changed', async () => {
+    const asked = [];
+    const restoreKept = engine.restoreKept;
+    engine.restoreKept = async (c, _f, _s, kept) => { asked.push(kept.map((k) => k.rule)); return c; };
+    try {
+      const { session, recs } = await open([], [authors('y.clash-a', 'a'), yRule(defaults)]);
+      await recs.answer({ picks: ['keep', 'reference'] });
+      expect(session.config.value.x.mode).toBe('ref');
+      expect(asked).toEqual([['y.clash-a']]);
+      // Nothing applied: nothing to set back.
+      const none = await open([], [authors('y.clash-a', 'a')]);
+      await none.recs.answer({ picks: ['keep'] });
+      expect(asked).toHaveLength(1);
+    } finally {
+      engine.restoreKept = restoreKept;
+    }
   });
 
   test('Apply all leaves what disagrees, applies the rest, and a notice says so', async () => {
@@ -942,6 +1029,26 @@ describe('a scan that brings recommendations of a chosen method', () => {
     h.session.redo();
     await h.flush();
     expect(h.recs.modal.value).toBeNull();
+  });
+});
+
+describe('a suggestion (better on some data, not all)', () => {
+  const suggestion = rule({ strength: 'suggested' });
+  test('its pop-up says so and starts on Keep mine; its details too', () => {
+    const modal = modalFor([suggestion]);
+    expect(modal.title).toBe('X suggests a change');
+    expect(modal.choices[modal.preselected ?? -1]).toEqual({ kind: 'ignore', label: 'Keep mine' });
+    expect(kindLabel(suggestion)).toBe('Suggested');
+    expect(whoSays(suggestion, '')).toBe('X suggests First echo time');
+    const details = detailsFor([suggestion], ['']);
+    expect(details.choices[details.preselected ?? -1].kind).toBe('ignore');
+  });
+
+  test('in a reference pipeline pop-up it starts on keep, and Keep mine is preselected', () => {
+    const modal = { kind: 'reference', title: '', recommendations: rowsOf([suggestion]), rows: rowsOf([yRule(defaults)]) };
+    expect(startingPicks(modal)).toEqual(['keep', 'keep']);
+    expect(keepPreselected(modal)).toBe(true);
+    expect(applyChoices(modal)[0]).toEqual({ answer: 'recommended', label: 'Apply suggested', preselected: false });
   });
 });
 

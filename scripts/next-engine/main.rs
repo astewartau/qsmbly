@@ -123,7 +123,8 @@ fn published(config: &PipelineConfig, facts: &ScanFacts, scan_file: &str, versio
     let key = entities::run_key(scan_file);
     let basename = key.basename();
     let sidecar_facts = outputs::SidecarFacts {
-        field_strength: facts.field_strength,
+        // The scanner's nominal field, as `qsmxt run` reports it (src/bids/bidsprov.rs).
+        field_strength: facts.nominal_field_strength.unwrap_or(facts.field_strength),
         echo_times: &facts.echo_times,
         qsmxt_version: versions["qsmxt"].as_str().unwrap_or(""),
         qsm_rs_version: versions["qsm_rs"].as_str().unwrap_or(""),

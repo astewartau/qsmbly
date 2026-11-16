@@ -5,8 +5,9 @@
  * here knows a rule or a method.
  *
  * - **Two kinds, labelled apart** (the engine's `kind`, QSMxT#486): a `reasoned` finding (required,
- *   recommended, discouraged) gives a reason why its value is better, and its change is
- *   preselected; a `reference` one is the original authors' setting, with no such reason, so Keep
+ *   recommended, discouraged, suggested) gives a reason why its value is better, and its change is
+ *   preselected, except a suggestion's (better on some data but not all: Keep mine is preselected,
+ *   as in the TUI); a `reference` one is the original authors' setting, with no such reason, so Keep
  *   mine is preselected (QSMxT#501). Enter on a pop-up that holds only those changes nothing.
  * - **A method's reference pipeline** is offered when a change chooses a method that has one (the
  *   engine's `chosen_methods`, before and after the change) and the config differs from it
@@ -99,8 +100,18 @@ export const isOpen = (r) => r.departs && r.kind !== 'reference' && !r.dismissed
  */
 export function kindLabel(r) {
   if (r.kind === 'reference') return "Original authors' setting (not a recommendation)";
-  return r.strength === 'required' ? 'Required' : r.strength === 'discouraged' ? 'Discouraged' : 'Recommended';
+  return STRENGTH_LABEL[r.strength] ?? 'Recommended';
 }
+
+/** A reasoned finding's strength, as its label reads. */
+const STRENGTH_LABEL = { required: 'Required', discouraged: 'Discouraged', suggested: 'Suggested', recommended: 'Recommended' };
+
+/**
+ * Whether a reasoned finding's change is preselected: every strength but `suggested` (the engine's
+ * `Strength::preselected`).
+ * @param {Recommendation} r
+ */
+export const preselectedChange = (r) => r.kind !== 'reference' && r.strength !== 'suggested';
 
 /**
  * Every finding in a settings view.
@@ -133,8 +144,7 @@ export function referenceLine(r) {
   const what = !r.departs ? (authors ? "Authors' setting" : 'Recommended')
     : authors ? "Differs from the authors' setting"
       : r.dismissed ? 'Kept'
-        : r.strength === 'required' ? 'Required'
-          : r.strength === 'discouraged' ? 'Discouraged' : 'Recommended';
+        : STRENGTH_LABEL[r.strength] ?? 'Recommended';
   const value = r.strength === 'discouraged' && r.departs ? `not ${currentText(r)}` : r.recommended.name;
   return { what, value, trigger: r.trigger.name, source: r.source };
 }
@@ -164,7 +174,7 @@ function alternatives(r) {
 }
 
 /** Offered findings first, then kept ones, then the authors' settings. */
-const STRENGTH_ORDER = { required: 0, recommended: 1, discouraged: 2, reference: 3 };
+const STRENGTH_ORDER = { required: 0, recommended: 1, discouraged: 2, suggested: 3, reference: 4 };
 const offeredFirst = (a, b) => (Number(!isOpen(a)) - Number(!isOpen(b)))
   || (STRENGTH_ORDER[a.strength] - STRENGTH_ORDER[b.strength]);
 
@@ -187,8 +197,11 @@ export function modalFor(findings) {
   const r = findings[0];
   const title = r.strength === 'required' ? `${r.trigger.name} requires a change`
     : r.strength === 'discouraged' ? `Discouraged with ${r.trigger.name}`
-      : several ? 'Recommendations disagree' : `${r.trigger.name} recommends a change`;
-  return { kind: 'finding', findings, choices, preselected: several ? null : 0, title, details: false };
+      : several ? 'Recommendations disagree'
+        : r.strength === 'suggested' ? `${r.trigger.name} suggests a change` : `${r.trigger.name} recommends a change`;
+  // A suggestion starts on Keep mine.
+  const preselected = several ? null : preselectedChange(r) ? 0 : choices.findIndex((c) => c.kind === 'ignore');
+  return { kind: 'finding', findings, choices, preselected, title, details: false };
 }
 
 /**
@@ -201,7 +214,8 @@ export function modalFor(findings) {
 export function whoSays(r, referenceTitle) {
   if (r.kind === 'reference') return `${referenceTitle} uses ${r.recommended.name}`;
   if (r.strength === 'discouraged') return `${r.trigger.name} discourages ${currentText(r)}`;
-  return `${r.trigger.name} ${r.strength === 'required' ? 'requires' : 'recommends'} ${r.recommended.name}`;
+  const verb = r.strength === 'required' ? 'requires' : r.strength === 'suggested' ? 'suggests' : 'recommends';
+  return `${r.trigger.name} ${verb} ${r.recommended.name}`;
 }
 
 /**
@@ -246,7 +260,7 @@ export function detailsFor(findings, titles) {
   // The first choice is the first finding's value, and reasoned findings come before authors' ones.
   const keep = choices.findIndex((c) => c.kind === 'ignore');
   const preselected = findings.some((f) => f.conflict && isOpen(f)) ? null
-    : r.kind !== 'reference' ? 0
+    : preselectedChange(r) ? 0
       : keep >= 0 ? keep : null;
   return { kind: 'finding', findings, choices, preselected, title, details: true, whose: findings.map((f, i) => whoSays(f, titles[i])) };
 }
@@ -298,20 +312,22 @@ export function referencesTitle(titles, methods) {
  * @returns {{ answer: 'recommended' | 'all', label: string, preselected: boolean }[]}
  */
 export function applyChoices(modal) {
+  const strong = modal.recommendations.some((row) => row.findings.some(preselectedChange));
   return modal.recommendations.length
     ? [
-      { answer: 'recommended', label: 'Apply recommended', preselected: true },
+      { answer: 'recommended', label: strong ? 'Apply recommended' : 'Apply suggested', preselected: strong },
       { answer: 'all', label: "Apply all, with the authors' settings", preselected: false },
     ]
     : [{ answer: 'all', label: "Apply the authors' settings", preselected: false }];
 }
 
 /**
- * Whether a reference pipeline pop-up preselects Keep mine: it holds only authors' settings.
+ * Whether a reference pipeline pop-up preselects Keep mine: it holds no change that is preselected
+ * (only authors' settings and suggestions).
  * @param {RefModal} modal
  * @returns {boolean}
  */
-export const keepPreselected = (modal) => !modal.recommendations.length;
+export const keepPreselected = (modal) => !modal.recommendations.some((row) => row.findings.some(preselectedChange));
 
 /**
  * What a settling left, for the notice under the header: the settings it left because the
@@ -339,7 +355,7 @@ export function leftNotice(settled) {
  * @returns {RefPick[]}
  */
 export function startingPicks(modal) {
-  return [...modal.recommendations, ...modal.rows].map((row) => (row.kind === 'reference' ? 'keep' : 'reference'));
+  return [...modal.recommendations, ...modal.rows].map((row) => (row.findings.some(preselectedChange) ? 'reference' : 'keep'));
 }
 
 /**
@@ -353,6 +369,7 @@ export function startingPicks(modal) {
  *   referenceOffers: (config: any, facts: any, scan: boolean, methods: Trigger[]) => Promise<{ method: Trigger, title: string, differences: Recommendation[] }[]>,
  *   referenceTitles: (methods: Trigger[]) => Promise<string[]>,
  *   keepFindings: (config: any, findings: Recommendation[]) => Promise<any>,
+ *   restoreKept: (config: any, facts: any, scan: boolean, kept: Recommendation[]) => Promise<any>,
  *   applyAll: (config: any, findings: Recommendation[]) => Promise<{ config: any, settled: Settled }>,
  *   settle: (findings: Recommendation[]) => Promise<Settled>,
  * }} options.engine
@@ -517,21 +534,28 @@ export function createRecommendations({ session, engine }) {
    */
   async function applyPicks(start, rows, picks) {
     const pickOf = (/** @type {number} */ i) => picks[i] ?? 'keep';
+    // A value the user picked is theirs to take: one authors' setting picked over another
+    // chosen method's that disagrees with it is no longer left for them to choose (its `conflict`
+    // cleared, as the TUI's picks are, QSMxT#562). Two picks that disagree still conflict.
     const settled = await engine.settle(rows.flatMap((row, i) => {
       const pick = pickOf(i);
       if (pick === 'keep') return [];
-      return pick === 'reference' ? row.findings : row.findings.map((f) => ({ ...f, recommended: row.alternatives[pick] }));
+      return row.findings.map((f) => ({ ...f, conflict: false, ...(pick === 'reference' ? {} : { recommended: row.alternatives[pick] }) }));
     }));
     let config = start;
     const applied = new Set();
     for (const [i, row] of rows.entries()) {
       const pick = pickOf(i);
-      if (pick === 'keep') config = await engine.keepFindings(config, row.findings);
-      else if (settled.apply.some((r) => r.rule === row.findings[0].rule) && !applied.has(row.setting)) {
+      if (pick !== 'keep' && settled.apply.some((r) => r.rule === row.findings[0].rule) && !applied.has(row.setting)) {
         applied.add(row.setting);
         config = await engine.applyRecommendation(config, row.findings[0].rule, pick === 'reference' ? undefined : row.alternatives[pick].value);
       }
     }
+    // A value applied to one part of the mask recipe can change a part kept (BET as the generator
+    // brings its preset's input and erosion): those are set back, as the TUI does (QSMxT#558).
+    const kept = rows.filter((_, i) => pickOf(i) === 'keep').flatMap((row) => row.findings);
+    if (kept.length && applied.size) config = await engine.restoreKept(config, session.facts.peek(), session.loaded.peek(), kept);
+    config = await engine.keepFindings(config, kept);
     return { config, settled };
   }
 
@@ -546,6 +570,33 @@ export function createRecommendations({ session, engine }) {
     session.setConfig(config);
     return true;
   };
+
+  /**
+   * After a reference pipeline pop-up applied something: the differences of its methods that only
+   * the applied values brought into play (BET's orientation, once the mask is BET), offered next
+   * as the TUI does (QSMxT#558). Only those, by rule, so a row kept here or before is not offered
+   * again and applying reaches a fixed point.
+   * @param {any} config - the config after the answer
+   * @param {RefRow[]} rows - the pop-up's rows
+   * @param {Set<string>} departedBefore - `key` of every finding departed from before the answer
+   */
+  async function followUp(config, rows, departedBefore) {
+    const presented = new Set(rows.flatMap((r) => r.findings.map((f) => f.rule)));
+    const methodsShown = rows.flatMap((r) => r.findings.map((f) => f.trigger))
+      .filter((m, i, list) => list.findIndex((x) => methodKey(x) === methodKey(m)) === i);
+    if (!methodsShown.length) return;
+    const offers = await engine.referenceOffers(config, session.facts.peek(), session.loaded.peek(), methodsShown);
+    const fresh = (/** @type {Recommendation} */ r) => !presented.has(r.rule) && !departedBefore.has(key(r));
+    const offered = offers.filter((o) => o.differences.some(fresh));
+    const differences = offered.flatMap((o) => o.differences.filter(fresh));
+    if (!differences.length || session.config.peek() !== config) return;
+    show({
+      kind: 'reference',
+      title: referencesTitle(offered.map((o) => o.title), offered.map((o) => o.method)),
+      recommendations: [],
+      rows: rowsOf(differences),
+    });
+  }
 
   /** Close the open pop-up; the next waiting one, if any, opens. */
   const next = () => {
@@ -597,6 +648,8 @@ export function createRecommendations({ session, engine }) {
       const open = modal.peek();
       if (open?.kind !== 'reference') return Promise.resolve();
       const rows = [...open.recommendations, ...open.rows];
+      // What departed before, each at its value: a follow-up never offers one of these again.
+      const departedBefore = new Set(findingsOf(session.view.peek()).filter((r) => r.departs).map(key));
       next();
       return act(async () => {
         const before = session.config.peek();
@@ -615,7 +668,7 @@ export function createRecommendations({ session, engine }) {
         // A method these choices chose is not asked again about the settings they decided. With
         // no edit there is no view to clear this, and it would hide what the next edit offers.
         if (!same(before, config)) decided = new Set(rows.map((r) => r.setting));
-        commit(before, config);
+        if (commit(before, config)) await followUp(config, rows, departedBefore);
       });
     },
     dispose() {

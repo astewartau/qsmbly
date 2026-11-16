@@ -39,7 +39,9 @@ pub fn output_files(request_json: &str) -> Result<String, String> {
     let space = str_of(&request, "space");
     let basename = key.basename();
     let sidecar_facts = outputs::SidecarFacts {
-        field_strength: facts.field_strength,
+        // The scanner's nominal field, as `qsmxt run` reports it: `field_strength` is the one phase
+        // was converted with (`ImagingFrequency / γ̄` when the sidecars give a centre frequency).
+        field_strength: facts.nominal_field_strength.unwrap_or(facts.field_strength),
         echo_times: &facts.echo_times,
         qsmxt_version: env!("QSMXT_ENGINE_VERSION"),
         qsm_rs_version: env!("QSM_CORE_PROVENANCE_VERSION"),
@@ -116,5 +118,26 @@ mod tests {
         assert_eq!(sidecar["GeneratedBy"], "bids::prov/#reference-sub-1");
         assert_eq!(sidecar["EchoTime"], 0.02);
         assert_eq!(files[1]["path"], "sub-1/anat/sub-1_mask.nii");
+        assert_eq!(sidecar["MagneticFieldStrength"], 3.0);
+    }
+
+    /// A scan with a centre frequency: phase is converted with the working field, but the sidecars
+    /// report the scanner's nominal one, as `qsmxt run` does.
+    #[test]
+    fn sidecars_report_the_nominal_field_strength() {
+        let mut f = facts();
+        f["field_strength"] = json!(2.8936);
+        f["nominal_field_strength"] = json!(3.0);
+        f["imaging_frequency"] = json!(123.2);
+        let request = json!({
+            "scan_file": "sub-1_echo-1_part-phase_MEGRE.nii.gz",
+            "facts": f,
+            "outputs": [{ "key": "Chi", "step": "reference" }],
+        });
+        let out: Value =
+            serde_json::from_str(&output_files(&request.to_string()).unwrap()).unwrap();
+        let sidecar: Value =
+            serde_json::from_str(out["files"][0]["sidecar"].as_str().unwrap()).unwrap();
+        assert_eq!(sidecar["MagneticFieldStrength"], 3.0);
     }
 }

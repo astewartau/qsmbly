@@ -43,7 +43,7 @@ test('the pipeline graph follows a run: queued, running, done; stale after an ed
   for (const step of ['mask', 'bgremove', 'invert', 'reference']) {
     expect([step, seen[step]]).toEqual([step, ['will-run', 'queued', 'running', 'done']]);
   }
-  await expect(page.getByTestId('graph-status')).toHaveText(/^Done · 8 steps computed/);
+  await expect(page.getByTestId('graph-status')).toHaveText(/^Done · 9 steps computed/);
   const done = await page.screenshot({ path: testInfo.outputPath('graph-done.png') });
   await testInfo.attach('after the run', { body: done, contentType: 'image/png' });
 

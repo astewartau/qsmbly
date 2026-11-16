@@ -24,8 +24,8 @@
 /** @type {Section[]} */
 export const SECTIONS = [
   { id: 'data', label: 'Data', group: null, steps: ['load', 'scale_phase'], schema: ['input'] },
-  { id: 'geometry', label: 'Geometry', group: null, steps: ['output_space'], schema: ['geometry'], summary: 'pipeline.output_space' },
-  { id: 'masking', label: 'Brain mask', group: null, steps: ['magnitude', 'mask', 'mask-reliable'], schema: ['masking'] },
+  { id: 'geometry', label: 'Geometry', group: null, steps: ['resample_axial', 'tukey_window', 'output_space'], schema: ['geometry'], summary: 'pipeline.output_space' },
+  { id: 'masking', label: 'Brain mask', group: null, steps: ['inhomog', 'magnitude', 'mask', 'mask-reliable'], schema: ['masking'] },
   { id: 'motion', label: 'Motion correction', group: null, steps: ['motion'], schema: ['motion'], toggle: 'motion_correction.enabled' },
   { id: 'fieldmap', label: 'Field map', group: null, steps: ['unwrap'], schema: ['field-map'], summary: 'field_mapping.unwrapping_algorithm' },
   { id: 'background', label: 'Background removal', group: null, steps: ['bgremove'], schema: ['background'], summary: 'bg_removal.algorithm' },
@@ -34,6 +34,8 @@ export const SECTIONS = [
   { id: 'chisep', label: 'χ-separation', group: 'Optional outputs', steps: ['chi_separation'], schema: ['separation'], toggle: 'pipeline.do_chi_separation', summary: 'separation.algorithm' },
   { id: 'swi', label: 'SWI / SMWI', group: 'Optional outputs', steps: ['swi', 'smwi'], schema: ['swi-smwi'], toggles: ['pipeline.do_swi', 'pipeline.do_smwi'] },
   { id: 'relaxometry', label: 'Relaxometry', group: 'Optional outputs', steps: ['t2star_r2star', 'r2_r2prime'], schema: ['relaxometry'], toggles: ['pipeline.do_t2starmap', 'pipeline.do_r2starmap', 'pipeline.do_r2map', 'pipeline.do_r2primemap'] },
+  // The combined magnitude is computed for the mask; this row only publishes it.
+  { id: 'magnitude', label: 'Combined magnitude', group: 'Optional outputs', steps: [], schema: ['magnitude'], toggles: ['pipeline.do_magnitude'] },
   { id: 'segmentation', label: 'Segmentation', group: 'Optional outputs', steps: ['segmentation', 'analysis'], schema: ['segmentation'], toggles: ['pipeline.do_segmentation', 'pipeline.do_analysis'] },
 ];
 

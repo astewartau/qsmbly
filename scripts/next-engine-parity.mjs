@@ -219,7 +219,12 @@ const check = (what, a, b) => {
 // the browser's cap is checked on its own.
 const WASM_RULE_ERROR = /\(rule [a-z0-9-]+\.wasm-(heap|windows);/;
 const TARGET_MAX = { 'inversion.amp_pe.nlevel': 31 };
-function withoutTarget(answer) {
+/**
+ * `answer` less what depends on the build. `marked`: the settings whose marker a WASM-only finding
+ * had a hand in on the browser side (MindGrab's heap rule beside iLSQR's authors' settings on the
+ * mask recipe: offered, and naming MindGrab); their markers are left out on both sides.
+ */
+function withoutTarget(answer, marked = new Set()) {
   const out = structuredClone(answer);
   for (const row of Array.isArray(out.view) ? out.view : []) {
     for (const k of ['reference', 'recommendations']) {
@@ -227,8 +232,8 @@ function withoutTarget(answer) {
       row[k] = row[k].filter((r) => !WASM_RULE.test(r.rule));
       if (!row[k].length) delete row[k];
     }
-    // A marker only those rules made goes with them.
-    if (row.marker && !(row.recommendations ?? []).some((r) => r.departs)) delete row.marker;
+    // A marker those rules made, or had a hand in, goes with them.
+    if (row.marker && (marked.has(row.path) || !(row.recommendations ?? []).some((r) => r.departs))) delete row.marker;
   }
   const check = out.plan?.check;
   if (check?.errors) {
@@ -258,7 +263,9 @@ for (const [i, ours] of browserSide.entries()) {
     if (ours.error !== theirs.error) failures.push(`${ours.name}: browser ${ours.error ?? 'ok'}, QSMxT ${theirs.error ?? 'ok'}`);
     continue;
   }
-  const [o, t] = [withoutTarget(ours), withoutTarget(theirs)];
+  const marked = new Set((Array.isArray(ours.view) ? ours.view : [])
+    .filter((row) => (row.recommendations ?? []).some((r) => WASM_RULE.test(r.rule) && r.departs)).map((row) => row.path));
+  const [o, t] = [withoutTarget(ours, marked), withoutTarget(theirs, marked)];
   for (const a of answers) check(`${ours.name}: ${a}`, o[a], t[a]);
 }
 

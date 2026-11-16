@@ -46,6 +46,7 @@ export function chosen_methods_wasm(config_json: string, facts_json: string | nu
 export function reference_offers_wasm(config_json: string, facts_json: string | null | undefined, scan: boolean, methods_json: string): string;
 export function reference_titles_wasm(methods_json: string): string;
 export function keep_findings_wasm(config_json: string, findings_json: string): string;
+export function restore_kept_wasm(config_json: string, facts_json: string | null | undefined, scan: boolean, kept_json: string): string;
 export function apply_all_wasm(config_json: string, findings_json: string): string;
 export function settle_wasm(findings_json: string): string;
 export function pipeline_graph_wasm(config_json: string, facts_json: string, grid_json?: string | null): string;

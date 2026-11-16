@@ -50,7 +50,7 @@ test.describe('runs in next.html', () => {
     await expect(page.locator('.step[data-step="inversion"] [data-testid="run-state"]')).toHaveAttribute('data-state', 'done');
     // The outputs, grouped by step, in run order.
     const groups = await page.locator('.output-group').evaluateAll((els) => els.map((e) => e.dataset.step));
-    expect(groups.slice(0, 3)).toEqual(['inputs', 'scale_phase', 'magnitude']);
+    expect(groups.slice(0, 3)).toEqual(['inputs', 'scale_phase', 'inhomog']);
     expect(groups).toContain('invert');
     await page.locator('.output-chip[data-key="LocalField(Main)"]').click();
     await expect(viewer).toHaveAttribute('data-volume', 'LocalField(Main)');

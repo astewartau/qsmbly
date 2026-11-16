@@ -21,7 +21,7 @@ export const RTS_DEFAULTS = {
 };
 
 export const TV_DEFAULTS = {
-  "lambda": 0.001,
+  "lambda": 0.0003,
   "rho": null,
   "tol": 0.001,
   "max_iter": 250,
@@ -33,7 +33,7 @@ export const TV_DEFAULTS = {
 };
 
 export const TKD_DEFAULTS = {
-  "threshold": 0.15,
+  "threshold": 0.25,
   "pad": [
     0,
     0,
@@ -56,7 +56,8 @@ export const BET_DEFAULTS = {
   "gradient_threshold": 0,
   "iterations": 1000,
   "subdivisions": 4,
-  "voxel_scale": 1
+  "voxel_scale": 1,
+  "orientation": "fsl"
 };
 
 export const VSHARP_DEFAULTS = {
@@ -102,7 +103,8 @@ export const SWI_DEFAULTS = {
   ],
   "scaling": "tanh",
   "strength": 4,
-  "mip_window": 7
+  "mip_window": 7,
+  "filtered_phase": false
 };
 
 export const SHARP_DEFAULTS = {
@@ -125,7 +127,8 @@ export const HARPERELLA_DEFAULTS = {
     0,
     0,
     0
-  ]
+  ],
+  "rim": "whole"
 };
 
 export const TIKHONOV_DEFAULTS = {
@@ -159,7 +162,8 @@ export const NDI_DEFAULTS = {
   "alpha": 0.00001,
   "max_iter": 100,
   "auto_stop": false,
-  "te": "first"
+  "te": "first",
+  "weight_norm": "global-max"
 };
 
 export const FANSI_DEFAULTS = {
@@ -266,12 +270,13 @@ export const QSMART_DEFAULTS = {
   "frangi_scale_ratio": 0.5,
   "frangi_c": 500,
   "vessel_magnitude": "mean-n4",
+  "offset_grid": "fft",
   "vessel_size_units": "voxels"
 };
 
 export const ROMEO_DEFAULTS = {
-  "individual": true,
-  "correct_global": true,
+  "individual": false,
+  "correct_global": false,
   "template": 0,
   "phase_coherence": true,
   "phase_gradient_coherence": true,
@@ -280,7 +285,7 @@ export const ROMEO_DEFAULTS = {
   "mag_weight": false,
   "mag_weight2": false,
   "bestpath": false,
-  "temporal_uncertain_unwrapping": 0.5,
+  "temporal_uncertain_unwrapping": 0,
   "max_seeds": 1,
   "merge_regions": false,
   "correct_regions": false,

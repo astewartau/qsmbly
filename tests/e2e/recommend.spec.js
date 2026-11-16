@@ -36,6 +36,11 @@ async function departFromNdiEchoTime(page) {
   await openStep(page, 'inversion');
   await row(page, 'inversion.algorithm').locator('select').selectOption({ label: 'NDI' });
   await expect(row(page, 'inversion.ndi.te')).toBeVisible();
+  // Choosing NDI offers its in-vivo weight normaliser, a suggestion: Keep mine first. Close leaves it.
+  const suggestion = page.getByTestId('rec-modal');
+  await expect(suggestion.getByRole('heading', { level: 2 })).toHaveText('NDI suggests a change');
+  await expect(suggestion.getByRole('button', { name: 'Keep mine' })).toHaveClass(/primary/);
+  await suggestion.getByRole('button', { name: 'Close' }).click();
   await expect(page.getByTestId('rec-modal')).toHaveCount(0);
   await row(page, 'inversion.ndi.te').locator('select').selectOption({ label: 'Last echo time' });
 }
@@ -229,7 +234,7 @@ test('choosing a method offers its reference pipeline; Close changes nothing', a
   expect(await config(page)).toEqual(before);
   // Each differing setting is marked ⓘ, naming MEDI.
   expect(await page.evaluate((paths) => paths.map((p) => globalThis.qsmblyNext.session.view.value.get(p)?.marker), settings))
-    .toEqual(settings.map(() => ({ actionable: false, text: expect.stringContaining('MEDI') })));
+    .toEqual(settings.map(() => ({ actionable: false, text: expect.stringContaining('MEDI'), short: expect.stringContaining('MEDI') })));
   expect(errors).toEqual([]);
 });
 
@@ -238,7 +243,13 @@ test('Apply the authors\' settings takes the reference pipeline\'s values', asyn
   const modal = await chooseMedi(page);
   const settings = await rowSettings(modal);
   await modal.getByRole('button', { name: "Apply the authors' settings" }).click();
-  await expect(modal).toHaveCount(0);
+  // BET's orientation only comes into play once the mask is BET: it is offered next, on its own,
+  // and applying it leaves nothing of MEDI's reference pipeline (QSMxT#558).
+  await expect(modal.getByRole('heading', { level: 2 })).toHaveText("MEDI's reference pipeline");
+  expect(await rowSettings(modal)).toEqual(['bet.orientation']);
+  await modal.getByRole('button', { name: "Apply the authors' settings" }).click();
+  await closeOffers(page);
+  expect(await page.evaluate(() => globalThis.qsmblyNext.session.config.value.bet.orientation)).toBe('as-stored');
   // Nothing the pop-up offered differs any more.
   await expect.poll(() => page.evaluate((paths) => {
     const view = globalThis.qsmblyNext.session.view.value;
@@ -266,13 +277,17 @@ test('Keep mine changes and records nothing; Choose per setting picks each row',
   await page.screenshot({ path: testInfo.outputPath('rec-per-setting.png') });
   // Every authors' setting starts on keep.
   expect(await picks.evaluateAll((all) => all.map((s) => s.value))).toEqual((await rowSettings(modal)).map(() => 'keep'));
-  // Take the authors' setting for the first row, keep the rest.
-  const [first, second] = await rowSettings(modal);
+  // Take the authors' setting for the first row, keep the rest (a setting of its own: the mask
+  // recipe's parts are rows on one setting).
+  const settings = await rowSettings(modal);
+  const first = settings[0];
+  const second = settings.find((s) => s !== first);
   const value = (c, path) => path.split('.').reduce((o, k) => o?.[k], c);
   const beforeChoices = await config(page);
   await picks.first().selectOption('reference');
   await modal.getByRole('button', { name: 'Apply choices' }).click();
-  await expect(modal).toHaveCount(0);
+  // What the value applied brings into play may be offered next (BET's orientation once the mask is BET).
+  await closeOffers(page);
   await expect.poll(async () => JSON.stringify(value(await config(page), first))).not.toBe(JSON.stringify(value(beforeChoices, first)));
   expect(value(await config(page), second)).toEqual(value(beforeChoices, second));
   expect(errors).toEqual([]);

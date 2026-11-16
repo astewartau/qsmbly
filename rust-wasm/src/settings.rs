@@ -386,6 +386,51 @@ pub fn apply_all_wasm(config_json: &str, findings_json: &str) -> Result<String, 
     apply_all(config_json, findings_json).map_err(js_err)
 }
 
+/// `config` after a reference pipeline pop-up's answer, with each of `kept_json` (findings kept on
+/// the mask recipe, `masking.sections`) that a value applied to another part of the recipe changed
+/// set back to the value it had when kept (`recommendations::restore`): BET as the generator brings
+/// its preset's input and erosion. The TUI does the same after its pop-up (QSMxT#558,
+/// `restore_kept` in src/tui/recommend.rs); the engine has no function for it.
+pub fn restore_kept(
+    config_json: &str,
+    facts_json: Option<&str>,
+    scan: bool,
+    kept_json: &str,
+) -> Result<String, String> {
+    let mut config = parse_config(config_json)?;
+    let facts = rule_facts(facts_json, scan)?;
+    for k in parse_findings(kept_json)?
+        .iter()
+        .filter(|k| k.setting == "masking.sections")
+    {
+        let Some(was) = k.current.first().map(|n| n.value.clone()) else {
+            continue;
+        };
+        if k.current.iter().any(|n| n.value != was) {
+            continue;
+        }
+        let now = rec::reference_values(&config, &facts)
+            .into_iter()
+            .find(|r| r.rule == k.rule);
+        if now.is_none_or(|r| r.current.iter().all(|n| n.value == was)) {
+            continue;
+        }
+        rec::restore(&mut config, &k.rule, &was)?;
+    }
+    to_json(&config)
+}
+
+/// [`restore_kept`].
+#[wasm_bindgen]
+pub fn restore_kept_wasm(
+    config_json: &str,
+    facts_json: Option<String>,
+    scan: bool,
+    kept_json: &str,
+) -> Result<String, JsValue> {
+    restore_kept(config_json, facts_json.as_deref(), scan, kept_json).map_err(js_err)
+}
+
 /// What findings chosen together come to, setting by setting, with nothing changed
 /// (`recommendations::settle`): `{ apply, conflicting, outranked }`. Choose per setting asks this
 /// of the picks it was given, each finding wanting the value picked for it.
@@ -840,6 +885,29 @@ mod tests {
         );
         let found = found_json;
         let applied: Value = serde_json::from_str(&apply_all(&medi, &found).unwrap()).unwrap();
+        // What the applied values bring into play (BET's orientation, once the mask is BET) is a
+        // difference of its own, by a rule the first pop-up did not show; applying it too leaves
+        // nothing (the TUI's follow-up pop-up, QSMxT#558).
+        let rules = |list: &[Value]| -> Vec<String> {
+            list.iter()
+                .map(|d| d["rule"].as_str().unwrap().to_string())
+                .collect()
+        };
+        let shown = rules(&serde_json::from_str::<Vec<Value>>(&found).unwrap());
+        let follow_up = differences(&applied["config"].to_string());
+        assert!(!follow_up.is_empty());
+        assert!(
+            rules(&follow_up).iter().all(|r| !shown.contains(r)),
+            "{follow_up:?}"
+        );
+        let applied: Value = serde_json::from_str(
+            &apply_all(
+                &applied["config"].to_string(),
+                &Value::from(follow_up).to_string(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
         assert!(differences(&applied["config"].to_string()).is_empty());
         assert_eq!(
             reference_titles(&chosen).unwrap(),
@@ -934,7 +1002,7 @@ mod tests {
                 .map(|d| d["rule"].as_str().unwrap().to_string())
                 .collect()
         };
-        const SIEMENS: &str = "chi-sepnet.tukey-siemens-ge";
+        const SIEMENS: &str = "chi-sepnet.tukey-not-philips";
         const PHILIPS: &str = "chi-sepnet.tukey-philips";
 
         let siemens = facts(Some("Siemens"));
@@ -1143,6 +1211,45 @@ mod tests {
             .contains("multi_orientation.group_by"));
     }
 
+    /// Choose per setting on MEDI's reference pipeline, BET taken and the mask input kept: BET's
+    /// preset brings its own input, which is set back to the one kept, as the TUI does.
+    #[test]
+    fn a_mask_part_kept_is_set_back_when_another_part_applied_changed_it() {
+        let facts = example_facts();
+        let medi = set(&browser(), "inversion.algorithm", json!("medi"));
+        let chosen = chosen_methods(&medi, Some(&facts), false).unwrap();
+        let offers: Vec<Value> =
+            serde_json::from_str(&reference_offers(&medi, Some(&facts), false, &chosen).unwrap())
+                .unwrap();
+        let differences: Vec<Value> = offers
+            .iter()
+            .flat_map(|o| o["differences"].as_array().unwrap().clone())
+            .collect();
+        let input = differences
+            .iter()
+            .find(|d| d["rule"] == "medi.mask-input")
+            .unwrap();
+        let input_was = input["current"][0]["value"].clone();
+        let section =
+            |c: &str| serde_json::to_value(&parse_config(c).unwrap().masking.sections[0]).unwrap();
+        let applied = apply_recommendation(&medi, "medi.mask-bet", None).unwrap();
+        assert_ne!(
+            section(&applied)["input"],
+            input_was,
+            "BET's preset brings its own input"
+        );
+        let kept = Value::from(vec![input.clone()]).to_string();
+        let restored = restore_kept(&applied, Some(&facts), false, &kept).unwrap();
+        assert_eq!(section(&restored)["input"], input_was);
+        // Only the part kept is set back: the generator applied stays BET.
+        assert_eq!(section(&restored)["generator"]["op"], "bet");
+        // Nothing to set back when nothing applied changed it.
+        assert_eq!(
+            restore_kept(&medi, Some(&facts), false, &kept).unwrap(),
+            medi
+        );
+    }
+
     /// MEDI's PDF and DECOMPOSE's V-SHARP disagree when LBV is chosen: the engine leaves Background
     /// removal as it is, through both the plain answer and Apply all (QSMxT#498).
     #[test]
@@ -1298,6 +1405,8 @@ mod tests {
         let facts: ScanFacts = serde_json::from_value(json!({
             "dims": [N, N, N], "n_echoes": 3, "echo_times": tes, "has_magnitude": true,
             "n_coils": 1, "real_imaginary": false, "field_strength": 3.0, "b0_dir": [0.0, 0.0, 1.0],
+            // The scanner's centre frequency at 3 T, so phase is converted with it, as planned.
+            "imaging_frequency": 3.0 * qsmxt_engine::qsm_core::constants::GAMMA_BAR_MHZ_PER_T,
             "mese_echo_times": null, "custom_mask": false, "custom_dseg": false, "custom_qsm": false,
             "custom_r2": false, "custom_r2prime": false,
         }))

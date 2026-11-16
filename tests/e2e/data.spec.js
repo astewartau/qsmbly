@@ -41,7 +41,7 @@ test.describe('the Data step', () => {
     // The manufacturer can be typed in (it sets the phase sign of real/imaginary parts).
     await expect(fact(page, 'manufacturer').locator('input')).toHaveValue('Siemens');
     // The plan is for this scan now.
-    await expect(page.getByTestId('plan-status')).toHaveText('Plan: 10 steps');
+    await expect(page.getByTestId('plan-status')).toHaveText('Plan: 11 steps');
     // The first echo's magnitude is shown.
     const viewer = page.getByRole('region', { name: 'Viewer' });
     await expect(viewer).toHaveAttribute('data-volume', 'AcquiredMagnitude(1)');

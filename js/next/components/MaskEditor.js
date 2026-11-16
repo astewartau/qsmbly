@@ -32,7 +32,7 @@ import {
 } from '../mask.js';
 import { WASM_HEAP_BYTES } from '../protocol.js';
 import { formatBytes } from '../format.js';
-import { SettingRow, sectionRows } from './Settings.js';
+import { SettingRow, StepSettings, sectionRows } from './Settings.js';
 import { SUPPLIED_TOOL } from '../schema.js';
 import { Icon } from './icons.js';
 import { slowSteps, SUPPLIED_MASK, PREVIEW_MASK, CUSTOM_MASK_PATH, EDITED_NAME } from '../mask-preview.js';
@@ -81,6 +81,14 @@ export function MaskEditor({ session, store, schema, kit, preview, engine, busy 
     return error && html`<p class="sub err" role="alert" data-testid="engine-error">${error}</p>`;
   };
   const combine = byPath.get('masking.combine');
+  // The masking section's other settings (inhomogeneity correction, which also feeds the combined
+  // magnitude and the other outputs): every one this editor does not place itself.
+  const placed = new Set([
+    ...recipeKeys.map((k) => `masking.${k}`), 'masking.custom_mask_tool', 'masking.two_pass', 'masking.two_pass_sections',
+    'masking.two_pass_combine', ...kit.schema.steps.flatMap((st) => st.settings ?? []),
+  ]);
+  const others = rows.filter((r) => !placed.has(r.setting.path)).map((r) => r.setting.path);
+  const otherSkip = schema.settings.filter((st) => st.section === 'masking' && placed.has(st.path)).map((st) => st.path);
 
   // While the recipe is open, previews follow its edits.
   useEffect(() => {
@@ -154,6 +162,11 @@ export function MaskEditor({ session, store, schema, kit, preview, engine, busy 
             ${engineError('masking.two_pass_sections')}
           </section>`}
         ${preview && html`<${PreviewPanel} session=${session} store=${store} kit=${kit} preview=${preview} busy=${busy} />`}`}
+      ${others.length > 0 && html`
+        <section class="mask-sec" aria-label="Inhomogeneity correction" data-testid="mask-other-settings">
+          <div class="mask-sec-head"><span>Inhomogeneity correction</span></div>
+          <${StepSettings} session=${session} store=${store} schema=${schema} id="masking-other" sections=${['masking']} skip=${otherSkip} />
+        </section>`}
     </div>
   `;
 }

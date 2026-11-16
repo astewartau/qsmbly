@@ -66,7 +66,7 @@ test.describe('next.html', () => {
     await expect(page.getByTestId('scan-summary')).toHaveText(/Example scan, not loaded: 5 echoes · 2\.89 T · 184×256×128/);
 
     // The steps in run order, each with its current choice; outputs that are off say so.
-    await expect(pipeline.locator('.step')).toHaveCount(12);
+    await expect(pipeline.locator('.step')).toHaveCount(13);
     await expect(stepRow(page, 'inversion').getByTestId('summary')).toHaveText('iLSQR');
     await expect(stepRow(page, 'masking').getByTestId('summary')).toHaveText('Robust threshold');
     await expect(stepRow(page, 'motion').getByTestId('summary')).toHaveText('off');
@@ -87,7 +87,7 @@ test.describe('next.html', () => {
     expect(await page.evaluate(() => globalThis.qsmblyNext.workspace.versions.qsmxt.version)).toBeTruthy();
 
     // The run bar: the plan's memory against the 4 GB heap, no downloads, no problems.
-    await expect(page.getByTestId('plan-status')).toHaveText('Plan: 10 steps');
+    await expect(page.getByTestId('plan-status')).toHaveText('Plan: 11 steps');
     await expect(page.getByTestId('memory')).toContainText('Peak 1.7 GB of 4.0 GB');
     await expect(page.getByTestId('downloads')).toHaveText('Downloads: none');
     await expect(page.getByTestId('problems')).toHaveText('No problems');
@@ -171,7 +171,7 @@ test.describe('next.html', () => {
     await (await field(page, 'inversion.algorithm')).selectOption({ label: 'TGV' });
     await closeOffers(page);
     await expect(stepRow(page, 'background')).toHaveCount(0);
-    await expect(page.getByTestId('plan-status')).toHaveText('Plan: 9 steps');
+    await expect(page.getByTestId('plan-status')).toHaveText('Plan: 10 steps');
 
     // A deep-learning inversion re-plans: its weights appear in the run bar.
     await (await field(page, 'inversion.algorithm')).selectOption({ label: 'xQSM' });
@@ -191,7 +191,7 @@ test.describe('next.html', () => {
     await expect((await field(page, 'pipeline.do_segmentation'))).toBeChecked();
     await expect(stepRow(page, 'segmentation').getByTestId('forced')).toHaveText(`On because ${await labelOf(page, 'pipeline.do_analysis')} needs it.`);
     // The plan takes the segmentation it forces, and the statistics after it.
-    await expect(page.getByTestId('plan-status')).toHaveText('Plan: 12 steps');
+    await expect(page.getByTestId('plan-status')).toHaveText('Plan: 13 steps');
 
     // Search finds an advanced setting by its flag and opens it.
     await page.getByLabel('Search settings').fill('--vsharp-max-radius');
@@ -272,7 +272,8 @@ test.describe('next.html', () => {
     const box = (step) => graph.locator(`.g-node[data-step="${step}"]`);
     await expect(graph.locator('.g-node')).toHaveCount(9);
     await expect(box('bgremove')).toContainText('V-SHARP');
-    await expect(graph.locator('.g-edge.collapsed')).toHaveCount(1);
+    // The browser profile's run is never resampled: no return to the acquired grid to draw.
+    await expect(graph.locator('.g-edge.collapsed')).toHaveCount(0);
 
     // Clicking a box opens its step in the pipeline column.
     await box('unwrap').click();
@@ -437,7 +438,7 @@ test.describe('next.html', () => {
     await finish(planned.record);
     await expect(page.getByTestId('graph-ran')).toHaveText('With what the last run did');
     await expect(box('invert')).toContainText('Computed');
-    await expect(graph.locator('.g-node.run-computed')).toHaveCount(8);
+    await expect(graph.locator('.g-node.run-computed')).toHaveCount(9);
     await expect(page.getByRole('radiogroup', { name: 'Which graph' })).toHaveCount(0);
     await expect(methods).toContainText('Dipole inversion was performed using iLSQR');
 
