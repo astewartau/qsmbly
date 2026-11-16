@@ -1,10 +1,14 @@
 # Instructions for coding agents
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing anything, and follow it.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing anything and follow it. The rules most
+often broken:
 
-- Work in a git worktree on its own branch; never commit or push to `main`, and never push
-  `staging` or merge a PR unless Ashley asks.
-- Before writing code, decide the owner (QSM.rs, QSMxT or qsmbly). Engine or algorithm changes
-  go upstream first; qsmbly only shows what the engine says.
-- New features go in `next.html` (`js/next/`); `index.html` gets fixes only.
-- Open pull requests as drafts, with the body CONTRIBUTING.md describes.
+- qsmbly decides nothing about a run: settings, defaults, checks, labels and methods text come
+  from `qsmxt-engine`. Fix wrong answers upstream (QSMxT or QSM.rs) and repin; no workarounds or
+  JS numerics here.
+- New features go in `next.html` (`js/next/`) only; `index.html` gets fixes only. Don't switch
+  the main site to `next.html`.
+- Never change a setting silently; offer the engine's rule findings as QSMxT does.
+- A temporary pin to an upstream PR head must be repinned to QSMxT `main` (fixtures regenerated)
+  before the PR is ready.
+- Never push to `main` or `staging`, and never merge or release; the maintainer does.
