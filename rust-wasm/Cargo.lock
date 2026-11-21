@@ -902,7 +902,7 @@ dependencies = [
 [[package]]
 name = "qsm-core"
 version = "0.0.0"
-source = "git+https://github.com/astewartau/QSM.rs.git?tag=v0.42.0#1c38ad9a79ed6f1229df8b10b310547974c5e746"
+source = "git+https://github.com/astewartau/QSM.rs.git?rev=dff62e20144fb9c79a31b88ae7b1617010b49282#dff62e20144fb9c79a31b88ae7b1617010b49282"
 dependencies = [
  "bytemuck",
  "delaunator",
@@ -941,7 +941,7 @@ dependencies = [
 [[package]]
 name = "qsmxt-engine"
 version = "0.0.0"
-source = "git+https://github.com/QSMxT/QSMxT.git?tag=v12.0.0#2c1485ad627375ba5aa1a3fc3c191c66c79bc0ae"
+source = "git+https://github.com/QSMxT/QSMxT.git?tag=v12.2.0#7473f09ccfe7d2c3a52c27d983a9a0a554e35137"
 dependencies = [
  "flate2",
  "getrandom",
