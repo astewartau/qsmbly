@@ -12,9 +12,11 @@ QSM.rs (qsm-core)  →  QSMxT (qsmxt-engine, re-exports qsm-core)  →  qsmbly (
 
 - **[QSM.rs](https://github.com/astewartau/QSM.rs)**: anything that computes or transforms image
   data, model weights and each network's memory figures, and algorithm documentation.
-- **[QSMxT](https://github.com/QSMxT/QSMxT)** (`qsmxt-engine`): settings, schema, defaults and
-  browser profile, plan, step graph, cache keys, checks, memory estimates, output names,
-  sidecars, methods text, rule findings.
+- **[QSMxT](https://github.com/QSMxT/QSMxT)** (`qsmxt-engine`): settings and the settings
+  registry (labels, help, bounds, basic or advanced), defaults and browser profile, plan, step
+  graph, cache keys, checks, memory estimates, output names, sidecars, methods text (names and
+  citations from QSM.rs's method catalogue), and advice: what a rule-findings pop-up offers and
+  what starts ticked.
 - **qsmbly**: the page (layout, controls, file loading, viewer, volume store, workers, model
   downloads, export) and thin bindings that expose the engine to JavaScript.
 
@@ -31,11 +33,13 @@ make it there and move qsmbly's pin; never work around it here.
 3. **No algorithms here**, and no JS numerics beyond display arithmetic.
 4. **Every setting comes from the engine's schema.** No hand-written forms, labels, ranges or
    defaults; which settings show in the basic view also comes from the engine.
-5. **Never change a setting silently.** The page offers the engine's rule findings, following
-   QSMxT's conventions: a recommendation is preselected, an original authors' setting preselects
+5. **Never change a setting silently.** The page shows the engine's advice
+   (`qsmxt_engine::advice`) as the TUI does, and does not decide preselection itself: a
+   recommendation is preselected, an original authors' setting or a suggestion preselects
    *Keep mine*, and the setting the user just changed stands (the pop-up corrects the other one).
-6. **One pin.** `rust-wasm/Cargo.toml` pins `qsmxt-engine` only; qsm-core comes through
-   `qsmxt_engine::qsm_core`.
+6. **One pin.** `rust-wasm/Cargo.toml` pins `qsmxt-engine` only, to a QSMxT release tag (the
+   *Bump qsmxt-engine pin* workflow opens the PR) or a QSMxT `main` commit between releases;
+   qsm-core comes through `qsmxt_engine::qsm_core`.
 7. **New features go in `next.html` (`js/next/`) only.** `index.html` is the released UI and gets
    only fixes that keep it running. Switching the main site to `next.html` is the maintainer's
    decision; don't make or propose it in a PR.
@@ -96,7 +100,9 @@ WebAssembly) is QSM.rs's to test.
 - Test names are sentences about behaviour.
 - If a test needs an algorithm to run, use the fastest choice on the smallest data. Keep CI well
   under 5 minutes per job; rewrite a slow test rather than deleting or weakening it.
-- Locally, run the tests covering your change, lint and typecheck; CI runs the rest.
+- **Push early.** Locally, run lint, typecheck, `cargo clippy` and `cargo test` for binding
+  changes, and only the tests covering your change, if they take about 2 minutes at most. CI
+  runs the full suite, Playwright and any repeats.
 
 ## Browser memory
 
