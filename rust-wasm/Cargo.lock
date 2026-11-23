@@ -854,7 +854,7 @@ dependencies = [
 [[package]]
 name = "qsm-core"
 version = "0.0.0"
-source = "git+https://github.com/stebo85/QSM.rs.git?rev=30df24f8e2c4892bacf6e1be8c4c85ae1d772dd4#30df24f8e2c4892bacf6e1be8c4c85ae1d772dd4"
+source = "git+https://github.com/astewartau/QSM.rs.git?tag=v0.39.0#42ab620190ad315c9dcf7aa8ec4a036402002b7e"
 dependencies = [
  "bytemuck",
  "delaunator",
@@ -889,7 +889,7 @@ dependencies = [
 [[package]]
 name = "qsmxt-config"
 version = "0.0.0"
-source = "git+https://github.com/QSMxT/QSMxT.git?tag=v9.22.0#9bffc6e726b09670a68790c71643cca811c5dfa9"
+source = "git+https://github.com/QSMxT/QSMxT.git?tag=v10.0.0#544ef94708904ec84e4f20128a22e99568e08687"
 dependencies = [
  "qsm-core",
  "serde",
@@ -1151,6 +1151,7 @@ version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "serde",
